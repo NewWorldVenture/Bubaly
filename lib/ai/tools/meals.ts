@@ -339,7 +339,11 @@ export const mealTools: ToolDefinition[] = [
       const notes: string[] = [];
       if (output.skipped.length) notes.push(`${output.skipped.length} already on it`);
       if (output.in_pantry.length) notes.push(`${output.in_pantry.length} in the pantry`);
-      if (output.substitutions.length) notes.push(`${output.substitutions.length} swapped for an allergy, a preference or the pantry`);
+      // `?.` because `summarize` sees the schema's INPUT shape, where the
+      // `.default([])` has not been applied — a call recorded before
+      // substitutions existed has no field at all.
+      const swapped = output.substitutions?.length ?? 0;
+      if (swapped) notes.push(`${swapped} swapped for an allergy, a preference or the pantry`);
       return notes.length ? `${base} (${notes.join(', ')})` : base;
     },
     execute: async (scope, input) => {
