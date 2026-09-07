@@ -408,7 +408,8 @@ export default async function HomePage() {
       <AskBar />
 
       {/* §16 Command Center: what needs a person, what Bubaly is doing, the
-          family's day, what is coming, and what Bubaly finished. */}
+          family's day, what is coming, and what Bubaly finished. Home shows the
+          top five; the full, uncapped queue (M5) lives at /dashboard/needs-you. */}
       <NeedsAttention
         items={needs.shown}
         more={needs.more}
@@ -417,6 +418,7 @@ export default async function HomePage() {
         moneyApprovalKinds={Object.fromEntries(((moneyApprovalsRes.data ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
         recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
         canDecide={manager}
+        seeAllHref="/dashboard/needs-you"
       />
 
       <WorkingOn familyId={familyId} initial={workingRuns} />

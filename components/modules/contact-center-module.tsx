@@ -193,7 +193,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
               const meta = intentMeta(m.ai_intent ?? 'other');
               const outbound = m.direction === 'outbound';
               return (
-                <li key={m.id} className={cn('rounded-2xl border border-border bg-card p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
+                <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-card p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
                   <div className="flex items-start gap-3">
                     <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}><Icon className="h-4.5 w-4.5" /></span>
                     <div className="min-w-0 flex-1">

@@ -68,5 +68,8 @@ export default async function TrustPage() {
     audit: (audit ?? []) as unknown as TrustData['audit'],
   };
 
-  return <TrustModule data={data} canManage={isManager(ctx.active.role)} />;
+  // The approvals inbox is one part of what needs a person; the M5 queue at
+  // /dashboard/needs-you carries the rest (money approvals, parked runs,
+  // memories to confirm, messages to answer, forms to sign), uncapped.
+  return <TrustModule data={data} canManage={isManager(ctx.active.role)} needsYouHref="/dashboard/needs-you" />;
 }

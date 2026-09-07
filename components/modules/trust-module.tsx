@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Scale, Inbox, Users, Share2, Siren, ScrollText, Plus, Check, X,
@@ -77,7 +78,7 @@ function timeLeft(iso: string) {
   return `${Math.round(h / 24)}d left`;
 }
 
-export function TrustModule({ data, canManage }: { data: TrustData; canManage: boolean }) {
+export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData; canManage: boolean; needsYouHref?: string }) {
   const tr = useTranslations();
   const [tab, setTab] = useState<Tab>('approvals');
   const pendingApprovals = data.approvals.filter(a => a.status === 'pending');
@@ -139,7 +140,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
         ))}
       </div>
 
-      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} />}
+      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} needsYouHref={needsYouHref} />}
       {tab === 'policies' && <PoliciesTab policies={data.policies} members={data.members} canManage={canManage} />}
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
@@ -150,7 +151,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 }
 
 // ─── Approvals inbox ──────────────────────────────────────────────────────────
-function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]; members: Member[]; canManage: boolean }) {
+function ApprovalsTab({ approvals, members, canManage, needsYouHref }: { approvals: Approval[]; members: Member[]; canManage: boolean; needsYouHref?: string }) {
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -165,6 +166,14 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
 
   return (
     <div className="space-y-4">
+      {needsYouHref && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5">
+          <p className="text-xs text-muted">{tr('trustModule.approvalsAreOnePartOf')}</p>
+          <Link href={needsYouHref} className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline focus-ring">
+            {tr('trustModule.seeEverythingThatNeedsYou')} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+      )}
       {pending.length === 0 ? (
         <EmptyCard icon={Check} title={tr('trust.noApprovalsWaiting')} sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
       ) : (
