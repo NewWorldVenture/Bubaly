@@ -36,6 +36,7 @@
 // `approval_requests`, which is where a reviewer looks for them.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TrailAction } from '@/lib/activity/trail';
 import { conformNulls } from '@/lib/ai/schema-to-json';
 import type { Database, Json } from '@/lib/database.types';
 import { recordActivity } from '@/lib/services/activity';
@@ -57,6 +58,23 @@ type DB = SupabaseClient<Database>;
 
 /** A reservation older than this is assumed abandoned (0250's documented semantics). */
 const STALE_RESERVATION_MS = 2 * 60_000;
+
+/**
+ * The trail verb for a tool, from what the tool already declares about itself.
+ *
+ * Read-only tools get `null`: Bubaly reads far more than it writes, and the
+ * household trail is a log of CHANGES — 40 read tools would bury every real one.
+ * `automate` has no honest mapping (`routines.create` and `routines.pause`
+ * share it), so such a tool must declare `trailAction`; one that does not
+ * records no trail row rather than a wrong verb, and
+ * `tests/household-trail.test.ts` fails on any write tool in that state.
+ */
+export function trailActionFor(tool: Pick<ToolDefinition, 'readOnly' | 'capability' | 'trailAction'>): TrailAction | null {
+  if (tool.readOnly) return null;
+  if (tool.trailAction) return tool.trailAction;
+  const fromCapability: Partial<Record<Capability, TrailAction>> = { create: 'create', edit: 'update', delete: 'delete' };
+  return fromCapability[tool.capability] ?? null;
+}
 
 /** Deep links used for the activity feed, per trust domain. */
 const DOMAIN_HREF: Record<string, string> = {
@@ -681,6 +699,7 @@ export async function executeTool(
   if (tool.activityFrom !== 'service') {
     const activity = await recordActivity(callScope, {
       agent: tool.domain,
+      action: trailActionFor(tool),
       title: summary,
       detail: verificationDetail,
       href: DOMAIN_HREF[tool.domain] ?? null,

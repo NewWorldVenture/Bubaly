@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -139,14 +141,21 @@ export function ChoresModule() {
   async function setStatus(a: Assignment, next: string) {
     if (busy) return;
     setBusy(a.id); setMenuFor(null);
-    const supabase = createClient();
-    const patch: Updatable<'chore_assignments'> = { status: next as Tables<'chore_assignments'>['status'] };
-    if (next === 'submitted') patch.submitted_at = new Date().toISOString();
-    if (next === 'todo') { patch.submitted_at = null; patch.approved_at = null; }
-    const { error } = await supabase.from('chore_assignments').update(patch).eq('id', a.id);
+    // Through the service, which is family-scoped where this filtered `id` alone —
+    // and which, for 'submitted', reads the chore's `requires_approval` and settles
+    // on 'done' when no parent is needed. This always wrote 'submitted', so a chore
+    // configured to need no approval still sat waiting for one.
+    const result = await setChoreStatusAction(a.id, next as 'todo' | 'in_progress' | 'submitted');
     setBusy(null);
-    if (error) return toastError(describeDbError(error));
-    success(next === 'submitted' ? 'Submitted for approval!' : next === 'in_progress' ? 'Marked in progress' : 'Updated');
+    if (!result.ok) return toastError(result.error);
+    // The SETTLED status, not the requested one: a chore that needs no approval
+    // comes back 'done', and saying "Submitted for approval!" about it would be
+    // a small lie this work exists to remove rather than add.
+    success(
+      result.status === 'done' ? 'Done — no approval needed!'
+        : result.status === 'submitted' ? 'Submitted for approval!'
+        : result.status === 'in_progress' ? 'Marked in progress' : 'Updated',
+    );
     void refresh();
   }
 
@@ -177,10 +186,9 @@ export function ChoresModule() {
     setMenuFor(null);
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${a.chore?.title ?? 'this chore'}"?`)) return;
     setBusy(a.id);
-    const supabase = createClient();
-    const { error } = await supabase.from('chore_assignments').delete().eq('id', a.id);
+    const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
-    if (error) return toastError(describeDbError(error));
+    if (!result.ok) return toastError(result.error);
     success('Chore removed'); void refresh();
   }
 
@@ -701,6 +709,11 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // One id per open modal, so a retry after a failed save is the SAME chore and
+  // a second Add (a new modal) is a different one. The modal is mounted only
+  // while `addOpen`, so closing and reopening mints a fresh id.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -721,19 +734,15 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Reward must be between 0 and 1000 points');
 
     setLoading(true);
-    const supabase = createClient();
     try {
-      const { data: chore, error: ce } = await supabase.from('chores')
-        .insert({ family_id: familyId, title, description, points, priority, recurrence, icon, created_by: userId })
-        .select('id').single();
-      if (ce || !chore) { toastError(describeDbError(ce)); return; }
-      const { error: ae } = await supabase.from('chore_assignments')
-        .insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
-      if (ae) {
-        await supabase.from('chores').delete().eq('id', chore.id); // roll back orphan
-        toastError(describeDbError(ae));
-        return;
-      }
+      // One call. `createChore` creates the chore and its assignment together and
+      // rolls the chore back FAMILY-SCOPED if the assignment fails, where this
+      // rolled back on `id` alone.
+      const result = await createChoreAction({
+        title, description, points, priority, recurrence, icon,
+        dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
+      });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

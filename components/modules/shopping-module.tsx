@@ -10,6 +10,10 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import {
+  addGroceryItemsAction, clearCheckedGroceriesAction, removeGroceryItemAction, setGroceryItemCheckedAction,
+} from '@/app/(app)/dashboard/grocery/actions';
+import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -104,10 +108,14 @@ export function ShoppingModule() {
     if (!name || !activeListId) return;
     if (name.length > 120) { toastError('Item name is too long (max 120 characters)'); return; }
     return run('add-item', async () => {
-      const { error } = await createClient().from('grocery_items').insert({
-        family_id: familyId, list_id: activeListId, name, category: addingCategory, created_by: userId,
-      });
-      if (error) throw error;
+      // Through the service, which skips a name already on this list under
+      // `normalizeName` — case, a trailing plural 's' and spacing are not
+      // differences. The raw insert had no idea milk was already there.
+      const result = await addGroceryItemsAction({ items: [{ name, category: addingCategory }], listId: activeListId });
+      if (!result.ok) throw new Error(result.error);
+      // Say which of the two happened. "Nothing visibly changed" is the outcome
+      // a family reads as a bug.
+      if (groceryAddWasNoOp(result)) toastError(describeGroceryAdd(result));
       setAddingText('');
       void refreshItems();
     });
@@ -115,34 +123,38 @@ export function ShoppingModule() {
 
   function toggleItem(item: GroceryItem) {
     return run(`toggle:${item.id}`, async () => {
-      const { error } = await createClient().from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
-      if (error) throw error;
+      const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
 
   function deleteItem(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('grocery_items').delete().eq('id', id);
-      if (error) throw error;
+      const result = await removeGroceryItemAction(id);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
 
   function clearChecked() {
     return run('clear-checked', async () => {
-      const checkedIds = items.filter((i) => i.is_checked).map((i) => i.id);
-      if (!checkedIds.length) return;
-      const { error } = await createClient().from('grocery_items').delete().in('id', checkedIds);
-      if (error) throw error;
-      success(`Cleared ${checkedIds.length} completed items`);
+      if (!activeListId) return;
+      // The LIST, not the ids this render happens to hold. Sending
+      // `.in('id', checkedIds)` cleared whatever the browser last saw, so an item
+      // a partner ticked on their phone between render and tap survived the
+      // clear. The service asks the database what is checked, when asked.
+      const result = await clearCheckedGroceriesAction(activeListId);
+      if (!result.ok) throw new Error(result.error);
+      if (result.removed === 0) return;
+      success(`Cleared ${result.removed} completed item${result.removed === 1 ? '' : 's'}`);
       void refreshItems();
     });
   }
 
   function archiveList(id: string) {
     return run(`archive:${id}`, async () => {
-      const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() } as never).eq('id', id);
+      const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       success('List archived');
       setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
@@ -364,7 +376,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
       const { data, error } = await supabase.from('grocery_lists').insert({
         family_id: familyId, name: trimmed, created_by: userId,
         list_icon: icon, store: preset.store,
-      } as never).select('id').single();
+      }).select('id').single();
       if (error || !data) { toastError(describeDbError(error)); return; }
       onCreated(data.id);
     } catch (err) {
@@ -432,7 +444,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon } as never).eq('id', list.id);
+      const { error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id);
       if (error) { toastError(describeDbError(error)); return; }
       onSaved();
     } catch (err) {

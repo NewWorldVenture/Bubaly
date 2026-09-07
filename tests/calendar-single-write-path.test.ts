@@ -24,15 +24,14 @@ const SURFACE = [
 ];
 
 /**
- * Still writing `calendar_events` from the browser, deliberately, for now.
- *
- * `routines-panel` materialises a whole routine into a week — many rows in one
- * insert, with an undo that deletes them by id. `createEvent` creates one event,
- * so routing this through it is a service change (a batch create that is
- * idempotent as a batch), not a call-site change, and bundling it here would
- * make this commit two things.
+ * `routines-panel` used to be the exception here: it materialises a whole
+ * routine into a week — many rows in one insert, with an undo that deletes them
+ * by id — and `createEvent` creates one event, so it needed a service change
+ * rather than a call-site one. That change landed (`createEvents`/`deleteEvents`),
+ * and this list is now empty. It is kept, rather than deleted, so a new direct
+ * writer has somewhere to be declared instead of appearing unremarked.
  */
-const KNOWN_REMAINING = ['components/modules/routines-panel.tsx'];
+const KNOWN_REMAINING: string[] = [];
 
 /** `.from('calendar_events')` followed by a write verb, allowing whitespace and chained calls. */
 const WRITE = /\.from\(\s*['"]calendar_events['"]\s*\)[\s\S]{0,200}?\.(insert|update|upsert|delete)\s*\(/g;
@@ -75,12 +74,32 @@ describe('the calendar surface writes through the service', () => {
     }
   });
 
-  it('names the one calendar component that still writes from the browser', () => {
-    // Fails the day routines-panel is converted, which is the point: the list
-    // has to be edited deliberately rather than drifting out of date.
+  it('the relationship page puts a date on the calendar through the service too', () => {
+    // Not part of the calendar page, but a `calendar_events` writer all the same
+    // — and it had the sharper bug: it deleted the event and cleared
+    // `calendar_event_id` REGARDLESS, so a failed delete orphaned the event.
+    const src = code('components/modules/relationship-module.tsx');
+    expect(writesIn('components/modules/relationship-module.tsx')).toEqual([]);
+    expect(src).toMatch(/from '@\/app\/\(app\)\/dashboard\/relationship\/actions'/);
+  });
+
+  it('has no calendar component left writing from the browser', () => {
+    // Every entry must still actually write, so a converted file cannot sit here
+    // pretending to be pending work — the same honesty the silent-empty ratchet
+    // keeps about its own baseline.
     for (const file of KNOWN_REMAINING) {
       expect(writesIn(file).length, file).toBeGreaterThan(0);
     }
-    expect(KNOWN_REMAINING).toHaveLength(1);
+    expect(KNOWN_REMAINING).toHaveLength(0);
+  });
+
+  it('routines-panel applies and undoes a week through the service', () => {
+    const src = code('components/modules/routines-panel.tsx');
+    expect(writesIn('components/modules/routines-panel.tsx')).toEqual([]);
+    expect(src).toMatch(/applyRoutineToCalendarAction\(/);
+    expect(src).toMatch(/undoCalendarEventsAction\(/);
+    // Undo drops the composition key, so applying again after changing their
+    // mind is a new batch rather than being answered with deleted events.
+    expect(src).toMatch(/delete applyIds\.current\[key\]/);
   });
 });

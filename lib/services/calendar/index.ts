@@ -17,10 +17,10 @@
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
-import type { EventCategory, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
+import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, withIdempotency } from '../idempotency';
+import { keyedProbe, makeKey, withIdempotency } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -121,6 +121,7 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
 
       await recordActivitySafely(scope, {
         agent: 'calendar',
+        action: 'create',
         title: `Added "${title}" to the calendar`,
         detail: new Date(startsAt).toISOString(),
         href: '/dashboard/calendar',
@@ -129,6 +130,147 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
       return ok(data);
     },
   );
+}
+
+/**
+ * Create several events as ONE write — a routine materialised across a week, a
+ * flyer's worth of fixtures.
+ *
+ * Not a loop over `createEvent`. A loop is N round trips, and a failure halfway
+ * leaves half a routine on the calendar with nothing to undo it. A single
+ * multi-row INSERT is atomic in Postgres: every row lands or none does.
+ *
+ * That atomicity is also what makes the batch deduplicable. Given a
+ * `scope.idempotencyKey`, each row gets a key derived from it and the row's
+ * position, so:
+ *
+ *   - the probe asks whether ANY row of this batch is present. Because the
+ *     insert is all-or-nothing, "any" answers "all" — there is no half-applied
+ *     batch to reason about. The probe is an OPTIMISATION, not the guarantee:
+ *     removing it changes nothing a caller can observe, because the index below
+ *     still refuses the second insert and the recovery returns the same rows;
+ *   - if the probe finds them, they are returned and nothing is written, so a
+ *     double-tapped Apply adds one week of events rather than two;
+ *   - if two taps race past the probe, the second loses the partial unique index
+ *     from 0256 and is answered with the winner's rows.
+ *
+ * Without a key it inserts directly, which is what the callers that have no
+ * composition to name still do.
+ */
+export async function createEvents(
+  scope: ServiceScope,
+  inputs: CreateEventInput[],
+): Promise<ServiceResult<CalendarEvent[]>> {
+  if (!inputs.length) return fail('There were no events to add.', { code: SERVICE_CODES.invalidInput });
+
+  const rows: Insertable<'calendar_events'>[] = [];
+  for (const input of inputs) {
+    const title = input.title?.trim() ?? '';
+    if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
+    const startsAt = isoOrNull(input.startsAt);
+    if (!startsAt) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+    const endsAt = isoOrNull(input.endsAt);
+    if (endsAt && Date.parse(endsAt) < Date.parse(startsAt)) {
+      return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+    }
+    rows.push({
+      family_id: scope.familyId,
+      title,
+      description: input.description?.trim() || null,
+      location: input.location?.trim() || null,
+      category: input.category && CATEGORIES.includes(input.category) ? input.category : 'general',
+      starts_at: startsAt,
+      ends_at: endsAt,
+      all_day: input.allDay ?? false,
+      recurrence: input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none',
+      recurrence_until: isoOrNull(input.recurrenceUntil),
+      assignee_id: input.assigneeId ?? null,
+      created_by: scope.userId,
+      idempotency_key: null,
+    });
+  }
+
+  const batchKey = scope.idempotencyKey;
+  if (batchKey) {
+    const keys = rows.map((_, i) => makeKey(['calendar.createEvents', scope.familyId, batchKey, i]));
+    rows.forEach((row, i) => { row.idempotency_key = keys[i]!; });
+
+    const seen = await findByKeys(scope, keys);
+    if (!seen.ok) return seen;
+    if (seen.data.length > 0) return ok(seen.data);
+  }
+
+  const { data, error } = await scope.db.from('calendar_events').insert(rows).select('*');
+  if (error || !data) {
+    // On a keyed batch this is what losing the race looks like: the winner's
+    // rows are the honest answer. A failure with nothing behind it is returned
+    // unchanged, so a real error is never disguised as success.
+    if (batchKey) {
+      const raced = await findByKeys(scope, rows.map((r) => r.idempotency_key!).filter(Boolean));
+      if (raced.ok && raced.data.length > 0) return ok(raced.data);
+    }
+    console.error('[service:calendar] batch create failed', error);
+    return fail(describeDbError(error, 'Could not add those events.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, {
+    agent: 'calendar',
+    action: 'create',
+    title: data.length === 1 ? `Added "${data[0]!.title}" to the calendar` : `Added ${data.length} events to the calendar`,
+    detail: data.map((e) => e.title).join(', ').slice(0, 500),
+    href: '/dashboard/calendar',
+  });
+  return ok(data);
+}
+
+/** The rows of a keyed batch that are already on the calendar, if any. */
+async function findByKeys(scope: ServiceScope, keys: string[]): Promise<ServiceResult<CalendarEvent[]>> {
+  const { data, error } = await scope.db
+    .from('calendar_events')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .in('idempotency_key', keys);
+  if (error) {
+    console.error('[service:calendar] batch duplicate probe failed', error);
+    return fail(describeDbError(error, 'Could not check for duplicate events.'), { code: SERVICE_CODES.db });
+  }
+  return ok(data ?? []);
+}
+
+/**
+ * Remove several events at once — the undo behind "added 12 events for this
+ * week". Family-scoped, where the client deleted on ids alone.
+ */
+export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Promise<ServiceResult<{ removed: number }>> {
+  const ids = eventIds.filter(Boolean);
+  if (!ids.length) return ok({ removed: 0 });
+
+  const { data, error } = await scope.db
+    .from('calendar_events')
+    .delete()
+    .eq('family_id', scope.familyId)
+    .in('id', ids)
+    .select('id, title');
+  if (error) {
+    console.error('[service:calendar] batch delete failed', error);
+    return fail(describeDbError(error, 'Could not undo those events.'), { code: SERVICE_CODES.db });
+  }
+
+  const removed = data ?? [];
+  // The batch create records a line; without this its Undo left none, so the
+  // trail showed a week going onto the calendar and never coming off.
+  if (removed.length) {
+    await recordActivitySafely(scope, {
+      agent: 'calendar',
+      action: 'delete',
+      title: removed.length === 1
+        ? `Removed "${removed[0]!.title}" from the calendar`
+        : `Removed ${removed.length} events from the calendar`,
+      detail: removed.map((r) => r.title).join(', ').slice(0, 500),
+      href: '/dashboard/calendar',
+    });
+  }
+  return ok({ removed: removed.length });
 }
 
 export type UpdateEventPatch = Partial<Omit<CreateEventInput, 'title'>> & { title?: string };
@@ -186,6 +328,7 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
+    action: 'update',
     title: `Updated "${data.title}"`,
     href: '/dashboard/calendar',
     memberId: data.assignee_id,
@@ -208,7 +351,7 @@ export async function deleteEvent(scope: ServiceScope, eventId: string): Promise
   }
   if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
 
-  await recordActivitySafely(scope, { agent: 'calendar', title: `Removed "${data.title}" from the calendar`, href: '/dashboard/calendar' });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'calendar', title: `Removed "${data.title}" from the calendar`, href: '/dashboard/calendar' });
   return ok({ id: data.id, title: data.title });
 }
 
@@ -622,6 +765,7 @@ export async function rsvpToEvent(scope: ServiceScope, input: RsvpInput): Promis
 
   await recordActivitySafely(scope, {
     agent: 'calendar',
+    action: 'rsvp',
     title: `Replied "${RSVP_LABELS[status]}" to "${event.title}"`,
     detail: event.starts_at,
     href: '/dashboard/calendar',

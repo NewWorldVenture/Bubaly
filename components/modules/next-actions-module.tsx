@@ -11,8 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { completeTodoAction } from '@/app/(app)/dashboard/todos/actions';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
@@ -118,10 +117,18 @@ export function NextActionsModule() {
   const needAttention = attentionCount(ranked);
 
   async function completeTask(taskId: string) {
-    const sb = createClient();
-    const { error: err } = await sb.from('todo_items')
-      .update({ is_done: true, completed_at: new Date().toISOString() }).eq('id', taskId);
-    if (err) { toastError(describeDbError(err)); return; }
+    // Was a direct update filtering `id` alone, with no family filter — the same
+    // shape §7 keeps finding, and it slipped past the to-dos tranche because that
+    // tranche's guard only read `todos-module`. `completeTodo` writes the same
+    // two columns, adds the family filter, and reports a row it cannot find
+    // instead of succeeding silently.
+    //
+    // It does NOT reach the household trail: no `complete`/`assign`/`progress`
+    // function in this service records one, so the trail carries creates and
+    // deletes but not the DOING. Recorded in the ledger rather than half-fixed
+    // here — it spans five functions across to-dos and chores.
+    const result = await completeTodoAction(taskId, true);
+    if (!result.ok) { toastError(result.error); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
     success('Nice — one less thing');
   }

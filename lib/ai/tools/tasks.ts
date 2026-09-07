@@ -124,6 +124,10 @@ export const taskTools: ToolDefinition[] = [
     capability: 'edit',
     risk: 'low',
     readOnly: false,
+    // The service records this one now, with its own copy, so the family sees
+    // the same line whether Bubaly did it or a person did. Without this the
+    // executor would add a second, blander entry for the assistant's path.
+    activityFrom: 'service',
     input: z.object({
       todo_id: z.string(),
       done: z.boolean().nullish().describe('Defaults to true'),
@@ -327,6 +331,10 @@ export const taskTools: ToolDefinition[] = [
     capability: 'edit',
     risk: 'low',
     readOnly: false,
+    // The service records this one now, with its own copy, so the family sees
+    // the same line whether Bubaly did it or a person did. Without this the
+    // executor would add a second, blander entry for the assistant's path.
+    activityFrom: 'service',
     input: z.object({ assignment_id: z.string() }),
     output: choreAssignmentOutput,
     summarize: (_input, output) => (output.status === 'submitted'

@@ -39,6 +39,18 @@ before the deploy that ships that tranche. As with `0265` and `0268`, the column
 is written unconditionally and deliberately so: a one-off tolerance for it would
 be a code path that is dead the moment the migration lands.
 
+The same now applies to the **chores board's Add**. `createChore` keys the chore
+and its assignment as one unit, so a create carrying a submission id names
+`idempotency_key` on the assignment insert. `assignChore` writes the column only
+when a key was actually supplied — which is not a schema tolerance but the
+difference between "no key" and "a null key": the assistant's standalone assign
+tool passes none and stays unaffected. Note what `0256` buys on this path
+specifically: the PROBE half (a retried Add finds the first assignment) works on
+either schema, but the RACE half — two simultaneous taps, where the partial
+unique index is what refuses the second assignment and triggers the rollback that
+prevents an orphan chore — needs the index. Until `0256` is applied, two truly
+simultaneous Adds can still leave a chore nobody is assigned to.
+
 `0255` through `0268` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production
 application.

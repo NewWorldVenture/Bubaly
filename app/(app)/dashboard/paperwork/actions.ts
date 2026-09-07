@@ -7,6 +7,7 @@ import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } 
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -87,19 +88,21 @@ export async function materializePaperworkActionAction(input: {
     materializedId = data?.id ?? null;
   } else {
     const amountBit = action.amount != null ? ` ($${action.amount})` : '';
-    const { data, error } = await supabase.from('family_reminders').insert({
-      family_id: ctx.active.familyId,
-      created_by: ctx.user.id,
+    // Through the service. This insert sent `status: 'pending'` and, off the
+    // urgent branch, `priority: 'normal'` — neither is in 0014's CHECK sets, so
+    // Postgres rejected it and materialising a sign/pay/provide action always
+    // threw. The service writes a legal status and maps an unknown priority onto
+    // the column default instead of sending it on.
+    const reminder = await createReminder(scopeFromUserContext(ctx, supabase), {
       title: `${action.label}${amountBit} — ${item.title}`.slice(0, 200),
       notes: `From Paperwork Inbox${item.sender ? ` · ${item.sender}` : ''}${dueOn ? ` · due ${dueOn}` : ''}`,
       kind: 'task',
-      priority: item.urgency === 'urgent' ? 'high' : 'normal',
-      status: 'pending',
-      ai_suggested: true,
-    }).select('id').single();
-    if (error) throw new Error(describeActionError(error, 'Could not create that reminder.'));
+      priority: item.urgency === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+    });
+    if (!reminder.ok) throw new Error(reminder.error);
     materializedAs = 'reminder';
-    materializedId = data?.id ?? null;
+    materializedId = reminder.data.id;
   }
 
   if (materializedId) {

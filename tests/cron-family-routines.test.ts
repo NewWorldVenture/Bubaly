@@ -91,25 +91,24 @@ const RULE = {
   next_run_at: '2026-09-05T12:00:00.000Z', said: 'every Sunday at 5pm', is_enabled: true,
 };
 
-// The rule below fires on `0 17 * * 0` in America/New_York — Sunday 17:00 NY,
-// which is 21:00 UTC — and the reschedule assertions name that exact instant on
-// Sunday 2026-09-06. That is only "the next occurrence" while now is BEFORE it,
-// so with a live clock these tests passed until 21:00 UTC on 2026-09-06 and
-// have failed every run since: the worker correctly rolled forward a week and
-// the hard-coded date did not. Pin the clock to the Saturday instead, just
-// after the fixture's own next_run_at, so the expectations describe the
-// scheduler's behaviour rather than the day the suite happens to run.
-//
-// Only Date is faked. Faking timers wholesale would stall the awaits in the
-// worker under test.
-const NOW = new Date('2026-09-05T13:00:00.000Z');
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+/**
+ * A fixed Saturday afternoon, so "the next Sunday 5pm" is a fact rather than a
+ * question about when the suite happens to run.
+ *
+ * The worker reads `new Date()` directly, and the reschedule assertion below
+ * names a real instant — `2026-09-06T21:00:00.000Z`. That made the test pass
+ * only while the wall clock was BEFORE that moment: once it passed, "the next
+ * Sunday 5pm in New York" rolled a week forward and the case failed on every
+ * run, on every branch, for a reason nothing in the diff could explain.
+ *
+ * Only `Date` is faked. Faking timers wholesale would stall the awaits in the
+ * route under test.
+ */
+const FROZEN_NOW = new Date('2026-09-05T13:00:00.000Z');
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FROZEN_NOW);
   vi.clearAllMocks();
   state.rules = [{ ...RULE }];
   state.families = [{ id: 'fam-1', timezone: 'America/New_York' }];
@@ -119,6 +118,8 @@ beforeEach(() => {
   mocks.createRequest.mockResolvedValue({ ok: true, data: { id: 'req-1' } });
   mocks.createRun.mockResolvedValue({ ok: true, data: { id: 'run-1' } });
 });
+
+afterEach(() => { vi.useRealTimers(); });
 
 describe('the routine worker', () => {
   it('refuses an unauthorized caller', async () => {

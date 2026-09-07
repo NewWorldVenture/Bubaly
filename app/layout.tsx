@@ -5,7 +5,6 @@ import { ToastProvider } from '@/components/ui/toast';
 import { AndroidBackHandler } from '@/components/app/android-back-handler';
 import { LAUNCH_SCREENS, launchScreenHref, launchScreenMedia } from '@/lib/pwa/launch-screens';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
-import { LanguagePicker } from '@/components/i18n/language-picker';
 import { getLocaleContext } from '@/lib/i18n/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -88,9 +87,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AndroidBackHandler />
         <LocaleProvider locale={locale} source={source} messages={messages}>
           <ToastProvider>{children}</ToastProvider>
-          {/* Reachable from every page, signed in or out — changing language and
-              changing back should never require finding a settings screen. */}
-          <LanguagePicker />
         </LocaleProvider>
       </body>
     </html>

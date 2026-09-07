@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Phone, MessageSquare, Mail, Instagram, BookOpen, Trophy,
   FileText, Plus, Search, Wand2, X, Archive,
@@ -10,6 +10,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -372,6 +374,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   const [copied, setCopied] = useState(false);
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
+  // One submission id per action item, keyed by COMMUNICATION AND INDEX — not
+  // index alone. `<CommDetail comm={selected} />` carries no `key`, so selecting
+  // a different message reuses this instance and this ref; keyed by position,
+  // the next message's first action item would reuse the previous one's id and
+  // be answered with the reminder that id already created.
+  const reminderIds = useRef<Record<string, string>>({});
 
   const canReply = comm.direction === 'inbound';
 
@@ -442,16 +450,19 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   async function addReminder(text: string, i: number) {
     if (busyItem !== null) return;
     setBusyItem(i);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_reminders').insert({
-      family_id: familyId, created_by: userId,
+    // Through the service. `status: 'pending'` and `priority: 'normal'` are both
+    // outside 0014's CHECK sets, so the raw insert was rejected every time and
+    // this one-tap button never saved anything.
+    const result = await createReminderAction({
       title: text.slice(0, 200),
       notes: comm.contact?.name ? `From ${comm.contact.name} · ${ch.label}` : `From ${ch.label}`,
-      kind: 'task', priority: comm.priority === 'urgent' ? 'high' : 'normal',
-      status: 'pending', ai_suggested: true,
+      kind: 'task',
+      priority: comm.priority === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+      submissionId: reminderIds.current[`${comm.id}:${i}`] ||= newSubmissionId(),
     });
     setBusyItem(null);
-    if (error) { toastError(describeDbError(error)); return; }
+    if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
     success('Added to reminders');
   }

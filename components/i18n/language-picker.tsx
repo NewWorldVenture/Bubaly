@@ -1,26 +1,21 @@
 'use client';
 
-// components/i18n/language-picker.tsx — the bottom-left language control.
+// components/i18n/language-picker.tsx — the language control.
 //
-// Sits above the mobile tab bar rather than behind it: the app shell pins a
-// fixed bottom nav on small screens, so the same offset the toast stack uses
-// (5rem + the home-indicator inset) keeps this reachable on a phone, and it
-// drops to a normal bottom margin once the nav goes away at lg.
+// Embedded in the bottom of the page, never floating. A fixed control that
+// hovers over the page is a control sitting on top of whatever the page keeps
+// at the bottom: the first version of this shipped 214px wide — 54% of a 393px
+// phone — at z-90, and hit-testing the public routes found it covering the
+// homepage CTA, the sign-up buttons, the login inputs and the cookie-consent
+// buttons on 13 of 28 route/device combinations. In normal flow it takes up its
+// own space and can cover nothing.
 //
-// Two things keep a permanently-floating control from eating the page under it:
+// Every layout puts one at its bottom, so language is reachable from every
+// screen — marketing, auth, onboarding and the signed-in app alike.
 //
-//   Width. The full endonym pair ("United States · English") measures 214px —
-//   54% of a 393px phone — so it reached the horizontal centre of the viewport
-//   and swallowed the click point of every full-width button in its band. On
-//   phones it collapses to the locale code, which is a fifth of the width and
-//   still unambiguous; `region` alone would not be, since en-US and es-US share
-//   "US". The endonyms come back at sm, where there is room for them.
-//
-//   Stacking. This is page furniture, not an overlay, so it belongs *under*
-//   everything transient: the cookie banner (z-50), the PWA prompt (z-60),
-//   dialogs (z-80/90), the command bar (z-95) and toasts (z-100). At z-90 it
-//   drew on top of all of them — including every modal, since it renders after
-//   children in the root layout and so won its own layer on paint order.
+// On phones the trigger collapses to the locale code, which is a fifth of the
+// width of the endonym pair and still unambiguous; `region` alone would not be,
+// since en-US and es-US share "US". The endonyms come back at sm.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -30,7 +25,13 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { setLocale } from '@/lib/i18n/actions';
 import { LOCALES, type LocaleCode } from '@/lib/i18n/locales';
 
-export function LanguagePicker() {
+type ControlProps = {
+  /** Positioning for the wrapper. Must establish a containing block: the menu
+   *  is absolute and hangs off the top of it. */
+  className: string;
+};
+
+function LanguageControl({ className }: ControlProps) {
   const active = useLocale();
   const t = useTranslations();
   const router = useRouter();
@@ -95,11 +96,7 @@ export function LanguagePicker() {
   );
 
   return (
-    <div
-      ref={rootRef}
-      className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-4 z-30 lg:bottom-6"
-      data-testid="language-picker"
-    >
+    <div ref={rootRef} className={className} data-testid="language-picker">
       {open && (
         <div
           ref={listRef}
@@ -165,4 +162,12 @@ export function LanguagePicker() {
       </button>
     </div>
   );
+}
+
+/**
+ * The language control, for the bottom of a layout. In normal flow, so it can
+ * never cover the page it sits on.
+ */
+export function LanguageBar({ className = '' }: { className?: string } = {}) {
+  return <LanguageControl className={`relative inline-block ${className}`.trim()} />;
 }

@@ -168,6 +168,10 @@ export const reminderTools: ToolDefinition[] = [
     capability: 'edit',
     risk: 'low',
     readOnly: false,
+    // The service records this one now, with its own copy, so the family sees
+    // the same line whether Bubaly did it or a person did. Without this the
+    // executor would add a second, blander entry for the assistant's path.
+    activityFrom: 'service',
     input: z.object({
       reminder_id: z.string().nullish(),
       title: z.string().nullish().describe('Part of the reminder title, when the id is unknown'),

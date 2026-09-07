@@ -4,7 +4,7 @@
 // what the family needs, auto-handles the high-confidence items, and surfaces
 // the rest for one-tap approval or awareness. 100% Supabase-wired via the
 // `autopilot_suggestions` table; the prediction logic lives in lib/autopilot.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Rocket, ShieldCheck, AlertTriangle, Sparkles, Check, X, RefreshCw, Gauge,
   CalendarClock, FileClock, Cake, ShoppingCart, ListChecks, CircleDot,
@@ -13,6 +13,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -89,6 +91,10 @@ export function AutopilotModule() {
   );
   const highRisks = open.filter((s) => s.urgency === 3).length;
 
+  // One submission id per suggestion: approving the same one twice must not
+  // leave the family two copies of the reminder it creates.
+  const reminderIds = useRef<Record<string, string>>({});
+
   async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     const supabase = createClient();
     // Approving a "create reminder" writes a real reminder the family sees on the
@@ -96,21 +102,25 @@ export function AutopilotModule() {
     // it up via dueFamilyReminderNotices, same as the Front Desk's call reminders.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      const { error: remErr } = await supabase.from('family_reminders').insert({
-        family_id: familyId,
-        created_by: userId,
+      // Through the service. `status: 'pending'` and `priority: 'normal'` are
+      // both outside 0014's CHECK sets, so this insert was rejected every time —
+      // the guard below then correctly refused to mark the suggestion executed,
+      // which is why approving a reminder suggestion has always just errored.
+      const reminder = await createReminderAction({
         title: payload.title ?? s.title,
         notes: s.detail ?? null,
         kind: 'task',
-        priority: s.urgency >= 3 ? 'high' : 'normal',
-        remind_at: payload.at ?? new Date().toISOString(),
-        member_id: s.member_id,
-        status: 'pending',
-        ai_suggested: true,
+        priority: s.urgency >= 3 ? 'high' : 'medium',
+        remindAt: payload.at ?? new Date().toISOString(),
+        memberId: s.member_id,
+        aiSuggested: true,
+        // The suggestion is the composition: approving it twice must not leave
+        // the family two copies of the same reminder.
+        submissionId: reminderIds.current[s.id] ||= newSubmissionId(),
       });
       // Don't claim "Bubaly handled it" / mark the suggestion executed if the
       // reminder the user approved never actually got written.
-      if (remErr) return toastError(describeDbError(remErr));
+      if (!reminder.ok) return toastError(reminder.error);
       status = 'executed';
     }
     const { error: upErr } = await supabase.from('autopilot_suggestions')

@@ -11,6 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createTransactionAction } from '@/app/(app)/dashboard/billing/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -538,17 +539,16 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
     if (!name) return onError('Add a description');
     if (!amount || amount <= 0) return onError('Enter a valid amount');
     setLoading(true);
-    const { error } = await createClient().from('transactions').insert({
-      family_id: familyId, created_by: userId,
+    const res = await createTransactionAction({
       name, amount,
       type: String(f.get('type') ?? 'expense') as TransactionType,
       category: String(f.get('category') ?? '') || null,
       date: String(f.get('date') ?? '') || new Date().toISOString().slice(0, 10),
-      account_id: String(f.get('account_id') ?? '') || null,
-      member_id: String(f.get('member_id') ?? '') || null,
+      accountId: String(f.get('account_id') ?? '') || null,
+      memberId: String(f.get('member_id') ?? '') || null,
     });
     setLoading(false);
-    if (error) return onError(describeDbError(error));
+    if (!res.ok) return onError(res.error);
     onSaved();
   }
 

@@ -32,7 +32,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
-  createEvent, deleteEvent, updateEvent,
+  createEvent, createEvents, deleteEvent, deleteEvents, updateEvent,
   EVENT_CATEGORIES, EVENT_RECURRENCES,
 } from '@/lib/services/calendar';
 import { makeKey } from '@/lib/services/idempotency';
@@ -211,5 +211,79 @@ export async function deleteCalendarEventAction(eventId: string): Promise<Calend
   } catch (err) {
     console.error('[calendar-action] delete failed', err);
     return { ok: false, error: describeActionError(err, 'Could not remove that event.') };
+  }
+}
+
+export type ApplyRoutineInput = {
+  events: {
+    title: string;
+    startsAt: string;
+    endsAt?: string | null;
+    category?: string;
+    assigneeId?: string | null;
+  }[];
+  /**
+   * Minted per composition in the browser. Applying the same routine to the same
+   * week twice is one composition, and adds one week of events rather than two.
+   */
+  submissionId?: string;
+};
+
+export type ApplyRoutineResult =
+  | { ok: true; eventIds: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Materialise a routine into the week as ONE write.
+ *
+ * The rows still come from `materializeRoutine`, which owns the weekday and
+ * time-of-day arithmetic and has its own tests; this only decides where they
+ * land and under whose name.
+ */
+export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Promise<ApplyRoutineResult> {
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const scope = scopeFromUserContext(ctx, supabase, {
+    idempotencyKey: submissionKey('calendar.applyRoutine', ctx.active.familyId, input.submissionId),
+  });
+
+  try {
+    const events = input.events ?? [];
+    if (!events.length) return { ok: false, error: 'This routine has no active days.' };
+
+    const result = await createEvents(scope, events.map((e) => ({
+      title: e.title,
+      startsAt: asStoredInstant(e.startsAt) ?? '',
+      endsAt: asStoredInstant(e.endsAt) ?? null,
+      category: asCategory(e.category),
+      assigneeId: e.assigneeId ?? null,
+      allDay: false,
+      recurrence: 'none' as const,
+    })));
+    if (!result.ok) return { ok: false, error: result.error };
+
+    revalidatePath(PATH);
+    return { ok: true, eventIds: result.data.map((e) => e.id) };
+  } catch (err) {
+    console.error('[calendar-action] apply routine failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not add those events.') };
+  }
+}
+
+export type UndoResult =
+  | { ok: true; removed: number }
+  | { ok: false; error: string };
+
+/** The undo behind "added 12 events for this week". Family-scoped. */
+export async function undoCalendarEventsAction(eventIds: string[]): Promise<UndoResult> {
+  const scope = await calendarScope();
+  try {
+    const result = await deleteEvents(scope, eventIds ?? []);
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    return { ok: true, removed: result.data.removed };
+  } catch (err) {
+    console.error('[calendar-action] undo failed', err);
+    return { ok: false, error: describeActionError(err, 'Could not undo those events.') };
   }
 }
