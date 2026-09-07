@@ -14,5 +14,5 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HowItWorksPage() {
   const t = await getTranslations();
-  return <><HowItWorksReferencePage /><MarketingAeoSection path="/how-it-works" name="How Bubaly Works" description={t('howItWorks.howBubalyTurnsScatteredFamily')} /></>;
+  return <><HowItWorksReferencePage /><MarketingAeoSection path="/how-it-works" name={t('howItWorks.howBubalyWorks')} description={t('howItWorks.howBubalyTurnsScatteredFamily')} /></>;
 }

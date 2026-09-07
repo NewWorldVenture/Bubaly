@@ -532,7 +532,7 @@ export default async function SecurityPage() {
           </div>
         </Container>
       </div>
-      <MarketingAeoSection path="/security" name="Bubaly Security" description={t('security.howBubalyProtectsFamilyData')} />
+      <MarketingAeoSection path="/security" name={t('security.bubalySecurity')} description={t('security.howBubalyProtectsFamilyData')} />
     </PageWrap>
   );
 }

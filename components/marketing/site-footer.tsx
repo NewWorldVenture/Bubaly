@@ -25,40 +25,46 @@ const SOCIAL_ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Ele
   tiktok: TiktokIcon,
 };
 
+// Catalogue KEYS, not copy. The footer renders on every marketing page, so a
+// literal here is English on every one of them at once — which is exactly what
+// happened: these were plain strings, `{l.label}` printed them verbatim, and a
+// half-finished migration left one entry reading `siteFooter.acceptableUse` on
+// screen because the key was never passed through t(). Keys resolve or fall
+// back to English; a raw key on screen is not a state this can reach.
 const GROUPS = [
   {
-    title: 'Product',
+    title: 'siteFooter.product',
     links: [
-      { href: '/features', label: 'Features' },
-      { href: '/how-it-works', label: 'How it works' },
-      { href: '/pricing', label: 'Pricing' },
-      { href: '/mobile', label: 'Mobile app' },
-      { href: '/ai', label: 'AI assistant' },
+      { href: '/features', label: 'marketing.nav.features' },
+      { href: '/how-it-works', label: 'marketing.nav.howItWorks' },
+      { href: '/pricing', label: 'marketing.nav.pricing' },
+      { href: '/mobile', label: 'siteFooter.mobileApp' },
+      { href: '/ai', label: 'marketing.nav.aiAssistant' },
     ],
   },
   {
-    title: 'Company',
+    title: 'siteFooter.company',
     links: [
-      { href: '/security', label: 'Security' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/contact', label: 'Contact' },
-      { href: '/faq', label: 'FAQ' },
+      { href: '/security', label: 'marketing.nav.security' },
+      { href: '/blog', label: 'marketing.nav.blog' },
+      { href: '/contact', label: 'siteFooter.contact' },
+      { href: '/faq', label: 'marketing.nav.faq' },
     ],
   },
   {
-    title: 'Get started',
+    title: 'marketing.getStarted',
     links: [
-      { href: '/signup', label: 'Create account' },
-      { href: '/login', label: 'Log in' },
+      { href: '/signup', label: 'siteFooter.createAccount' },
+      { href: '/login', label: 'marketing.logIn' },
     ],
   },
   {
-    title: 'Legal',
+    title: 'siteFooter.legal',
     links: [
-      { href: '/privacy', label: 'Privacy Policy' },
-      { href: '/terms', label: 'Terms of Service' },
+      { href: '/privacy', label: 'siteFooter.privacyPolicy' },
+      { href: '/terms', label: 'siteFooter.termsOfService' },
       { href: '/acceptable-use', label: 'siteFooter.acceptableUse' },
-      { href: '/cookies', label: 'Cookie Policy' },
+      { href: '/cookies', label: 'siteFooter.cookiePolicy' },
     ],
   },
 ];
@@ -81,12 +87,12 @@ export async function SiteFooter() {
         </div>
         {GROUPS.map((g) => (
           <div key={g.title}>
-            <h4 className="text-[11px] font-semibold text-fg">{g.title}</h4>
+            <h4 className="text-[11px] font-semibold text-fg">{t(g.title)}</h4>
             <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-[10px] text-muted transition hover:text-fg">
-                    {l.label}
+                    {t(l.label)}
                   </Link>
                 </li>
               ))}
@@ -98,7 +104,7 @@ export async function SiteFooter() {
       {/* Bottom legal bar */}
       <div className="border-t border-border/60">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-3 px-5 py-5 text-[11px] text-muted sm:flex-row sm:px-8 lg:px-10">
-          <p>© {new Date().getFullYear()} Bubaly. All rights reserved.</p>
+          <p>{t('siteFooter.allRightsReserved', { year: new Date().getFullYear() })}</p>
 
           {/* Only the accounts an admin has actually filled in — an empty set
               renders nothing rather than a row of links to nowhere. */}
@@ -112,7 +118,7 @@ export async function SiteFooter() {
                     href={social[key]}
                     target="_blank"
                     rel="me noopener noreferrer"
-                    aria-label={`Bubaly on ${label}`}
+                    aria-label={t('siteFooter.bubalyOn', { platform: label })}
                     className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg focus-ring"
                   >
                     <Icon className="h-4 w-4" />

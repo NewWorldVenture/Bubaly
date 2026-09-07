@@ -23,8 +23,8 @@ export async function MarketingAeoSection({
       {items.length > 0 ? (
         <Section className="pt-0">
           <SectionHeading
-            eyebrow="Knowledge Center"
-            title={`Answers about ${name}`}
+            eyebrow={t('marketingAeoSection.knowledgeCenter')}
+            title={t('marketingAeoSection.answersAbout', { name })}
             description={t('marketingAeoSection.clearAnswersMaintainedByThe')}
           />
           <div className="mx-auto mt-10 max-w-3xl">

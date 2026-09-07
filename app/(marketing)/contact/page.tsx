@@ -83,7 +83,7 @@ export default async function ContactPage() {
         <ContactForm />
       </div>
     </Section>
-    <MarketingAeoSection path="/contact" name="Contact Bubaly" description={t('contact.getInTouchWithThe')} />
+    <MarketingAeoSection path="/contact" name={t('contact.contactBubaly')} description={t('contact.getInTouchWithThe')} />
     </>
   );
 }

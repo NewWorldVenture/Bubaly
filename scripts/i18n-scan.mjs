@@ -41,15 +41,29 @@ export const GATED_SURFACES = {
   everything: ['app', 'components'],
 };
 
-const IGNORE_DIRS = new Set([
+// Build output and VCS metadata nest anywhere, so these are skipped at any
+// depth.
+const IGNORE_ANYWHERE = new Set([
   'node_modules', '.next', '.git', 'out', 'dist', 'coverage',
-  'test-results', 'playwright-report', 'ios', 'android', 'mobile',
+  'test-results', 'playwright-report',
 ]);
+
+// Sibling PROJECTS at the repo root: the Expo app and the native shells, which
+// have their own copy and their own translation story.
+//
+// Matched by path from the root, NOT by name. Matching the bare name skipped
+// every directory called `mobile` at any depth — including
+// `app/(marketing)/mobile`, the public Mobile App page, whose eight hardcoded
+// English strings were therefore invisible to the gate. The surface said clean
+// while a visitor could read English on the page, which is the exact failure
+// this scanner exists to prevent.
+const IGNORE_AT_ROOT = new Set(['ios', 'android', 'mobile']);
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
-    if (IGNORE_DIRS.has(entry)) continue;
+    if (IGNORE_ANYWHERE.has(entry)) continue;
     const full = join(dir, entry);
+    if (IGNORE_AT_ROOT.has(entry) && relative(ROOT, full) === entry) continue;
     const st = statSync(full);
     if (st.isDirectory()) walk(full, out);
     else if (/\.tsx?$/.test(entry)) out.push(full);
@@ -136,8 +150,37 @@ const NOT_COPY = [
 // two admin pages through the whole migration because `message` was not on it,
 // and the count said zero while a person could read English on the screen. If a
 // component takes a string a person reads, its prop name belongs here.
-const PROP_PATTERN =
-  /\b(?:placeholder|aria-label|title|alt|label|emptyLabel|confirmLabel|cancelLabel|message|description|text|heading|subheading|subtitle|hint|helper|helperText|tooltip|caption|summary|note|badge|ctaLabel|actionLabel|submitLabel|okLabel|emptyText|errorText|legend)="([^"{}]{3,})"/g;
+//
+// `eyebrow` and `subhead` were added after `<SectionHeading eyebrow="Knowledge
+// Center" …>` shipped that label to every locale on six marketing pages.
+const COPY_PROPS = [
+  'placeholder', 'aria-label', 'title', 'alt', 'label', 'emptyLabel', 'confirmLabel',
+  'cancelLabel', 'message', 'description', 'text', 'heading', 'subheading', 'subtitle',
+  'hint', 'helper', 'helperText', 'tooltip', 'caption', 'summary', 'note', 'badge',
+  'ctaLabel', 'actionLabel', 'submitLabel', 'okLabel', 'emptyText', 'errorText', 'legend',
+  'eyebrow', 'subhead', 'headline', 'tagline', 'blurb', 'question', 'answer',
+];
+const PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.join('|')})="([^"{}]{3,})"`, 'g');
+
+/**
+ * Copy sitting in a DATA structure rather than in the markup:
+ *
+ *   const GROUPS = [{ title: 'Product', links: [{ label: 'Features' }] }];
+ *
+ * The scanner saw none of this. `{l.label}` renders it, so it is copy by every
+ * measure that matters, but it is neither a JSX text node nor a JSX attribute —
+ * and a nav, a footer, a settings list or a feature grid is almost always
+ * written this way. The whole site footer shipped untranslated behind this gap,
+ * on every marketing page, while the surface reported clean.
+ *
+ * Restricted to the same prop names as above: `a string in an object` also
+ * describes a table name, a sort key and a CSS class, so the property name is
+ * what makes it copy. A value that is itself a catalogue key ('siteFooter.product')
+ * is a single lowercase-initial token and fails `looksLikeCopy`, so migrating a
+ * literal to a key clears the finding.
+ */
+const DATA_PATTERN = new RegExp(
+  String.raw`(?:^|[\s,{[])(?:${COPY_PROPS.join('|')})\s*:\s*'([^'\\\n]{3,})'`, 'gm');
 // Copy passed as a CALL ARGUMENT, which the two patterns above cannot see: the
 // string is in expression position, not in a tag or an attribute. This is the
 // third and last blind spot the migration found, and the loudest of its kind —
@@ -279,6 +322,7 @@ export function scanFile(file) {
   // page copy — and that email goes to the operator, not to the visitor.
   if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(DATA_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);
