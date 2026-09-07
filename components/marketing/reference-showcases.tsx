@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import {
   ArrowRight,
   Bell,
@@ -150,30 +151,33 @@ function FeatureCard({
   );
 }
 
+// Catalogue KEYS, not copy. The `\n` that used to sit inside each label is
+// gone with them: a line break belongs to English's word lengths, and German
+// "Aufgaben verwalten" breaks in a different place than "Manage Tasks". The
+// heading wraps on its own now (`whitespace-pre-line` became `text-balance`).
 const FEATURE_TOPICS = [
-  [CalendarDays, 'Organize\nSchedules', 'violet'],
-  [CheckSquare2, 'Manage\nTasks', 'green'],
-  [UtensilsCrossed, 'Plan\nMeals', 'orange'],
-  [GraduationCap, 'Stay on Top of\nSchool', 'blue'],
-  [Heart, 'Health &\nWellness', 'pink'],
-  [Home, 'Home\nManagement', 'blue'],
-  [Star, 'AI Family\nAssistant', 'violet'],
+  [CalendarDays, 'featureTopics.organizeSchedules', 'violet'],
+  [CheckSquare2, 'featureTopics.manageTasks', 'green'],
+  [UtensilsCrossed, 'featureTopics.planMeals', 'orange'],
+  [GraduationCap, 'featureTopics.stayOnTopOfSchool', 'blue'],
+  [Heart, 'featureTopics.healthWellness', 'pink'],
+  [Home, 'featureTopics.homeManagement', 'blue'],
+  [Star, 'featureTopics.aiFamilyAssistant', 'violet'],
 ] as const;
 
-export function FeaturesReferencePage() {
+export async function FeaturesReferencePage() {
+  const t = await getTranslations();
   return (
     <ReferencePage>
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-2 pt-[26px] sm:px-7">
         <section className="text-center">
-          <Eyebrow>Less Managing Life. More Living It.</Eyebrow>
-          <h1 className="mt-3 text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
-            Everything your family needs,
-            <br />
-            <GradientText>all in one intelligent place.</GradientText>
+          <Eyebrow>{t('referenceShowcases.eyebrow')}</Eyebrow>
+          <h1 className="mt-3 text-balance text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
+            {t('referenceShowcases.featuresTitleLead')}{' '}
+            <GradientText>{t('referenceShowcases.featuresTitleAccent')}</GradientText>
           </h1>
-          <p className="mx-auto mt-3.5 max-w-[590px] text-[15px] leading-6 text-white/72">
-            Bubaly combines powerful tools with AI intelligence to handle the invisible work of family life
-            <br className="hidden sm:block" /> — so you spend less time managing life and more time living it.
+          <p className="mx-auto mt-3.5 max-w-[590px] text-balance text-[15px] leading-6 text-white/72">
+            {t('referenceShowcases.featuresSubtitle')}
           </p>
         </section>
 
@@ -181,14 +185,14 @@ export function FeaturesReferencePage() {
           {FEATURE_TOPICS.map(([Icon, title, tone]) => (
             <div key={title} className="text-center">
               <TopicIcon icon={Icon} tone={tone} />
-              <h2 className="mt-2.5 whitespace-pre-line text-[15px] font-semibold leading-[21px]">{title}</h2>
+              <h2 className="mt-2.5 text-balance text-[15px] font-semibold leading-[21px]">{t(title)}</h2>
             </div>
           ))}
         </section>
 
         <section className="mt-4 border-t border-white/[0.07] pt-[14px] text-center">
-          <h2 className="text-[27px] font-bold tracking-[-0.025em]">Powerful features. Peaceful families.</h2>
-          <p className="mt-1.5 text-[13px] text-white/65">Discover how Bubaly makes everyday life easier.</p>
+          <h2 className="text-[27px] font-bold tracking-[-0.025em]">{t('referenceShowcases.powerfulFeatures')}</h2>
+          <p className="mt-1.5 text-[13px] text-white/65">{t('referenceShowcases.discoverHowBubaly')}</p>
         </section>
 
         <section className="mt-[18px] grid gap-[14px] px-0 sm:grid-cols-2 lg:grid-cols-4 lg:px-[14px]">
@@ -196,8 +200,8 @@ export function FeaturesReferencePage() {
             id="smart-calendar"
             icon={CalendarDays}
             tone="violet"
-            title="Smart Calendar"
-            description="See everyone's schedule in one place. AI automatically adds events from emails, texts, and school updates."
+            title={t('featureCards.smartCalendar')}
+            description={t('featureCards.smartCalendarBody')}
           >
             <MiniCalendar />
           </FeatureCard>
@@ -205,8 +209,8 @@ export function FeaturesReferencePage() {
             id="tasks-chores"
             icon={CheckSquare2}
             tone="green"
-            title="Tasks & Chores"
-            description="Assign chores, track progress, and reward good habits. AI suggests tasks based on your family's routine."
+            title={t('featureCards.tasksChores')}
+            description={t('featureCards.tasksChoresBody')}
           >
             <TaskList />
           </FeatureCard>
@@ -214,16 +218,16 @@ export function FeaturesReferencePage() {
             id="meal-planning"
             icon={UtensilsCrossed}
             tone="orange"
-            title="Meal Planning"
-            description="Plan meals for the week, automatically create grocery lists, and discover recipes your family will love."
+            title={t('featureCards.mealPlanning')}
+            description={t('featureCards.mealPlanningBody')}
           >
             <MealPlan />
           </FeatureCard>
           <FeatureCard
             icon={ShoppingBasket}
             tone="green"
-            title="Grocery Lists"
-            description="Smart lists that update automatically based on your meal plan and what you actually need."
+            title={t('featureCards.groceryLists')}
+            description={t('featureCards.groceryListsBody')}
           >
             <GroceryList />
           </FeatureCard>
@@ -231,8 +235,8 @@ export function FeaturesReferencePage() {
             id="school-hub"
             icon={GraduationCap}
             tone="blue"
-            title="School Hub"
-            description="Keep track of homework, assignments, school events, important dates, and teacher communications."
+            title={t('featureCards.schoolHub')}
+            description={t('featureCards.schoolHubBody')}
             row={2}
           >
             <SchoolList />
@@ -241,8 +245,8 @@ export function FeaturesReferencePage() {
             id="health-medications"
             icon={HeartPulse}
             tone="pink"
-            title="Health & Medications"
-            description="Never miss a dose or appointment. Get smart reminders and keep health info all in one place."
+            title={t('featureCards.healthMedications')}
+            description={t('featureCards.healthMedicationsBody')}
             row={2}
           >
             <HealthList />
@@ -251,8 +255,8 @@ export function FeaturesReferencePage() {
             id="home-management"
             icon={HousePlus}
             tone="green"
-            title="Home Management"
-            description="Track maintenance, warranties, important documents, and reminders to keep your home running smoothly."
+            title={t('featureCards.homeManagement')}
+            description={t('featureCards.homeManagementBody')}
             row={2}
           >
             <HomeList />
@@ -260,8 +264,8 @@ export function FeaturesReferencePage() {
           <FeatureCard
             icon={Sparkles}
             tone="violet"
-            title="AI Family Assistant"
-            description="Your AI sidekick that helps plan, organize, and keep your family ahead of everything."
+            title={t('featureCards.aiFamilyAssistant')}
+            description={t('featureCards.aiFamilyAssistantBody')}
             row={2}
           >
             <AssistantChat />
@@ -398,30 +402,33 @@ const FLOW_CARDS = [
   [CheckCircle2, 'You Stay Ahead', 'AI reminds, suggests, and\nhelps you plan better.'],
 ] as const;
 
+// Keys, not copy — and the hand-placed `\n` line breaks are gone with them.
+// Those breaks were measured against English word lengths; German and Dutch
+// compounds break in different places, so the text wraps on its own now.
 const WORK_STEPS = [
-  [UsersRound, 'Create Your Family', 'Set up your household in\nminutes and invite family\nmembers.'],
-  [Mail, 'Add or Forward Anything', 'Forward emails, snap photos\nof flyers, or add events, tasks,\nand lists.'],
-  [Sparkles, 'AI Gets to Work', 'Our AI reads, understands, and\norganizes everything into the\nright places.'],
-  [Users, 'Everyone Stays in Sync', 'Calendars, tasks, reminders,\nand updates are shared in\nreal time.'],
-  [CheckCircle2, 'Life Runs Smoother', 'Bubaly helps you plan\nahead, avoid chaos, and\nenjoy more time together.'],
+  [UsersRound, 'workSteps.createYourFamily', 'workSteps.createYourFamilyBody'],
+  [Mail, 'workSteps.addOrForward', 'workSteps.addOrForwardBody'],
+  [Sparkles, 'workSteps.aiGetsToWork', 'workSteps.aiGetsToWorkBody'],
+  [Users, 'workSteps.everyoneInSync', 'workSteps.everyoneInSyncBody'],
+  [CheckCircle2, 'workSteps.lifeRunsSmoother', 'workSteps.lifeRunsSmootherBody'],
 ] as const;
 
-export function HowItWorksReferencePage() {
+export async function HowItWorksReferencePage() {
+  const t = await getTranslations();
   return (
     <ReferencePage>
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-3 pt-8 sm:px-[31px]">
         <section className="relative min-h-[463px] lg:h-[463px]">
           <div className="max-w-[414px] pt-[26px] lg:pl-[14px]">
-            <Eyebrow>Less Managing Life. More Living It.</Eyebrow>
-            <h1 className="mt-3 text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
-              How Bubaly
-              <br />
-              <GradientText>Works</GradientText>
+            <Eyebrow>{t('referenceShowcases.eyebrow')}</Eyebrow>
+            <h1 className="mt-3 text-balance text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
+              {t('referenceShowcases.howBubalyLead')}{' '}
+              <GradientText>{t('referenceShowcases.howBubalyAccent')}</GradientText>
             </h1>
-            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is the AI operating system for family<br className="hidden sm:block" /> life. It quietly handles the logistics behind the<br className="hidden sm:block" /> scenes—so you get your time back to live it.</p>
+            <p className="mt-[16px] max-w-[390px] text-balance text-[16px] leading-[26px] text-white/78">{t('referenceShowcases.howBubalyBody')}</p>
             <div className="mt-[20px] flex flex-wrap gap-[15px]">
-              <PrimaryButton>Get Started Free <ArrowRight className="h-4 w-4" /></PrimaryButton>
-              <OutlineButton href="#steps">See It in Action</OutlineButton>
+              <PrimaryButton>{t('visualMocks.getStartedFree')} <ArrowRight className="h-4 w-4" /></PrimaryButton>
+              <OutlineButton href="#steps">{t('referenceShowcases.seeItInAction')}</OutlineButton>
             </div>
             <SocialProof />
           </div>
@@ -494,25 +501,26 @@ function PhonePanel({ title, className, children }: { title: string; className?:
   return <div className={cn('rounded-[9px] bg-white/[0.035] p-2.5', className)}><div className="mb-1 flex items-center justify-between"><p className="text-[8px] font-semibold">{title}</p><CalendarDays className="h-3 w-3 text-violet-400" /></div>{children}</div>;
 }
 
-function StepsPanel() {
+async function StepsPanel() {
+  const t = await getTranslations();
   return (
     <section id="steps" className="dark rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-3 pb-3 pt-[5px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.02)]">
-      <div className="text-center"><h2 className="text-[27px] font-bold tracking-[-0.025em]">It works in 5 simple steps</h2><p className="mt-1 text-[12px] text-white/62">Powerful technology. Simple for families.</p></div>
+      <div className="text-center"><h2 className="text-[27px] font-bold tracking-[-0.025em]">{t('referenceShowcases.itWorksInFiveSteps')}</h2><p className="mt-1 text-[12px] text-white/62">{t('referenceShowcases.powerfulTechnology')}</p></div>
       <div className="mt-[41px] grid gap-7 lg:grid-cols-5">
         {WORK_STEPS.map(([Icon, title, body], index) => (
           <article key={title} className="relative min-h-[175px] rounded-[13px] border border-white/[0.09] bg-white/[0.04] px-3 pb-3 pt-7 text-center shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
             <span className="absolute -top-[29px] left-1/2 grid h-[38px] w-[38px] -translate-x-1/2 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-700 text-[15px] font-semibold shadow-[0_8px_20px_rgba(90,48,220,.32)]">{index + 1}</span>
             {index < 4 && <><span className="absolute -top-[10px] left-[68%] hidden w-[82%] border-t border-dashed border-violet-500/65 lg:block" /><ArrowRight className="absolute -right-[35px] -top-[16px] hidden h-3 w-3 text-violet-400 lg:block" /></>}
             <Icon className="mx-auto h-[45px] w-[45px] text-violet-500" strokeWidth={1.8} />
-            <h3 className="mt-3 text-[11px] font-semibold">{title}</h3>
-            <p className="mt-2 whitespace-pre-line text-[10px] leading-[16px] text-white/63">{body}</p>
+            <h3 className="mt-3 text-[11px] font-semibold">{t(title)}</h3>
+            <p className="mt-2 text-balance text-[10px] leading-[16px] text-white/63">{t(body)}</p>
           </article>
         ))}
       </div>
       <div className="mt-[13px] border-t border-white/[0.06] pt-[13px]">
         <div className="flex min-h-[66px] flex-col gap-4 rounded-[12px] border border-white/[0.08] bg-white/[0.035] px-7 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4"><ShieldCheck className="h-9 w-9 text-violet-400" /><div><h3 className="text-[13px] font-semibold">Private by Design. Built for Families.</h3><p className="mt-1 text-[11px] text-white/60">Family-scoped access controls keep household data within your family account.</p></div></div>
-          <Link href="/security" className="flex items-center gap-3 text-[11px] text-violet-400">Learn more about security <ArrowRight className="h-4 w-4" /></Link>
+          <div className="flex items-center gap-4"><ShieldCheck className="h-9 w-9 text-violet-400" /><div><h3 className="text-[13px] font-semibold">{t('referenceShowcases.privateByDesign')}</h3><p className="mt-1 text-[11px] text-white/60">{t('referenceShowcases.familyScopedAccess')}</p></div></div>
+          <Link href="/security" className="flex items-center gap-3 text-[11px] text-violet-400">{t('referenceShowcases.learnMoreAboutSecurity')} <ArrowRight className="h-4 w-4" /></Link>
         </div>
       </div>
     </section>
