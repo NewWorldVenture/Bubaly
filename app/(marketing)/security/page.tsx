@@ -11,6 +11,7 @@ import { Container, GradientText, PageWrap } from '@/components/marketing/visual
 import { FAQAccordion } from '@/components/marketing/faq-accordion';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/security', {
@@ -141,7 +142,8 @@ const COMMITMENTS = [
   { text: 'We invest in continuous improvement', detail: 'Regular penetration tests, security audits, and infrastructure upgrades.' },
 ];
 
-export default function SecurityPage() {
+export default async function SecurityPage() {
+  const t = await getTranslations();
   return (
     <PageWrap>
       {/* Hero */}
@@ -153,7 +155,7 @@ export default function SecurityPage() {
             </div>
             <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
               Your family&apos;s privacy<br />
-              <span className="gradient-text-violet">is our top priority.</span>
+              <span className="gradient-text-violet">{t('security.isOurTopPriority')}</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-white/65">
               Bubaly is built with the same security standards used by leading banks and healthcare
@@ -220,8 +222,8 @@ export default function SecurityPage() {
       <div id="architecture" />
       <Container className="py-20">
         <div className="mb-12 text-center">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Defense in Depth</p>
-          <h2 className="text-3xl font-black sm:text-4xl">Security at Every Layer</h2>
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.defenseInDepth')}</p>
+          <h2 className="text-3xl font-black sm:text-4xl">{t('security.securityAtEveryLayer')}</h2>
           <p className="mx-auto mt-4 max-w-2xl text-white/55">
             Six layers of protection stand between a threat and your family&apos;s data.
             Each layer is independently audited and continuously monitored.
@@ -268,8 +270,8 @@ export default function SecurityPage() {
       <Container className="py-0">
         <div className="rounded-3xl border border-white/8 bg-white/[0.025] p-8 sm:p-12">
           <div className="mb-10 text-center">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Trust Center</p>
-            <h2 className="text-3xl font-black sm:text-4xl">Certified. Compliant. Trusted.</h2>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.trustCenter')}</p>
+            <h2 className="text-3xl font-black sm:text-4xl">{t('security.certifiedCompliantTrusted')}</h2>
             <p className="mx-auto mt-4 max-w-2xl text-white/55">
               Bubaly meets and exceeds the highest industry standards. Our compliance posture is independently
               verified and continuously maintained.
@@ -290,15 +292,15 @@ export default function SecurityPage() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-6 border-t border-white/8 pt-8">
             <div className="flex items-center gap-2 text-sm text-white/50">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span>Annual penetration testing</span>
+              <span>{t('security.annualPenetrationTesting')}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-white/50">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span>Continuous vulnerability scanning</span>
+              <span>{t('security.continuousVulnerabilityScanning')}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-white/50">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span>Bug bounty program</span>
+              <span>{t('security.bugBountyProgram')}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-white/50">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -312,8 +314,8 @@ export default function SecurityPage() {
       <Container className="py-20">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Data Sovereignty</p>
-            <h2 className="text-3xl font-black sm:text-4xl">Your Data, Your Region</h2>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.dataSovereignty')}</p>
+            <h2 className="text-3xl font-black sm:text-4xl">{t('security.yourDataYourRegion')}</h2>
             <p className="mt-4 text-white/55">
               Choose where your family&apos;s data lives. All regions run on AWS infrastructure with
               SOC 2, ISO 27001, and ISO 27018 certifications. Data never leaves your selected region
@@ -322,15 +324,15 @@ export default function SecurityPage() {
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-3 text-sm text-white/60">
                 <Cloud className="h-4 w-4 text-violet-300" />
-                <span>Multi-AZ deployment for high availability</span>
+                <span>{t('security.multiAzDeploymentForHigh')}</span>
               </div>
               <div className="flex items-center gap-3 text-sm text-white/60">
                 <RefreshCw className="h-4 w-4 text-violet-300" />
-                <span>Automatic failover within region</span>
+                <span>{t('security.automaticFailoverWithinRegion')}</span>
               </div>
               <div className="flex items-center gap-3 text-sm text-white/60">
                 <Server className="h-4 w-4 text-violet-300" />
-                <span>Encrypted cross-region backups</span>
+                <span>{t('security.encryptedCrossRegionBackups')}</span>
               </div>
             </div>
           </div>
@@ -354,8 +356,8 @@ export default function SecurityPage() {
       {/* You Have Full Control */}
       <Container className="py-0">
         <div className="mb-12 text-center">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Your Data, Your Rules</p>
-          <h2 className="text-3xl font-black sm:text-4xl">You Have Full Control</h2>
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.yourDataYourRules')}</p>
+          <h2 className="text-3xl font-black sm:text-4xl">{t('security.youHaveFullControl')}</h2>
           <p className="mx-auto mt-4 max-w-2xl text-white/55">
             We believe your data belongs to you. These aren&apos;t just words — they&apos;re features
             built into every Bubaly account.
@@ -378,8 +380,8 @@ export default function SecurityPage() {
       <Container className="py-20">
         <div className="rounded-3xl border border-white/8 bg-white/[0.025] p-8 sm:p-12">
           <div className="mb-10 text-center">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Incident Response</p>
-            <h2 className="text-3xl font-black sm:text-4xl">When It Matters Most</h2>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.incidentResponse')}</p>
+            <h2 className="text-3xl font-black sm:text-4xl">{t('security.whenItMattersMost')}</h2>
             <p className="mx-auto mt-4 max-w-2xl text-white/55">
               Our incident response protocol is battle-tested and designed for speed,
               transparency, and accountability.
@@ -414,8 +416,8 @@ export default function SecurityPage() {
       <Container className="py-0">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Responsible Disclosure</p>
-            <h2 className="text-3xl font-black sm:text-4xl">Found a Vulnerability?</h2>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.responsibleDisclosure')}</p>
+            <h2 className="text-3xl font-black sm:text-4xl">{t('security.foundAVulnerability')}</h2>
             <p className="mt-4 text-white/55">
               We take security vulnerabilities seriously and appreciate the work of security researchers
               who help us keep families safe. Our responsible disclosure program rewards researchers
@@ -426,34 +428,34 @@ export default function SecurityPage() {
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                 <div>
                   <p className="text-sm font-bold">24-hour acknowledgment</p>
-                  <p className="text-xs text-white/50">We confirm receipt of every report within one business day.</p>
+                  <p className="text-xs text-white/50">{t('security.weConfirmReceiptOfEvery')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                 <div>
                   <p className="text-sm font-bold">48-hour triage</p>
-                  <p className="text-xs text-white/50">Our security team assesses severity and begins work within 48 hours.</p>
+                  <p className="text-xs text-white/50">{t('security.ourSecurityTeamAssessesSeverity')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                 <div>
-                  <p className="text-sm font-bold">Safe harbor policy</p>
-                  <p className="text-xs text-white/50">Researchers acting in good faith are protected from legal action.</p>
+                  <p className="text-sm font-bold">{t('security.safeHarborPolicy')}</p>
+                  <p className="text-xs text-white/50">{t('security.researchersActingInGoodFaith')}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                 <div>
-                  <p className="text-sm font-bold">Credit & recognition</p>
-                  <p className="text-xs text-white/50">Researchers are credited on our security acknowledgments page.</p>
+                  <p className="text-sm font-bold">{t('security.creditRecognition')}</p>
+                  <p className="text-xs text-white/50">{t('security.researchersAreCreditedOnOur')}</p>
                 </div>
               </div>
             </div>
           </div>
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-6 sm:p-8">
-            <h3 className="text-lg font-bold">Report a Vulnerability</h3>
+            <h3 className="text-lg font-bold">{t('security.reportAVulnerability')}</h3>
             <p className="mt-2 text-sm leading-6 text-white/55">
               Send your report to our security team. Include a detailed description, steps to reproduce,
               and potential impact. We&apos;ll work with you to understand and address the issue.
@@ -462,7 +464,7 @@ export default function SecurityPage() {
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4">
                 <Mail className="h-5 w-5 text-violet-300" />
                 <div>
-                  <p className="text-xs text-white/50">Email</p>
+                  <p className="text-xs text-white/50">{t('security.email')}</p>
                   <a href="mailto:security@bubaly.com" className="text-sm font-semibold text-violet-300 hover:text-violet-200">
                     security@bubaly.com
                   </a>
@@ -471,8 +473,8 @@ export default function SecurityPage() {
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4">
                 <KeyRound className="h-5 w-5 text-violet-300" />
                 <div>
-                  <p className="text-xs text-white/50">PGP Key</p>
-                  <p className="text-sm font-semibold text-white/70">Available on request</p>
+                  <p className="text-xs text-white/50">{t('security.pgpKey')}</p>
+                  <p className="text-sm font-semibold text-white/70">{t('security.availableOnRequest')}</p>
                 </div>
               </div>
             </div>
@@ -491,7 +493,7 @@ export default function SecurityPage() {
               <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-violet-600/20">
                 <Shield className="h-8 w-8 text-violet-300" />
               </div>
-              <h2 className="text-3xl font-black">Our Commitment to You</h2>
+              <h2 className="text-3xl font-black">{t('security.ourCommitmentToYou')}</h2>
               <p className="mt-4 text-sm leading-7 text-white/65">
                 We know families trust us with what matters most. That&apos;s why security isn&apos;t a feature
                 we added — it&apos;s the foundation we built on. Every decision, from architecture to
@@ -525,8 +527,8 @@ export default function SecurityPage() {
       <div id="faq" />
       <Container className="py-0 pb-20">
         <div className="mb-10 text-center">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">Common Questions</p>
-          <h2 className="text-3xl font-black sm:text-4xl">Security FAQ</h2>
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.commonQuestions')}</p>
+          <h2 className="text-3xl font-black sm:text-4xl">{t('security.securityFaq')}</h2>
           <p className="mx-auto mt-4 max-w-2xl text-white/55">
             Everything you need to know about how we protect your family&apos;s data.
           </p>
@@ -542,7 +544,7 @@ export default function SecurityPage() {
               <Shield className="h-7 w-7 text-violet-300" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-bold">Have a Security Question?</h2>
+              <h2 className="text-lg font-bold">{t('security.haveASecurityQuestion')}</h2>
               <p className="mt-1 text-sm text-white/55">
                 Our security team is here to help. Reach out anytime — we respond within 24 hours.
               </p>
