@@ -13,7 +13,7 @@
 // persisted. The run link that appears after handling is live for this response
 // only, because the row has no column to remember it in; the copy says so
 // rather than implying a durable link.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -72,16 +72,19 @@ export function InboxQueue({ items, unavailable, needsYou }: {
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Run paths keyed by item id — live for this response only; see the note above. */
   const [runPaths, setRunPaths] = useState<Record<string, string>>({});
-  /** One submission id per row, so a second tap after a failure is the same request. */
-  const [submissionIds] = useState<Record<string, string>>({});
+  // One submission id per ROW, so a second tap after a failed response is the
+  // same request rather than a second one. Keyed by the item id — keyed by
+  // position, the next row would reuse this row's id and the server would
+  // answer with the request that id already made.
+  const submissionIds = useRef<Record<string, string>>({});
 
   const missing = (['messages', 'paperwork', 'communications'] as const).filter((k) => unavailable[k]);
 
   async function handleIt(item: UnifiedInboxItem) {
     if (busyId) return;
     setBusyId(item.id);
-    submissionIds[item.id] ||= newSubmissionId();
-    const result = await handleInboxMessageAction(item.rowId, submissionIds[item.id]);
+    submissionIds.current[item.id] ||= newSubmissionId();
+    const result = await handleInboxMessageAction(item.rowId, submissionIds.current[item.id]);
     setBusyId(null);
     if (!result.ok) {
       toastError(result.error);

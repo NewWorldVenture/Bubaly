@@ -1,6 +1,6 @@
 import 'server-only';
 import type { createServiceClient } from '@/lib/supabase/server';
-import type { Tables } from '@/lib/database.types';
+import type { Json, Tables } from '@/lib/database.types';
 import {
   isTwilioConfigured, searchAvailableNumber, provisionNumber,
 } from '@/lib/guardian/twilio';
@@ -152,7 +152,7 @@ export async function recordInboundMessage(admin: Admin, input: {
   // read back by the provider ref the unique index is on. A row we cannot
   // identify is still filed — the caller simply gets `null` and skips the
   // follow-up write rather than stamping the wrong message.
-  let messageId = data?.[0]?.id ?? null;
+  let messageId: string | null = data?.[0]?.id ?? null;
   if (!messageId && input.providerRef) {
     const found = await admin
       .from('family_inbox_messages')
@@ -281,7 +281,9 @@ export async function fileInboundPaperwork(
       due_on: triage.due_on,
       amount: triage.amount,
       urgency: triage.urgency,
-      actions: triage.actions,
+      // `actions` is a jsonb column; the triage result is a plain array of flat
+      // records, which is valid JSON but not structurally `Json` to TypeScript.
+      actions: triage.actions as unknown as Json,
       meta: { ...fields.meta, source: 'inbound_email' },
     })
     .select('id')

@@ -6,7 +6,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import {
   Inbox, FileSignature, School, Stethoscope, Trophy, Receipt, PartyPopper,
-  FileText, Plus, Check, CalendarPlus, BellPlus, Archive, RotateCcw,
+  FileText, Plus, Check, CalendarPlus, BellPlus, Archive, RotateCcw, CalendarCheck,
   AlertTriangle, Clock, Loader2, X, Sparkles, Copy,
 } from 'lucide-react';
 import type { Tables, Json } from '@/lib/database.types';
@@ -36,6 +36,12 @@ const KIND_ICON: Record<PaperworkKind, typeof FileText> = {
   sports: Trophy,
   bill_or_payment: Receipt,
   event_flyer: PartyPopper,
+  // Triage recognises these two; `paperwork_items.kind` stores them as
+  // bill_or_payment / event_flyer (0169's CHECK), so a row never carries them
+  // today — but the map is exhaustive so the day the column widens, the icon
+  // is already here rather than crashing on an undefined component.
+  receipt: Receipt,
+  reservation: CalendarCheck,
   other: FileText,
 };
 
