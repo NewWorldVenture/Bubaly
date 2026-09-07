@@ -31,7 +31,12 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { addItems, checkItem, clearChecked, removeItem, type GroceryItemInput } from '@/lib/services/groceries';
+import type { Substitution } from '@/lib/meals/substitutions';
+import { createTransaction } from '@/lib/services/finances';
+import {
+  addFromMealPlan, addItems, checkItem, clearChecked, recordShoppingTrip, removeItem,
+  type GroceryItemInput,
+} from '@/lib/services/groceries';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -142,5 +147,148 @@ export async function clearCheckedGroceriesAction(listId: string): Promise<Clear
   } catch (err) {
     console.error('[grocery-action] clear checked failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotClearTheChecked')) };
+  }
+}
+
+// ── The loop's two ends ─────────────────────────────────────────────────────
+//
+// M10's gap was never the maths. `addFromMealPlan` (ingredients − pantry − what
+// is already listed) and `pantryAdjust` both existed and were both tested; what
+// did not exist was a way for a person to reach either of them. The plan → list
+// step was exposed only as an AI tool and a planner-template step, so a family
+// who never asked the concierge for anything saw the loop's two ends and no
+// middle. These two actions are that middle.
+
+export type MealPlanToListResult =
+  | {
+      ok: true;
+      listId: string;
+      added: number;
+      skipped: string[];
+      inPantry: string[];
+      meals: { id: string; name: string; date: string }[];
+      /** Swaps the family's own allergy/preference/pantry rows forced, each with its reason. */
+      substitutions: Substitution[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * "Add this week's plan to the list."
+ *
+ * Dates come from the caller because the meals module knows which week it is
+ * showing; omit them and the service takes the family's coming seven days in
+ * their own zone.
+ */
+export async function addMealPlanToGroceryListAction(
+  input: { from?: string | null; to?: string | null; listId?: string | null } = {},
+): Promise<MealPlanToListResult> {
+  const t = await getTranslations();
+  const scope = await groceryScope();
+  try {
+    const result = await addFromMealPlan(scope, {
+      from: input.from ?? null,
+      to: input.to ?? null,
+      listId: input.listId ?? null,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    revalidatePath('/dashboard/meals');
+    return {
+      ok: true,
+      listId: result.data.listId,
+      added: result.data.added.length,
+      skipped: result.data.skipped,
+      inPantry: result.data.inPantry,
+      meals: result.data.meals,
+      substitutions: result.data.substitutions,
+    };
+  } catch (err) {
+    console.error('[grocery-action] add from meal plan failed', err);
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddTheMeal')) };
+  }
+}
+
+export type ShoppingTripActionResult =
+  | {
+      ok: true;
+      /** Names that reached the pantry. */
+      pantryUpdated: string[];
+      /** Names the pantry write refused, with why. Non-empty means the list was left alone. */
+      pantryFailed: { name: string; error: string }[];
+      cleared: number;
+      /**
+       * TRUE ONLY WHEN A `transactions` ROW EXISTS. There is no optimistic
+       * spelling of this: the flag is set from the service's own result, and a
+       * shop with no amount typed sets it false rather than "recorded".
+       */
+      purchaseRecorded: boolean;
+      /** Why the purchase did not land, when an amount was given and it failed. */
+      purchaseError?: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * The end of a shop: what was ticked off goes into the pantry, and — only when
+ * a person typed an amount — the charge goes onto the household books.
+ *
+ * The two writes are ordered so that the failure modes are the harmless ones.
+ * The pantry and the list move first, through the groceries service; the
+ * purchase is last, through the finances service, which is also the one that
+ * can refuse (a child cannot record a purchase). A refusal there therefore
+ * leaves a correctly-stocked pantry and an honest message, and a retry finds
+ * nothing checked and does nothing — rather than a second charge.
+ *
+ * `amount` is deliberately optional and deliberately not defaulted. Most shops
+ * are not entered with a receipt to hand, and a made-up total is worse on a
+ * family's books than no total at all.
+ */
+export async function recordShoppingTripAction(input: {
+  listId: string;
+  /** Dollars. Anything not above zero means "no receipt", not "free". */
+  amount?: number | null;
+  merchant?: string | null;
+}): Promise<ShoppingTripActionResult> {
+  const t = await getTranslations();
+  if (!input?.listId) return { ok: false, error: t('actions.thatListCouldNotBe') };
+  const scope = await groceryScope();
+  try {
+    const trip = await recordShoppingTrip(scope, { listId: input.listId });
+    if (!trip.ok) return { ok: false, error: trip.error };
+
+    let purchaseRecorded = false;
+    let purchaseError: string | undefined;
+    const amount = typeof input.amount === 'number' && Number.isFinite(input.amount) ? input.amount : null;
+    // Only a shop that completed gets a charge. When a pantry write failed
+    // nothing was cleared, so the family will do this again — and a purchase
+    // recorded now would be recorded twice. The caller shows the failed names
+    // and keeps the amount in the form.
+    if (amount !== null && amount > 0 && trip.data.pantryFailed.length === 0) {
+      const merchant = input.merchant?.trim() || null;
+      const purchase = await createTransaction(scope, {
+        name: merchant ? `Groceries — ${merchant}` : 'Groceries',
+        amount,
+        type: 'expense',
+        category: 'Groceries',
+        merchant,
+        source: 'manual',
+      });
+      purchaseRecorded = purchase.ok;
+      if (!purchase.ok) purchaseError = purchase.error;
+    }
+
+    revalidatePath(PATH);
+    revalidatePath('/dashboard/pantry');
+    if (purchaseRecorded) revalidatePath('/dashboard/billing');
+    return {
+      ok: true,
+      pantryUpdated: trip.data.pantryUpdated,
+      pantryFailed: trip.data.pantryFailed,
+      cleared: trip.data.cleared,
+      purchaseRecorded,
+      ...(purchaseError ? { purchaseError } : {}),
+    };
+  } catch (err) {
+    console.error('[grocery-action] shopping trip failed', err);
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRecordThatShopping')) };
   }
 }

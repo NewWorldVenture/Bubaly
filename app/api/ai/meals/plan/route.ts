@@ -10,6 +10,7 @@ import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
   PLAN_MEAL_TYPES, type PlannerRequest, type PlanAssignment,
 } from '@/lib/meals/planner';
+import { scoreWeekNights } from '@/lib/meals/week-context';
 import { expiringSoon } from '@/lib/pantry/logic';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -26,8 +27,9 @@ function logDatabaseFailure(operation: string, error: unknown) {
 
 /**
  * AI Meal Planner. Auto-fills a week of meal slots using the family's saved
- * meals + recipes, honoring dietary constraints and
- * preferring soon-to-expire pantry items (cuts waste). When `write` is true it
+ * meals + recipes, honoring dietary constraints, preferring soon-to-expire
+ * pantry items (cuts waste) and planning around the nights the family's own
+ * calendar says they will not be cooking. When `write` is true it
  * persists the result into meal_plans (creating meal rows for new/recipe dishes
  * and clearing the targeted slots first), so it's a true one-click planner.
  */
@@ -89,16 +91,40 @@ export async function POST(req: Request) {
     expiring = expiringSoon(pantry ?? [], 7).map((p) => p.name).slice(0, 12);
   }
 
+  // Busy nights ------------------------------------------------------------
+  // The week the family actually has, not seven identical evenings. Read a day
+  // either side of the week so an event that is Monday evening in the family's
+  // zone is still Monday evening after the zone is applied, and let
+  // `scoreWeekNights` do the local-date arithmetic.
+  const scope = scopeFromUserContext(ctx, supabase);
+  const windowFrom = new Date(`${weekStart}T00:00:00Z`);
+  const windowTo = new Date(windowFrom.getTime() + 8 * 86_400_000);
+  const { data: weekEvents, error: weekEventsError } = await supabase
+    .from('calendar_events')
+    .select('title,starts_at,ends_at,all_day,category')
+    .eq('family_id', familyId)
+    .gte('starts_at', new Date(windowFrom.getTime() - 86_400_000).toISOString())
+    .lt('starts_at', windowTo.toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(400);
+  if (weekEventsError) {
+    // Fail closed. Planning "around" a calendar we could not read would put a
+    // two-hour braise on the night of the away game and call it calendar-aware.
+    logDatabaseFailure('calendar read', weekEventsError);
+    return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
+  }
+  const weekContext = scoreWeekNights(weekStart, weekEvents ?? [], { tz: scope.tz });
+
   const request: PlannerRequest = {
     weekStart, mealTypes: mealTypes.length ? mealTypes : ['dinner'],
-    candidates, dietary, expiring, avoidRepeats, notes,
+    candidates, dietary, expiring, busyNights: weekContext.busyNights, avoidRepeats, notes,
   };
 
   // Ask the model ---------------------------------------------------------
   let text: string;
   try {
     text = await withAiRequest(
-      scopeFromUserContext(ctx, supabase),
+      scope,
       { feature: 'meals.plan', text: 'Plan the week\u2019s meals' },
       async (obs) => {
         const completion = await (await resolveProvider()).complete({
@@ -120,7 +146,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t('plan.thePlannerCouldNotProduce') }, { status: 422 });
   }
 
-  if (!write) return NextResponse.json({ assignments, written: false });
+  // `busyNights` rides along on both replies so the caller can say WHY a
+  // Tuesday got a 20-minute dish, quoting the calendar rows it came from.
+  if (!write) return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: false });
 
   // Persist into meal_plans ----------------------------------------------
   // Resolve every assignment to a concrete meals.id (meal_plans.meal_id → meals).
@@ -207,5 +235,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ assignments, written: true, count: rows.length });
+  return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: true, count: rows.length });
 }
