@@ -12,9 +12,9 @@
 // rehydrates its cards from `ai_messages.structured_content`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarDays, CheckCircle2, Bell, Pill, ListChecks, Mic,
+  CalendarDays, CheckCircle2, Bell, Pill, ListChecks,
   Plus, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
-  Square, Volume2, VolumeX, Loader2, ShieldCheck, LayoutList,
+  Square, Volume2, VolumeX, ShieldCheck, LayoutList,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { AssistantWorkspace, useDesktop, type WorkspacePane } from '@/components/assistant/workspace';
@@ -28,7 +28,9 @@ import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { isManager } from '@/lib/constants/roles';
 import { useVoice } from '@/lib/hooks/use-voice';
-import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
+import { MicButton } from '@/components/voice/mic-button';
+import type { MicStatus } from '@/lib/voice/mic-flow';
+import { VOICE_MODES } from '@/lib/ai/voice';
 import { parsePrefillQuery } from '@/lib/ai/prefill';
 import { parseAssistantStreamEvent, runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -102,7 +104,10 @@ export function AssistantModule() {
   const desktop = useDesktop();
 
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  // Speaking is the shared MicButton's job; this hook stays for the SPEAKING
+  // half (mode, voice, TTS playback of replies).
   const voice = useVoice({ onError: setVoiceError });
+  const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
 
   const greeting = () => {
@@ -377,17 +382,6 @@ export function AssistantModule() {
     }
   }
 
-  // Mic flow: record → transcribe → drop into the input (auto-send if we got text).
-  async function onMicPress() {
-    setVoiceError(null);
-    if (voice.status === 'recording') { voice.stopRecording(); return; }
-    const text = await voice.startRecording();
-    if (text) {
-      const cleaned = cleanTranscript(text);
-      if (cleaned) void send(cleaned);
-    }
-  }
-
   /** A chip in the thread points at its card: on a phone that means the Plan tab. */
   function openCard(id: string) {
     setHighlightId(id);
@@ -400,9 +394,12 @@ export function AssistantModule() {
 
   // Shared composer props (used by both the hero and the docked input bar).
   const composerProps = {
-    input, setInput, loading, voice, voiceError,
+    input, setInput, loading, voice, voiceError, micStatus,
     onSend: () => void send(),
-    onMic: () => void onMicPress(),
+    // A spoken request is sent exactly like a typed one.
+    onTranscript: (text: string) => void send(text),
+    onMicStatus: setMicStatus,
+    onVoiceError: setVoiceError,
     dismissVoiceError: () => setVoiceError(null),
   };
 
@@ -490,7 +487,7 @@ export function AssistantModule() {
 
       {/* Docked input bar */}
       <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
-        <Composer variant="bar" {...composerProps} onMicPress={composerProps.onMic} />
+        <Composer variant="bar" {...composerProps} />
         <p className="mt-3 text-center text-xs text-muted/60">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
       </div>
     </>
@@ -504,7 +501,7 @@ export function AssistantModule() {
       </p>
 
       <div className="mt-6 w-full max-w-2xl">
-        <Composer variant="hero" {...composerProps} onMicPress={composerProps.onMic} />
+        <Composer variant="hero" {...composerProps} />
       </div>
 
       <div className="mt-6 w-full max-w-3xl">
@@ -655,7 +652,8 @@ export function AssistantModule() {
    voice-error banner, stop-speaking control, and recording state. */
 type VoiceApi = ReturnType<typeof useVoice>;
 function Composer({
-  variant, input, setInput, loading, voice, voiceError, onSend, onMicPress, dismissVoiceError,
+  variant, input, setInput, loading, voice, voiceError, micStatus,
+  onSend, onTranscript, onMicStatus, onVoiceError, dismissVoiceError,
 }: {
   variant: 'hero' | 'bar';
   input: string;
@@ -663,14 +661,27 @@ function Composer({
   loading: boolean;
   voice: VoiceApi;
   voiceError: string | null;
+  micStatus: MicStatus;
   onSend: () => void;
-  onMicPress: () => void;
+  onTranscript: (text: string) => void;
+  onMicStatus: (status: MicStatus) => void;
+  onVoiceError: (message: string | null) => void;
   dismissVoiceError: () => void;
 }) {
   const t = useTranslations();
   const isHero = variant === 'hero';
-  const disabled = loading || voice.status === 'transcribing';
+  const disabled = loading || micStatus === 'transcribing';
   const canSend = !disabled && input.trim().length > 0;
+  const capturing = micStatus === 'recording' || micStatus === 'listening';
+  const mic = (
+    <MicButton
+      size={isHero ? 'md' : 'sm'}
+      disabled={loading}
+      onTranscript={onTranscript}
+      onStatusChange={onMicStatus}
+      onError={onVoiceError}
+    />
+  );
 
   return (
     <div className={isHero ? 'text-left' : ''}>
@@ -689,29 +700,23 @@ function Composer({
           <Square className="h-3 w-3" aria-hidden /> {t('assistant.stopSpeaking')}
         </button>
       )}
-
-      {voice.status === 'recording' ? (
-        // Recording state: pulsing indicator + stop / cancel.
-        <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3">
-          <span className="relative flex h-3 w-3 shrink-0">
+      {capturing && (
+        <p className="mb-2 flex items-center gap-2 text-xs font-medium text-rose-300" role="status">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
           </span>
-          <span className="flex-1 text-sm font-medium text-rose-200">{t('assistant.listeningTapTheMicToSend')}</span>
-          <button type="button" onClick={voice.cancelRecording} className="rounded-full px-3 py-1.5 text-xs font-semibold text-rose-200/80 hover:text-rose-100">
-            {t('assistant.cancel')}
-          </button>
-          <button type="button" onClick={onMicPress} aria-label={t('assistant.stopAndSend')} className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
-            <Square className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
-      ) : isHero ? (
+          {t('assistant.listeningTapTheMicToSend')}
+        </p>
+      )}
+
+      {isHero ? (
         /* Hero: tall textarea with gradient send button */
         <div className="ai-composer flex items-end gap-2 p-3 sm:gap-3 sm:p-4">
           <textarea
             rows={2}
             className="min-h-[3.5rem] w-full flex-1 resize-none bg-transparent text-base leading-7 outline-none placeholder:text-muted"
-            placeholder={voice.status === 'transcribing' ? 'Transcribing…' : 'Describe what you need… e.g. “Plan dinners and build the grocery list”'}
+            placeholder={micStatus === 'transcribing' ? t('micButton.transcribing') : t('assistant.describeWhatYouNeed')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
@@ -719,17 +724,7 @@ function Composer({
             disabled={disabled}
             aria-label={t('assistant.askBubaly')}
           />
-          {voice.supported && (
-            <button
-              type="button"
-              onClick={onMicPress}
-              disabled={disabled}
-              aria-label={t('assistant.recordVoiceMessage')}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
-            >
-              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-5 w-5" aria-hidden />}
-            </button>
-          )}
+          {mic}
           <button
             type="button"
             onClick={onSend}
@@ -745,7 +740,7 @@ function Composer({
         <div className="ai-composer flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
           <input
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
-            placeholder={voice.status === 'transcribing' ? 'Transcribing…' : 'Ask anything or give a command…'}
+            placeholder={micStatus === 'transcribing' ? t('micButton.transcribing') : t('assistant.askAnythingOrGiveA')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
@@ -753,17 +748,7 @@ function Composer({
             disabled={disabled}
             aria-label={t('assistant.messageBubaly')}
           />
-          {voice.supported && (
-            <button
-              type="button"
-              onClick={onMicPress}
-              disabled={disabled}
-              aria-label={t('assistant.recordVoiceMessage')}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
-            >
-              {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-4 w-4" aria-hidden />}
-            </button>
-          )}
+          {mic}
           <button type="button" onClick={onSend} disabled={!canSend} aria-label={t('assistant.send')} className="ai-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40">
             <Send className="h-4 w-4" aria-hidden />
           </button>
