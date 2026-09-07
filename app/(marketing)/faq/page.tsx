@@ -4,7 +4,7 @@ import { type FAQ } from '@/components/marketing/faq-accordion';
 import { FaqTabs, type FaqSection } from '@/components/marketing/faq-tabs';
 import { CTASection } from '@/components/marketing/cta';
 import { FaqStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
-import { readPublishedAeoQuestions } from '@/lib/marketing/aeo';
+import { readPublishedAeoQuestionsCached } from '@/lib/marketing/aeo';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -71,7 +71,7 @@ export default async function FAQPage() {
   // marketing_aeo_questions render here + feed the FAQPage structured data, so
   // adding/editing an answer in /admin/marketing/aeo updates this page and its
   // rich results automatically — no duplication.
-  const aeo = await readPublishedAeoQuestions(60);
+  const aeo = await readPublishedAeoQuestionsCached(60);
   const knowledge: FAQ[] = aeo.questions.map((q) => ({ q: q.question, a: q.answer }));
 
   // The live Knowledge Center becomes its own tab when answers are published.

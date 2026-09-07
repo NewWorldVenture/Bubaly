@@ -3,6 +3,7 @@
 // PUBLISHED rows are world-readable (migration 0228), so the public FAQ page and
 // every blog article render the SAME answers + their FAQPage structured data.
 // One edit in the admin console propagates everywhere — the closed loop.
+import { unstable_cache } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -133,6 +134,92 @@ export async function readAeoQuestionsForCategory(category: string, limit = 4): 
 
 export async function getAeoQuestionsForCategory(category: string, limit = 4): Promise<AeoQuestion[]> {
   return (await readAeoQuestionsForCategory(category, limit)).questions;
+}
+
+/** Cache tag for every public AEO read, so an admin edit can drop them all. */
+export const AEO_TAG = 'marketing-aeo';
+
+/**
+ * The per-path read, cached.
+ *
+ * MarketingAeoSection renders on the homepage, /features, /ai, /contact, the
+ * legal pages and every /f/[id] — so the uncached version ran one Supabase
+ * query per marketing page view. pg_stat_statements caught it at 7,627 calls
+ * in 24 hours against a t4g.nano, the single largest recurring reader on the
+ * database.
+ *
+ * `path` is an argument, so Next keys the cache per path and the pages do not
+ * share each other's answers. Tagged rather than short-TTL because the whole
+ * point of the AEO console is that one edit propagates everywhere immediately:
+ * the admin write paths revalidate this tag, so "immediately" still holds.
+ *
+ * Only a read that SUCCEEDED is cached. readAeoQuestionsForPath degrades to
+ * `available: false` when the database is unreachable, which is right for
+ * rendering and wrong to store — caching it would keep the Knowledge Center
+ * empty for an hour after a blip. So the cached function throws on that, and
+ * the catch below sits outside the cache.
+ */
+const cachedRead = unstable_cache(
+  async (path: string, limit: number): Promise<PublicAeoRead> => {
+    const result = await readAeoQuestionsForPath(path, limit);
+    if (!result.available) throw new Error(`[marketing-aeo] unavailable for ${path}`);
+    return result;
+  },
+  ['marketing-aeo-path'],
+  { revalidate: 3600, tags: [AEO_TAG] },
+);
+
+/** What the public pages call. Cached; falls back to a live-but-empty read. */
+export async function readAeoQuestionsForPathCached(path: string, limit = 6): Promise<PublicAeoRead> {
+  try {
+    return await cachedRead(path, limit);
+  } catch {
+    // Already logged inside the uncached read. Render the page without the
+    // Knowledge Center rather than failing it, and try again next render.
+    return { questions: [], available: false };
+  }
+}
+
+// The other two public readers of this table, cached the same way and under the
+// same tag. /faq pulls 60 rows on every view, and every blog article ran two of
+// these per view — all of it the same handful of admin-managed answers.
+
+const cachedPublished = unstable_cache(
+  async (limit: number): Promise<PublicAeoRead> => {
+    const result = await readPublishedAeoQuestions(limit);
+    if (!result.available) throw new Error('[marketing-aeo] published read unavailable');
+    return result;
+  },
+  ['marketing-aeo-published'],
+  { revalidate: 3600, tags: [AEO_TAG] },
+);
+
+/** Every published question — the /faq page. Cached. */
+export async function readPublishedAeoQuestionsCached(limit = 60): Promise<PublicAeoRead> {
+  try {
+    return await cachedPublished(limit);
+  } catch {
+    return { questions: [], available: false };
+  }
+}
+
+const cachedCategory = unstable_cache(
+  async (category: string, limit: number): Promise<PublicAeoRead> => {
+    const result = await readAeoQuestionsForCategory(category, limit);
+    if (!result.available) throw new Error(`[marketing-aeo] category read unavailable for ${category}`);
+    return result;
+  },
+  ['marketing-aeo-category'],
+  { revalidate: 3600, tags: [AEO_TAG] },
+);
+
+/** Questions for one blog category. Cached. */
+export async function readAeoQuestionsForCategoryCached(category: string, limit = 4): Promise<PublicAeoRead> {
+  try {
+    return await cachedCategory(category, limit);
+  } catch {
+    return { questions: [], available: false };
+  }
 }
 
 /** Read the canonical page payload populated by the Super Admin content loop. */
