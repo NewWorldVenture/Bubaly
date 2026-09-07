@@ -32,7 +32,7 @@ export default async function TrustPage() {
     supabase.from('trust_delegations').select('*').eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso).order('expires_at'),
     supabase.from('approval_requests').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
     supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null),
-    supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
+    supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, policy_id, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
   ]);
 
   // Trust is a security-state surface: the policies, grants, delegations,

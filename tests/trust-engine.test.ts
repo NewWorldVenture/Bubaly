@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  evaluateAction, computeTrustScore, trustBand, riskToDecision,
+  evaluateAction, computeTrustScore, trustBand, riskToDecision, toolTags,
   type Policy, type Actor, type Grant, type Delegation,
 } from '@/lib/trust/engine';
 
@@ -240,5 +240,59 @@ describe('a household policy is only a decision about what it names', () => {
   it('does not label a deny or an approval requirement — only an allow can over-reach', () => {
     expect(evaluate(policy({ domain: 'all', capability: 'all', effect: 'deny' })).policyScope).toBeUndefined();
     expect(evaluate(policy({ domain: 'all', capability: 'all', effect: 'require_approval' })).policyScope).toBeUndefined();
+  });
+});
+
+// ── M7 learned policies: a policy scoped by `conditions.tags` to ONE tool ────
+// Household Autopilot offers a policy for the exact tool a family kept
+// approving, and the accept action writes it as AI × domain × capability with
+// `conditions.tags = [toolName]`. The gates hand the engine the executing
+// tool's name as a tag (`toolTags`), so the policy reaches that tool and no
+// other in the same domain.
+describe('evaluateAction — a tag-scoped AI policy allows only the named tool', () => {
+  const learned = policy({
+    id: 'learned-record-expense', domain: 'finances', capability: 'automate', subjectKind: 'ai',
+    effect: 'allow', conditions: { tags: ['finance.recordExpense'] }, priority: 200,
+  });
+
+  it('allows the named tool without approval, and names the policy that did it', () => {
+    const d = evaluateAction({ actor: ai, domain: 'finances', capability: 'automate', context: { tags: toolTags('finance.recordExpense') }, policies: [learned] });
+    expect(d.effect).toBe('allow');
+    expect(d.basis).toBe('policy');
+    expect(d.policyId).toBe('learned-record-expense');
+    // Names its domain, so the risk tier treats it as the family's deliberate decision.
+    expect(d.policyScope).toBe('specific');
+  });
+
+  it('leaves a neighbouring tool in the same domain on the default path', () => {
+    const d = evaluateAction({ actor: ai, domain: 'finances', capability: 'automate', context: { tags: toolTags('finance.deleteExpense') }, policies: [learned] });
+    expect(d.effect).toBe('require_approval');
+    expect(d.basis).toBe('role_default');
+    expect(d.policyId).toBeUndefined();
+  });
+
+  it('does not match an action that carries no tool tag at all', () => {
+    const d = evaluateAction({ actor: ai, domain: 'finances', capability: 'automate', context: { confidence: 0.99 }, policies: [learned] });
+    expect(d.effect).toBe('require_approval');
+    expect(d.basis).toBe('role_default');
+  });
+
+  it('matches through a legacy alias only when the caller supplies the canonical name alongside it', () => {
+    const aliasOnly = evaluateAction({ actor: ai, domain: 'finances', capability: 'automate', context: { tags: toolTags('record_expense') }, policies: [learned] });
+    expect(aliasOnly.basis).toBe('role_default');
+    const both = evaluateAction({ actor: ai, domain: 'finances', capability: 'automate', context: { tags: toolTags('record_expense', 'finance.recordExpense') }, policies: [learned] });
+    expect(both.effect).toBe('allow');
+    expect(both.policyId).toBe('learned-record-expense');
+  });
+
+  it('does not reach a person acting in the same domain', () => {
+    const d = evaluateAction({ actor: teen, domain: 'finances', capability: 'automate', context: { tags: toolTags('finance.recordExpense') }, policies: [learned] });
+    expect(d.policyId).toBeUndefined();
+  });
+
+  it('toolTags carries both spellings for every name, without duplicates or blanks', () => {
+    expect(toolTags('reminders.create')).toEqual(['reminders.create', 'tool:reminders.create']);
+    expect(toolTags('add_reminder', 'reminders.create')).toEqual(['add_reminder', 'tool:add_reminder', 'reminders.create', 'tool:reminders.create']);
+    expect(toolTags('a', null, undefined, ' ', 'a')).toEqual(['a', 'tool:a']);
   });
 });
