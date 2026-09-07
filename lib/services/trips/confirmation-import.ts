@@ -1,4 +1,5 @@
 import 'server-only';
+import { settleAll } from '@/lib/supabase/settle';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
@@ -83,7 +84,7 @@ async function authorize(scope: ServiceScope): Promise<ServiceResult<void>> {
   }
   if (auth.data.user.id !== userId) return denied();
 
-  const [membership, preferences, family, subscriptions, settings] = await Promise.all([
+  const [membership, preferences, family, subscriptions, settings] = await settleAll([
     scope.db.from('family_members').select('id, family_id, user_id, role, is_active')
       .eq('id', memberId).eq('family_id', familyId).eq('user_id', userId).eq('is_active', true).maybeSingle(),
     scope.db.from('user_preferences').select('active_family_id').eq('user_id', userId).maybeSingle(),

@@ -24,6 +24,7 @@ import 'server-only';
 import type { Tables, VacDocKind } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
@@ -197,7 +198,7 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
   if (input.kind && !DOC_KINDS.includes(input.kind)) return fail('That travel document kind is not one Bubaly knows.', { code: SERVICE_CODES.invalidInput });
   if (input.expiresOn && !DAY_KEY.test(input.expiresOn)) return fail('The expiry date must be YYYY-MM-DD.', { code: SERVICE_CODES.invalidInput });
 
-  const [doc, trip] = await Promise.all([
+  const [doc, trip] = await settleAll([
     scope.db.from('documents').select('*').eq('id', input.documentId).eq('family_id', scope.familyId).maybeSingle(),
     scope.db.from('vacations').select('id, title').eq('id', input.vacationId).eq('family_id', scope.familyId).maybeSingle(),
   ]);

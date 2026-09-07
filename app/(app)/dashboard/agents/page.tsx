@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { AgentsModule } from '@/components/modules/agents-module';
 import { runAllAgents, type AgentContext, type AgentItem } from '@/lib/agents/roster';
@@ -53,12 +54,12 @@ export default async function AgentsPage() {
     openGrocery, billsDueSoon, subscriptions, overdueChores, expiringDocs, maintenanceDue,
     upcomingTrips, pendingApprovals, newMemories,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, category')
-      .eq('family_id', familyId).gte('starts_at', dayStart).lte('starts_at', weekEnd.toISOString()).order('starts_at').limit(500),
-    supabase.from('meal_plans').select('plan_date, meal_type').eq('family_id', familyId)
-      .gte('plan_date', todayKey).lt('plan_date', weekEnd.toISOString().slice(0, 10)),
-    supabase.from('family_members').select('birthday').eq('family_id', familyId),
-    supabase.from('agent_activity').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at', { ascending: false }).limit(200),
+    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, category')
+      .eq('family_id', familyId).gte('starts_at', dayStart).lte('starts_at', weekEnd.toISOString()).order('starts_at').limit(500)),
+    settle(supabase.from('meal_plans').select('plan_date, meal_type').eq('family_id', familyId)
+      .gte('plan_date', todayKey).lt('plan_date', weekEnd.toISOString().slice(0, 10))),
+    settle(supabase.from('family_members').select('birthday').eq('family_id', familyId)),
+    settle(supabase.from('agent_activity').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at', { ascending: false }).limit(200)),
     count(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
     count(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', in14)),
     count(supabase.from('subscriptions_tracked').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['active', 'trial'])),

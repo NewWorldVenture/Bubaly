@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Phone, ShieldAlert, MapPin, UserCheck, HeartPulse, FileText } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -23,9 +24,9 @@ export default async function FamilyEmergencyPage() {
   const manager = isManager(ctx.active.role);
 
   const [membersRes, contactsRes, plansRes, profilesRes] = await Promise.all([
-    supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('family_emergency_contacts').select('*').eq('family_id', familyId).order('priority'),
-    supabase.from('family_emergency_plans').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
+    settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('family_emergency_contacts').select('*').eq('family_id', familyId).order('priority')),
+    settle(supabase.from('family_emergency_plans').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
     manager ? supabase.from('medical_profiles').select('member_id, blood_type, allergies, conditions, emergency_contact_name, emergency_contact_phone').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
   ]);
 

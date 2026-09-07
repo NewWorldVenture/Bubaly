@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import {
   simulateDecision, projectActivity,
@@ -107,14 +108,14 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   // Member's upcoming events (schedule/load), budgets (cost), vacations (conflicts).
   const costCents = Math.round((input.costDollars ?? 0) * 100);
   const [{ data: evRows }, { data: budgetRows }, { data: vacRows }] = await Promise.all([
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day')
+    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day')
       .eq('family_id', familyId).eq('assignee_id', input.memberId)
-      .gte('starts_at', now.toISOString()).lte('starts_at', in180).limit(500),
+      .gte('starts_at', now.toISOString()).lte('starts_at', in180).limit(500)),
     input.costCategory
       ? supabase.from('budgets').select('category, amount, period').eq('family_id', familyId)
       : Promise.resolve({ data: [] as { category: string; amount: number; period: string }[] }),
-    supabase.from('vacations').select('title, start_date, end_date')
-      .eq('family_id', familyId).not('start_date', 'is', null).not('end_date', 'is', null).limit(50),
+    settle(supabase.from('vacations').select('title, start_date, end_date')
+      .eq('family_id', familyId).not('start_date', 'is', null).not('end_date', 'is', null).limit(50)),
   ]);
 
   const memberEvents: SimEvent[] = (evRows ?? []).map((e) => ({

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -6,7 +7,6 @@ import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
-import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Calm | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -40,10 +40,22 @@ export default async function CalmPage() {
       .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(50)),
   ]);
 
-  const readError = [agentResult.error, autopilotResult.error, foiResult.error, approvalResult.error, reminderResult.error].find(Boolean);
+  const readFailures = ([
+    ['agent', agentResult],
+    ['autopilot', autopilotResult],
+    ['foi', foiResult],
+    ['approval', approvalResult],
+    ['reminder', reminderResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error instanceof Error ? res.error.message : String(res.error)}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[dashboard-calm] inbox read failed', readError);
-    return <ErrorState message={t('calm.couldNotLoadYourCalm')} />;
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[dashboard-calm] inbox read failed — rendering degraded', readError);
   }
 
   const agentRows = agentResult.data;
@@ -77,17 +89,29 @@ export default async function CalmPage() {
   // R2: relationship-level reasoning over the Knowledge Graph (hub risk, ripple,
   // coverage) folded into the same calm inbox — best-effort, so a missing graph
   // never breaks the page.
+  // Best-effort, as the comment above says — which the previous `return
+  // <ErrorState />` here did not honour: it turned a missing graph into a blank
+  // page, the exact outcome the comment ruled out. The graph ADDS insights to an
+  // inbox that is already built from five other reads; without it the reader
+  // loses those rows and keeps everything else.
   let reasoning;
   try {
     reasoning = await loadFamilyContext(supabase, familyId);
   } catch (error) {
-    console.error('[dashboard-calm] reasoning context read failed', error);
-    return <ErrorState message={t('calm.couldNotLoadYourCalm')} />;
+    console.warn('[dashboard-calm] reasoning context read failed — inbox without graph insights', error);
+    reasoning = null;
   }
-  for (const ins of reasoningInsights(reasoning)) {
-    items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });
+  if (reasoning) {
+    for (const ins of reasoningInsights(reasoning)) {
+      items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });
+    }
   }
 
   const inbox = buildCalmInbox(items);
-  return <CalmModule inbox={inbox} />;
+  return (
+    <div className="space-y-5">
+      <PartialReadBanner title="Some of your inbox could not be loaded:" failures={readFailures} />
+      <CalmModule inbox={inbox} />
+    </div>
+  );
 }

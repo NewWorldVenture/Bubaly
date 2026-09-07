@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Lightbulb, ArrowBigUp, Rocket, Heart } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { LEGEND_STATUSES, STATUS_META, KIND_ORDER, KIND_META, statusTally, kindTally, type IdeaRow } from '@/lib/feedback/board';
 import { cn } from '@/lib/utils/cn';
@@ -21,12 +22,15 @@ export default async function FeedbackPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const [admin, ideasRes, votesRes] = await Promise.all([
-    isSuperAdmin(),
-    supabase.from('feedback_ideas')
+    isSuperAdmin().catch((cause) => {
+      console.warn('[feedback] super-admin check failed — denying', cause);
+      return false;
+    }),
+    settle(supabase.from('feedback_ideas')
       .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, created_at')
       .order('pinned', { ascending: false }).order('vote_count', { ascending: false }).order('created_at', { ascending: false })
-      .limit(400),
-    supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000),
+      .limit(400)),
+    settle(supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000)),
   ]);
 
   const ideas = (ideasRes.data ?? []) as IdeaRow[];

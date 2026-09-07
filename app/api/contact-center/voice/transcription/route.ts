@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { getOrCreateChannelResult, recordInboundMessage } from '@/lib/contact-center/server';
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   const admin = createServiceClient();
   const [channelResult, familyResult] = await Promise.all([
     getOrCreateChannelResult(admin, familyId),
-    admin.from('families').select('name').eq('id', familyId).maybeSingle(),
+    settle(admin.from('families').select('name').eq('id', familyId).maybeSingle()),
   ]);
   if (channelResult.error || familyResult.error) {
     console.error('[contact-center] transcription family context read failed', channelResult.error ?? familyResult.error);

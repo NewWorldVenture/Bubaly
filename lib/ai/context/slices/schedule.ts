@@ -8,6 +8,7 @@ import { findConflicts, searchEvents } from '@/lib/services/calendar';
 import { recallFacts } from '@/lib/services/memory';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import { memberName, type SliceDefinition } from '../policy';
 import { day, weekdays, when } from '../render';
 
@@ -35,15 +36,15 @@ export const scheduleSlice: SliceDefinition = {
       searchEvents(scope, { from: window.from, to: window.to, limit: MAX_EVENTS }),
       findConflicts(scope, window),
       recallFacts(scope, { category: 'preference', limit: 200 }),
-      scope.db
+      settle(scope.db
         .from('family_routines')
         .select('id, title, time_of_day, days_of_week, member_id')
         .eq('family_id', scope.familyId)
         .eq('status', 'active')
         .is('deleted_at', null)
         .order('time_of_day', { ascending: true, nullsFirst: false })
-        .limit(MAX_ROUTINES),
-    ]);
+        .limit(MAX_ROUTINES)),
+  ]);
     if (!events.ok) return events;
     if (!conflicts.ok) return conflicts;
     if (!facts.ok) return facts;

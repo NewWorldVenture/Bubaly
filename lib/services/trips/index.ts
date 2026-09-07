@@ -30,6 +30,7 @@ import { dateRange, tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { createEvent, searchEvents, type CalendarEvent } from '../calendar';
 import { getMembers, type FamilyMember } from '../family';
@@ -98,21 +99,21 @@ export async function getTrip(scope: ServiceScope, vacationId: string): Promise<
   if (!trip) return fail('That trip could not be found.', { code: SERVICE_CODES.notFound });
 
   const results = await Promise.all([
-    scope.db.from('vacation_members').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_lodging').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_flights').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_transportation').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_activities').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_reservations').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_budgets').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_expenses').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_packing_lists').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_packing_items').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_documents').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_emergency_contacts').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_itinerary_days').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_itinerary_items').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
-    scope.db.from('vacation_weather_snapshots').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000),
+    settle(scope.db.from('vacation_members').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_lodging').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_flights').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_transportation').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_activities').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_reservations').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_budgets').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_expenses').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_packing_lists').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_packing_items').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_documents').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_emergency_contacts').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_itinerary_days').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_itinerary_items').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
+    settle(scope.db.from('vacation_weather_snapshots').select('*').eq('family_id', scope.familyId).eq('vacation_id', vacationId).limit(1000)),
   ]);
   const failed = results.find((r) => r.error);
   if (failed?.error) {
@@ -787,7 +788,7 @@ export async function commitmentConflicts(scope: ServiceScope, vacationId: strin
     listEventsBetween(scope, { from, to }),
     listPracticesBetween(scope, { from, to }),
     listHomeworkDue(scope, { from, to }),
-    scope.db.from('bills').select('*').eq('family_id', scope.familyId).neq('status', 'paid').gte('due_date', trip.start_date).lte('due_date', endDate).order('due_date', { ascending: true }).limit(100),
+    settle(scope.db.from('bills').select('*').eq('family_id', scope.familyId).neq('status', 'paid').gte('due_date', trip.start_date).lte('due_date', endDate).order('due_date', { ascending: true }).limit(100)),
   ]);
   if (!calendar.ok) return calendar;
   if (!school.ok) return school;

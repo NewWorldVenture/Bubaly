@@ -7,6 +7,7 @@ import {
   ToyBrick, LayoutGrid, ArrowRight, Activity as ActivityIcon, AlertTriangle,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { FollowButton } from '@/components/marketplace/follow-button';
@@ -101,13 +102,13 @@ export default async function MarketplaceHomePage() {
     safe<{ store_id: string; member_id: string }>('Store follows', sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000)),
     safe<{ listing_id: string | null; reviewee_member: string | null; rating: number; created_at: string; id: string }>(
       'Reviews',
-      sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500)),
+      settle(sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500))),
     safe<ActivityOrder & { seller_member: string | null; amount_cents: number }>(
       'Orders',
-      sb.from('marketplace_orders').select('id, kind, status, buyer_member, seller_member, listing_id, amount_cents, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(200)),
+      settle(sb.from('marketplace_orders').select('id, kind, status, buyer_member, seller_member, listing_id, amount_cents, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(200))),
     safe<{ id: string; name: string; emoji: string | null; description: string | null }>(
       'Collections',
-      sb.from('marketplace_collections').select('id, name, emoji, description').eq('family_id', familyId).limit(8)),
+      settle(sb.from('marketplace_collections').select('id, name, emoji, description').eq('family_id', familyId).limit(8))),
     safe<{ collection_id: string }>('Collection items', sb.from('marketplace_collection_items').select('collection_id').eq('family_id', familyId).limit(2000)),
   ]);
 

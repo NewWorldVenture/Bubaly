@@ -5,6 +5,7 @@ import {
   CalendarRange, Gauge, ArrowRight, Lock,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { gatherSignalsResult } from '@/lib/family/signals';
@@ -40,10 +41,10 @@ export default async function AutonomousManagementPage() {
 
   const [signals, recs, rules, pendingRuns, doneRuns] = await Promise.all([
     gatherSignalsResult(familyId),
-    supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8),
-    supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true),
-    supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6),
-    supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed']).order('created_at', { ascending: false }).limit(6),
+    settle(supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8)),
+    settle(supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true)),
+    settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6)),
+    settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed']).order('created_at', { ascending: false }).limit(6)),
   ]);
 
   const readError = signals.error ?? recs.error ?? rules.error ?? pendingRuns.error ?? doneRuns.error;

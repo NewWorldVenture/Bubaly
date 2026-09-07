@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import Link from 'next/link';
 import { Wallet, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { ErrorState } from '@/components/ui/states';
+
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -32,29 +33,24 @@ export default async function AdminWalletPage() {
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);
 
-  const readError = [
-    activeWalletsResult.error,
-    childWalletsResult.error,
-    pendingGiftsResult.error,
-    pendingApprovalsResult.error,
-    creditAggResult.error,
-    flagsResult.error,
-    auditResult.error,
-  ].find(Boolean);
+  const readFailures = ([
+    ['active wallets', activeWalletsResult],
+    ['child wallets', childWalletsResult],
+    ['pending gifts', pendingGiftsResult],
+    ['pending approvals', pendingApprovalsResult],
+    ['credit agg', creditAggResult],
+    ['flags', flagsResult],
+    ['audit', auditResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[admin-wallet] wallet overview read failed', readError);
-    return (
-      <div className="space-y-5">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <Wallet className="h-6 w-6 text-brand-text" /> {tr('adminWallet.familyWallet')}
-          </h1>
-          <p className="mt-1 text-sm text-muted">{tr('adminWallet.liveWalletOversightAcrossEveryFamily')}</p>
-        </div>
-        <ErrorState message={tr('wallet.couldNotLoadWalletOversight')} />
-        <a href="/admin/wallet" className="text-sm font-medium text-brand-text underline">{tr('adminWallet.refreshWalletOverview')}</a>
-      </div>
-    );
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[admin-wallet] wallet overview read failed — rendering degraded', readError);
   }
 
   const { count: activeWallets } = activeWalletsResult;
@@ -76,6 +72,7 @@ export default async function AdminWalletPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">

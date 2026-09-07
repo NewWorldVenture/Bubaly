@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Bars } from '@/components/admin/charts';
@@ -16,8 +17,8 @@ export default async function AnalyticsPage() {
   const supabase = createServiceClient();
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
-    supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null),
-    supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null),
+    settle(supabase.from('marketing_campaigns').select('channel, status, budget_cents').is('deleted_at', null)),
+    settle(supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status').is('deleted_at', null)),
   ]);
   const readError = customersResult.error ?? campaignsResult.error ?? emailsResult.error;
   if (readError) {

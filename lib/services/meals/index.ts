@@ -30,6 +30,7 @@ import 'server-only';
 import type { Json, MealType, Tables } from '@/lib/database.types';
 import { normalizeAllergies } from '@/lib/meals/pantry-chef';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { getMembers } from '../family';
 import { withIdempotency } from '../idempotency';
@@ -651,7 +652,7 @@ export async function foodProfile(scope: ServiceScope): Promise<ServiceResult<Fo
   const members = await getMembers(scope);
   if (!members.ok) return members;
 
-  const [medical, favorites, facts] = await Promise.all([
+  const [medical, favorites, facts] = await settleAll([
     scope.db.from('medical_profiles').select('member_id, allergies').eq('family_id', scope.familyId),
     scope.db.from('family_favorites').select('member_id, kind, name').eq('family_id', scope.familyId).in('kind', ['recipe', 'meal', 'snack', 'restaurant', 'drink']),
     scope.db.from('family_facts').select('member_id, category, label, value').eq('family_id', scope.familyId).eq('category', 'preference'),

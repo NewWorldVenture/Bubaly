@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateChannelResult } from '@/lib/contact-center/server';
 import { suggestEmailLocal } from '@/lib/contact-center/address';
@@ -22,11 +23,11 @@ export default async function ContactCenterPage() {
 
   const [channelResult, messagesResult] = await Promise.all([
     getOrCreateChannelResult(admin, familyId),
-    admin.from('family_inbox_messages')
+    settle(admin.from('family_inbox_messages')
       .select('id, channel, direction, from_addr, to_addr, subject, body, ai_summary, ai_intent, status, occurred_at')
       .eq('family_id', familyId)
       .order('occurred_at', { ascending: false })
-      .limit(100),
+      .limit(100)),
   ]);
 
   if (channelResult.error || messagesResult.error) {

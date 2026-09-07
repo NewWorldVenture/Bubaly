@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -130,7 +131,7 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       const [chores, asg] = await Promise.all([
         eq(sb, 'chores', familyId).eq('is_active', true).limit(40),
         sb.from('chore_assignments').select('*').eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted']).limit(60),
-      ]);
+  ]);
       return { chores: chores.data ?? [], chore_assignments: asg.data ?? [] };
     }
     case 'closet': {
@@ -264,7 +265,7 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       const [assets, tasks] = await Promise.all([
         eq(sb, 'home_assets', familyId).limit(40),
         sb.from('maintenance_tasks').select('*').eq('family_id', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(40),
-      ]);
+  ]);
       return { home_assets: assets.data ?? [], maintenance_tasks: tasks.data ?? [] };
     }
     case 'notifications': {
@@ -288,7 +289,7 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
         eq(sb, 'chores', familyId).limit(50),
         sb.from('meals').select('id').eq('family_id', familyId).limit(50),
         sb.from('documents').select('id').eq('family_id', familyId).limit(50),
-      ]);
+  ]);
       return {
         calendar_events: ev.data ?? [], todo_items: todos.data ?? [], chores: chores.data ?? [],
         meals: meals.data ?? [], documents: docs.data ?? [],
@@ -296,8 +297,8 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
     }
     case 'meals': {
       const [plans, mealRows] = await Promise.all([
-        sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30),
-        sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
+        settle(sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30)),
+        settle(sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20)),
       ]);
       return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
     }

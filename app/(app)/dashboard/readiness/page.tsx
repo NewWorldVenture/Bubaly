@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-react';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
@@ -38,11 +39,11 @@ export default async function ReadinessPage() {
     activeMembersRes,
     famPlanLevel,
   ] = await Promise.all([
-    supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', now.toISOString()),
-    supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString()),
-    supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr),
-    supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
-    supabase.from('family_members').select('id', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true).order('id').limit(200),
+    settle(supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', now.toISOString())),
+    settle(supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString())),
+    settle(supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', weekEndStr)),
+    settle(supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString())),
+    settle(supabase.from('family_members').select('id', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true).order('id').limit(200)),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
@@ -102,8 +103,8 @@ export default async function ReadinessPage() {
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
+    settle(supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
+      .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`)),
     // Exact accessible-row count detects both this cap and server-side limits.
     supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
