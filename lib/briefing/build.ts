@@ -14,7 +14,14 @@
 // Center renders. A brief may under-report (a run that finished after the
 // window) but it can never over-report, and `tests/briefing-build.test.ts`
 // pins that: handled ⊆ completed runs.
+//
+// AND `counts.handled` IS NOT `handled.length`. It used to be, and
+// `mergeCompletedByBubaly` caps its LIST at six — so a family that had eleven
+// things handled read "6 handled" in the brief and a different number on Home.
+// The count now comes from `countHandledThisWeek` (`lib/metric/time-saved-server.ts`),
+// the one accounting every surface shares; the list stays a list.
 import { z } from 'zod';
+import type { MetricCount } from '@/lib/metric/count';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { mergeCompletedByBubaly, type AiActivityRow, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
 import { buildFirstBrief, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
@@ -22,6 +29,9 @@ import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
 import type { HomeBriefKind } from '@/lib/database.types';
 
 export type BriefKind = HomeBriefKind;
+
+/** Where `counts.handled` came from — the shared ledger, or this brief's list. */
+export type HandledSource = 'ledger' | 'listed';
 
 export type BriefInput = {
   kind: BriefKind;
@@ -36,6 +46,13 @@ export type BriefInput = {
   dinnerCandidates?: DinnerIdea[];
   /** Counts the home brief already tracks, for the stored row. */
   counts?: { choresPending?: number; openTodos?: number; groceryOpen?: number; memberCount?: number };
+  /**
+   * The ONE handled-this-week number, from `countHandledThisWeek`. `null` means
+   * the ledger read failed and the brief falls back to what it can see itself
+   * (the listed items), which under-reports rather than inventing a number.
+   * Omitted entirely by callers that have not read it.
+   */
+  handledThisWeek?: MetricCount;
 };
 
 export type Brief = {
@@ -55,6 +72,14 @@ export type Brief = {
     conflicts: number;
     overdue: number;
     handled: number;
+    /** Where `handled` came from: the shared ledger count, or this brief's own list. */
+    handledSource: HandledSource;
+    /**
+     * An ESTIMATE of planning time, derived from the calendar by
+     * `buildFirstBrief` — not a measurement of work Bubaly did. The surfaces
+     * that render it must label it as an estimate; the measured number is
+     * `lib/metric/time-saved-server.ts`.
+     */
     timeSavedMinutes: number;
   };
   /** True when there is genuinely nothing to say — the caller leads with getting-started. */
@@ -88,6 +113,9 @@ export const briefSchema = z.object({
   counts: z.object({
     today: z.number(), week: z.number(), conflicts: z.number(),
     overdue: z.number(), handled: z.number(), timeSavedMinutes: z.number(),
+    // Optional: briefs stored before the shared handled accounting existed have
+    // no source recorded, and rejecting them would break the history.
+    handledSource: z.enum(['ledger', 'listed']).optional(),
   }),
   isSparse: z.boolean(),
 });
@@ -133,12 +161,14 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? []);
 
+  const ledgerHandled = input.handledThisWeek;
   const counts = {
     today: calendar.todayCount,
     week: calendar.weekCount,
     conflicts: calendar.conflicts.length,
     overdue: digest.counts.overdue,
-    handled: handled.length,
+    handled: typeof ledgerHandled === 'number' ? ledgerHandled : handled.length,
+    handledSource: (typeof ledgerHandled === 'number' ? 'ledger' : 'listed') as HandledSource,
     timeSavedMinutes: calendar.timeSavedMinutes,
   };
 

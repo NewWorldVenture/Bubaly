@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { buildBrief } from '@/lib/briefing/build';
+import { countHandledThisWeek } from '@/lib/metric/time-saved-server';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -377,6 +378,12 @@ ${UNTRUSTED_CONTENT_RULE}
     // 0258's unique key is (family_id, as_of_date, kind), so a `weekly` request
     // must not be filed as the day's brief — the "This Week" tab used to
     // overwrite it on every visit.
+    // The ONE handled accounting (S-15). `counts.handled` used to be the length
+    // of a list capped at six; it is now the same number Home and the Autopilot
+    // panel show. `null` when the read failed — the brief then falls back to its
+    // own list rather than to a zero.
+    const { total: handledThisWeek } = await countHandledThisWeek(supabase, familyId, now);
+
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
@@ -384,6 +391,7 @@ ${UNTRUSTED_CONTENT_RULE}
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
+      handledThisWeek,
     }, tz);
 
     briefing = {

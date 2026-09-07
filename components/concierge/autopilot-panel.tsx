@@ -6,14 +6,25 @@
 // of what Bubaly executed on its own. Reads the same trust_policies /
 // family_automation_runs rows the server loop writes; all writes go through
 // the manager-gated server actions.
+//
+// THE HANDLED NUMBER IS NOT THIS FILE'S TO INVENT. The header used to count
+// runs with `trigger_type = 'plan_accepted'` and the legacy `status =
+// 'executed'`, which is a third definition of "handled" that disagreed with the
+// brief and with time-saved. It now counts exactly what
+// `lib/metric/time-saved.ts` says counts — `HANDLED_RUN_STATES`, any trigger —
+// so the same week reads the same number wherever the family looks.
+//
+// And a read that fails says so. The panel used to swallow every error and
+// render an empty feed, which is the same lie as a zero: "Bubaly did nothing"
+// when the truth is "we could not ask".
 import { useCallback, useEffect, useState, useTransition } from 'react';
-import { Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
+import { AlertTriangle, Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { isManager } from '@/lib/constants/roles';
-import {
-  AUTOPILOT_POLICY_NAME, autopilotStats, dialLevel, type AutopilotLevel,
-} from '@/lib/autonomy/loop';
+import { AUTOPILOT_POLICY_NAME, dialLevel, type AutopilotLevel } from '@/lib/autonomy/loop';
+import { countOrNull, type MetricCount } from '@/lib/metric/count';
+import { HANDLED_RUN_STATES } from '@/lib/metric/time-saved';
 import {
   dismissQueuedRunAction, executeQueuedRunAction, setConciergeAutopilotAction,
 } from '@/app/(app)/dashboard/concierge/actions';
@@ -26,10 +37,12 @@ type Run = {
   created_at: string; metadata: unknown;
 };
 
-const LEVELS: { key: AutopilotLevel; label: string; hint: string; icon: typeof Zap }[] = [
-  { key: 'auto', label: 'Auto-pilot', hint: 'Accepted plans execute on their own', icon: Zap },
-  { key: 'ask', label: 'Ask first', hint: 'Bubaly queues it for one-tap approval', icon: ShieldQuestion },
-  { key: 'off', label: 'Off', hint: 'Manual buttons only', icon: X },
+const WEEK_MS = 7 * 86_400_000;
+
+const LEVELS: { key: AutopilotLevel; label: string; labelKey: string; hint: string; hintKey: string; icon: typeof Zap }[] = [
+  { key: 'auto', label: 'Auto-pilot', labelKey: 'autopilotPanel.autoPilot', hint: 'Accepted plans execute on their own', hintKey: 'autopilotPanel.acceptedPlansExecuteOnTheirOwn', icon: Zap },
+  { key: 'ask', label: 'Ask first', labelKey: 'autopilotPanel.askFirst', hint: 'Bubaly queues it for one-tap approval', hintKey: 'autopilotPanel.bubalyQueuesItForOneTapApproval', icon: ShieldQuestion },
+  { key: 'off', label: 'Off', labelKey: 'autopilotPanel.off', hint: 'Manual buttons only', hintKey: 'autopilotPanel.manualButtonsOnly', icon: X },
 ];
 
 export function AutopilotPanel({ className }: { className?: string }) {
@@ -39,33 +52,53 @@ export function AutopilotPanel({ className }: { className?: string }) {
   const manager = isManager(role);
   const [level, setLevel] = useState<AutopilotLevel>('ask');
   const [runs, setRuns] = useState<Run[]>([]);
+  const [handled, setHandled] = useState<MetricCount>(null);
+  const [readFailed, setReadFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoaded(false);
     const supabase = createClient();
-    // Both reads are best-effort: a family that predates 0093/0022 in prod just
-    // sees the default dial and an empty feed.
+    const sinceIso = new Date(Date.now() - WEEK_MS).toISOString();
     try {
-      const [{ data: policy }, { data: runRows }] = await Promise.all([
+      const [policy, runRows, handledCount] = await Promise.all([
         supabase.from('trust_policies').select('effect')
           .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle(),
         supabase.from('family_automation_runs')
           .select('id, status, trigger_type, summary, created_at, metadata')
           .eq('family_id', familyId).eq('trigger_type', 'plan_accepted')
           .order('created_at', { ascending: false }).limit(30),
+        // The ONE handled-this-week definition, counted in PostgreSQL.
+        countOrNull(
+          supabase.from('family_automation_runs').select('id', { count: 'exact', head: true })
+            .eq('family_id', familyId).in('state', HANDLED_RUN_STATES).gte('created_at', sinceIso),
+          'autopilot handled runs',
+        ),
       ]);
-      setLevel(dialLevel(policy?.effect));
-      setRuns((runRows ?? []) as Run[]);
-    } catch { /* degrade silently */ }
+      // A failed queue read must not render as an empty queue: "nothing is
+      // waiting for you" is a claim, and we cannot make it.
+      if (runRows.error) {
+        console.error('[autopilot-panel] run feed read failed', runRows.error);
+        setReadFailed(true);
+      } else {
+        setReadFailed(false);
+        setRuns((runRows.data ?? []) as Run[]);
+      }
+      setLevel(dialLevel(policy.data?.effect));
+      setHandled(handledCount);
+    } catch (error) {
+      console.error('[autopilot-panel] autopilot read failed', error);
+      setReadFailed(true);
+      setHandled(null);
+    }
     setLoaded(true);
   }, [familyId]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const stats = autopilotStats(runs);
   const queued = runs.filter((r) => r.status === 'pending');
   const executed = runs.filter((r) => r.status === 'executed').slice(0, 5);
 
@@ -76,7 +109,9 @@ export function AutopilotPanel({ className }: { className?: string }) {
     startTransition(async () => {
       const res = await setConciergeAutopilotAction(next);
       if (!res.ok) { setLevel(prev); toastError(res.error); }
-      else success(next === 'auto' ? 'Auto-pilot on — accepted plans execute themselves' : next === 'ask' ? 'Bubaly will ask before executing' : 'Autopilot off');
+      else success(next === 'auto' ? t('autopilotPanel.autoPilotOnAcceptedPlansExecuteThemselves')
+        : next === 'ask' ? t('autopilotPanel.bubalyWillAskBeforeExecuting')
+        : t('autopilotPanel.autopilotOff'));
     });
   };
 
@@ -85,7 +120,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
     startTransition(async () => {
       const res = await executeQueuedRunAction(runId);
       if (!res.ok) toastError(res.error);
-      else success(res.summary ?? 'Executed');
+      else success(res.summary ?? t('autopilotPanel.executed'));
       setBusyId(null);
       void load();
     });
@@ -118,18 +153,20 @@ export function AutopilotPanel({ className }: { className?: string }) {
                 : level === 'ask' ? 'bg-amber-500/15 text-amber-300'
                 : 'bg-white/[0.08] text-muted',
             )}>
-              {LEVELS.find((l) => l.key === level)?.label}
+              {t(LEVELS.find((l) => l.key === level)?.labelKey ?? 'autopilotPanel.askFirst')}
             </span>
-            {queued.length > 0 && (
+            {!readFailed && queued.length > 0 && (
               <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                {queued.length} waiting
+                {t('autopilotPanel.nWaiting', { count: queued.length })}
               </span>
             )}
           </span>
           <span className="block text-xs text-muted">
-            {stats.executedThisWeek > 0
-              ? `${stats.executedThisWeek} plan${stats.executedThisWeek === 1 ? '' : 's'} executed for you this week`
-              : 'Accepted plans can land on the calendar, reminders and tasks by themselves.'}
+            {handled === null
+              ? t('autopilotPanel.couldNotReadWhatBubalyHandled')
+              : handled > 0
+                ? t('autopilotPanel.nThingsHandledForYouThisWeek', { count: handled })
+                : t('autopilotPanel.acceptedPlansCanLandOnTheCalendar')}
           </span>
         </span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted transition-transform', open && 'rotate-180')} />
@@ -137,10 +174,20 @@ export function AutopilotPanel({ className }: { className?: string }) {
 
       {open && (
         <div className="mt-4 space-y-4">
+          {readFailed && (
+            <div role="alert" className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-xs">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+              <span className="min-w-0 flex-1 text-danger">{t('autopilotPanel.couldNotReadTheAutopilotQueue')}</span>
+              <button type="button" onClick={() => void load()} className="font-semibold text-danger underline">
+                {t('autopilotPanel.tryAgain')}
+              </button>
+            </div>
+          )}
+
           {/* The dial */}
           <div>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-              {t('autopilot.whenYouAcceptAPlan')}{manager ? '' : ' (parents/guardians can change this)'}
+              {t('autopilot.whenYouAcceptAPlan')}{manager ? '' : ` ${t('autopilotPanel.parentsGuardiansCanChangeThis')}`}
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {LEVELS.map((l) => (
@@ -149,7 +196,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
                   type="button"
                   onClick={() => changeLevel(l.key)}
                   disabled={!manager || pending}
-                  title={l.hint}
+                  title={t(l.hintKey)}
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition disabled:cursor-not-allowed',
                     level === l.key
@@ -157,27 +204,29 @@ export function AutopilotPanel({ className }: { className?: string }) {
                       : 'border-border text-muted hover:bg-elevated disabled:opacity-50',
                   )}
                 >
-                  <l.icon className="h-4 w-4" /> {l.label}
+                  <l.icon className="h-4 w-4" /> {t(l.labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Waiting for approval */}
-          {queued.length > 0 && (
+          {!readFailed && queued.length > 0 && (
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">{t('autopilot.waitingForYourOk')}</p>
               <div className="space-y-1.5">
                 {queued.map((r) => (
                   <div key={r.id} className="flex items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-500/[0.06] px-3 py-2">
-                    <span className="min-w-0 flex-1 text-xs">{(r.summary ?? 'Queued plan').replace(/^Waiting for approval: /, '')}</span>
+                    <span className="min-w-0 flex-1 text-xs">
+                      {(r.summary ?? t('autopilotPanel.queuedPlan')).replace(/^Waiting for approval: /, '')}
+                    </span>
                     {manager && (
                       <>
                         <button
                           type="button" onClick={() => approve(r.id)} disabled={pending}
                           className="inline-flex h-7 items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 text-[11px] font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
                         >
-                          {busyId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Do it
+                          {busyId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {t('autopilotPanel.doIt')}
                         </button>
                         <button
                           type="button" onClick={() => dismiss(r.id)} disabled={pending}
@@ -195,14 +244,14 @@ export function AutopilotPanel({ className }: { className?: string }) {
           )}
 
           {/* Done for you */}
-          {executed.length > 0 && (
+          {!readFailed && executed.length > 0 && (
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{t('autopilot.doneForYou')}</p>
               <div className="space-y-1">
                 {executed.map((r) => (
                   <div key={r.id} className="flex items-start gap-2 rounded-lg px-1 py-1">
                     <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300" />
-                    <span className="min-w-0 flex-1 text-xs text-muted">{r.summary ?? 'Executed a plan'}</span>
+                    <span className="min-w-0 flex-1 text-xs text-muted">{r.summary ?? t('autopilotPanel.executedAPlan')}</span>
                   </div>
                 ))}
               </div>
