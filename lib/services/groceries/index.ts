@@ -576,17 +576,162 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
   if (isPantryLocation(input.location)) patch.location = input.location;
   if (input.expiresAt) patch.expires_at = input.expiresAt;
 
+  // A DELTA is a read-modify-write, so it races: two people unpacking the
+  // shopping and each tapping +1 both read 3 and both write 4. The update
+  // therefore carries the quantity it read as a condition, and a write that
+  // matches no row means someone moved it first — re-read and apply the delta
+  // again rather than overwrite their change. An absolute `quantity` is the
+  // caller stating a figure, so it does not need the condition and does not get
+  // one. Same distinction as `setGoalProgress` versus `contributeToSavingsGoal`.
+  const isDelta = input.quantity == null && input.delta != null;
+  let current = existing;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (isDelta) patch.quantity = Math.max(0, Number(current.quantity ?? 0) + (input.delta ?? 0));
+
+    let write = scope.db
+      .from('pantry_items')
+      .update(patch)
+      .eq('family_id', scope.familyId)
+      .eq('id', current.id);
+    if (isDelta) write = write.eq('quantity', current.quantity as number);
+
+    const { data, error } = await write.select('*').maybeSingle();
+    if (error) {
+      console.error('[service:groceries] pantry update failed', error);
+      return fail(describeDbError(error, 'Could not update that pantry item.'), { code: SERVICE_CODES.db });
+    }
+    if (data) return ok({ item: data, created: false });
+    if (!isDelta) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
+
+    // Nothing matched: either the row is gone, or its quantity moved.
+    const { data: fresh, error: reread } = await scope.db
+      .from('pantry_items')
+      .select('*')
+      .eq('family_id', scope.familyId)
+      .eq('id', current.id)
+      .maybeSingle();
+    if (reread) {
+      console.error('[service:groceries] pantry re-read failed', reread);
+      return fail(describeDbError(reread, 'Could not update that pantry item.'), { code: SERVICE_CODES.db });
+    }
+    if (!fresh) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
+    current = fresh;
+  }
+
+  return fail('That pantry item is being updated by someone else. Try again.', { code: SERVICE_CODES.db });
+}
+
+/**
+ * Create or update a pantry item from the editor.
+ *
+ * Distinct from `pantryAdjust`, which exists for "we used two" and carries only
+ * quantity, unit, location and expiry. The editor also sets `category`,
+ * `low_threshold`, `is_staple` and `notes`; routing it through `pantryAdjust`
+ * would have dropped all four silently — the same shape as the chore icon the
+ * board set and `CreateChoreInput` did not carry.
+ *
+ * `quantity` here is an ABSOLUTE the family typed, so it needs no compare-and-set.
+ */
+export type SavePantryItemInput = {
+  name: string;
+  category?: string | null;
+  location?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  lowThreshold?: number | null;
+  expiresAt?: string | null;
+  isStaple?: boolean | null;
+  notes?: string | null;
+};
+
+export async function savePantryItem(
+  scope: ServiceScope,
+  input: SavePantryItemInput & { itemId?: string | null },
+): Promise<ServiceResult<{ item: PantryItem; created: boolean }>> {
+  const name = input.name?.trim() ?? '';
+  if (!name) return fail('A pantry item needs a name.', { code: SERVICE_CODES.invalidInput });
+  if (input.quantity != null && !(Number.isFinite(input.quantity) && input.quantity >= 0)) {
+    return fail('A quantity must be zero or more.', { code: SERVICE_CODES.invalidInput });
+  }
+  if (input.lowThreshold != null && !(Number.isFinite(input.lowThreshold) && input.lowThreshold >= 0)) {
+    return fail('A low-stock threshold must be zero or more.', { code: SERVICE_CODES.invalidInput });
+  }
+  if (input.expiresAt && !isDayKey(input.expiresAt)) {
+    return fail('A best-by date must look like 2026-09-07.', { code: SERVICE_CODES.invalidInput });
+  }
+  if (input.location && !isPantryLocation(input.location)) {
+    return fail(`"${input.location}" is not a pantry location.`, { code: SERVICE_CODES.invalidInput });
+  }
+
+  const fields = {
+    name,
+    category: input.category?.trim() || categorizeGroceryItem(name),
+    location: (isPantryLocation(input.location) ? input.location : 'pantry') as PantryLocation,
+    quantity: input.quantity ?? 1,
+    unit: input.unit?.trim() || null,
+    low_threshold: input.lowThreshold ?? null,
+    expires_at: input.expiresAt || null,
+    is_staple: input.isStaple ?? false,
+    notes: input.notes?.trim() || null,
+  };
+
+  if (input.itemId) {
+    const { data, error } = await scope.db
+      .from('pantry_items')
+      .update(fields)
+      .eq('id', input.itemId)
+      .eq('family_id', scope.familyId)
+      .select('*')
+      .maybeSingle();
+    if (error) {
+      console.error('[service:groceries] pantry save failed', error);
+      return fail(describeDbError(error, 'Could not save that pantry item.'), { code: SERVICE_CODES.db });
+    }
+    if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
+
+    await recordActivitySafely(scope, {
+      agent: 'groceries', action: 'update',
+      title: `Updated ${data.name} in the pantry`, href: '/dashboard/pantry', resourceId: data.id,
+    });
+    return ok({ item: data, created: false });
+  }
+
   const { data, error } = await scope.db
     .from('pantry_items')
-    .update(patch)
-    .eq('family_id', scope.familyId)
-    .eq('id', existing.id)
+    .insert({ ...fields, family_id: scope.familyId, created_by: scope.userId })
     .select('*')
+    .single();
+  if (error || !data) {
+    console.error('[service:groceries] pantry create failed', error);
+    return fail(describeDbError(error, 'Could not add that to the pantry.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, {
+    agent: 'groceries', action: 'create',
+    title: `Added ${data.name} to the pantry`, href: '/dashboard/pantry', resourceId: data.id,
+  });
+  return ok({ item: data, created: true });
+}
+
+/** Remove a pantry item. Family-scoped, where the module deleted on `id` alone. */
+export async function removePantryItem(scope: ServiceScope, itemId: string): Promise<ServiceResult<{ id: string }>> {
+  const { data, error } = await scope.db
+    .from('pantry_items')
+    .delete()
+    .eq('id', itemId)
+    .eq('family_id', scope.familyId)
+    .select('id, name')
     .maybeSingle();
   if (error) {
-    console.error('[service:groceries] pantry update failed', error);
-    return fail(describeDbError(error, 'Could not update that pantry item.'), { code: SERVICE_CODES.db });
+    console.error('[service:groceries] pantry delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that pantry item.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
-  return ok({ item: data, created: false });
+
+  await recordActivitySafely(scope, {
+    agent: 'groceries', action: 'delete',
+    title: `Took ${data.name} out of the pantry`, href: '/dashboard/pantry', resourceId: data.id,
+  });
+  return ok({ id: data.id });
 }

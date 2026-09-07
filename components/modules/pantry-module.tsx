@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { adjustPantryQuantityAction, removePantryItemAction, savePantryItemAction } from '@/app/(app)/dashboard/pantry/actions';
 import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -56,17 +57,18 @@ export function PantryModule() {
   const groups = useMemo(() => groupByLocation(items), [items]);
 
   async function adjustQty(item: PantryItem, delta: number) {
-    const next = Math.max(0, Number(item.quantity) + delta);
-    const supabase = createClient();
-    const { error } = await supabase.from('pantry_items').update({ quantity: next }).eq('id', item.id);
-    if (error) return toastError(describeDbError(error));
+    // The DELTA, not a total computed here. `next` used to come from what this
+    // page last rendered, so two people unpacking the shopping and each tapping
+    // +1 both read the same number and both wrote the same number.
+    const res = await adjustPantryQuantityAction(item.id, delta);
+    if (!res.ok) return toastError(res.error);
     void refresh();
   }
 
   async function removeItem(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('pantry_items').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await removePantryItemAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Removed');
     void refresh();
   }
@@ -256,12 +258,22 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
       notes: String(form.get('notes') ?? '').trim() || null,
     };
     setLoading(true);
-    const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('pantry_items').update(payload).eq('id', item.id)
-      : await supabase.from('pantry_items').insert({ ...payload, family_id: familyId, created_by: userId });
+    // `savePantryItem`, not `pantryAdjust`: the latter carries only quantity,
+    // unit, location and expiry, so it would drop the category, threshold,
+    // staple flag and notes this form sets.
+    const res = await savePantryItemAction(item?.id ?? null, {
+      name: payload.name,
+      category: payload.category,
+      location: payload.location,
+      quantity: payload.quantity,
+      unit: payload.unit,
+      lowThreshold: payload.low_threshold,
+      expiresAt: payload.expires_at,
+      isStaple: payload.is_staple,
+      notes: payload.notes,
+    });
     setLoading(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success(item ? 'Updated' : 'Item added');
     onSaved();
   }
