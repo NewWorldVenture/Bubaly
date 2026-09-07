@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { Logo } from '@/components/brand/logo';
 import { ConsentReopenLink } from '@/components/marketing/consent-manager';
 import { LanguageBar } from '@/components/i18n/language-picker';
-import { SOCIAL_PLATFORMS, type SocialPlatform } from '@/lib/marketing/social-links';
+import { SOCIAL_PLATFORMS, resolveSocialLinks, type SocialPlatform } from '@/lib/marketing/social-links';
 import { getCachedSocialLinks } from '@/lib/server/social-links';
 import {
   FacebookIcon,
@@ -70,8 +70,10 @@ const GROUPS = [
 
 export async function SiteFooter() {
   const t = await getTranslations();
-  const social = await getCachedSocialLinks();
-  const configured = SOCIAL_PLATFORMS.filter((p) => social[p.key]);
+  // Every platform draws: an admin-saved URL where there is one, the brand's
+  // canonical handle otherwise. The row is part of the footer's design rather
+  // than something that appears only once someone has filled a form in.
+  const social = resolveSocialLinks(await getCachedSocialLinks());
 
   return (
     <footer className="border-t border-border/70 bg-bg text-fg transition-colors duration-300">
@@ -86,25 +88,23 @@ export async function SiteFooter() {
               overflowing when six accounts are configured on a narrow phone. */}
           <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
             <LanguageBar />
-            {configured.length > 0 && (
-              <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-1">
-                {configured.map(({ key, label }) => {
-                  const Icon = SOCIAL_ICONS[key];
-                  return (
-                    <a
-                      key={key}
-                      href={social[key]}
-                      target="_blank"
-                      rel="me noopener noreferrer"
-                      aria-label={t('siteFooter.bubalyOn', { platform: label })}
-                      className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg coarse:min-h-11 coarse:min-w-11 focus-ring"
-                    >
-                      <Icon className="h-4 w-4" />
-                    </a>
-                  );
-                })}
-              </nav>
-            )}
+            <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-1">
+              {SOCIAL_PLATFORMS.map(({ key, label }) => {
+                const Icon = SOCIAL_ICONS[key];
+                return (
+                  <a
+                    key={key}
+                    href={social[key]}
+                    target="_blank"
+                    rel="me noopener noreferrer"
+                    aria-label={t('siteFooter.bubalyOn', { platform: label })}
+                    className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg coarse:min-h-11 coarse:min-w-11 focus-ring"
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                );
+              })}
+            </nav>
           </div>
         </div>
         {GROUPS.map((g) => (

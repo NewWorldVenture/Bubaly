@@ -10329,5 +10329,6 @@
   "supportTickets.tab.closed": "Fechados",
   "walletDashboard.bucket.save": "Poupar",
   "walletDashboard.bucket.give": "Doar",
-  "walletDashboard.bucket.invest": "Investir"
+  "walletDashboard.bucket.invest": "Investir",
+  "socialLinksForm.defaultsAreDimmed": "Os ícones esbatidos usam o URL predefinido — guarde o seu para o substituir."
 }
