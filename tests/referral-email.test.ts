@@ -173,3 +173,59 @@ describe('referral email wiring (source)', () => {
     expect(panel).toContain("t('referralPanel.inviteEmailSent', { email: res.email })");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The two in-product prompts that feed the panel: the invite-success CTA in
+// Settings and the dismissible Home card. Both are pinned at source level —
+// what gates them, where the amounts come from, and that a failed read shows
+// NOTHING rather than a card built on a guess.
+describe('in-product referral prompts (source)', () => {
+  const settings = readFileSync('components/modules/settings-module.tsx', 'utf8');
+  const settingsPage = readFileSync('app/(app)/dashboard/settings/page.tsx', 'utf8');
+  const home = readFileSync('app/(app)/home/page.tsx', 'utf8');
+  const card = readFileSync('components/referrals/referral-home-card.tsx', 'utf8');
+  const actions = readFileSync('app/(app)/referrals/actions.ts', 'utf8');
+
+  it('the invite-success CTA appears only after an invite is actually sent, and links to /referrals', () => {
+    // The flag is raised by the invite dialog's onSent callback, nothing else.
+    expect(settings.match(/setShowReferralCta\(true\)/g)).toHaveLength(1);
+    expect(settings).toContain('onSent={() => { setInviteOpen(false); setShowReferralCta(true);');
+    expect(settings).toContain('href="/referrals"');
+    expectSays(settings, 'settingsModule.knowAnotherFamily', 'Know another family?');
+    expectSays(settings, 'settingsModule.referAFamily', 'Refer a family');
+  });
+
+  it('the CTA amounts come from the referral config, never typed into the component', () => {
+    expect(settings).toContain('referralConfig ?? DEFAULT_REFERRAL_CONFIG');
+    expect(settings).toContain("t('settingsModule.giveGetWhenTheyUpgrade', { give: fmtMoney(referral.referredRewardCents), get: fmtMoney(referral.referrerRewardCents) })");
+    expect(settingsPage).toContain('getReferralConfigResult(createServiceClient())');
+    expect(settingsPage).toContain("console.error('[settings] referral config read failed'");
+  });
+
+  it('the Home card is gated on an invite count read server-side, and a failed read renders no card', () => {
+    const start = home.indexOf('let referralCard');
+    const block = home.slice(start, home.indexOf('return (', start));
+    expect(block).toContain("supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId)");
+    expect(block).toContain('REFERRAL_HOME_CARD_DISMISSED_KEY');
+    expect(block).toContain("console.error('[home] referral card read failed'");
+    // Fail closed: the card is only ever assigned inside the else branch of the
+    // error check, so an unreadable count can never render a prompt.
+    expect(block.indexOf('referralCard = {')).toBeGreaterThan(block.indexOf('} else {'));
+    expect(block).toContain('(invitesRes.count ?? 0) >= 1');
+    expect(block).toContain('config.enabled');
+    expect(home).toContain('{referralCard && <ReferralHomeCard give={referralCard.give} get={referralCard.get} />}');
+  });
+
+  it('the Home card dismissal persists on the user’s own preferences row, and says so when it cannot', () => {
+    // Not an inert button: the card hides only after the write comes back ok.
+    expect(card).toContain('dismissReferralHomeCardAction()');
+    expect(card).toContain('if (res.ok) setHidden(true);');
+    expect(card).toContain('else toastError(res.reason);');
+    expectSays(card, 'referralHomeCard.title', 'Know another family?');
+    expectSays(card, 'referralHomeCard.cta', 'Get your link');
+    expect(actions).toContain("from('user_preferences')");
+    expect(actions).toContain('[REFERRAL_HOME_CARD_DISMISSED_KEY]: new Date().toISOString()');
+    expect(actions).toContain("console.error('[referrals/home-card] preferences write failed'");
+    expectTranslates(actions, 'referralActions.couldNotSaveYourPreference', 'Could not save your preference. Try again.');
+  });
+});
