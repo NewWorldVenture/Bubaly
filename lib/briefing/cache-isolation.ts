@@ -50,6 +50,14 @@ const responseSchema = z.object({
     byDomain: z.array(z.object({ domain, count })),
     headline: z.string(),
   }).optional(),
+  // The quiet notifications the brief folded in. Optional because a cached or
+  // older response predates the section, and `alsoTodayUnavailable` is what
+  // keeps a failed read from rendering as "nothing else today".
+  alsoToday: z.array(z.object({
+    id: z.string(), title: z.string(), detail: z.string().nullable(),
+    href: z.string(), at: z.string().nullable(),
+  })).optional(),
+  alsoTodayUnavailable: z.boolean().optional(),
 }).passthrough();
 
 export type BriefingData = z.infer<typeof briefingSchema>;

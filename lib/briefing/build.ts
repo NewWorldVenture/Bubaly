@@ -18,8 +18,10 @@ import { z } from 'zod';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { mergeCompletedByBubaly, type AiActivityRow, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
 import { buildFirstBrief, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { notificationAction } from '@/lib/notifications/actions';
+import { isDigestNotification } from '@/lib/notifications/priority';
 import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
-import type { HomeBriefKind } from '@/lib/database.types';
+import type { HomeBriefKind, NotificationType } from '@/lib/database.types';
 
 export type BriefKind = HomeBriefKind;
 
@@ -34,9 +36,41 @@ export type BriefInput = {
   completedRuns: CompletedRunRow[];
   activity: AiActivityRow[];
   dinnerCandidates?: DinnerIdea[];
+  /**
+   * Unread notifications, already read from the table by the caller so this
+   * stays pure. Only the 'digest'-class ones are used — see `foldAlsoToday`.
+   */
+  notifications?: BriefNotice[];
   /** Counts the home brief already tracks, for the stored row. */
   counts?: { choresPending?: number; openTodos?: number; groceryOpen?: number; memberCount?: number };
 };
+
+/** One row of `public.notifications`, reduced to what a brief needs. */
+export type BriefNotice = {
+  id: string;
+  type: NotificationType | string;
+  title: string;
+  body?: string | null;
+  createdAt?: string | null;
+  relatedType?: string | null;
+  relatedId?: string | null;
+};
+
+/** A quiet notice, said once, with somewhere to go. */
+export type AlsoTodayItem = {
+  /** The `notifications.id` it came from — what the caller marks read. */
+  id: string;
+  title: string;
+  detail: string | null;
+  href: string;
+  at: string | null;
+};
+
+/**
+ * At most this many quiet notices. "Also today" is the part of the brief nobody
+ * has to read; a list of forty defeats the compression it exists to provide.
+ */
+export const ALSO_TODAY_LIMIT = 8;
 
 export type Brief = {
   kind: BriefKind;
@@ -49,12 +83,18 @@ export type Brief = {
   digest: ConciergeDigest;
   /** What Bubaly actually finished — runs that completed, never a claim. */
   handled: CompletedItem[];
+  /**
+   * The quiet half of the notification queue, folded in so it stops
+   * interrupting: said once, here, instead of once per row in the bell.
+   */
+  alsoToday: AlsoTodayItem[];
   counts: {
     today: number;
     week: number;
     conflicts: number;
     overdue: number;
     handled: number;
+    alsoToday: number;
     timeSavedMinutes: number;
   };
   /** True when there is genuinely nothing to say — the caller leads with getting-started. */
@@ -85,9 +125,17 @@ export const briefSchema = z.object({
     key: z.string(), kind: z.enum(['run', 'activity']), title: z.string(),
     detail: z.string().nullable(), href: z.string(), at: z.string(), partial: z.boolean(),
   })),
+  // Optional with a default, not required: `home_briefs` rows written before
+  // "Also today" existed still have to parse, or every stored brief in the
+  // table becomes unreadable the moment this ships.
+  alsoToday: z.array(z.object({
+    id: z.string(), title: z.string(), detail: z.string().nullable(),
+    href: z.string(), at: z.string().nullable(),
+  })).optional().default([]),
   counts: z.object({
     today: z.number(), week: z.number(), conflicts: z.number(),
     overdue: z.number(), handled: z.number(), timeSavedMinutes: z.number(),
+    alsoToday: z.number().optional().default(0),
   }),
   isSparse: z.boolean(),
 });
@@ -124,6 +172,64 @@ function headlineFor(kind: BriefKind, calendar: FirstBrief, digest: ConciergeDig
   return parts.length ? `${parts.join(', ')}.` : 'A quiet day — nothing needs you yet.';
 }
 
+/** Lower-cased and de-punctuated, so two sources of the same notice collide. */
+function titleKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!:;]+$/, '');
+}
+
+/**
+ * The quiet notifications, folded into one section — said once.
+ *
+ * WHAT "ONCE" MEANS HERE, because it is the whole point of the section:
+ *
+ *  - Once per notification row. `notify()` writes one row PER RECIPIENT, and
+ *    `generateFamilyNotifications` writes a family-wide row alongside
+ *    per-member ones, so the same "Soccer practice at 5" can arrive three
+ *    times. Rows are deduped by id first and then by title.
+ *  - Never twice across the brief. If the concierge digest is already telling
+ *    the family about the same thing — the pantry sweep and the grocery
+ *    reminder are frequently the same sentence — the digest wins, because it
+ *    carries the due date and the domain. Same for anything already on today's
+ *    timeline.
+ *
+ * Only 'digest'-class rows are considered at all: a medication reminder does
+ * not belong in the part of the brief you are allowed to skim past.
+ */
+export function foldAlsoToday(
+  notices: readonly BriefNotice[],
+  digest: ConciergeDigest,
+  calendar: FirstBrief,
+): AlsoTodayItem[] {
+  const spokenFor = new Set<string>();
+  for (const item of digest.items ?? []) spokenFor.add(titleKey(item.title));
+  for (const entry of calendar.timeline ?? []) spokenFor.add(titleKey(entry.title));
+
+  const seenIds = new Set<string>();
+  const out: AlsoTodayItem[] = [];
+  for (const notice of notices ?? []) {
+    if (!notice?.id || !notice.title?.trim()) continue;
+    if (!isDigestNotification(notice)) continue;
+    if (seenIds.has(notice.id)) continue;
+    const key = titleKey(notice.title);
+    if (spokenFor.has(key)) continue;
+    seenIds.add(notice.id);
+    spokenFor.add(key);
+    out.push({
+      id: notice.id,
+      title: notice.title.trim(),
+      detail: notice.body?.trim() || null,
+      href: notificationAction({
+        type: notice.type,
+        related_type: notice.relatedType ?? null,
+        related_id: notice.relatedId ?? null,
+      }).href,
+      at: notice.createdAt ?? null,
+    });
+    if (out.length >= ALSO_TODAY_LIMIT) break;
+  }
+  return out;
+}
+
 /**
  * Compose a brief. Pure: every input is already-read data, so this is testable
  * without a database and identical for the page, the route and the cron.
@@ -132,6 +238,7 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
   const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? []);
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? []);
+  const alsoToday = foldAlsoToday(input.notifications ?? [], digest, calendar);
 
   const counts = {
     today: calendar.todayCount,
@@ -139,6 +246,7 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
     conflicts: calendar.conflicts.length,
     overdue: digest.counts.overdue,
     handled: handled.length,
+    alsoToday: alsoToday.length,
     timeSavedMinutes: calendar.timeSavedMinutes,
   };
 
@@ -149,10 +257,13 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
     calendar,
     digest,
     handled,
+    alsoToday,
     counts,
-    // Nothing on the calendar, nothing due and nothing done is a genuinely
-    // sparse day — the caller leads with getting-started instead of a void.
-    isSparse: counts.today === 0 && counts.week === 0 && digest.counts.total === 0 && handled.length === 0,
+    // Nothing on the calendar, nothing due, nothing done and nothing waiting is
+    // a genuinely sparse day — the caller leads with getting-started instead of
+    // a void. A quiet notice is still something to say, so it counts.
+    isSparse: counts.today === 0 && counts.week === 0 && digest.counts.total === 0
+      && handled.length === 0 && alsoToday.length === 0,
   };
 }
 

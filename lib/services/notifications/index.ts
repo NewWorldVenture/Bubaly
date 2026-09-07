@@ -27,6 +27,7 @@
 import 'server-only';
 import type { Json, NotificationType, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
+import { DIGEST_NOTIFICATION_TYPES, type NotificationPriority } from '@/lib/notifications/priority';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getAISettings } from '../ai-settings';
 import { dayKeyInTz, hourInTz, scopeNow, zonedTimeMs } from '../scope';
@@ -284,8 +285,19 @@ export async function markRead(scope: ServiceScope, notificationId: string): Pro
  * Unread notifications for the acting user, plus the family-wide ones.
  * Rows whose `send_at` is still in the future are withheld — that is what a
  * quiet-hours deferral has to mean at read time as well as at push time.
+ *
+ * `priority` narrows the read to one half of the queue. There is no priority
+ * COLUMN (see lib/notifications/priority.ts for the migration this is standing
+ * in for), so the filter is on `type` — which is exactly what the classifier
+ * uses, so a caller asking for 'digest' gets the same rows the Daily Brief will
+ * fold and the bell will not count. 'now' is expressed as NOT-in rather than
+ * in, so a notification type added later still reaches the surfaces that
+ * interrupt.
  */
-export async function listUnread(scope: ServiceScope, opts?: { limit?: number }): Promise<ServiceResult<Notification[]>> {
+export async function listUnread(
+  scope: ServiceScope,
+  opts?: { limit?: number; priority?: NotificationPriority },
+): Promise<ServiceResult<Notification[]>> {
   const nowIso = scopeNow(scope).toISOString();
   let query = scope.db
     .from('notifications')
@@ -295,6 +307,8 @@ export async function listUnread(scope: ServiceScope, opts?: { limit?: number })
     .lte('send_at', nowIso)
     .order('send_at', { ascending: false })
     .limit(Math.min(Math.max(opts?.limit ?? 50, 1), 200));
+  if (opts?.priority === 'digest') query = query.in('type', [...DIGEST_NOTIFICATION_TYPES]);
+  else if (opts?.priority === 'now') query = query.not('type', 'in', `(${DIGEST_NOTIFICATION_TYPES.join(',')})`);
   // A cron scope has no user of its own; it reads the whole family's queue.
   if (scope.userId) query = query.or(`user_id.eq.${scope.userId},user_id.is.null`);
 
