@@ -380,6 +380,12 @@ async function rememberUnconfirmed(
 
 export type RecallInput = { query?: string | null; category?: FactCategory | string | null; memberId?: string | null; limit?: number };
 
+/** Shared visibility rule for recall and review; expiry is handled separately. */
+function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'>>(scope: ServiceScope, rows: T[]): T[] {
+  const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
+  return rows.filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+}
+
 /**
  * Confirmed, unexpired facts, pinned first. Filtering runs in memory over the
  * family's rows (a household has dozens of facts, not thousands) so the match
@@ -408,10 +414,8 @@ export async function recallFacts(scope: ServiceScope, input: RecallInput = {}):
   }
   // Same rule as the memory context slice: medical and account facts are for
   // the adults who manage the family, whatever tool or page asks.
-  const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
-  const visible = (data ?? [])
-    .filter((f) => !isExpiredFact(f, scope.now ?? new Date()))
-    .filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+  const visible = filterVisibleMemories(scope, (data ?? [])
+    .filter((f) => !isExpiredFact(f, scope.now ?? new Date())));
   const matched = filterFacts(visible, { q: input.query ?? '' });
   return ok(matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
 }
@@ -434,7 +438,10 @@ export async function listMemories(scope: ServiceScope, input: { memberId?: stri
     console.error('[service:memory] list failed', error);
     return fail(describeDbError(error, 'Could not load family memory.'), { code: SERVICE_CODES.db });
   }
-  return ok({ facts: factsRes.data ?? [], pending: pendingRes.data ?? [] });
+  return ok({
+    facts: filterVisibleMemories(scope, factsRes.data ?? []),
+    pending: filterVisibleMemories(scope, pendingRes.data ?? []),
+  });
 }
 
 /**

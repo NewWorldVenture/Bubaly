@@ -53,6 +53,32 @@ describe('generatePrepPlans', () => {
     expect(bday.urgency).not.toBe('now');
   });
 
+  describe.each([
+    { kind: 'trip', leadDays: 30 },
+    { kind: 'birthday', leadDays: 21 },
+    { kind: 'doc_expiry', leadDays: 30 },
+    { kind: 'school_start', leadDays: 21 },
+    { kind: 'event', leadDays: 7 },
+  ] as const)('$kind preparation window', ({ kind, leadDays }) => {
+    it.each([
+      { offset: -1, urgency: 'now' },
+      { offset: 0, urgency: 'now' },
+      { offset: 1, urgency: 'soon' },
+      { offset: 7, urgency: 'soon' },
+      { offset: 8, urgency: 'later' },
+    ] as const)('is $urgency when the first step opens in $offset days', ({ offset, urgency }) => {
+      const date = new Date(Date.UTC(2026, 6, 6 + leadDays + offset)).toISOString().slice(0, 10);
+      const plans = generatePrepPlans([{ id: kind, kind, title: 'Upcoming plan', date }], NOW);
+      const plan = plans[0];
+
+      expect(plan.urgency).toBe(urgency);
+      expect(plan.steps[0].leadDays).toBe(leadDays);
+      expect(plan.steps[0].dueDate).toBe(new Date(Date.UTC(2026, 6, 6 + offset)).toISOString().slice(0, 10));
+      expect(plan.steps[0].overdue).toBe(offset < 0);
+      expect(actionablePlans(plans)).toBe(urgency === 'now' ? 1 : 0);
+    });
+  });
+
   it('sorts plans by target date', () => {
     const plans = generatePrepPlans(signals, NOW);
     for (let i = 1; i < plans.length; i++) {
