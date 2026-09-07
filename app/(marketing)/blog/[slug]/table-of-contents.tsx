@@ -19,7 +19,7 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
           }
         }
       },
-      { rootMargin: '-80px 0px -60% 0px', threshold: 0.1 },
+      { rootMargin: t('tableOfContents.80px0px600px'), threshold: 0.1 },
     );
 
     for (const { id } of headings) {

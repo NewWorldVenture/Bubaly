@@ -10,44 +10,44 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return resolveMarketingMetadata('/cookies', {
   title: t('cookies.cookiePolicy'),
-  description: 'How Bubaly uses cookies and similar technologies, and the choices you have.',
+  description: t('cookies.howBubalyUsesCookiesAnd'),
   });
 }
 
 const SECTIONS: LegalSection[] = [
   {
     id: 'what',
-    heading: 'What cookies are',
+    heading: 'cookies.whatCookiesAre',
     body: [
-      'Cookies are small text files stored on your device when you visit a website or use an app. Similar technologies — like local storage — work in comparable ways. Together they help Bubaly remember you, keep you signed in, and run reliably.',
+      'cookies.cookiesAreSmallTextFiles',
     ],
   },
   {
     id: 'how-we-use',
-    heading: 'How Bubaly uses them',
+    heading: 'cookies.howBubalyUsesThem',
     body: [
-      'We keep our use of cookies minimal and purpose‑driven:',
+      'cookies.weKeepOurUseOf',
       [
-        'Essential — sign you in, keep your session secure, and remember your active family. Bubaly will not work without these.',
-        'Preferences — remember choices such as light or dark theme and notification settings.',
-        'Analytics — understand, in aggregate, how families use Bubaly so we can improve it. We use privacy‑respecting analytics and do not build advertising profiles.',
+        'cookies.essentialSignYouInKeep',
+        'cookies.preferencesRememberChoicesSuchAs',
+        'cookies.analyticsUnderstandInAggregateHow',
       ],
-      'We do not use cookies for third‑party advertising, and we do not sell information collected through cookies.',
+      'cookies.weDoNotUseCookies',
     ],
   },
   {
     id: 'managing',
-    heading: 'Managing cookies',
+    heading: 'cookies.managingCookies',
     body: [
-      'You can control cookies through your browser or device settings — including blocking or deleting them. Please note that blocking essential cookies will prevent you from staying signed in to Bubaly.',
-      'Because we don\'t use advertising trackers, there\'s nothing extra you need to opt out of for ad targeting.',
+      'cookies.youCanControlCookiesThrough',
+      'cookies.becauseWeDonTUse',
     ],
   },
   {
     id: 'changes',
-    heading: 'Changes to this policy',
+    heading: 'cookies.changesToThisPolicy',
     body: [
-      'If we change how we use cookies, we\'ll update this page and the date above. For more on how we handle your information, see our Privacy Policy.',
+      'cookies.ifWeChangeHowWe',
     ],
   },
 ];
@@ -59,7 +59,7 @@ export default async function CookiesPage() {
       <LegalPage
         title={t('cookies.cookiePolicy')}
         summary={t('cookies.theSmallFilesThatKeep')}
-        lastUpdated="June 24, 2026"
+        lastUpdated="2026-06-24"
         path="/cookies"
         sections={SECTIONS}
       />

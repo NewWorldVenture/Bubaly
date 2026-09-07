@@ -85,8 +85,12 @@ export async function SiteFooter() {
           {/* Language and the social accounts share one row: both are "where
               else can I go / in what language", and a visitor who has just
               switched language is looking right here. Wraps rather than
-              overflowing when six accounts are configured on a narrow phone. */}
-          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              overflowing when six accounts are configured on a narrow phone.
+              gap-y is deliberately larger than gap-x: once it wraps — which is
+              the normal state in this narrow column — the pill and the icon row
+              read as two separate controls stacked, and 8px left them looking
+              like one crowded block. */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-4">
             <LanguageBar />
             <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-1">
               {SOCIAL_PLATFORMS.map(({ key, label }) => {

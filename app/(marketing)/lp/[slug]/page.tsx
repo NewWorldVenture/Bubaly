@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
@@ -42,11 +43,12 @@ async function getPlatformPage(slug: string) {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const t = await getTranslations();
   const { slug } = await params;
   const page = await getPage(slug);
   if (!page) {
     const platformPage = await getPlatformPage(slug);
-    return platformPage ? marketingPageMetadata('landing', slug) : { title: 'Not found', robots: { index: false } };
+    return platformPage ? marketingPageMetadata('landing', slug) : { title: t('lp.notFound'), robots: { index: false } };
   }
   return resolveMarketingMetadata(`/lp/${page.slug}`, {
     title: page.headline || page.title,

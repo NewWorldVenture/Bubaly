@@ -20,6 +20,12 @@
 # about.
 
 # --- proper nouns, brands, demo-data placeholder names ----------------------
+# Social networks. The share bar names each one beside a translated verb
+# ("Share on {network}"), so the noun itself must stay put.
+Facebook
+Pinterest
+Reddit
+Telegram
 # --- (fragment) unit and separator artifacts, no translatable word ----------
 # --- loanwords the target languages use unchanged ---------------------------
 % fit

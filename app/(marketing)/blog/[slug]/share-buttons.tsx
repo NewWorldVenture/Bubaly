@@ -63,14 +63,17 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
   const u = encodeURIComponent(url);
 
   // The most popular networks for sharing a link, each with its own brand tint.
+  // The network NAME stays a literal — it is a proper noun, the same word in
+  // every language — and only the sentence around it is translated, so word
+  // order can differ ("Auf Facebook teilen") without hard-coding seven labels.
   const networks: { name: string; href: string; Icon: (p: IconProps) => JSX.Element; hover: string }[] = [
-    { name: 'Share on X', href: `https://x.com/intent/tweet?text=${t}&url=${u}`, Icon: XIcon, hover: 'hover:border-white/40 hover:text-white' },
-    { name: 'Share on Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${u}`, Icon: FacebookIcon, hover: 'hover:border-[#1877F2]/50 hover:text-[#1877F2]' },
-    { name: 'Share on LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`, Icon: LinkedinIcon, hover: 'hover:border-[#0A66C2]/50 hover:text-[#0A66C2]' },
-    { name: 'Share on WhatsApp', href: `https://wa.me/?text=${t}%20${u}`, Icon: WhatsappIcon, hover: 'hover:border-[#25D366]/50 hover:text-[#25D366]' },
-    { name: 'Share on Reddit', href: `https://www.reddit.com/submit?url=${u}&title=${t}`, Icon: RedditIcon, hover: 'hover:border-[#FF4500]/50 hover:text-[#FF4500]' },
-    { name: 'Share on Pinterest', href: `https://pinterest.com/pin/create/button/?url=${u}&description=${t}`, Icon: PinterestIcon, hover: 'hover:border-[#E60023]/50 hover:text-[#E60023]' },
-    { name: 'Share on Telegram', href: `https://t.me/share/url?url=${u}&text=${t}`, Icon: TelegramIcon, hover: 'hover:border-[#26A5E4]/50 hover:text-[#26A5E4]' },
+    { name: tr('shareButtons.shareOn', { network: 'X' }), href: `https://x.com/intent/tweet?text=${t}&url=${u}`, Icon: XIcon, hover: 'hover:border-white/40 hover:text-white' },
+    { name: tr('shareButtons.shareOn', { network: 'Facebook' }), href: `https://www.facebook.com/sharer/sharer.php?u=${u}`, Icon: FacebookIcon, hover: 'hover:border-[#1877F2]/50 hover:text-[#1877F2]' },
+    { name: tr('shareButtons.shareOn', { network: 'LinkedIn' }), href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`, Icon: LinkedinIcon, hover: 'hover:border-[#0A66C2]/50 hover:text-[#0A66C2]' },
+    { name: tr('shareButtons.shareOn', { network: 'WhatsApp' }), href: `https://wa.me/?text=${t}%20${u}`, Icon: WhatsappIcon, hover: 'hover:border-[#25D366]/50 hover:text-[#25D366]' },
+    { name: tr('shareButtons.shareOn', { network: 'Reddit' }), href: `https://www.reddit.com/submit?url=${u}&title=${t}`, Icon: RedditIcon, hover: 'hover:border-[#FF4500]/50 hover:text-[#FF4500]' },
+    { name: tr('shareButtons.shareOn', { network: 'Pinterest' }), href: `https://pinterest.com/pin/create/button/?url=${u}&description=${t}`, Icon: PinterestIcon, hover: 'hover:border-[#E60023]/50 hover:text-[#E60023]' },
+    { name: tr('shareButtons.shareOn', { network: 'Telegram' }), href: `https://t.me/share/url?url=${u}&text=${t}`, Icon: TelegramIcon, hover: 'hover:border-[#26A5E4]/50 hover:text-[#26A5E4]' },
   ];
 
   return (

@@ -355,18 +355,19 @@ async function GroceryList() {
 async function SchoolList() {
   const t = await getTranslations();
   const items = [['Math Homework', 'Due Tomorrow'], ['Science Project', 'Due May 10'], ['Field Trip', 'May 16']];
-  return <ListPanel title={t('referenceShowcases.upcoming')} footer="View All Assignments">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className={cn('grid h-6 w-6 place-items-center rounded-md', ['bg-pink-500/55', 'bg-indigo-500/55', 'bg-blue-500/55'][i])}><FileText className="h-3.5 w-3.5" /></span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+  return <ListPanel title={t('referenceShowcases.upcoming')} footer={t('referenceShowcases.viewAllAssignments')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className={cn('grid h-6 w-6 place-items-center rounded-md', ['bg-pink-500/55', 'bg-indigo-500/55', 'bg-blue-500/55'][i])}><FileText className="h-3.5 w-3.5" /></span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
-function HealthList() {
+async function HealthList() {
+  const t = await getTranslations();
   const items = [['Liam – Allergy Medication', '8:00 AM'], ['Olivia – Vitamin D', '12:00 PM'], ['Dentist Appointment', '3:30 PM']];
-  return <ListPanel title="Today&apos;s Reminders" footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><TinyAvatar index={i + 1} className="h-6 w-6" /><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+  return <ListPanel title={t('referenceShowcases.todaysReminders')} footer={t('referenceShowcases.viewAll')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><TinyAvatar index={i + 1} className="h-6 w-6" /><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 async function HomeList() {
   const t = await getTranslations();
   const items = [['HVAC Filter Change', 'May 5'], ['Garage Door Service', 'May 20'], ['Water Heater Flush', 'June 2']];
-  return <ListPanel title={t('referenceShowcases.upcoming')} footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+  return <ListPanel title={t('referenceShowcases.upcoming')} footer={t('referenceShowcases.viewAll')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 function ListPanel({ title, footer, children }: { title: string; footer: string; children: React.ReactNode }) {
