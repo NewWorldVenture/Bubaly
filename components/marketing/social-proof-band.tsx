@@ -11,7 +11,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { BandHeader, Container } from '@/components/marketing/visual-mocks';
 import { getPublishedCaseStudies, getPublishedTestimonials } from '@/lib/marketing/reputation-server';
 import { getPublicStats } from '@/lib/marketing/stats';
-import { formatFamilies } from '@/lib/marketing/format';
+import { familiesNote } from '@/lib/marketing/format';
 import { cn } from '@/lib/utils/cn';
 
 function Stars({ rating, label }: { rating: number; label: string }) {
@@ -34,8 +34,10 @@ export async function SocialProofBand() {
   return (
     <Container className="max-w-[1440px] px-5 pb-4 pt-14 sm:px-8 sm:pt-16 lg:px-10">
       <BandHeader eyebrow={t('socialProof.eyebrow')} title={t('socialProof.title')} align="center" />
+      {/* The same registered-family line the pricing TrustStrip shows; hidden
+          at zero rather than falling back to a slogan under real quotes. */}
       {families > 0 && (
-        <p className="mt-3 text-center text-sm text-white/60">{t('handledProof.familiesAggregate', { count: formatFamilies(families) })}</p>
+        <p className="mt-3 text-center text-sm text-white/60">{familiesNote(t, families)}</p>
       )}
 
       {testimonials.length > 0 && (

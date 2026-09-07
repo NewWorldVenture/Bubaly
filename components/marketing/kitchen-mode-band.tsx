@@ -11,7 +11,7 @@ import {
   Calendar, CheckCircle2, CloudSun, Image as ImageIcon, ShoppingCart, Sparkles, Timer, Users, UtensilsCrossed, Check, type LucideIcon,
 } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
-import { BandHeader, Container, PrimaryLink } from '@/components/marketing/visual-mocks';
+import { BandHeader, Container, PrimaryLink, SampleBadge } from '@/components/marketing/visual-mocks';
 import { DEFAULT_TILES, type TileSize, type TileWidget } from '@/lib/display/tiles';
 import { cn } from '@/lib/utils/cn';
 
@@ -109,7 +109,10 @@ export async function KitchenModeBand() {
                 })}
               </div>
             </div>
-            <figcaption className="mt-3 text-center text-xs text-white/55">{t('kitchenMode.exampleCaption')}</figcaption>
+            <figcaption className="mt-3 flex items-center justify-center gap-2 text-xs text-white/55">
+              <SampleBadge>{t('handledProof.sampleBadge')}</SampleBadge>
+              {t('kitchenMode.exampleCaption')}
+            </figcaption>
           </figure>
         </div>
       </section>

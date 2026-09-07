@@ -44,12 +44,26 @@ export function formatHandled(n: number): string {
   return formatFamilies(n);
 }
 
+/** True when a real "things finished" count is large enough to print at all. */
+export function meetsHandledFloor(n: number): boolean {
+  return Number.isFinite(n) && n >= HANDLED_PUBLIC_MIN;
+}
+
 /**
  * The public "things finished" line, or '' when the real count is below
  * HANDLED_PUBLIC_MIN. Callers render the line only when this is non-empty, so
  * a site with no runs yet shows nothing rather than "0 things finished".
+ *
+ * Takes a translator for the same reason familiesNote does: this sentence is
+ * read on the public homepage in every language we ship, and `lib/` is
+ * outside the i18n gate's surfaces, so an English literal here would never be
+ * caught. The number is formatted by formatHandled; the words come from
+ * `handledProof.aggregateNote`.
  */
-export function handledNote(n: number): string {
-  if (!Number.isFinite(n) || n < HANDLED_PUBLIC_MIN) return '';
-  return `${formatHandled(n)} things finished by Bubaly for real families so far`;
+export function handledNote(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  n: number,
+): string {
+  if (!meetsHandledFloor(n)) return '';
+  return t('handledProof.aggregateNote', { count: formatHandled(n) });
 }

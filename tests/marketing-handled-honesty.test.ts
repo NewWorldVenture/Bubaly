@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HANDLED_SAMPLE, SAMPLE_NOW, SAMPLE_WEEK, sampleBriefNumbers } from '@/lib/marketing/handled-sample';
-import { HANDLED_PUBLIC_MIN, formatHandled, handledNote } from '@/lib/marketing/format';
+import { HANDLED_PUBLIC_MIN, formatHandled, handledNote, meetsHandledFloor } from '@/lib/marketing/format';
 import { buildFirstBrief } from '@/lib/onboarding/first-brief';
 
 // The "Bubaly Handled" band mixes three kinds of evidence — real aggregates,
@@ -12,6 +12,8 @@ const ledger = readFileSync('components/marketing/handled-ledger.tsx', 'utf8');
 const sample = readFileSync('lib/marketing/handled-sample.ts', 'utf8');
 const stats = readFileSync('lib/marketing/stats.ts', 'utf8');
 const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
+const t = (key: string, params?: Record<string, string | number>) =>
+  Object.entries(params ?? {}).reduce((out, [name, value]) => out.replaceAll(`{${name}}`, String(value)), en[key] ?? key);
 
 describe('illustrative elements are badged', () => {
   it('the ledger renders the sample badge in every sample card header', () => {
@@ -96,10 +98,18 @@ describe('real aggregates come from the RPC and hide below the threshold', () =>
 
   it('handledNote is empty below HANDLED_PUBLIC_MIN', () => {
     expect(HANDLED_PUBLIC_MIN).toBe(25);
-    expect(handledNote(0)).toBe('');
-    expect(handledNote(HANDLED_PUBLIC_MIN - 1)).toBe('');
-    expect(handledNote(24)).toBe('');
-    expect(handledNote(HANDLED_PUBLIC_MIN)).not.toBe('');
+    expect(handledNote(t, 0)).toBe('');
+    expect(handledNote(t, HANDLED_PUBLIC_MIN - 1)).toBe('');
+    expect(handledNote(t, 24)).toBe('');
+    expect(handledNote(t, HANDLED_PUBLIC_MIN)).not.toBe('');
+    expect(meetsHandledFloor(24)).toBe(false);
+    expect(meetsHandledFloor(25)).toBe(true);
+  });
+
+  it('handledNote never carries English of its own — the words are the catalogue key', () => {
+    expect(handledNote(t, 25)).toBe(t('handledProof.aggregateNote', { count: '25' }));
+    const format = readFileSync('lib/marketing/format.ts', 'utf8');
+    expect(format).not.toContain('things finished by Bubaly');
   });
 
   it('formatHandled rounds like formatFamilies', () => {
@@ -108,11 +118,16 @@ describe('real aggregates come from the RPC and hide below the threshold', () =>
   });
 
   it('the ledger renders each aggregate line only behind its formatter', () => {
-    expect(ledger).toContain('handledNote(stats.handledCompleted)');
-    expect(ledger).toContain('handledNote(stats.handled30d)');
-    expect(ledger).toContain('handledNote(stats.tasksCompleted)');
+    expect(ledger).toContain('handledNote(t, stats.handledCompleted)');
+    expect(ledger).toContain('meetsHandledFloor(stats.handled30d)');
+    expect(ledger).toContain('meetsHandledFloor(stats.tasksCompleted)');
     expect(ledger).toContain('stats.families > 0');
+    expect(ledger).toContain('familiesNote(t, stats.families)');
     expect(ledger).toContain('aggregates.length > 0');
+    // No aggregate sentence is typed in the component: every line is a
+    // formatter result or a catalogue key with the formatted count.
+    expect(ledger).not.toMatch(/\d+ things finished/);
+    expect(ledger).not.toContain('registered families');
   });
 
   it('links the live demo and the Trust Center', () => {

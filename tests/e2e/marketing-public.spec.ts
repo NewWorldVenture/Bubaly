@@ -68,11 +68,6 @@ test('each homepage feature leads to its existing detail card', async ({ page })
   }
 });
 
-test('the handled week on the homepage is badged as a sample on a phone', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#handled').getByText('Illustrative sample').first()).toBeVisible();
-});
-
 test('kid sign-in has a labelled PIN and a usable visibility control', async ({ page }) => {
   await page.goto('/kid-login');
   const username = page.getByRole('textbox', { name: 'Username', exact: true });

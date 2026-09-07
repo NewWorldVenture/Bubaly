@@ -5,9 +5,23 @@ import {
   familiesNote,
   formatHandled,
   handledNote,
+  meetsHandledFloor,
 } from '@/lib/marketing/format';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import DE_MESSAGES from '@/lib/i18n/messages/de-DE.json';
+
+// The note formatters take a translator, because their sentences render on the
+// public marketing pages and a German visitor should not be told about
+// "registered families" in English. Resolving through the real catalogues keeps
+// these assertions checking the words a visitor sees rather than a key.
+const through = (messages: Record<string, string>) =>
+  (key: string, params?: Record<string, string | number>) =>
+    Object.entries(params ?? {}).reduce(
+      (out, [name, value]) => out.replaceAll(`{${name}}`, String(value)),
+      messages[key] ?? key,
+    );
+const t = through(SOURCE_MESSAGES);
+const german = through(DE_MESSAGES as Record<string, string>);
 
 // These guard the public marketing copy: counts must reflect real data and must
 // NEVER fall back to a fabricated number when there are zero families.
@@ -28,16 +42,6 @@ describe('marketing family-count formatters', () => {
     expect(formatFamilies(12_345)).toBe('12,000+');
   });
 
-  // familiesNote now takes a translator, because this line renders on the public
-  // marketing pages and a German visitor should not be told about "registered
-  // families" in English. Resolving through the real English catalogue keeps
-  // these assertions checking the words a visitor sees rather than a key.
-  const t = (key: string, params?: Record<string, string | number>) =>
-    Object.entries(params ?? {}).reduce(
-      (out, [name, value]) => out.replaceAll(`{${name}}`, String(value)),
-      SOURCE_MESSAGES[key] ?? key,
-    );
-
   it('uses honest fallback copy when count is zero', () => {
     expect(familiesNote(t, 0)).toBe('Built for modern family life');
   });
@@ -51,11 +55,6 @@ describe('marketing family-count formatters', () => {
   // outside the i18n gate's surfaces, which is why nothing caught it.
   it('renders the count line in the visitor\'s language', () => {
     const de = DE_MESSAGES as Record<string, string>;
-    const german = (key: string, params?: Record<string, string | number>) =>
-      Object.entries(params ?? {}).reduce(
-        (out, [name, value]) => out.replaceAll(`{${name}}`, String(value)),
-        de[key] ?? key,
-      );
     expect(familiesNote(german, 0)).toBe(de['marketing.builtForModernFamilyLife']);
     expect(familiesNote(german, 0)).not.toBe('Built for modern family life');
     expect(familiesNote(german, 42)).toContain('42');
@@ -78,7 +77,27 @@ describe('marketing handled-count formatters', () => {
     [1000, '1,000+ things finished by Bubaly for real families so far'],
     [12_345, '12,000+ things finished by Bubaly for real families so far'],
   ])('handledNote(%i) → %j', (n, expected) => {
-    expect(handledNote(n)).toBe(expected);
+    expect(handledNote(t, n)).toBe(expected);
+  });
+
+  it.each([
+    [0, false],
+    [24, false],
+    [25, true],
+    [12_345, true],
+    [Number.NaN, false],
+  ])('meetsHandledFloor(%d) → %s', (n, expected) => {
+    expect(meetsHandledFloor(n)).toBe(expected);
+  });
+
+  // Same defect familiesNote had: an English literal in lib/ that the i18n gate
+  // cannot see. The line must come out in the visitor's language, and the
+  // floor must hide it in every language, not just English.
+  it('renders the handled line in the visitor\'s language and hides it below the floor', () => {
+    const de = DE_MESSAGES as Record<string, string>;
+    expect(handledNote(german, 24)).toBe('');
+    expect(handledNote(german, 1000)).toBe(de['handledProof.aggregateNote'].replace('{count}', '1,000+'));
+    expect(handledNote(german, 1000)).not.toContain('things finished');
   });
 
   it.each([
@@ -93,6 +112,6 @@ describe('marketing handled-count formatters', () => {
   });
 
   it('never renders a line for a non-number', () => {
-    expect(handledNote(Number.NaN)).toBe('');
+    expect(handledNote(t, Number.NaN)).toBe('');
   });
 });

@@ -14,7 +14,7 @@ import { AlertTriangle, CheckCircle2, Clock, Heart, ListChecks, PlayCircle, Shie
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { Container, Pill, SampleBadge } from '@/components/marketing/visual-mocks';
 import { HANDLED_SAMPLE, sampleBriefNumbers, type HandledSampleRow } from '@/lib/marketing/handled-sample';
-import { formatFamilies, formatHandled, handledNote } from '@/lib/marketing/format';
+import { familiesNote, formatHandled, handledNote, meetsHandledFloor } from '@/lib/marketing/format';
 import { getPublicStats } from '@/lib/marketing/stats';
 
 function StateIcon({ row, partlyDone }: { row: HandledSampleRow; partlyDone: string }) {
@@ -30,20 +30,23 @@ export async function HandledLedger() {
   const numbers = sampleBriefNumbers();
   const weekday = new Intl.DateTimeFormat(locale.code, { weekday: 'short', timeZone: 'UTC' });
 
-  // Every aggregate is gated by the same threshold. An empty list renders no
-  // list at all — the band never prints "0" or a placeholder.
+  // Every handled aggregate is gated by the same floor (HANDLED_PUBLIC_MIN),
+  // and the family count by zero. An empty list renders no list at all — the
+  // band never prints "0" or a placeholder. The sentences come from the same
+  // formatters the pricing page uses, so the two surfaces cannot disagree.
   const aggregates: { key: string; icon: typeof Sparkles; text: string }[] = [];
-  if (handledNote(stats.handledCompleted)) {
-    aggregates.push({ key: 'handled', icon: Sparkles, text: t('handledProof.aggregateNote', { count: formatHandled(stats.handledCompleted) }) });
+  const handledLine = handledNote(t, stats.handledCompleted);
+  if (handledLine) {
+    aggregates.push({ key: 'handled', icon: Sparkles, text: handledLine });
   }
-  if (handledNote(stats.handled30d)) {
+  if (meetsHandledFloor(stats.handled30d)) {
     aggregates.push({ key: 'handled30d', icon: Clock, text: t('handledProof.aggregate30d', { count: formatHandled(stats.handled30d) }) });
   }
-  if (handledNote(stats.tasksCompleted)) {
+  if (meetsHandledFloor(stats.tasksCompleted)) {
     aggregates.push({ key: 'chores', icon: ListChecks, text: t('handledProof.choresAggregate', { count: formatHandled(stats.tasksCompleted) }) });
   }
   if (stats.families > 0) {
-    aggregates.push({ key: 'families', icon: Heart, text: t('handledProof.familiesAggregate', { count: formatFamilies(stats.families) }) });
+    aggregates.push({ key: 'families', icon: Heart, text: familiesNote(t, stats.families) });
   }
 
   return (
