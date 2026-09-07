@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
-  Sparkles, CheckCircle2, PhoneCall, UserCheck, Bell, Check, Loader2, CalendarPlus,
+  Sparkles, CheckCircle2, PhoneCall, UserCheck, Bell, Check, Loader2,
   PhoneOutgoing, ArrowRight, FileText, AlertTriangle, Inbox as InboxIcon,
 } from 'lucide-react';
 import Link from 'next/link';
