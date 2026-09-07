@@ -9,7 +9,7 @@
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
-import { Container, IconOrb } from '@/components/marketing/primitives';
+import { Container, IconOrb, SampleBadge } from '@/components/marketing/primitives';
 import { HERO_OUTCOMES, MORE_OUTCOMES, type HeroOutcome } from '@/lib/marketing/hero-outcomes';
 import { trustDomainKey } from '@/lib/marketing/trust-copy';
 import { ROLE_DEFAULTS } from '@/lib/trust/engine';
@@ -49,9 +49,14 @@ export async function HeroOutcomes() {
             <IconOrb icon={outcome.icon} tone={outcome.tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
             <h3 className="mt-3 text-xs font-semibold">{t(outcome.titleKey)}</h3>
             <p className="mx-auto mt-2 max-w-[170px] text-xs leading-5 text-white/55">{t(outcome.bodyKey)}</p>
-            <span className="mt-3 inline-flex items-center rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-[10px] font-medium text-white/80">
+            {/* The proof chip names a made-up example, so it wears the site's
+                illustrative marker rather than reading like a real run. The
+                badge text itself is announced to screen readers, where the
+                violet pill carries no meaning. */}
+            <SampleBadge className="mt-3 normal-case tracking-normal">
+              <span className="sr-only">{t('handledProof.sampleBadge')}</span>
               {t(outcome.proofKey)}
-            </span>
+            </SampleBadge>
             {outcome.trustChipKey && (
               <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-white/80">
                 <ShieldCheck className="h-3 w-3 text-emerald-400" aria-hidden />
