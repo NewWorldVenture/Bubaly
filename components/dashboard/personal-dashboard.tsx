@@ -4,6 +4,7 @@ import {
   Gift, LayoutDashboard, ListChecks, Sparkles, Star, Trophy, Users,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { isManager, ROLE_LABELS } from '@/lib/constants/roles';
 import { personalDashboardLabel } from '@/lib/constants/dashboards';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
@@ -61,7 +62,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
     { data: todayEvents },
     { data: upcomingEvents },
     { data: members },
-  ] = await Promise.all([
+  ] = await settleAll([
     // My open / in-progress / submitted chores
     supabase.from('chore_assignments')
       .select('id, due_at, status, chore_id')

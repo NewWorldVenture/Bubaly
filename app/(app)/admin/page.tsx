@@ -6,6 +6,7 @@ import {
   BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -43,6 +44,16 @@ export default async function AdminDashboardPage() {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const thirtyDaysAgo = new Date(now - 30 * MS_DAY).toISOString();
 
+  // Lifted out of the settled batch because their SHAPE differs, not because
+  // they are fragile: both already resolve { ok, latencyMs, detail } and catch
+  // internally, and that is exactly what the status tiles render — a better
+  // fallback than settleAll's { data, error }. The .catch below is belt and
+  // braces for a client that fails to construct at all.
+  const [dbHealth, storageHealth] = await Promise.all([
+    checkDatabase(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
+    checkStorage(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
+  ]);
+
   const [
     familyCountResult,
     activeMemberCountResult,
@@ -56,9 +67,7 @@ export default async function AdminDashboardPage() {
     ticketsResult,
     adminNotesResult,
     unreadNoteCountResult,
-    dbHealth,
-    storageHealth,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
@@ -73,8 +82,6 @@ export default async function AdminDashboardPage() {
     supabase.from('admin_notifications').select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
-    checkDatabase(supabase),
-    checkStorage(supabase),
   ]);
 
   const readError = [
