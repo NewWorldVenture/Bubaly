@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Search, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -31,7 +32,7 @@ const KEYWORD_LIMIT = 100;
 export default async function SeoPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [keywordCountResult, keywordsResult, pagesResult] = await Promise.all([
+  const [keywordCountResult, keywordsResult, pagesResult] = await settleAll([
     supabase.from('marketing_seo_keywords').select('id', { count: 'exact', head: true }),
     supabase
       .from('marketing_seo_keywords')

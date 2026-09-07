@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Activity, TrendingUp, Package, HelpCircle, Flame, Tag, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { marketplaceInsights, type InsightListing } from '@/lib/marketplace/insights';
@@ -41,7 +42,7 @@ export default async function MarketplaceInsightsPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: listings }, { data: saves }, { data: offers }] = await Promise.all([
+  const [{ data: listings }, { data: saves }, { data: offers }] = await settleAll([
     sb.from('marketplace_listings').select('id, title, kind, category, status, price_cents, member_id')
       .eq('family_id', familyId).limit(2000),
     sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).limit(5000),

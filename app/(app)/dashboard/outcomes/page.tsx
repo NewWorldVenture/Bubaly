@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { OutcomesLauncher, type OutcomePlan } from '@/components/modules/outcomes-launcher';
 import { ActivationBeacon } from '@/components/analytics/activation-beacon';
@@ -28,7 +29,7 @@ export default async function OutcomesPage() {
   const dayEnd = `${new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10)}T00:00:00Z`;
 
   // Real, focused snapshot — all family-scoped, count-only where possible.
-  const [eventsRes, overdueRes, groceryRes, membersRes] = await Promise.all([
+  const [eventsRes, overdueRes, groceryRes, membersRes] = await settleAll([
     supabase.from('calendar_events').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).gte('starts_at', dayStart).lt('starts_at', dayEnd),
     supabase.from('todo_items').select('id', { count: 'exact', head: true })

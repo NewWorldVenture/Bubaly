@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let failed = 0;
   for (const family of families) {
-    const [{ data: events, error: eventsError }, { data: chores, error: choresError }, { data: meals, error: mealsError }, { data: members, error: membersError }] = await Promise.all([
+    const [{ data: events, error: eventsError }, { data: chores, error: choresError }, { data: meals, error: mealsError }, { data: members, error: membersError }] = await settleAll([
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
         .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('chores').select('title, points, assignee_id').eq('family_id', family.id)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -48,7 +49,7 @@ export async function POST() {
       );
     }
 
-    const [{ data: profile }, { data: dateRows, error: datesErr }] = await Promise.all([
+    const [{ data: profile }, { data: dateRows, error: datesErr }] = await settleAll([
       supabase.from('relationship_profile')
         .select('partner_name, partner_member_id, interests, love_languages, gift_budget_cents')
         .eq('family_id', familyId).maybeSingle(),

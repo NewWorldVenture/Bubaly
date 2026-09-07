@@ -68,6 +68,7 @@ import { notify } from '@/lib/services/notifications';
 import { scopeForSystem, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 type ApprovalRow = Database['public']['Tables']['approval_requests']['Row'];
@@ -1094,7 +1095,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
   let reminded = 0;
   let families = 0;
   for (const [familyId, approvals] of byFamily) {
-    const [{ data: family, error: familyError }, { data: members, error: memberError }] = await Promise.all([
+    const [{ data: family, error: familyError }, { data: members, error: memberError }] = await settleAll([
       db.from('families').select('id, timezone').eq('id', familyId).maybeSingle(),
       db.from('family_members').select('id, user_id, role').eq('family_id', familyId).eq('is_active', true),
     ]);

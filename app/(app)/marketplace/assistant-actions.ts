@@ -9,6 +9,7 @@
 // Either way the caller gets a reply + deep links; the UI never breaks on a
 // missing key. History is passed through for multi-turn context (LLM tier).
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -40,7 +41,7 @@ export async function askMarketAssistantAction(
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const [{ data: listings }, { data: offers }] = await Promise.all([
+  const [{ data: listings }, { data: offers }] = await settleAll([
     sb.from('marketplace_listings')
       .select('id, title, kind, category, condition, price_cents, rent_period, status, member_id')
       .eq('family_id', ctx.active.familyId)

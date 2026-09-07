@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { WorkloadModule } from '@/components/modules/workload-module';
 import type { Tables } from '@/lib/database.types';
@@ -17,7 +18,7 @@ export default async function WorkloadPage() {
   const familyId = ctx.active.familyId;
 
   const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const [membersQ, assignQ, choresQ, todosQ, eventsQ, snapshotsQ] = await Promise.all([
+  const [membersQ, assignQ, choresQ, todosQ, eventsQ, snapshotsQ] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, chore_id, member_id, status, created_at')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
       { data: events, error: eventsError },
       { data: chores, error: choresError },
       { data: meals, error: mealsError },
-    ] = await Promise.all([
+    ] = await settleAll([
       supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),

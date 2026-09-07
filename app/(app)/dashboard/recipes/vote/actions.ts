@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
@@ -62,7 +63,7 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
 export async function closeMealVote(voteId: string): Promise<Result> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const [{ data: options }, { data: ballots }] = await Promise.all([
+  const [{ data: options }, { data: ballots }] = await settleAll([
     supabase.from('meal_vote_options').select('id').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
     supabase.from('meal_vote_ballots').select('option_id, choice').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
   ]);

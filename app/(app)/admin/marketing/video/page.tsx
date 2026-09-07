@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Film, Eye, EyeOff, FileText, Youtube } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -24,7 +25,7 @@ const PROVIDER_LABEL: Record<VideoProvider, string> = { youtube: 'YouTube', vime
 export default async function VideoPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [videosResult, assetsResult] = await Promise.all([
+  const [videosResult, assetsResult] = await settleAll([
     supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300),
     supabase.from('marketing_assets').select('id, name').eq('kind', 'video').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
   ]);

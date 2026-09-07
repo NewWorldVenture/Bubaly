@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gift, Trophy, Coins, Settings2, Users, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -21,7 +22,7 @@ export default async function LoyaltyPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await Promise.all([
+  const [settingsResult, rewardsResult, accountsResult, redemptionsResult, familiesResult] = await settleAll([
     supabase.from('loyalty_settings').select('*').eq('singleton', true).maybeSingle(),
     supabase.from('loyalty_rewards').select('*').is('deleted_at', null).order('sort', { ascending: true }).limit(200),
     supabase.from('loyalty_accounts').select('*').order('lifetime_points', { ascending: false }).limit(100),

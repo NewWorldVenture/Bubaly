@@ -7,6 +7,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { orderAmountCents } from '@/lib/invest/portfolio';
@@ -64,7 +65,7 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
   if (!Number.isFinite(shares) || shares <= 0) return { ok: false, error: tr('actions.enterANumberOfShares') };
 
   const supabase = await createServer();
-  const [{ data: cw, error: walletError }, { data: asset, error: assetError }] = await Promise.all([
+  const [{ data: cw, error: walletError }, { data: asset, error: assetError }] = await settleAll([
     supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('invest_assets').select('id, price_cents, is_active').eq('id', input.assetId).maybeSingle(),
   ]);

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessageSquare, CornerDownRight, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { categorizeQuestions, type QuestionLike } from '@/lib/marketplace/questions';
@@ -19,7 +20,7 @@ export default async function MarketplaceQuestionsPage() {
   const familyId = ctx.active.familyId;
   const meId = ctx.active.member.id;
 
-  const [{ data: questions }, { data: listings }, { data: members }] = await Promise.all([
+  const [{ data: questions }, { data: listings }, { data: members }] = await settleAll([
     sb.from('marketplace_questions').select('id, listing_id, asker_member, question, answer, answered_by, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(500),
     sb.from('marketplace_listings').select('id, title, member_id').eq('family_id', familyId).limit(2000),

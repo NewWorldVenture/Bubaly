@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
       { data: pantry },
       { data: completedRuns },
       { data: agentActivity },
-    ] = await Promise.all([
+    ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', todayEnd).order('starts_at'),
       supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gt('starts_at', todayEnd).lte('starts_at', weekEnd).order('starts_at').limit(8),

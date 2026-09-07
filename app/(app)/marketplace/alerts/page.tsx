@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, BellRing, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
@@ -27,7 +28,7 @@ export default async function MarketplaceAlertsPage() {
   const meId = ctx.active.member.id;
   const dataWarnings: string[] = [];
 
-  const [{ data: searches, error: searchesError }, { data: listings, error: listingsError }, { data: saves, error: savesError }] = await Promise.all([
+  const [{ data: searches, error: searchesError }, { data: listings, error: listingsError }, { data: saves, error: savesError }] = await settleAll([
     sb.from('marketplace_saved_searches')
       .select('id, label, query, kind, category, max_price_cents, last_seen_at, created_at')
       .eq('family_id', familyId).eq('member_id', meId).order('created_at', { ascending: false }),

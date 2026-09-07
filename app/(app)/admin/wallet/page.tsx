@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Wallet, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { ErrorState } from '@/components/ui/states';
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
@@ -21,7 +22,7 @@ export default async function AdminWalletPage() {
     creditAggResult,
     flagsResult,
     auditResult,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('child_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('gift_payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),

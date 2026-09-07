@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Heart, Users, Camera, Award, Megaphone, Cake, BookHeart } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { buildGrandparentDigest, digestSummary, celebrationCountdown } from '@/lib/grandparent/digest';
 import { daysUntilNext } from '@/lib/celebrations/dates';
@@ -26,7 +27,7 @@ export default async function GrandparentPortalPage() {
     { data: milestones },
     { data: announcements },
     { data: dates },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('families').select('name').eq('id', familyId).single(),
     supabase.from('family_members').select('id, display_name, birthday, color, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_photos').select('url, caption, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(12),

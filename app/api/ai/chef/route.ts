@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
   const weekAhead = new Date(now.getTime() + 7 * 86400000).toISOString();
 
   // Gather real family context in parallel.
-  const [recipesRes, pantryRes, eventsRes, leftoverRes] = await Promise.all([
+  const [recipesRes, pantryRes, eventsRes, leftoverRes] = await settleAll([
     supabase.from('family_recipes').select('name').eq('family_id', familyId).order('is_favorite', { ascending: false }).limit(40),
     supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).limit(200),
     supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId)

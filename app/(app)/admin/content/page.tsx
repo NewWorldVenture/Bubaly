@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { FileText, Image as ImageIcon, FolderKanban, HardDrive, Clock } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -43,7 +44,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const [{ data: documents, error: documentsError }, { data: families, error: familiesError }, { data: profiles, error: profilesError }] = await Promise.all([
+  const [{ data: documents, error: documentsError }, { data: families, error: familiesError }, { data: profiles, error: profilesError }] = await settleAll([
     supabase.from('documents').select('*').order('created_at', { ascending: false }),
     supabase.from('families').select('id, name'),
     supabase.from('profiles').select('id, full_name, email'),

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessageSquare, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -18,7 +19,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 export default async function SmsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [smsResult, segmentsResult] = await Promise.all([
+  const [smsResult, segmentsResult] = await settleAll([
     supabase.from('marketing_sms_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('marketing_segments').select('id, name').is('deleted_at', null).order('name'),
   ]);

@@ -4,6 +4,7 @@
 // notifications already created for the same item. Deterministic by design:
 // notifications must be trustworthy, so this is rule-based, not AI-generated.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
@@ -53,7 +54,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const renewalMaxKey = new Date(now.getTime() + 90 * 24 * HOUR).toISOString().slice(0, 10);
   const signupMaxKey = new Date(now.getTime() + 7 * 24 * HOUR).toISOString().slice(0, 10);
 
-  const sourceResults = await Promise.all([
+  const sourceResults = await settleAll([
     supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { weeksToGoal } from '@/lib/wallet/ledger';
@@ -20,7 +21,7 @@ export default async function WalletGoalsPage() {
   // Fetch goals, wallets, members, and recent save-bucket credits (last 8 weeks)
   // to compute a per-child weekly save rate for goal forecasts.
   const since = new Date(Date.now() - 56 * 86400000).toISOString();
-  const [{ data: goals, error: goalsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: walletBuckets, error: walletBucketsError }, { data: recentTxns, error: recentTxnsError }] = await Promise.all([
+  const [{ data: goals, error: goalsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: walletBuckets, error: walletBucketsError }, { data: recentTxns, error: recentTxnsError }] = await settleAll([
     supabase.from('wallet_goals').select('id, child_wallet_id, title, kind, target_cents, saved_cents, target_date, status').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),

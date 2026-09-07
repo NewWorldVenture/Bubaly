@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DollarSign, CreditCard, Users, RefreshCw, AlertCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -23,7 +24,7 @@ const PLAN_COLORS = ['#7c5dff', '#22c55e', '#60a5fa', '#fbbf24', '#f87171', '#64
 export default async function AdminBillingPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [subscriptionsResult, billingCustomersResult, familiesResult] = await Promise.all([
+  const [subscriptionsResult, billingCustomersResult, familiesResult] = await settleAll([
     supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
     supabase.from('billing_customers').select('id', { count: 'exact', head: true }),
     supabase.from('families').select('id, name'),

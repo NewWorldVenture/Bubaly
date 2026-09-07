@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { isManager } from '@/lib/constants/roles';
 import {
   AUTOPILOT_POLICY_NAME, autopilotStats, dialLevel, type AutopilotLevel,
@@ -49,7 +50,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
     // Both reads are best-effort: a family that predates 0093/0022 in prod just
     // sees the default dial and an empty feed.
     try {
-      const [{ data: policy }, { data: runRows }] = await Promise.all([
+      const [{ data: policy }, { data: runRows }] = await settleAll([
         supabase.from('trust_policies').select('effect')
           .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle(),
         supabase.from('family_automation_runs')

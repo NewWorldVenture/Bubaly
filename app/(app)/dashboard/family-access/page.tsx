@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
@@ -19,7 +20,7 @@ export default async function FamilyAccessPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: members }, { data: logins }] = await Promise.all([
+  const [{ data: members }, { data: logins }] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),

@@ -6,6 +6,7 @@
 // clears stale OPEN suggestions whose signal vanished, and auto-executes new
 // high-confidence reminders (reversibly — it inserts a real `reminders` row).
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
@@ -51,7 +52,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     membersResult, groceriesResult, apptRemindersResult,
     eventsResult, subsResult, stressResult, medsResult,
     choreHistoryResult, twinProfilesResult, mealPlansResult, insuranceResult, wishlistResult, existingResult,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
     supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', `${today}T00:00:00Z`).limit(100),

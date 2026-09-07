@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { CommunityModule } from '@/components/marketplace/community-module';
@@ -32,7 +33,7 @@ export default async function CommunityPage() {
   };
 
   try {
-    const [{ data: c, error: cErr }, { data: m, error: mErr }, { data: s, error: sErr }] = await Promise.all([
+    const [{ data: c, error: cErr }, { data: m, error: mErr }, { data: s, error: sErr }] = await settleAll([
       supabase.from('marketplace_circles').select('id, name, emoji, join_code').order('created_at'),
       supabase.from('marketplace_circle_members').select('circle_id, family_id, family_name, role'),
       supabase.from('marketplace_listing_shares').select('listing_id, circle_id, family_id, created_at').order('created_at', { ascending: false }).limit(600),

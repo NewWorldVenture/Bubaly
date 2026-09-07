@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     let portfolioValueCents = 0, holdingsCount = 0;
     if (body.childWalletId) {
-      const [{ data: holdings }, { data: assets }] = await Promise.all([
+      const [{ data: holdings }, { data: assets }] = await settleAll([
         supabase.from('invest_holdings').select('asset_id, shares, avg_cost_cents').eq('family_id', familyId).eq('child_wallet_id', body.childWalletId),
         supabase.from('invest_assets').select('id, price_cents'),
       ]);

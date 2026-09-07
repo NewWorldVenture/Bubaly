@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CreditCard, Users, DollarSign, TrendingDown, ExternalLink, Receipt } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getStripe } from '@/lib/stripe';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -74,7 +75,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'plans';
   const supabase = createServiceClient();
 
-  const [subscriptionsResult, familiesResult, billingCustomersResult] = await Promise.all([
+  const [subscriptionsResult, familiesResult, billingCustomersResult] = await settleAll([
     supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
     supabase.from('families').select('id, name'),
     supabase.from('billing_customers').select('family_id, customer_ref'),

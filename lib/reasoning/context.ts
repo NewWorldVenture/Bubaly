@@ -11,6 +11,7 @@
 // and unit-tested; the server loader just fetches rows and hands them in.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import {
   buildIndex, hubs, orphans, reachable, propagateImpact,
@@ -148,7 +149,7 @@ export function contextSummary(ctx: FamilyContext): string {
  * presenting a partial relationship view as current.
  */
 export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<Graph> {
-  const [ents, edges] = await Promise.all([
+  const [ents, edges] = await settleAll([
     supabase.from('graph_entities')
       .select('id, kind, name, ref_table, ref_id, attributes')
       .eq('family_id', familyId).limit(4000),
@@ -183,6 +184,10 @@ export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<G
  * importable in a plain Node/vitest environment.
  */
 export async function loadFamilyContext(supabase: DB, familyId: string, now: Date = new Date()): Promise<FamilyContext> {
+  // Deliberately Promise.all: neither element is a Supabase read. A dynamic
+  // import that fails and a graph that cannot load have no meaningful degraded
+  // value here — an empty FamilyContext would make every AI surface answer
+  // confidently from nothing, which is worse than failing.
   const [graph, { buildSnapshot }] = await Promise.all([
     loadFamilyGraph(supabase, familyId),
     import('@/lib/operating-index/server'),

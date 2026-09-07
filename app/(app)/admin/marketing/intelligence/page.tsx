@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Users, MousePointerClick, Target, Radar } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import {
   attributeConversions, conversionCount, channelOf, ATTRIBUTION_MODEL_LABELS, type Touchpoint,
@@ -27,7 +28,7 @@ export default async function IntelligencePage() {
   const supabase = createServiceClient();
   let results;
   try {
-    results = await Promise.all([
+    results = await settleAll([
       supabase.from('mkt_visitors').select('*', { count: 'exact', head: true }),
       supabase.from('mkt_sessions').select('*', { count: 'exact', head: true }),
       supabase.from('mkt_sessions').select('source').limit(5000),
