@@ -180,6 +180,9 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
       case 'plan_event':
         // A party is planned like a weekend: schedule, people, food.
         return { intent: 'organize_weekend', confidence: 0.7, entities: { ...entities, topic: 'event' }, source: 'fast_path' };
+      // M34: the command bar already recognises the transition; plan it rather
+      // than only linking to the playbook list.
+      case 'start_life_event': return { intent: 'life_event', confidence: 0.85, entities, source: 'fast_path' };
     }
   }
 

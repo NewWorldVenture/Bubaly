@@ -9,7 +9,9 @@
 
 export type FamilyIntent =
   | 'make_decision' | 'check_readiness' | 'plan_trip' | 'prep_for' | 'plan_meals'
-  | 'check_availability' | 'plan_event';
+  | 'check_availability' | 'plan_event'
+  /** M34: a transition the household is heading into — a playbook, not a task. */
+  | 'start_life_event';
 
 export type IntentMatch = {
   intent: FamilyIntent;
@@ -29,6 +31,15 @@ const RULES: Rule[] = [
     // First so a broad decision pattern (…or…?) can't swallow an availability ask.
     intent: 'check_availability', href: '/dashboard/calendar', cta: "See who's free → Calendar",
     test: /\b(who'?s (free|available|around)|who is (free|available)|are we (all )?(free|available)|any(one|body) (free|available)|when are we (all )?free|find (a|some) time)\b/i,
+  },
+  {
+    // M34. Above the party and decision rules because "we're getting a puppy"
+    // is a statement about what is happening, not a question — and the broad
+    // `…or…?` decision pattern would otherwise claim "we're having a baby or
+    // two". A real question ("should we get a dog or a cat?") does not match
+    // these patterns and still reaches the Decision Engine.
+    intent: 'start_life_event', href: '/dashboard/life-events', cta: 'Start the playbook → Life & Milestones',
+    test: /\b((we'?re|we are|i'?m|i am) (getting|adopting|expecting|having) (a |an |our )?(puppy|dog|kitten|cat|pet|baby|newborn|rescue)|(bringing|welcoming) (home )?(a |our )?(puppy|kitten|new pet|new baby)|new (puppy|kitten|pet|baby) (is )?(coming|arriving|joining)|(starting|start) (a )?new job|caring for (my|our|an) (mum|mom|mother|dad|father|parent|elderly))\b/i,
   },
   {
     // "plan Emma's party", "throw a birthday party", "plan a sleepover" → Prep Plans.
