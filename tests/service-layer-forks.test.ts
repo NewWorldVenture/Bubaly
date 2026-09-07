@@ -59,6 +59,16 @@ const KNOWN_FORKS: Record<string, string> = {
   family_messages: 'not yet converted',
   family_recipes: 'not yet converted',
   home_assets: 'not yet converted',
+  // M13/M14 gave these four a service so the ASSISTANT could reach them
+  // (inventory.find / inventory.recordMove / moving.planTasks / moving.setMoveDate).
+  // That is a new caller, not a conversion: inventory-module.tsx and
+  // moving-module.tsx still do their own CRUD from the browser exactly as
+  // before. Listed rather than converted so the number stays honest — the
+  // modules are a §7 tranche of their own.
+  inventory_items: 'service added for the assistant’s tools (M13); the module’s own CRUD is not converted yet',
+  inventory_moves: 'same — recordMove is the tool path, the module still inserts its own moves',
+  move_tasks: 'service added for the assistant’s tools (M14); the module’s own CRUD is not converted yet',
+  moves: 'same — planTasks/setMoveDate are the tool path, the module still writes the move row',
   maintenance_tasks: 'not yet converted',
   meals: 'not yet converted',
   notifications: 'not yet converted',
