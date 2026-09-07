@@ -2,13 +2,21 @@
 //
 // `i18n-lift.mjs` rewrites copy into `t('key')` but deliberately never decides
 // where `t` comes from, because getting that wrong turns a page into a runtime
-// error. This does decide it, from one fact that is not a guess: whether the
-// file is a client component.
+// error. This does decide it, from whether the file is a client component:
 //
-//   'use client' at the top  ->  const t = useTranslations();      (a hook)
-//   otherwise                ->  const t = await getTranslations(); (server)
+//   client  ->  const t = useTranslations();      (a hook)
+//   server  ->  const t = await getTranslations(); (and the function goes async)
 //
-// and it only touches functions TypeScript has already named. Run:
+// "Client" is NOT the same as "has 'use client' at the top". Next marks a module
+// client if anything that imports it is client, so `components/ai/cards/*.tsx`
+// carry no directive and are still browser modules — their dispatcher,
+// `cards/index.tsx`, is `'use client'`. Reading only the directive wired those
+// files to `getTranslations()` and the build failed on `next/headers` reaching
+// the browser, which is exactly the failure this tool exists to prevent. So the
+// question is asked of the IMPORT GRAPH: a file is client if it declares it, or
+// if any file that imports it — at any depth — declares it.
+//
+// It only touches functions TypeScript has already named. Run:
 //
 //   node scripts/i18n-lift.mjs <file> --apply
 //   npx tsc --noEmit 2>&1 | node scripts/i18n-wire.mjs
@@ -17,7 +25,84 @@
 // missed and nothing is invented. Anything it cannot place — a `t` inside a
 // callback with no enclosing named function, say — it reports and leaves for a
 // person, because a wrong `await` in the wrong scope is worse than a red build.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+
+const ROOT = process.cwd();
+const SOURCE_DIRS = ['app', 'components', 'lib', 'hooks'];
+
+/** Every source file, its 'use client' flag, and what it imports. */
+function indexSources() {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      if (entry === 'node_modules' || entry.startsWith('.')) continue;
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(entry)) files.push(full);
+    }
+  };
+  for (const d of SOURCE_DIRS) {
+    try { walk(join(ROOT, d)); } catch { /* a directory this repo does not have */ }
+  }
+
+  const index = new Map();
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    const specifiers = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    index.set(file, { declaresClient: /^['"]use client['"]/.test(src.trimStart()), specifiers });
+  }
+  return index;
+}
+
+/** `@/a/b` and `./a/b` to a real file, or null for a package. */
+function resolveSpecifier(fromFile, spec) {
+  let base;
+  if (spec.startsWith('@/')) base = join(ROOT, spec.slice(2));
+  else if (spec.startsWith('.')) base = resolve(dirname(fromFile), spec);
+  else return null;
+  for (const candidate of [`${base}.tsx`, `${base}.ts`, join(base, 'index.tsx'), join(base, 'index.ts')]) {
+    try { if (statSync(candidate).isFile()) return candidate; } catch { /* keep looking */ }
+  }
+  return null;
+}
+
+/** file -> the files that import it. */
+function buildImporters(index) {
+  const importers = new Map();
+  for (const [file, { specifiers }] of index) {
+    for (const spec of specifiers) {
+      const target = resolveSpecifier(file, spec);
+      if (!target) continue;
+      if (!importers.has(target)) importers.set(target, new Set());
+      importers.get(target).add(file);
+    }
+  }
+  return importers;
+}
+
+const SOURCES = indexSources();
+const IMPORTERS = buildImporters(SOURCES);
+const clientCache = new Map();
+
+function isClientModule(file, seen = new Set()) {
+  const abs = resolve(ROOT, file);
+  if (clientCache.has(abs)) return clientCache.get(abs);
+  if (seen.has(abs)) return false;          // an import cycle proves nothing
+  seen.add(abs);
+
+  const entry = SOURCES.get(abs);
+  let answer = Boolean(entry?.declaresClient);
+  if (!answer) {
+    for (const importer of IMPORTERS.get(abs) ?? []) {
+      if (isClientModule(importer, seen)) { answer = true; break; }
+    }
+  }
+  // Only cache a settled answer: one reached while a cycle was being unwound
+  // could be "false" merely because we had already visited the file.
+  if (seen.size === 1 || answer) clientCache.set(abs, answer);
+  return answer;
+}
 
 const SERVER_IMPORT = "import { getTranslations } from '@/lib/i18n/server';\n";
 const CLIENT_IMPORT = "import { useTranslations } from '@/components/i18n/locale-provider';\n";
@@ -39,7 +124,7 @@ if (!wanted.size) {
 let unplaced = 0;
 for (const [path, lines] of wanted) {
   let src = readFileSync(path, 'utf8');
-  const isClient = /^['"]use client['"]/.test(src.trimStart());
+  const isClient = isClientModule(path);
 
   // If the file already has a translator under another name, adding a second
   // one called `t` is how you get a duplicate declaration, or a shadow when the
@@ -83,7 +168,8 @@ for (const [path, lines] of wanted) {
   }
 
   writeFileSync(path, src);
-  console.log(`  ${isClient ? 'client' : 'server'}  ${path}  (${targets.size} component(s))`);
+  const why = /^['"]use client['"]/.test(src.trimStart()) ? '' : ' (via an importer)';
+  console.log(`  ${isClient ? `client${why}` : 'server'}  ${relative(ROOT, resolve(ROOT, path))}  (${targets.size} component(s))`);
 }
 
 if (unplaced) {

@@ -114,10 +114,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
             <Inbox className="h-6 w-6 text-brand-text" /> {t('paperwork.paperworkInbox')}
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Paste any slip, form, or flyer — AI pulls out what you actually have to
-            do, and one tap puts it on the calendar or your reminders.
-          </p>
+          <p className="mt-1 max-w-xl text-sm text-muted">{t('paperworkModule.pasteAnySlipFormOr')}</p>
         </div>
         <button
           onClick={() => setComposerOpen((v) => !v)}

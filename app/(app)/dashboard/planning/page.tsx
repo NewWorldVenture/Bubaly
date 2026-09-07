@@ -196,7 +196,7 @@ export default async function PlanningPage() {
                   const src = p.thumbnail_url || p.url;
                   return (
                     <span key={p.id} className="relative aspect-square overflow-hidden rounded-lg bg-elevated">
-                      {src ? <Image src={src} alt="Family moment" fill sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
+                      {src ? <Image src={src} alt={tr('planning.familyMoment')} fill sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
                     </span>
                   );
                 })}

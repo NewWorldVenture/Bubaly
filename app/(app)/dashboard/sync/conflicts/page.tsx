@@ -75,9 +75,9 @@ export default async function SyncConflictsPage() {
                   <p className="mt-0.5 text-sm text-muted">{KIND_LABEL[c.conflict_kind] ?? c.conflict_kind}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <Badge tone="brand">Keep ours</Badge>
-                  <Badge tone="accent">Keep theirs</Badge>
-                  <Badge tone="neutral">Keep both</Badge>
+                  <Badge tone="brand">{t('conflicts.keepOurs')}</Badge>
+                  <Badge tone="accent">{t('conflicts.keepTheirs')}</Badge>
+                  <Badge tone="neutral">{t('conflicts.keepBoth')}</Badge>
                 </div>
               </div>
             </Card>

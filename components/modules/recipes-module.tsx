@@ -628,7 +628,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <Field label={tr('recipes.recipeName')} required>
-          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder="Grandma's Spaghetti, Taco Tuesday…" autoFocus />}
+          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder={tr('recipesModule.grandmaSSpaghettiTacoTuesday')} autoFocus />}
         </Field>
         <Field label={tr('recipes.description')}>
           {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder={tr('recipes.aBriefDescriptionOfThisDish')} className="min-h-[60px]" />}
@@ -729,7 +729,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={tr('recipes.notes')}>
-            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder="Chef's tips, substitutions…" className="min-h-[60px]" />}
+            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder={tr('recipesModule.chefSTipsSubstitutions')} className="min-h-[60px]" />}
           </Field>
           <Field label={tr('recipes.sourceUrl')}>
             {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}

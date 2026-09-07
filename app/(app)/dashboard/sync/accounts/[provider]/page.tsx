@@ -173,9 +173,9 @@ export default async function SyncProviderPage({
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium">{label}</p>
                     {c.read && c.write && <Badge tone="success">Two-way</Badge>}
-                    {c.write && !c.read && <Badge tone="accent">Export only</Badge>}
-                    {c.read && !c.write && <Badge tone="brand">Import only</Badge>}
-                    {!c.read && !c.write && <Badge tone="neutral">Not supported</Badge>}
+                    {c.write && !c.read && <Badge tone="accent">{t('accounts.exportOnly')}</Badge>}
+                    {c.read && !c.write && <Badge tone="brand">{t('accounts.importOnly')}</Badge>}
+                    {!c.read && !c.write && <Badge tone="neutral">{t('accounts.notSupported')}</Badge>}
                   </div>
                   {c.limitation && <p className="mt-0.5 text-xs text-muted">{c.limitation}</p>}
                 </div>

@@ -123,7 +123,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 py-4 text-center">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><FeatureIcon icon={f.icon} className="h-4 w-4" /></div>
             <span className="text-[11px] font-semibold">{f.label}</span>
-            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">Fixed</span>}
+            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">{t('quickActions.fixed')}</span>}
           </Link>
         ))}
 
@@ -134,8 +134,8 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             <button onClick={() => setPicker({ mode: 'replace', index: i })} className="grid h-9 w-9 place-items-center rounded-xl bg-elevated"><FeatureIcon icon={f.icon} className="h-4 w-4" /></button>
             <span className="text-[11px] font-semibold">{f.label}</span>
             <div className="absolute bottom-1 right-1 flex flex-col">
-              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" className="text-muted hover:text-fg disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
-              <button onClick={() => move(i, 1)} disabled={i === tiles.length - 1} aria-label="Move down" className="text-muted hover:text-fg disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
+              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={t('quickActions.moveUp')} className="text-muted hover:text-fg disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
+              <button onClick={() => move(i, 1)} disabled={i === tiles.length - 1} aria-label={t('quickActions.moveDown')} className="text-muted hover:text-fg disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
             </div>
           </div>
         ) : (

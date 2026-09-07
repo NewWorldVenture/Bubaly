@@ -157,10 +157,10 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       {form && (
         <Modal open onClose={() => setForm(null)} title={tr('vacationsList.newTrip')}>
           <form onSubmit={create} className="space-y-3">
-            <Field label={tr('vacationsList.tripName')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Summer at Disney World" required />}</Field>
+            <Field label={tr('vacationsList.tripName')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={tr('vacationsList.summerAtDisneyWorld')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={tr('vacationsList.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{VACATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-              <Field label={tr('vacationsList.destination')}>{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Orlando, FL" />}</Field>
+              <Field label={tr('vacationsList.destination')}>{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder={tr('vacationsList.orlandoFl')} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={tr('vacationsList.startDate')}>{(id) => <Input id={id} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />}</Field>

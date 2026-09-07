@@ -255,7 +255,7 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
         <div className="min-w-0 flex-1">
           <h4 className="font-semibold">{t('subscriptions.reviewRecurringExpenses')}</h4>
           <p className="text-sm text-muted">{t('subscriptions.lookForThreeOrMoreMatching')}</p>
-          <p className="mt-1 text-xs text-muted">Only expenses linked to accessible USD accounts can pre-fill this USD form. Unlinked or other-currency expenses are excluded without conversion.</p>
+          <p className="mt-1 text-xs text-muted">{t('subscriptionsModule.onlyExpensesLinkedToAccessible')}</p>
         </div>
         <Button type="button" disabled={!canReview || visibleReview.loading} onClick={() => { void load(); }}>{visibleReview.loading ? 'Reviewing...' : visibleReview.result || visibleReview.error ? 'Refresh candidates' : 'Find candidates'}</Button>
       </div>

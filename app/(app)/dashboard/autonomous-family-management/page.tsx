@@ -20,12 +20,13 @@ export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = { high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500' };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Autonomous Family Management</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('autonomousFamilyManagement.autonomousFamilyManagement')}</h1>
       <ErrorState message="Could not load autonomous family management data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">Refresh autonomous management</Link>
+      <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">{t('autonomousFamilyManagement.refreshAutonomousManagement')}</Link>
     </div>
   );
 }
@@ -135,7 +136,7 @@ export default async function AutonomousManagementPage() {
               <li key={run.id} className="flex items-center gap-3 rounded-xl border border-orange-400/20 bg-orange-500/5 p-3">
                 <Lock className="h-4 w-4 shrink-0 text-orange-300" />
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{run.summary ?? 'Proposed action'}</p><p className="text-xs text-muted">{fmtRelative(run.created_at)}</p></div>
-                {manager ? <AutomationApproval id={run.id} /> : <span className="text-xs text-muted">Awaiting parent</span>}
+                {manager ? <AutomationApproval id={run.id} /> : <span className="text-xs text-muted">{t('autonomousFamilyManagement.awaitingParent')}</span>}
               </li>
             ))}
           </ul>

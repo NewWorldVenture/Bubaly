@@ -70,7 +70,7 @@ export function SavingsView() {
                       {g.target_date && <p className="text-xs text-muted">by {fmtDueDate(g.target_date)}</p>}
                     </div>
                   </div>
-                  <button onClick={() => remove(g.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(g.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('savingsView.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
                   <span className="font-bold tabular-nums">{usd(Number(g.current_amount))}</span>
@@ -118,7 +118,7 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
   return (
     <Modal open onClose={onClose} title={t('savings.addSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('savings.goalName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Family vacation" required autoFocus />}</Field>
+        <Field label={t('savings.goalName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('savingsView.familyVacation')} required autoFocus />}</Field>
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{t('savings.icon')}</p>
           <div className="flex flex-wrap gap-1.5">{EMOJIS.map((e) => <button key={e} type="button" onClick={() => setV({ ...v, emoji: e })} className={`rounded-lg p-1.5 text-lg transition hover:bg-elevated ${v.emoji === e ? 'bg-brand/15 ring-2 ring-brand/40' : ''}`}>{e}</button>)}</div>

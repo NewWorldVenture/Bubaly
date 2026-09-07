@@ -79,7 +79,7 @@ export function DrivingSafetyView() {
                   <p className={cn('text-2xl font-black tabular-nums', SCORE_TINT[band])}>{t.score}</p>
                   <p className="text-[10px] capitalize text-muted">{band}</p>
                 </div>
-                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             );
           })}
@@ -132,7 +132,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
           <Field label={tr('drivingSafety.driver')}>{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={tr('drivingSafety.when')}>{(id) => <Input id={id} type="datetime-local" value={v.started_at} onChange={(e) => setV({ ...v, started_at: e.target.value })} />}</Field>
         </div>
-        <Field label={tr('drivingSafety.label')} hint="Optional">{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder="School run" />}</Field>
+        <Field label={tr('drivingSafety.label')} hint="Optional">{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder={tr('drivingSafetyView.schoolRun')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('drivingSafety.distanceMi')}>{(id) => <Input id={id} type="number" step="0.1" value={v.distance_miles} onChange={(e) => setV({ ...v, distance_miles: e.target.value })} placeholder="8.4" />}</Field>
           <Field label={tr('drivingSafety.maxSpeedMph')}>{(id) => <Input id={id} type="number" value={v.max_mph} onChange={(e) => setV({ ...v, max_mph: e.target.value })} placeholder="68" />}</Field>

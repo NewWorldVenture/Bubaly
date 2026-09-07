@@ -211,7 +211,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     <Modal open onClose={onClose} title={t('goals.newSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('goals.whatAreYouSavingFor')}>
-          {(id) => <Input id={id} name="title" placeholder="New bike, vacation fund…" autoFocus />}
+          {(id) => <Input id={id} name="title" placeholder={t('goalsView.newBikeVacationFund')} autoFocus />}
         </Field>
         <Field label={t('goals.targetAmountUsd')}>
           {(id) => <Input id={id} name="target" type="number" min="0" step="0.01" inputMode="decimal" placeholder="100.00" />}
@@ -237,7 +237,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
           {(id) => (
             <select id={id} value={childId} onChange={(e) => setChildId(e.target.value)}
               className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand/40 focus:outline-none">
-              <option value="">Family goal</option>
+              <option value="">{t('goalsView.familyGoal')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}

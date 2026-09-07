@@ -325,9 +325,7 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
   return (
     <section className="mt-12">
       <h2 className="text-center text-2xl font-black">{tr('pricingPricingContent.everyFeatureByPlan')}</h2>
-      <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
-        Your 5-day free trial includes full Family Basic. After that, a check means the feature is included on that plan (and every plan above it).
-      </p>
+      <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">{tr('pricingContent.your5DayFreeTrial')}</p>
       <PositioningCallouts />
       <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
         <table className="w-full min-w-[640px] text-sm">
@@ -500,9 +498,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             <div className="shrink-0 text-3xl">📸</div>
             <div>
               <h2 className="font-bold">{tr('pricingPricingContent.smartImportsTheFeatureMostCompetitors')}</h2>
-              <p className="mt-1 text-sm text-white/65">
-                Snap a school flyer, upload a PDF, or share a screenshot. Bubaly AI automatically creates calendar events, tasks, and reminders — no manual entry.
-              </p>
+              <p className="mt-1 text-sm text-white/65">{tr('pricingContent.snapASchoolFlyerUpload')}</p>
             </div>
           </div>
         </section>
