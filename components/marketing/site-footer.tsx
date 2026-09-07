@@ -25,40 +25,46 @@ const SOCIAL_ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Ele
   tiktok: TiktokIcon,
 };
 
+// Every entry is a catalogue key rendered through t(), never a literal. A
+// previous pass converted only part of this list and left one key sitting in a
+// `label` field that renders verbatim — so the live footer read
+// "siteFooter.acceptableUse" to every visitor. Naming the field `titleKey`/
+// `labelKey` is what stops that: a key in a field called `label` looks fine,
+// a literal in a field called `labelKey` does not.
 const GROUPS = [
   {
-    title: 'Product',
+    titleKey: 'siteFooter.group.product',
     links: [
-      { href: '/features', label: 'Features' },
-      { href: '/how-it-works', label: 'How it works' },
-      { href: '/pricing', label: 'Pricing' },
-      { href: '/mobile', label: 'Mobile app' },
-      { href: '/ai', label: 'AI assistant' },
+      { href: '/features', labelKey: 'siteFooter.link.features' },
+      { href: '/how-it-works', labelKey: 'siteFooter.link.howItWorks' },
+      { href: '/pricing', labelKey: 'siteFooter.link.pricing' },
+      { href: '/mobile', labelKey: 'siteFooter.link.mobileApp' },
+      { href: '/ai', labelKey: 'siteFooter.link.aiAssistant' },
     ],
   },
   {
-    title: 'Company',
+    titleKey: 'siteFooter.group.company',
     links: [
-      { href: '/security', label: 'Security' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/contact', label: 'Contact' },
-      { href: '/faq', label: 'FAQ' },
+      { href: '/security', labelKey: 'siteFooter.link.security' },
+      { href: '/blog', labelKey: 'siteFooter.link.blog' },
+      { href: '/contact', labelKey: 'siteFooter.link.contact' },
+      { href: '/faq', labelKey: 'siteFooter.link.faq' },
     ],
   },
   {
-    title: 'Get started',
+    titleKey: 'siteFooter.group.getStarted',
     links: [
-      { href: '/signup', label: 'Create account' },
-      { href: '/login', label: 'Log in' },
+      { href: '/signup', labelKey: 'siteFooter.link.createAccount' },
+      { href: '/login', labelKey: 'siteFooter.link.logIn' },
     ],
   },
   {
-    title: 'Legal',
+    titleKey: 'siteFooter.group.legal',
     links: [
-      { href: '/privacy', label: 'Privacy Policy' },
-      { href: '/terms', label: 'Terms of Service' },
-      { href: '/acceptable-use', label: 'siteFooter.acceptableUse' },
-      { href: '/cookies', label: 'Cookie Policy' },
+      { href: '/privacy', labelKey: 'siteFooter.link.privacyPolicy' },
+      { href: '/terms', labelKey: 'siteFooter.link.termsOfService' },
+      { href: '/acceptable-use', labelKey: 'siteFooter.acceptableUse' },
+      { href: '/cookies', labelKey: 'siteFooter.link.cookiePolicy' },
     ],
   },
 ];
@@ -75,18 +81,41 @@ export async function SiteFooter() {
           <Logo />
           <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">{t('siteFooter.lessManagingLifeMoreLiving')}</p>
           <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">{t('siteFooter.theAiOperatingSystemFor')}</p>
-          <div className="mt-5">
+          {/* Language and the social accounts share one row: both are "where
+              else can I go / in what language", and a visitor who has just
+              switched language is looking right here. Wraps rather than
+              overflowing when six accounts are configured on a narrow phone. */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
             <LanguageBar />
+            {configured.length > 0 && (
+              <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-1">
+                {configured.map(({ key, label }) => {
+                  const Icon = SOCIAL_ICONS[key];
+                  return (
+                    <a
+                      key={key}
+                      href={social[key]}
+                      target="_blank"
+                      rel="me noopener noreferrer"
+                      aria-label={t('siteFooter.bubalyOn', { platform: label })}
+                      className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg coarse:min-h-11 coarse:min-w-11 focus-ring"
+                    >
+                      <Icon className="h-4 w-4" />
+                    </a>
+                  );
+                })}
+              </nav>
+            )}
           </div>
         </div>
         {GROUPS.map((g) => (
-          <div key={g.title}>
-            <h4 className="text-[11px] font-semibold text-fg">{g.title}</h4>
+          <div key={g.titleKey}>
+            <h4 className="text-[11px] font-semibold text-fg">{t(g.titleKey)}</h4>
             <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-[10px] text-muted transition hover:text-fg">
-                    {l.label}
+                    {t(l.labelKey)}
                   </Link>
                 </li>
               ))}
@@ -98,31 +127,9 @@ export async function SiteFooter() {
       {/* Bottom legal bar */}
       <div className="border-t border-border/60">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-3 px-5 py-5 text-[11px] text-muted sm:flex-row sm:px-8 lg:px-10">
-          <p>© {new Date().getFullYear()} Bubaly. All rights reserved.</p>
+          <p>{t('siteFooter.copyright', { year: new Date().getFullYear() })}</p>
 
-          {/* Only the accounts an admin has actually filled in — an empty set
-              renders nothing rather than a row of links to nowhere. */}
-          {configured.length > 0 && (
-            <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-2">
-              {configured.map(({ key, label }) => {
-                const Icon = SOCIAL_ICONS[key];
-                return (
-                  <a
-                    key={key}
-                    href={social[key]}
-                    target="_blank"
-                    rel="me noopener noreferrer"
-                    aria-label={`Bubaly on ${label}`}
-                    className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg focus-ring"
-                  >
-                    <Icon className="h-4 w-4" />
-                  </a>
-                );
-              })}
-            </nav>
-          )}
-
-          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <nav aria-label={t('siteFooter.legalNavLabel')} className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
             <Link href="/privacy" className="transition hover:text-fg">{t('siteFooter.privacy')}</Link>
             <Link href="/terms" className="transition hover:text-fg">{t('siteFooter.terms')}</Link>
             <Link href="/acceptable-use" className="transition hover:text-fg">{t('siteFooter.acceptableUse')}</Link>
