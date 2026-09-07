@@ -77,7 +77,7 @@ export function WatchlistModule() {
   const memberName = (id: string) => members.find((m) => m.id === id)?.display_name ?? 'Someone';
 
   async function castVote(title: Title, vote: WatchVote) {
-    if (!myMemberId) return toastError('Join the family to vote');
+    if (!myMemberId) return toastError(tr('watchlistModule.joinTheFamilyToVote'));
     const supabase = createClient();
     const existing = votes.data.find((v) => v.title_id === title.id && v.member_id === myMemberId);
     const { error } = existing
@@ -98,7 +98,7 @@ export function WatchlistModule() {
     if (!confirm(`Remove “${title.title}” from the watchlist?`)) return;
     const { error } = await createClient().from('watchlist_titles').delete().eq('id', title.id);
     if (error) return toastError(describeDbError(error));
-    success('Title removed');
+    success(tr('watchlistModule.titleRemoved'));
   }
 
   async function deleteSession(session: Session) {
@@ -270,7 +270,7 @@ export function WatchlistModule() {
         <TitleForm familyId={familyId} userId={userId} memberId={myMemberId} title={form.title} onClose={() => setForm({ open: false, title: null })} onSaved={(msg) => { setForm({ open: false, title: null }); success(msg); }} />
       )}
       {watchedForm && (
-        <WatchedForm familyId={familyId} userId={userId} title={watchedForm} members={members} defaultAudience={audience} onClose={() => setWatchedForm(null)} onSaved={() => { setWatchedForm(null); success('Movie night logged'); }} />
+        <WatchedForm familyId={familyId} userId={userId} title={watchedForm} members={members} defaultAudience={audience} onClose={() => setWatchedForm(null)} onSaved={() => { setWatchedForm(null); success(tr('watchlistModule.movieNightLogged')); }} />
       )}
     </div>
   );
@@ -288,7 +288,7 @@ function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('title') ?? '').trim();
-    if (!name) return toastError('Title is required');
+    if (!name) return toastError(tr('watchlistModule.titleIsRequired'));
     setLoading(true);
     const payload = {
       title: name,

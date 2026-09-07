@@ -59,9 +59,9 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     if (error) toastError(error.message); else success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
-    if (!confirm('Delete this bill?')) return;
+    if (!confirm(t('billsView.deleteThisBill'))) return;
     const { error } = await createClient().from('bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('billsView.deleted'));
   }
 
   const Row = ({ b }: { b: Bill }) => {
@@ -145,7 +145,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim() || !v.amount) return toastError('Add a name and amount');
+    if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
     const { error } = await createClient().from('bills').insert({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
@@ -154,7 +154,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Bill added');
+    success(t('billsView.billAdded'));
     onClose();
   }
 

@@ -148,8 +148,8 @@ export function RelationshipModule() {
   }
   async function saveDate(e: React.FormEvent) {
     e.preventDefault();
-    if (!dateForm.title.trim()) { toastError('Give this date a name'); return; }
-    if (!dateForm.eventDate) { toastError('Pick a date'); return; }
+    if (!dateForm.title.trim()) { toastError(t('relationshipModule.giveThisDateAName')); return; }
+    if (!dateForm.eventDate) { toastError(t('relationshipModule.pickADate')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -170,7 +170,7 @@ export function RelationshipModule() {
     if (!confirm(`Remove "${d.title}"?`)) return;
     const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Removed');
+    success(t('relationshipModule.removed'));
   }
   async function toggleCalendar(d: RDate) {
     // Both halves in one call. This used to delete the event and then clear
@@ -194,7 +194,7 @@ export function RelationshipModule() {
   }
   async function saveGift(e: React.FormEvent) {
     e.preventDefault();
-    if (!giftForm.title.trim()) { toastError('What’s the gift?'); return; }
+    if (!giftForm.title.trim()) { toastError(t('relationshipModule.whatSTheGift')); return; }
     setSaving(true);
     const fields = {
       title: giftForm.title.trim(), url: giftForm.url.trim() || null,
@@ -218,7 +218,7 @@ export function RelationshipModule() {
   async function removeGift(g: Gift_) {
     const { error: err } = await createClient().from('relationship_gift_ideas').delete().eq('id', g.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Removed');
+    success(t('relationshipModule.removed'));
   }
   async function saveAiGift(idea: { title: string; reason: string; estimatedPrice: string | null }) {
     const cents = idea.estimatedPrice ? Math.round((Number(idea.estimatedPrice.replace(/[^0-9.]/g, '')) || 0) * 100) : null;
@@ -228,7 +228,7 @@ export function RelationshipModule() {
       source: 'ai', status: 'idea',
     });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Saved to gift ideas');
+    success(t('relationshipModule.savedToGiftIdeas'));
   }
   async function addWishGift(w: Wish) {
     const { error: err } = await createClient().from('relationship_gift_ideas').insert({
@@ -266,7 +266,7 @@ export function RelationshipModule() {
       : await sb.from('relationship_profile').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Preferences saved');
+    success(t('relationshipModule.preferencesSaved'));
     setProfileModal(false);
   }
 
@@ -285,13 +285,13 @@ export function RelationshipModule() {
       if (!digestScope.isCurrent(request)) return;
       if (!res.ok) { toastError(json.error ?? 'Could not generate suggestions.'); return; }
       if (!digestScope.accepts(request, json.context)) {
-        toastError('Household or partner context changed. Please generate suggestions again.');
+        toastError(t('relationshipModule.householdOrPartnerContextChanged'));
         return;
       }
       setDigestResult({ scope: digestScope, request, digest: json.digest as RelationshipDigest });
     } catch {
       if (!digestScope.isCurrent(request)) return;
-      toastError('Network problem — please try again.');
+      toastError(t('relationshipModule.networkProblemPleaseTryAgain'));
     } finally {
       setAiLoading(false);
     }

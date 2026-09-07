@@ -58,7 +58,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
     const res = await deleteRuleAction(id);
     if (!res.ok) { toastError(res.error); return; }
     setRules(prev => prev.filter(r => r.id !== id));
-    toastSuccess('Rule deleted');
+    toastSuccess(t('rulesEditor.ruleDeleted'));
   }
 
   async function handleCreate(form: NewRuleForm) {
@@ -75,7 +75,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
       action_routing_mode: form.routing_mode,
     });
     if (!res.ok) { toastError(res.error); return; }
-    toastSuccess('Rule created');
+    toastSuccess(t('rulesEditor.ruleCreated'));
     setCreating(false);
     setRules(prev => [...prev, {
       id: res.data!.id,

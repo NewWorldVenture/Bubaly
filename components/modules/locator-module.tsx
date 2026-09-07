@@ -165,12 +165,12 @@ export function LocatorModule() {
   async function toggleShareOff() {
     const res = await setLocationSharing(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    setSharing(false); void refreshLocations(); success('Location sharing off');
+    setSharing(false); void refreshLocations(); success(tr('locatorModule.locationSharingOff'));
   }
 
   function refreshAll() {
     void refreshLocations(); void refreshPlaces(); void refreshEvents();
-    setNow(new Date()); success('Locations refreshed');
+    setNow(new Date()); success(tr('locatorModule.locationsRefreshed'));
   }
 
   // ── Places / geofences ────────────────────────────────────
@@ -183,14 +183,14 @@ export function LocatorModule() {
     try {
       const pos = await getPosition();
       setPlaceForm((f) => ({ ...f, latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) }));
-      success('Filled in your current coordinates');
+      success(tr('locatorModule.filledInYourCurrentCoordinates'));
     } catch (e) { toastError(geoErrorMessage(e)); }
   }
   async function submitPlace(e: React.FormEvent) {
     e.preventDefault();
     const lat = Number(placeForm.latitude); const lng = Number(placeForm.longitude);
-    if (!placeForm.name.trim()) { toastError('Name is required'); return; }
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) { toastError('Valid coordinates are required'); return; }
+    if (!placeForm.name.trim()) { toastError(tr('locatorModule.nameIsRequired')); return; }
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) { toastError(tr('locatorModule.validCoordinatesAreRequired')); return; }
     setSavingPlace(true);
     const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name.trim(), icon: placeForm.icon, address: placeForm.address.trim() || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
     setSavingPlace(false);
@@ -201,7 +201,7 @@ export function LocatorModule() {
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
     const res = await deletePlace(p.id);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    success('Place deleted'); void refreshPlaces();
+    success(tr('locatorModule.placeDeleted')); void refreshPlaces();
   }
   async function toggleGeofence(p: Place) {
     if (togglingGeo) return;

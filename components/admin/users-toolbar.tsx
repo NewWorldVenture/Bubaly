@@ -47,7 +47,7 @@ export function UsersToolbar({ families, exportRows }: {
     const res = await adminCreateUserAction({ email, familyId: familyId || undefined, role: familyId ? role : undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Invite sent — they’ll get a Supabase sign-in email');
+    success(t('usersToolbar.inviteSentTheyLlGet'));
     setModal(null);
     router.refresh();
   }
@@ -63,7 +63,7 @@ export function UsersToolbar({ families, exportRows }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Family created');
+    success(t('usersToolbar.familyCreated'));
     setModal(null);
     router.refresh();
   }

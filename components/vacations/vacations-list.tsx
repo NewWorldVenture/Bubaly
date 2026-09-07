@@ -74,7 +74,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError('Give your trip a name');
+    if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
     const { data, error } = await createClient().from('vacations').insert({
       family_id: familyId, created_by: userId,
       title: form.title.trim(),
@@ -87,7 +87,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       is_international: form.is_international,
     }).select('id').single();
     if (error) return toastError(error.message);
-    success('Trip created');
+    success(tr('vacationsList.tripCreated'));
     setForm(null);
     router.push(`/dashboard/vacations/${data.id}/overview`);
   }

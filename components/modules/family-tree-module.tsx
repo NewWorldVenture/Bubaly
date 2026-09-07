@@ -92,7 +92,7 @@ export function FamilyTreeModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Added to family tree');
+    success(t('familyTreeModule.addedToFamilyTree'));
     setForm(null);
   }
 
@@ -113,14 +113,14 @@ export function FamilyTreeModule() {
     }).eq('id', editNode.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Updated');
+    success(t('familyTreeModule.updated'));
     setEditNode(null); setForm(null);
   }
 
   async function remove(id: string) {
-    if (!confirm('Remove this person from the tree?')) return;
+    if (!confirm(t('familyTreeModule.removeThisPersonFromThe'))) return;
     const { error } = await createClient().from('family_tree_nodes').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('familyTreeModule.removed'));
   }
 
   function startEdit(n: Node) {

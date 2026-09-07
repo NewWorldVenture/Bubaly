@@ -25,7 +25,7 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
     if (res.rejected.length) {
       toastError(`Saved, but ${res.rejected.join(', ')} was not a valid https URL and is not published.`);
     } else {
-      success('Social links updated');
+      success(t('socialLinksForm.socialLinksUpdated'));
     }
   }
 

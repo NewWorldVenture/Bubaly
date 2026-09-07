@@ -54,7 +54,7 @@ export function CreateMemory() {
   function addFiles(list: FileList | null) {
     if (!list) return;
     const images = Array.from(list).filter((f) => f.type.startsWith('image/'));
-    if (!images.length) { toastError('Please choose image files.'); return; }
+    if (!images.length) { toastError(t('createMemory.pleaseChooseImageFiles')); return; }
     // Drop anything over the family-media bucket limit before it can fail mid-upload.
     const { ok, tooBig } = partitionBySize(images);
     const msg = oversizeMessage(tooBig.length);
@@ -116,11 +116,11 @@ export function CreateMemory() {
         if (insErr || !row) {
           toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
-          if (cleanupError) toastError('The uploaded photo could not be cleaned up.');
+          if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
           const { error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
-          if (favoriteError) toastError('The memory was saved, but could not be added to Favorites.');
+          if (favoriteError) toastError(t('createMemory.theMemoryWasSavedBut'));
           createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }
@@ -159,12 +159,12 @@ export function CreateMemory() {
     // Rows are gone; best-effort remove the now-orphaned storage objects.
     if (paths.length) {
       const { error: rmErr } = await supabase.storage.from('family-media').remove(paths);
-      if (rmErr) toastError('The memory was undone, but its photo files could not be cleaned up.');
+      if (rmErr) toastError(t('createMemory.theMemoryWasUndoneBut'));
     }
     setCreated([]);
     setUndoing(false);
     setDone(false);
-    success('Memory undone — nothing was saved.');
+    success(t('createMemory.memoryUndoneNothingWasSaved'));
   }
 
   // ── Memory Created (screen 10) ───────────────────────────────

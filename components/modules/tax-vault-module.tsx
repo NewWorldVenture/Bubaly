@@ -65,7 +65,7 @@ export function TaxVaultModule() {
         created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Document saved');
+      success(t('taxVaultModule.documentSaved'));
       setForm(null);
     } finally {
       setSaving(false);
@@ -80,11 +80,11 @@ export function TaxVaultModule() {
   }
 
   async function remove(d: TaxDoc) {
-    if (!confirm('Delete this document?')) return;
+    if (!confirm(t('taxVaultModule.deleteThisDocument'))) return;
     const supabase = createClient();
     if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
     const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('taxVaultModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

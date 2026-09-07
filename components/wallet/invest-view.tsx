@@ -120,7 +120,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   const estCost = asset ? orderAmountCents(shares, asset.priceCents) : 0;
 
   function trade() {
-    if (shares <= 0) return toastError('Enter how many shares.');
+    if (shares <= 0) return toastError(tr('investView.enterHowManyShares'));
     onTrade(assetId, side, shares);
     setSharesStr('');
   }
@@ -130,9 +130,9 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
     try {
       const res = await fetch('/api/ai/invest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childWalletId: child.id, assetId }) });
       const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not explain right now.'); return; }
+      if (!res.ok) { toastError(data.error ?? tr('investView.couldNotExplainRightNow')); return; }
       setExplainer(data.coaching);
-    } catch { toastError('Could not explain right now.'); }
+    } catch { toastError(tr('investView.couldNotExplainRightNow')); }
     finally { setExplaining(false); }
   }
 

@@ -441,8 +441,8 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!desc.trim()) return toastError('What is it for?');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
+    if (!desc.trim()) return toastError(tr('walletDashboard.whatIsItFor'));
     setLoading(true);
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
@@ -486,14 +486,14 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (from === to) return toastError('Pick two different wallets.');
+    if (from === to) return toastError(tr('walletDashboard.pickTwoDifferentWallets'));
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await sendMoneyAction({ fromChildWalletId: from, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send money');
-    success('Money sent');
+    success(tr('walletDashboard.moneySent'));
     onClose();
     router.refresh();
   }
@@ -543,7 +543,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);

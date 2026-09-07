@@ -77,11 +77,11 @@ export function PetsModule() {
   );
 
   async function removePet(id: string) {
-    if (!confirm('Remove this pet and all its care records?')) return;
+    if (!confirm(t('petsModule.removeThisPetAndAll'))) return;
     const { error } = await createClient().from('pets').update({ is_active: false }).eq('id', id);
     if (error) return toastError(describeDbError(error));
     setSelected(null);
-    success('Pet removed');
+    success(t('petsModule.petRemoved'));
   }
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
@@ -204,7 +204,7 @@ export function PetsModule() {
       )}
 
       {addPetOpen && (
-        <PetForm familyId={familyId} userId={userId} onClose={() => setAddPetOpen(false)} onSaved={() => { setAddPetOpen(false); success('Pet added'); }} />
+        <PetForm familyId={familyId} userId={userId} onClose={() => setAddPetOpen(false)} onSaved={() => { setAddPetOpen(false); success(t('petsModule.petAdded')); }} />
       )}
 
       {selected && (
@@ -221,7 +221,7 @@ export function PetsModule() {
         <CareForm
           familyId={familyId} userId={userId} pet={careForPet}
           onClose={() => setCareForPet(null)}
-          onSaved={() => { setCareForPet(null); success('Care record added'); }}
+          onSaved={() => { setCareForPet(null); success(t('petsModule.careRecordAdded')); }}
         />
       )}
     </div>
@@ -237,7 +237,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('petsModule.nameIsRequired'));
     setLoading(true);
     const { error } = await createClient().from('pets').insert({
       family_id: familyId,
@@ -297,7 +297,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Title is required');
+    if (!title) return toastError(t('petsModule.titleIsRequired'));
     setLoading(true);
     const { error } = await createClient().from('pet_care_records').insert({
       family_id: familyId,

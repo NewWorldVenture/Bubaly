@@ -26,13 +26,13 @@ export function UserSecurityActions({ userId, email, banned }: { userId: string;
   }
 
   async function sendReset() {
-    if (!email) return toastError('No email on file');
+    if (!email) return toastError(t('userSecurityActions.noEmailOnFile'));
     setBusy(true);
     const res = await adminSendPasswordResetAction(email);
     setBusy(false);
     setOpen(false);
     if (!res.ok) return toastError(res.error);
-    success('Password-reset email sent');
+    success(t('userSecurityActions.passwordResetEmailSent'));
   }
 
   return (

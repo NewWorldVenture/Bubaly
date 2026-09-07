@@ -95,7 +95,7 @@ export function GraphModule() {
     const res = await projectTwinAction();
     setProjecting(false);
     if (!res.ok) { toastError(res.error ?? 'Could not rebuild the twin'); return; }
-    if (res.entities === 0) { toastError('No family data to project yet — add members, teams, etc.'); return; }
+    if (res.entities === 0) { toastError(t('graphModule.noFamilyDataToProject')); return; }
     success(`Twin synced — ${res.entities} entities, ${res.edges} links from your data`);
   }
 
@@ -263,7 +263,7 @@ export function GraphModule() {
         <AddEdgeModal
           familyId={familyId} userId={userId} entities={graph.entities}
           onClose={() => setAddEdge(false)}
-          onSaved={() => { success('Linked'); setAddEdge(false); }}
+          onSaved={() => { success(t('graphModule.linked')); setAddEdge(false); }}
           onError={toastError}
         />
       )}

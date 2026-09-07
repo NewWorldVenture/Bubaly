@@ -93,7 +93,7 @@ export function MovingWorkspace() {
 
   async function generateTasks() {
     if (!move) return;
-    if (!plan.length) return toastError('The full checklist for this move is already here.');
+    if (!plan.length) return toastError(tr('movingModule.theFullChecklistForThis'));
     setPlanning(true);
     const { error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
       family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, date_mode: 'relative' as const, template_key: p.key, status: 'todo' as const, created_by: userId,
@@ -106,14 +106,14 @@ export function MovingWorkspace() {
   async function setTaskStatus(t: Task, status: Task['status']) {
     const { error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    if (status === 'done') success('Done ✓');
+    if (status === 'done') success(tr('movingModule.done'));
   }
 
   async function deleteTask(t: Task) {
     if (!confirm(`Delete “${t.title}”?`)) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    success('Task deleted');
+    success(tr('movingModule.taskDeleted'));
   }
 
   async function advanceBox(b: Box) {
@@ -128,7 +128,7 @@ export function MovingWorkspace() {
     if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
-    success('Box deleted');
+    success(tr('movingModule.boxDeleted'));
   }
 
   async function setMoveStatus(status: MoveStatus) {
@@ -143,7 +143,7 @@ export function MovingWorkspace() {
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');
-    success('Move deleted');
+    success(tr('movingModule.moveDeleted'));
   }
 
   const loading = moves.loading || tasks.loading || boxes.loading;
@@ -350,16 +350,16 @@ export function MovingWorkspace() {
 
       {dateMove && (
         <MoveDateRecalculation key={JSON.stringify([moveDateContextKey(context), dateMove.id])} context={context} move={dateMove}
-          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success('Move date and reviewed deadlines saved'); }} />
+          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success(tr('movingModule.moveDateAndReviewedDeadlines')); }} />
       )}
       {moveForm.open && (
-        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success('Move saved'); }} />
+        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success(tr('movingModule.moveSaved')); }} />
       )}
       {taskForm.open && move && (
-        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success('Task saved'); }} />
+        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success(tr('movingModule.taskSaved')); }} />
       )}
       {boxForm.open && move && (
-        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success('Box saved'); }} />
+        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success(tr('movingModule.boxSaved')); }} />
       )}
     </div>
   );
@@ -381,9 +381,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
     const moveDate = String(f.get('move_date') ?? '');
-    if (!title) return toastError('Name the move');
-    if (!isMoveDate(moveDate)) return toastError('Pick a valid move date');
-    if (move && moveDate !== move.move_date) return toastError('Use Change date to review the existing deadlines first.');
+    if (!title) return toastError(tr('movingModule.nameTheMove'));
+    if (!isMoveDate(moveDate)) return toastError(tr('movingModule.pickAValidMoveDate'));
+    if (move && moveDate !== move.move_date) return toastError(tr('movingModule.useChangeDateToReview'));
     setLoading(true);
     const payload = {
       title, from_address: String(f.get('from_address') ?? '').trim() || null, to_address: String(f.get('to_address') ?? '').trim() || null,
@@ -455,11 +455,11 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Give the task a title');
+    if (!title) return toastError(tr('movingModule.giveTheTaskATitle'));
     const dueDate = String(f.get('due_date') ?? '') || null;
-    if (dueDate && !isMoveDate(dueDate)) return toastError('Pick a valid task date.');
+    if (dueDate && !isMoveDate(dueDate)) return toastError(tr('movingModule.pickAValidTaskDate'));
     const offset = dueDate ? dayDiff(move.move_date, dueDate) : (task?.offset_days ?? 0);
-    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError('A following deadline needs a date within 365 days of the move. Otherwise keep a fixed date.');
+    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError(tr('movingModule.aFollowingDeadlineNeedsA'));
     setLoading(true);
     const payload = {
       title, category: String(f.get('category') ?? 'other') as MoveTaskCategory, due_date: dueDate,
@@ -507,7 +507,7 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const label = String(f.get('label') ?? '').trim();
-    if (!label) return toastError('Give the box a label');
+    if (!label) return toastError(tr('movingModule.giveTheBoxALabel'));
     const boxNumber = Math.max(1, Math.round(Number(f.get('box_number') ?? nextNumber)));
     const contents = String(f.get('contents') ?? '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     setLoading(true);

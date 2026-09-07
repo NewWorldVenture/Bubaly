@@ -63,7 +63,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await saveDashboardLayoutAction({ featureKeys: keys });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save layout');
-    success('Dashboard saved');
+    success(t('quickActions.dashboardSaved'));
     setEditing(false);
     router.refresh();
   }
@@ -72,7 +72,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await resetDashboardLayoutAction({});
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not reset');
-    success('Reset to default');
+    success(t('quickActions.resetToDefault'));
     setEditing(false);
     router.refresh();
   }
@@ -82,7 +82,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await saveFamilyDefaultLayoutAction({ featureKeys: keys });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not set family default');
-    success('Saved as the family default');
+    success(t('quickActions.savedAsTheFamilyDefault'));
   }
 
   const addable = available.filter((f) => !keys.includes(f.key));
@@ -196,17 +196,17 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
     const res = await saveDashboardSettingsAction({ allowChildCustomization: allowChild, lockToFamilyDefault: lockAll });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save settings');
-    success('Dashboard settings saved');
+    success(t('quickActions.dashboardSettingsSaved'));
     onClose();
     router.refresh();
   }
   async function resetEveryone() {
-    if (!confirm('Reset every family member’s dashboard to the default?')) return;
+    if (!confirm(t('quickActions.resetEveryFamilyMemberS'))) return;
     setSaving(true);
     const res = await resetAllLayoutsAction();
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not reset');
-    success('Everyone’s dashboard was reset');
+    success(t('quickActions.everyoneSDashboardWasReset'));
     onClose();
     router.refresh();
   }

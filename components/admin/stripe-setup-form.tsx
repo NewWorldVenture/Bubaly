@@ -50,7 +50,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const dollars = Number(feeDollars);
-    if (!Number.isFinite(dollars) || dollars < 0) { toastError('Enter a valid service fee'); return; }
+    if (!Number.isFinite(dollars) || dollars < 0) { toastError(t('stripeSetupForm.enterAValidServiceFee')); return; }
     setSaving(true);
     const res = await saveStripeSettingsAction({
       enabled,
@@ -63,7 +63,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Stripe Setup saved');
+    success(t('stripeSetupForm.stripeSetupSaved'));
     setSecretKey(''); setWebhookSecret('');
     router.refresh();
   }

@@ -70,11 +70,11 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 
   async function onCancel(id: string) {
     const res = await cancelCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Call cancelled');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.callCancelled'));
   }
   async function onRequeue(id: string) {
     const res = await requeueCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Back in the queue');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.backInTheQueue'));
   }
 
   return (
@@ -98,7 +98,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
       {composerOpen && (
         <Composer
           onClose={() => setComposerOpen(false)}
-          onCreated={() => { setComposerOpen(false); success('On it — Bubaly will make the call.'); }}
+          onCreated={() => { setComposerOpen(false); success(t('conciergeCallsModule.onItBubalyWillMake')); }}
         />
       )}
 

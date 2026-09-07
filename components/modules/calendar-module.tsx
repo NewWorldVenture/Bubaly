@@ -227,8 +227,8 @@ export function CalendarModule() {
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
     const params = new URLSearchParams(window.location.search);
-    if (params.get('gcal') === 'connected') { success('Google Calendar connected!'); window.history.replaceState({}, '', window.location.pathname); }
-    else if (params.get('gcal') === 'error') { toastError('Google Calendar connection failed.'); window.history.replaceState({}, '', window.location.pathname); }
+    if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
+    else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount

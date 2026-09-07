@@ -238,7 +238,7 @@ export function DocumentsModule() {
 
   async function download(doc: Document) {
     setMenuId(null);
-    if (!doc.storage_path) { toastError('No file attached to this document'); return; }
+    if (!doc.storage_path) { toastError(tr('documentsModule.noFileAttachedToThis')); return; }
     const tab = preOpenWindow(); // sync, inside the tap gesture (iOS popup blocker)
     const sb = createClient();
     const { url, error: err } = await getDocumentSignedUrl(sb, doc.storage_path);
@@ -252,7 +252,7 @@ export function DocumentsModule() {
     if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
     const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('File deleted'); refresh();
+    success(tr('documentsModule.fileDeleted')); refresh();
   }
 
   function pickFile(f: File | null) {
@@ -267,7 +267,7 @@ export function DocumentsModule() {
   }
 
   async function save() {
-    if (!form.title || !file) { toastError('Choose a file and name it'); return; }
+    if (!form.title || !file) { toastError(tr('documentsModule.chooseAFileAndName')); return; }
     setSaving(true);
     const sb = createClient();
     const folder = form.category.trim() || 'general';
@@ -280,8 +280,8 @@ export function DocumentsModule() {
       expires_at: form.expires_at || null,
     });
     setSaving(false);
-    if (err) { await removeFamilyDocument(sb, path); toastError('Failed to save file'); return; }
-    success('File uploaded');
+    if (err) { await removeFamilyDocument(sb, path); toastError(tr('documentsModule.failedToSaveFile')); return; }
+    success(tr('documentsModule.fileUploaded'));
     setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
   }
 

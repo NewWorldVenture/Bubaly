@@ -21,7 +21,7 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
     setSaving(true);
     const res = await saveAIConfigAction(formData);
     setSaving(false);
-    if (res.ok) success('AI engine updated'); else toastError(res.error ?? 'Could not save');
+    if (res.ok) success(t('aiEngineForm.aiEngineUpdated')); else toastError(res.error ?? 'Could not save');
   }
 
   async function onTest() {

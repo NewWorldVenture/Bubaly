@@ -74,14 +74,14 @@ export function CelebrationsModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Celebration added');
+    success(t('celebrationsModule.celebrationAdded'));
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
 
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('celebrationsModule.removed'));
   }
 
   return (

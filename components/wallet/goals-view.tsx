@@ -193,8 +193,8 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     const title = String(form.get('title') ?? '').trim();
     const target = Number(form.get('target'));
     const targetDate = String(form.get('targetDate') ?? '').trim() || null;
-    if (!title) return toastError('Give the goal a name.');
-    if (!Number.isFinite(target) || target <= 0) return toastError('Set a target greater than $0.');
+    if (!title) return toastError(t('goalsView.giveTheGoalAName'));
+    if (!Number.isFinite(target) || target <= 0) return toastError(t('goalsView.setATargetGreaterThan'));
     setLoading(true);
     const res = await createGoalAction({
       title, kind, targetCents: Math.round(target * 100),
@@ -202,7 +202,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not create goal');
-    success('Goal created');
+    success(t('goalsView.goalCreated'));
     onClose();
     router.refresh();
   }
@@ -263,7 +263,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('goalsView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await fundGoalAction({ goalId: goal.id, amountCents: Math.round(dollars * 100) });
     setLoading(false);

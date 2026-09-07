@@ -89,7 +89,7 @@ export function InventoryModule() {
     if (!confirm(`Remove ${item.name} from the inventory?`)) return;
     const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
-    success('Item removed');
+    success(tr('inventoryModule.itemRemoved'));
   }
 
   async function setStatus(item: Item, status: InventoryStatus) {
@@ -105,7 +105,7 @@ export function InventoryModule() {
     if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
-    success('Location deleted');
+    success(tr('inventoryModule.locationDeleted'));
   }
 
   const loading = locations.loading || items.loading || moves.loading;
@@ -292,7 +292,7 @@ export function InventoryModule() {
       )}
       {moveFor && (
         <MoveForm familyId={familyId} userId={userId} memberId={selfMember?.id ?? null} item={moveFor} locations={locations.data}
-          onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success('Move logged'); }} />
+          onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success(tr('inventoryModule.moveLogged')); }} />
       )}
       {lendFor && (
         <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(`${lendFor.name} marked as lent out`); }} />
@@ -342,7 +342,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(tr('inventoryModule.nameIsRequired'));
     setLoading(true);
     const payload = {
       name,
@@ -428,7 +428,7 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(tr('inventoryModule.nameIsRequired'));
     setLoading(true);
     const payload = { name, kind: String(f.get('kind') ?? 'room') as HomeLocationKind, parent_id: String(f.get('parent_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
@@ -505,7 +505,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const to = String(f.get('lent_to') ?? '').trim();
-    if (!to) return toastError('Who has it?');
+    if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
     const { error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id);
     setLoading(false);

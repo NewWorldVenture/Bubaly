@@ -101,7 +101,7 @@ export function HabitsModule() {
         log_date: today, count: 1, created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Nice! Checked in for today 🔥');
+      success(t('habitsModule.niceCheckedInForToday'));
     }
     void logsQ.refresh();
   }
@@ -133,7 +133,7 @@ export function HabitsModule() {
     const { error } = await supabase.from('habits')
       .update({ is_active: false, archived_at: new Date().toISOString() }).eq('id', habit.id);
     if (error) return toastError(describeDbError(error));
-    success('Habit archived');
+    success(t('habitsModule.habitArchived'));
     void habitsQ.refresh();
   }
 
@@ -322,7 +322,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
 
       <div className="mt-3 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
         <button onClick={onEdit} aria-label={t('habits.editHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-        <button onClick={() => { if (confirm('Archive this habit?')) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
+        <button onClick={() => { if (confirm(t('habitsModule.archiveThisHabit'))) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );
@@ -361,7 +361,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
     e.preventDefault();
     const name = title.trim();
     const detail = description.trim() || null;
-    if (!name) return toastError('Give your habit a name');
+    if (!name) return toastError(t('habitsModule.giveYourHabitAName'));
     setLoading(true);
     const supabase = createClient();
     const patch = {

@@ -242,7 +242,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
         start(async () => {
           const res = await setIdeaStatusAction({ ideaId: idea.id, status });
           if (!res.ok) { error(res.error ?? 'Could not update status.'); return; }
-          if (isFeedbackStatus(status)) { onChanged(status); success('Roadmap updated.'); }
+          if (isFeedbackStatus(status)) { onChanged(status); success(t('feedbackBoard.roadmapUpdated')); }
         });
       }}
       className="rounded-lg border border-border bg-bg px-2 py-1 text-[11px] font-semibold outline-none focus:border-brand"

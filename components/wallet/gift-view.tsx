@@ -40,7 +40,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
   async function dismiss(g: PendingGift) {
     const res = await dismissGiftAction({ giftPaymentId: g.id });
     if (!res.ok) return toastError(res.error ?? 'Could not dismiss');
-    success('Gift declined');
+    success(t('giftView.giftDeclined'));
     router.refresh();
   }
 
@@ -101,7 +101,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true); success('Link copied');
+      setCopied(true); success(t('giftView.linkCopied'));
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard unavailable */ }
   }
@@ -151,7 +151,7 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!childId) return toastError('Pick a child.');
+    if (!childId) return toastError(t('giftView.pickAChild'));
     const form = new FormData(e.currentTarget);
     setLoading(true);
     const res = await createGiftLinkAction({
@@ -162,7 +162,7 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not create link');
-    success('Gift link created');
+    success(t('giftView.giftLinkCreated'));
     onClose();
     router.refresh();
   }

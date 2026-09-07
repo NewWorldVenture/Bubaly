@@ -57,11 +57,11 @@ export function InsuranceModule() {
   const byType = useMemo(() => premiumByType(policies.data).slice(0, 5), [policies.data]);
 
   async function removePolicy(id: string) {
-    if (!confirm('Remove this policy?')) return;
+    if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
     const { error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id);
     if (error) return toastError(describeDbError(error));
     setSelected(null);
-    success('Policy removed');
+    success(tr('insuranceModule.policyRemoved'));
   }
 
   const memberName = (id: string | null) => (id ? members.find((m) => m.id === id)?.display_name ?? null : null);
@@ -182,7 +182,7 @@ export function InsuranceModule() {
         <PolicyForm
           familyId={familyId} userId={userId} members={members}
           onClose={() => setAddOpen(false)}
-          onSaved={() => { setAddOpen(false); success('Policy added'); }}
+          onSaved={() => { setAddOpen(false); success(tr('insuranceModule.policyAdded')); }}
         />
       )}
 
@@ -210,7 +210,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const insurer = String(f.get('insurer') ?? '').trim();
-    if (!insurer) return toastError('Insurer is required');
+    if (!insurer) return toastError(tr('insuranceModule.insurerIsRequired'));
     setLoading(true);
     const { error } = await createClient().from('family_insurance_policies').insert({
       family_id: familyId,

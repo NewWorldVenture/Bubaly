@@ -78,7 +78,7 @@ export function DeclutterModule() {
   const recentDone = missions.data.filter((m) => m.status !== 'planned').sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at)).slice(0, 8);
 
   async function planWeek() {
-    if (!plan.length) return toastError('Every zone already has a mission this week, or nothing needs one. Bump a clutter score to plan more.');
+    if (!plan.length) return toastError(tr('declutterModule.everyZoneAlreadyHasA'));
     setPlanning(true);
     const { error } = await createClient().from('declutter_missions').insert(plan.map((p) => ({
       family_id: familyId, zone_id: p.zone.id, title: p.template.title, minutes: p.template.minutes, points: p.template.points,
@@ -92,20 +92,20 @@ export function DeclutterModule() {
   async function skipMission(m: Mission) {
     const { error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission skipped');
+    success(tr('declutterModule.missionSkipped'));
   }
 
   async function reopenMission(m: Mission) {
     const { error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission back on the list');
+    success(tr('declutterModule.missionBackOnTheList'));
   }
 
   async function deleteMission(m: Mission) {
     if (!confirm(`Delete “${m.title}”?`)) return;
     const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission deleted');
+    success(tr('declutterModule.missionDeleted'));
   }
 
   async function resetZone(z: Zone) {
@@ -314,17 +314,17 @@ export function DeclutterModule() {
       </div>
 
       {zoneForm.open && (
-        <ZoneForm familyId={familyId} userId={userId} zone={zoneForm.zone} onClose={() => setZoneForm({ open: false, zone: null })} onSaved={() => { setZoneForm({ open: false, zone: null }); success('Zone saved'); }} />
+        <ZoneForm familyId={familyId} userId={userId} zone={zoneForm.zone} onClose={() => setZoneForm({ open: false, zone: null })} onSaved={() => { setZoneForm({ open: false, zone: null }); success(tr('declutterModule.zoneSaved')); }} />
       )}
       {missionForm.open && (
         <MissionForm familyId={familyId} userId={userId} zones={activeZones} members={members} mission={missionForm.mission} zoneId={missionForm.zoneId} preset={missionForm.preset} defaultAssignee={selfMember?.id ?? null}
-          onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success('Mission saved'); }} />
+          onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
         <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
       )}
       {sessionOpen && (
-        <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success('Session logged'); }} />
+        <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />
       )}
     </div>
   );
@@ -340,7 +340,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Give the zone a name');
+    if (!name) return toastError(tr('declutterModule.giveTheZoneAName'));
     setLoading(true);
     const payload = {
       name, room: String(f.get('room') ?? '').trim() || null, kind: String(f.get('kind') ?? 'surface') as DeclutterZoneKind, clutter_score: score,
@@ -394,7 +394,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Give the mission a title');
+    if (!title) return toastError(tr('declutterModule.giveTheMissionATitle'));
     const minutes = Math.min(60, Math.max(5, Number(f.get('minutes') ?? 15)));
     setLoading(true);
     const payload = {

@@ -21,13 +21,13 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
   const [busy, setBusy] = useState(false);
 
   async function removeFromFamily() {
-    if (!confirm('Remove this person from the family? This is reversible — they can be re-invited.')) return;
+    if (!confirm(t('memberRowActions.removeThisPersonFromThe'))) return;
     setBusy(true);
     const res = await adminRemoveMemberAction(memberId);
     setBusy(false);
     setOpen(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed from family');
+    success(t('memberRowActions.removedFromFamily'));
     router.refresh();
   }
 
@@ -36,12 +36,12 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
     const form = new FormData(e.currentTarget);
     const newName = String(form.get('display_name') ?? '').trim();
     const newRole = String(form.get('role') ?? role) as MemberRole;
-    if (!newName) { toastError('Name is required'); return; }
+    if (!newName) { toastError(t('memberRowActions.nameIsRequired')); return; }
     setBusy(true);
     const res = await adminUpdateMemberAction(memberId, { displayName: newName, role: newRole });
     setBusy(false);
     if (!res.ok) return toastError(res.error);
-    success('Member updated');
+    success(t('memberRowActions.memberUpdated'));
     setEditing(false);
     router.refresh();
   }

@@ -156,7 +156,7 @@ export function ShoppingModule() {
     return run(`archive:${id}`, async () => {
       const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
-      success('List archived');
+      success(t('shoppingModule.listArchived'));
       setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
       void refreshLists();
     });
@@ -367,9 +367,9 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
     if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
-    if (!familyId) { toastError('No active family — reload and try again.'); return; }
+    if (!familyId) { toastError(t('shoppingModule.noActiveFamilyReloadAnd')); return; }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -439,7 +439,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
     if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
     setLoading(true);
     try {

@@ -89,7 +89,7 @@ export function TripMemoriesModule() {
         created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Memory saved');
+      success(t('tripMemoriesModule.memorySaved'));
       setForm(null);
     } finally {
       setSaving(false);
@@ -97,11 +97,11 @@ export function TripMemoriesModule() {
   }
 
   async function remove(m: Memory) {
-    if (!confirm('Delete this memory?')) return;
+    if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
     if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
     const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

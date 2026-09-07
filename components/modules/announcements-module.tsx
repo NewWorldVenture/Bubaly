@@ -83,7 +83,7 @@ export function AnnouncementsModule() {
     });
     setSaving(false);
     if (err) return toastError(describeDbError(err));
-    success('Announcement posted');
+    success(t('announcementsModule.announcementPosted'));
     setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
   }
 
@@ -97,7 +97,7 @@ export function AnnouncementsModule() {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
     if (err) toastError(describeDbError(err));
-    else success('Announcement removed');
+    else success(t('announcementsModule.announcementRemoved'));
   }
 
   return (

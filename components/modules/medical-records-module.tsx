@@ -143,8 +143,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deleteProvider(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('health_providers').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function uploadCard(side: 'front' | 'back', file: File) {
@@ -183,16 +183,16 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
     setSaving(false);
-    if (err) { toastError('Could not save insurance'); return; }
-    success('Insurance saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
 
   async function deletePolicy(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function saveProfile() {
@@ -219,8 +219,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     };
     const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
     setSaving(false);
-    if (err) { toastError('Could not save profile'); return; }
-    success('Profile saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }
 

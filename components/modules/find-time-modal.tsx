@@ -112,7 +112,7 @@ export function FindTimeModal({
         submissionId: bookingIdFor(slot.startISO),
       });
       if (!result.ok) { toastError(result.error); return; }
-      success('Event scheduled');
+      success(tr('findTimeModal.eventScheduled'));
       onScheduled();
     } catch (err) {
       toastError(describeDbError(err));

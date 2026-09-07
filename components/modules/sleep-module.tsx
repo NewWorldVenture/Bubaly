@@ -77,14 +77,14 @@ export function SleepModule() {
   async function deleteLog(log: Log) {
     const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
     if (error) return toastError(describeDbError(error));
-    success('Night removed');
+    success(t('sleepModule.nightRemoved'));
   }
 
   async function archiveRoutine(r: Routine) {
     if (!confirm(`Retire “${r.name}”?`)) return;
     const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Routine retired');
+    success(t('sleepModule.routineRetired'));
   }
 
   const loading = logs.loading || routines.loading || checkins.loading;
@@ -231,13 +231,13 @@ export function SleepModule() {
       </div>
 
       {logOpen && memberId && (
-        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success('Night logged'); }} />
+        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success(t('sleepModule.nightLogged')); }} />
       )}
       {routineOpen && memberId && (
-        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success('Routine saved'); }} />
+        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success(t('sleepModule.routineSaved')); }} />
       )}
       {checkinOpen && memberId && (
-        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success('Check-in saved'); }} />
+        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success(t('sleepModule.checkInSaved')); }} />
       )}
     </div>
   );
@@ -255,9 +255,9 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
     const f = new FormData(e.currentTarget);
     const bedtime = new Date(String(f.get('bedtime') ?? ''));
     const wake = new Date(String(f.get('wake_time') ?? ''));
-    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError('Enter both times');
+    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError(t('sleepModule.enterBothTimes'));
     const duration = durationMinutes(bedtime.toISOString(), wake.toISOString());
-    if (duration === 0) return toastError('Wake time must be after bedtime');
+    if (duration === 0) return toastError(t('sleepModule.wakeTimeMustBeAfter'));
     setLoading(true);
     const sleepDate = `${wake.getFullYear()}-${String(wake.getMonth() + 1).padStart(2, '0')}-${String(wake.getDate()).padStart(2, '0')}`;
     const { error } = await createClient().from('sleep_logs').upsert({
@@ -302,7 +302,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const steps = String(f.get('steps') ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!days.length) return toastError('Pick at least one night');
+    if (!days.length) return toastError(t('sleepModule.pickAtLeastOneNight'));
     setLoading(true);
     const payload = {
       name: String(f.get('name') ?? '').trim() || 'Bedtime routine',

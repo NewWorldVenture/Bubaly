@@ -134,6 +134,42 @@ const NOT_COPY = [
 // component takes a string a person reads, its prop name belongs here.
 const PROP_PATTERN =
   /\b(?:placeholder|aria-label|title|alt|label|emptyLabel|confirmLabel|cancelLabel|message|description|text|heading|subheading|subtitle|hint|helper|helperText|tooltip|caption|summary|note|badge|ctaLabel|actionLabel|submitLabel|okLabel|emptyText|errorText|legend)="([^"{}]{3,})"/g;
+// Copy passed as a CALL ARGUMENT, which the two patterns above cannot see: the
+// string is in expression position, not in a tag or an attribute. This is the
+// third and last blind spot the migration found, and the loudest of its kind —
+// `toastError('Failed to save appointment')` is a sentence a person reads, and
+// the scanner reported the file clean 335 times over.
+//
+// Only functions whose argument is UNCONDITIONALLY user-facing are listed. A
+// generic `t(`, `push(` or `set(` would drag in identifiers, table names and
+// sort keys, and a scanner that cries wolf gets its findings ignored.
+// Fixed names: a browser dialog says exactly what it is called.
+const DIALOG_PATTERN = /\b(?:window\.confirm|confirm|alert|prompt)\(\s*'([^'\\\n]{3,})'/g;
+
+/**
+ * The toast API is destructured, so its local names vary by file:
+ *
+ *   const { success, error: toastError } = useToast();
+ *
+ * A fixed list would have to guess. `toastError` covers 331 sites and `success`
+ * 256, but `success(` and `error(` are ordinary enough words that matching them
+ * everywhere would report identifiers in files that have no toast at all. So
+ * the names are READ from the destructuring in each file, and matched only
+ * there — no guessing, and no false positives from a same-named helper next
+ * door.
+ */
+function toastPattern(source) {
+  const names = new Set();
+  for (const m of source.matchAll(/const\s*\{([^}]*)\}\s*=\s*useToast\(\)/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.includes(':') ? part.split(':')[1] : part;
+      const clean = name.trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(clean)) names.add(clean);
+    }
+  }
+  if (!names.size) return null;
+  return new RegExp(`\\b(?:${[...names].join('|')})\\(\\s*'([^'\\\\\\n]{3,})'`, 'g');
+}
 // A JSX text node: between > and <, no braces (those are expressions, not copy).
 //
 // Newlines are ALLOWED inside the match on purpose. Copy that trails an inline
@@ -192,6 +228,9 @@ export function scanFile(file) {
 
   for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
+  const toasts = toastPattern(source);
+  if (toasts) for (const m of source.matchAll(toasts)) push(m[1], m.index ?? 0);
 
   return findings;
 }

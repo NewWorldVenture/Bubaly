@@ -71,9 +71,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this visit record?')) return;
+    if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
     const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Visit deleted');
+    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {

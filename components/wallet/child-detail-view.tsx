@@ -377,8 +377,8 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!desc.trim()) return toastError('What is it for?');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!desc.trim()) return toastError(t('childDetailView.whatIsItFor'));
     setLoading(true);
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
@@ -435,13 +435,13 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!to) return toastError('Pick a recipient.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!to) return toastError(t('childDetailView.pickARecipient'));
     setLoading(true);
     const res = await sendMoneyAction({ fromChildWalletId: child.id, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send money');
-    success('Money sent');
+    success(t('childDetailView.moneySent'));
     onClose();
     router.refresh();
   }
@@ -488,7 +488,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);
@@ -541,12 +541,12 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await requestAllowanceAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), reason: reason.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send request');
-    success('Request sent to a parent');
+    success(t('childDetailView.requestSentToAParent'));
     onClose();
     router.refresh();
   }

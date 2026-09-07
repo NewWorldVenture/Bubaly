@@ -86,7 +86,7 @@ export function WalletHub() {
     if (!confirm(`Remove ${label}?`)) return;
     const res = await deleteWalletRowAction({ table, id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
-    success('Removed');
+    success(t('walletHub.removed'));
     if (table === 'wallet_cards') refreshCards();
     else if (table === 'wallet_passes') refreshPasses();
     else if (table === 'wallet_rewards') refreshRewards();
@@ -435,6 +435,7 @@ function EmptyBlock({ label, onAdd, addLabel }: { label: string; onAdd: () => vo
 
 // ── Add modals ──────────────────────────────────────────────
 function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>, onClose: () => void, onDone: () => void) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   async function submit(values: Record<string, unknown>) {
@@ -442,7 +443,7 @@ function useAddForm(action: (i: Record<string, unknown>) => Promise<{ ok: boolea
     const res = await action(values);
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save');
-    success('Added to wallet');
+    success(t('walletHub.addedToWallet'));
     onDone();
     onClose();
   }

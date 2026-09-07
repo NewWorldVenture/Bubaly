@@ -290,7 +290,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           <button
             type="button" disabled={busy !== null}
             onClick={() => {
-              if (window.confirm('Delete this idea? This removes it and all its votes and comments. This cannot be undone.')) {
+              if (window.confirm(t('feedbackAdmin.deleteThisIdeaThisRemoves'))) {
                 void run('delete', () => deleteIdeaAction({ ideaId: idea.id }), 'Idea deleted.');
               }
             }}

@@ -36,9 +36,9 @@ export function DrivingSafetyView() {
   const [form, setForm] = useState(false);
 
   async function remove(id: string) {
-    if (!confirm('Delete this trip?')) return;
+    if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
     const { error } = await createClient().from('driving_trips').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(tr('drivingSafetyView.deleted'));
   }
 
   return (
@@ -121,7 +121,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Trip logged');
+    success(tr('drivingSafetyView.tripLogged'));
     onClose();
   }
 

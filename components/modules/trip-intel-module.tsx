@@ -226,11 +226,11 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
       setRecs(json.recommendations);
       setSource(json.source);
     } catch {
-      toastError('Network problem — please try again.');
+      toastError(tr('tripIntelModule.networkProblemPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
-  }, [event, interests, selectedMembers, toastError]);
+  }, [event, interests, selectedMembers, toastError, tr]);
 
   async function save() {
     if (!recs) return;
@@ -244,7 +244,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Trip research saved');
+    success(tr('tripIntelModule.tripResearchSaved'));
     onClose();
     router.refresh();
   }
@@ -374,7 +374,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
     const res = await deleteTripPlanAction({ id: plan.id });
     setDeleting(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(tr('tripIntelModule.removed'));
     router.refresh();
   }
 
@@ -425,7 +425,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
   }, []);
 
   const compute = useCallback(async () => {
-    if (!home.trim()) return toastError('Enter your starting address or city.');
+    if (!home.trim()) return toastError(tr('tripIntelModule.enterYourStartingAddressOr'));
     setComputing(true);
     try { localStorage.setItem(HOME_KEY, home); } catch { /* ignore */ }
 
@@ -438,7 +438,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 
     if (!originLL || !destLL) {
       setComputing(false);
-      return toastError('Could not locate one of the addresses. Try a more specific place.');
+      return toastError(tr('tripIntelModule.couldNotLocateOneOf'));
     }
 
     // Real driving time (OSRM), with a haversine/avg-speed fallback.
@@ -458,7 +458,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 
     setResult({ driveSeconds, trafficFactor, weatherDelay, weatherSummary, originLL, destLL, miles, usedFallback });
     setComputing(false);
-  }, [home, event, toastError]);
+  }, [home, event, toastError, tr]);
 
   const plan = useMemo(() => result ? computeDeparture({
     eventStartISO: event.startsAt, driveSeconds: result.driveSeconds, prepMinutes: prep, parkMinutes: park,
@@ -478,7 +478,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Added to your calendar — we’ll tell you when to head out');
+    success(tr('tripIntelModule.addedToYourCalendarWe'));
     onClose();
     router.refresh();
   }
@@ -610,7 +610,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
       }
       const res = await refreshDeparturePlanAction({ id: plan.id, driveSeconds, trafficFactor, weatherDelayMinutes: weatherDelay, weatherSummary });
       if (!res.ok) { toastError(res.error); return; }
-      success('Updated with live traffic & weather');
+      success(tr('tripIntelModule.updatedWithLiveTrafficWeather'));
       router.refresh();
     } finally {
       setRefreshing(false);
@@ -622,7 +622,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
     const res = await deleteDeparturePlanAction({ id: plan.id });
     setDeleting(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(tr('tripIntelModule.removed'));
     router.refresh();
   }
 

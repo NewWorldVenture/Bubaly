@@ -466,12 +466,12 @@ export function FinancesModule() {
 
       {addOpen && (
         <AddTransactionModal familyId={familyId} userId={userId} selfId={selfId} accounts={accounts} members={members}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refreshTxns(); success('Transaction added'); }}
+          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refreshTxns(); success(tr('financesModule.transactionAdded')); }}
           onError={toastError} />
       )}
       {linkOpen && (
         <LinkAccountModal familyId={familyId} userId={userId}
-          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); void refreshAccounts(); success('Account linked'); }}
+          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); void refreshAccounts(); success(tr('financesModule.accountLinked')); }}
           onError={toastError} />
       )}
     </div>

@@ -355,8 +355,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save appointment'); return; }
-    success('Appointment added!');
+    if (err) { toastError(tr('healthModule.failedToSaveAppointment')); return; }
+    success(tr('healthModule.appointmentAdded'));
     setApptOpen(false);
     setApptForm({ title: '', starts_at: '', member_id: '', provider: '', location: '', notes: '' });
   }
@@ -375,8 +375,8 @@ export function HealthModule() {
       recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
     });
     setSaving(false);
-    if (err) { toastError('Failed to log metric'); return; }
-    success('Metric logged!');
+    if (err) { toastError(tr('healthModule.failedToLogMetric')); return; }
+    success(tr('healthModule.metricLogged'));
     setMetricOpen(false);
     setMetricForm({ member_id: '', type: 'steps', value: '', recorded_at: '' });
   }
@@ -397,8 +397,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log workout'); return; }
-    success('Workout logged!');
+    if (err) { toastError(tr('healthModule.failedToLogWorkout')); return; }
+    success(tr('healthModule.workoutLogged'));
     setWorkoutOpen(false);
     setWorkoutForm({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
   }
@@ -418,8 +418,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log symptom'); return; }
-    success('Symptom logged!');
+    if (err) { toastError(tr('healthModule.failedToLogSymptom')); return; }
+    success(tr('healthModule.symptomLogged'));
     setSymptomOpen(false);
     setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
   }
@@ -427,21 +427,21 @@ export function HealthModule() {
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
-    if (err) { toastError('Failed to update symptom'); return; }
-    success('Marked resolved.');
+    if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
-    if (err) { toastError('Failed to delete symptom'); return; }
-    success('Symptom removed.');
+    if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    success(tr('healthModule.symptomRemoved'));
   }
 
   async function saveGoal() {
     if (!goalForm.member_id || !goalForm.target) return;
     const target = parseFloat(goalForm.target);
-    if (!(target > 0)) { toastError('Target must be greater than 0.'); return; }
+    if (!(target > 0)) { toastError(tr('healthModule.targetMustBeGreaterThan')); return; }
     setSaving(true);
     const sb = createClient();
     const typeInfo = METRIC_TYPES.find((t) => t.value === goalForm.metric_type);
@@ -456,8 +456,8 @@ export function HealthModule() {
       created_by: userId,
     }, { onConflict: 'member_id,metric_type,period' });
     setSaving(false);
-    if (err) { toastError('Failed to save goal'); return; }
-    success('Goal saved!');
+    if (err) { toastError(tr('healthModule.failedToSaveGoal')); return; }
+    success(tr('healthModule.goalSaved'));
     setGoalOpen(false);
     setGoalForm({ member_id: '', metric_type: 'steps', target: '', period: 'daily' });
   }

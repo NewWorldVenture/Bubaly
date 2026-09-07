@@ -186,7 +186,7 @@ export function TodosModule() {
   }
 
   function deleteItem(id: string) {
-    if (!confirm('Delete this task?')) return;
+    if (!confirm(tr('todosModule.deleteThisTask'))) return;
     return run(`delete:${id}`, async () => {
       // Through the service, which filters `family_id` as well as `id`. The
       // client delete filtered on `id` alone and left tenancy to RLS.
@@ -209,7 +209,7 @@ export function TodosModule() {
 
   async function quickAdd(when: 'today' | 'tomorrow' | 'week') {
     const title = quickTitle.trim();
-    if (!title) { toastError('Type a task first'); return; }
+    if (!title) { toastError(tr('todosModule.typeATaskFirst')); return; }
     setQuickBusy(true);
     try {
       const listId = await ensureListId();
@@ -226,7 +226,7 @@ export function TodosModule() {
       if (!result.ok) { toastError(result.error); return; }
       quickSubmission.current = '';
       setQuickTitle('');
-      success('Task added');
+      success(tr('todosModule.taskAdded'));
       void refreshItems();
     } finally {
       setQuickBusy(false);
@@ -536,7 +536,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your category a name'); return; }
+    if (!trimmed) { toastError(tr('todosModule.giveYourCategoryAName')); return; }
     if (trimmed.length > 80) { toastError('Name is too long (max 80 characters)'); return; }
     setLoading(true);
     try {
@@ -620,9 +620,9 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
     e.preventDefault();
     if (loading) return;
     const trimmed = title.trim();
-    if (!trimmed) { toastError('Add a task title'); return; }
+    if (!trimmed) { toastError(tr('todosModule.addATaskTitle')); return; }
     if (trimmed.length > 200) { toastError('Title is too long (max 200 characters)'); return; }
-    if (!listId) { toastError('Pick a category'); return; }
+    if (!listId) { toastError(tr('todosModule.pickACategory')); return; }
     setLoading(true);
     try {
       // list_id is fixed at creation, so it is a create-only field — the service's

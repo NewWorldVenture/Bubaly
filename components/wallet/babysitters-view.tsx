@@ -46,7 +46,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
   async function archive(s: BabysitterRow) {
     const res = await archiveBabysitterAction({ id: s.id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
-    success('Babysitter removed');
+    success(t('babysittersView.babysitterRemoved'));
     router.refresh();
   }
 
@@ -179,7 +179,7 @@ function SitterModal({ sitter, onClose, onSaved }: {
     const email = String(form.get('email') ?? '').trim();
     const rateStr = String(form.get('rate') ?? '').trim();
     const notes = String(form.get('notes') ?? '').trim();
-    if (!name) return toastError('Enter a name');
+    if (!name) return toastError(t('babysittersView.enterAName'));
     const rateCents = rateStr ? Math.round(parseFloat(rateStr) * 100) : undefined;
 
     setLoading(true);
@@ -211,6 +211,7 @@ function SitterModal({ sitter, onClose, onSaved }: {
 function PaymentModal({ sitter, onClose, onSaved }: {
   sitter: BabysitterRow; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -230,7 +231,7 @@ function PaymentModal({ sitter, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const overrideStr = String(form.get('amount') ?? '').trim();
     const amountCents = overrideStr ? Math.round(parseFloat(overrideStr) * 100) : computed;
-    if (!amountCents || amountCents <= 0) return toastError('Enter hours or a payment amount');
+    if (!amountCents || amountCents <= 0) return toastError(t('babysittersView.enterHoursOrAPayment'));
     const h = parseFloat(hours) || undefined;
     const tipCents = Math.round((parseFloat(tip) || 0) * 100);
 

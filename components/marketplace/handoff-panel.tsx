@@ -40,21 +40,21 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
     start(async () => {
       const res = await proposeHandoffAction({ orderId, ...form });
       if (!res.ok) { toastError(res.error); return; }
-      setEditing(false); success('Pickup proposed — waiting for confirmation.'); router.refresh();
+      setEditing(false); success(tr('handoffPanel.pickupProposedWaitingForConfirmation')); router.refresh();
     });
   }
   function confirm() {
     start(async () => {
       const res = await confirmHandoffAction(orderId);
       if (!res.ok) { toastError(res.error); return; }
-      success('Confirmed! Added to your calendar.'); router.refresh();
+      success(tr('handoffPanel.confirmedAddedToYourCalendar')); router.refresh();
     });
   }
   function cancel() {
     start(async () => {
       const res = await cancelHandoffAction(orderId);
       if (!res.ok) { toastError(res.error); return; }
-      success('Pickup cancelled.'); router.refresh();
+      success(tr('handoffPanel.pickupCancelled')); router.refresh();
     });
   }
 
@@ -119,7 +119,7 @@ export function HandoffPanel({ orderId, viewerRole, handoff }: {
               <span className="ml-auto max-w-[9rem] text-[10px] text-muted">{tr('handoff.shareThisWhenYouMeetTo')}</span>
             </div>
           )}
-          {canComplete(h.status) && <CompleteForm orderId={orderId} onDone={() => { success('Handed off — order complete! 🎉'); router.refresh(); }} onError={toastError} />}
+          {canComplete(h.status) && <CompleteForm orderId={orderId} onDone={() => { success(tr('handoffPanel.handedOffOrderComplete')); router.refresh(); }} onError={toastError} />}
           {canCancel(h.status) && <button onClick={cancel} disabled={pending} className="text-[11px] text-muted transition hover:text-rose-400">{tr('handoff.cancelPickup')}</button>}
         </div>
       )}

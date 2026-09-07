@@ -82,7 +82,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const existing = new Set(items.map((i) => i.name.toLowerCase()));
     const toAdd = suggestions.filter((s) => !existing.has(s.name.toLowerCase()))
       .map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category, quantity: s.quantity, ai_suggested: true, created_by: userId }));
-    if (toAdd.length === 0) { setBusy(false); return toastError('Your list already covers the essentials'); }
+    if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
     if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
@@ -97,7 +97,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (!form?.name.trim()) return;
     const listId = await ensureMasterList();
     const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-    if (error) toastError(error.message); else success('Added');
+    if (error) toastError(error.message); else success(tr('tripPacking.added'));
     setForm(null);
   }
   async function remove(id: string) {

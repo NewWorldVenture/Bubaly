@@ -178,7 +178,7 @@ export function ChoresModule() {
     const res = await payChoreRewardAction({ choreAssignmentId: a.id });
     setPaying(null);
     if (!res.ok) return toastError(res.error ?? 'Payment failed');
-    success('Paid to wallet!'); void refresh();
+    success(tr('choresModule.paidToWallet')); void refresh();
   }
 
   async function removeChore(a: Assignment) {
@@ -189,11 +189,11 @@ export function ChoresModule() {
     const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
     if (!result.ok) return toastError(result.error);
-    success('Chore removed'); void refresh();
+    success(tr('choresModule.choreRemoved')); void refresh();
   }
 
   async function redeem(r: Reward) {
-    if (!selfMember) return toastError('No member profile to redeem for');
+    if (!selfMember) return toastError(tr('choresModule.noMemberProfileToRedeem'));
     if (busy) return;
     setBusy(r.id);
     const supabase = createClient();
@@ -728,10 +728,10 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     const due_at = String(form.get('due_at') ?? '') || null;
     const icon = String(form.get('icon') ?? '').trim() || null;
 
-    if (!title) return toastError('Add a chore title');
+    if (!title) return toastError(tr('choresModule.addAChoreTitle'));
     if (title.length > 160) return toastError('Title is too long (max 160 characters)');
-    if (!memberId) return toastError('Pick who this chore is for');
-    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Reward must be between 0 and 1000 points');
+    if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
+    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
     setLoading(true);
     try {

@@ -444,7 +444,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
     setBusyItem(null);
     if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
-    success('Added to reminders');
+    success(tr('frontDeskModule.addedToReminders'));
   }
 
   return (
@@ -686,16 +686,16 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
       } catch {
         // Fall back to using the raw text as the summary if it isn't valid JSON.
         setSummary(String(data.message ?? '').slice(0, 500));
-        success('AI summary added');
+        success(tr('frontDeskModule.aiSummaryAdded'));
         return;
       }
       if (parsed.summary) setSummary(String(parsed.summary).slice(0, 500));
       if (parsed.classification && VALID_CLASS.has(parsed.classification)) setClassification(parsed.classification);
       if (parsed.priority && VALID_PRIORITY.has(parsed.priority)) setPriority(parsed.priority);
       if (Array.isArray(parsed.action_items)) setActionItems(parsed.action_items.map(String).filter(Boolean).slice(0, 10));
-      success('AI analyzed the call');
+      success(tr('frontDeskModule.aiAnalyzedTheCall'));
     } catch {
-      toastError('Could not reach the AI. Please try again.');
+      toastError(tr('frontDeskModule.couldNotReachTheAi'));
     } finally {
       setAnalyzing(false);
     }
@@ -704,7 +704,7 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (loading) return;
-    if (!callerName.trim() && !callerNumber.trim()) return toastError('Add a caller name or number');
+    if (!callerName.trim() && !callerNumber.trim()) return toastError(tr('frontDeskModule.addACallerNameOr'));
 
     setLoading(true);
     const supabase = createClient();

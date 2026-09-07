@@ -100,7 +100,7 @@ export function CareModule() {
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault();
-    if (!recipientId) { toastError('Pick who the care is for'); return; }
+    if (!recipientId) { toastError(tr('careModule.pickWhoTheCareIs')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -120,7 +120,7 @@ export function CareModule() {
   }
 
   async function quickLog(type: CareLogType) {
-    if (!recipientId) { toastError('Pick who the care is for'); return; }
+    if (!recipientId) { toastError(tr('careModule.pickWhoTheCareIs')); return; }
     const sb = createClient();
     const { error: err } = await sb.from('care_log').insert({
       family_id: familyId, member_id: recipientId, log_type: type,
@@ -131,11 +131,11 @@ export function CareModule() {
   }
 
   async function remove(e: CareEntry) {
-    if (!confirm('Delete this care entry?')) return;
+    if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
     const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Entry deleted');
+    success(tr('careModule.entryDeleted'));
   }
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });

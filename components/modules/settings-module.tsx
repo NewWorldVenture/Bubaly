@@ -132,7 +132,7 @@ export function SettingsModule() {
       setDashboardView(previous);
       return toastError(res.error ?? 'Could not update dashboard');
     }
-    success('Default dashboard updated');
+    success(t('settingsModule.defaultDashboardUpdated'));
   }
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
@@ -144,28 +144,28 @@ export function SettingsModule() {
     const res = await updateMyProfileAction(profileForm);
     setSavingProfile(false);
     if (!res.ok) return toastError(res.error ?? 'Could not update profile');
-    success('Profile updated');
+    success(t('settingsModule.profileUpdated'));
   }
 
   async function saveFamilyName(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
     const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
-    success('Family name updated');
+    success(t('settingsModule.familyNameUpdated'));
   }
 
   async function removeMember(memberId: string) {
-    if (!confirm('Remove this member from the family?')) return;
+    if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
     const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
     if (error) return toastError(describeDbError(error));
-    success('Member removed');
+    success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
 
@@ -370,7 +370,7 @@ export function SettingsModule() {
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); success('Invite sent!'); }}
+          onSent={() => { setInviteOpen(false); success(t('settingsModule.inviteSent')); }}
         />
       )}
 
@@ -398,13 +398,13 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const display_name = String(form.get('display_name') ?? '').trim();
     const role = String(form.get('role') ?? member.role) as MemberRole;
     const birthday = String(form.get('birthday') ?? '').trim();
-    if (!display_name) { toastError('Name is required'); return; }
+    if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
     const { error } = await createClient().from('family_members')
       .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Member updated');
+    success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();
   }
@@ -449,7 +449,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
     const form = new FormData(e.currentTarget);
     const email = String(form.get('email') ?? '').trim().toLowerCase();
     const role = String(form.get('role') ?? 'adult') as MemberRole;
-    if (!email) return toastError('Email is required');
+    if (!email) return toastError(t('settingsModule.emailIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { data: invite, error } = await supabase.from('invites').insert({

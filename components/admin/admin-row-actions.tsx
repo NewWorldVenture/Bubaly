@@ -20,10 +20,10 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
           toastError(result.error ?? 'Could not update admin access.');
           return;
         }
-        success('Admin access updated.');
+        success(t('adminRowActions.adminAccessUpdated'));
         setOpen(false);
       } catch {
-        toastError('Could not update admin access. Please try again.');
+        toastError(t('adminRowActions.couldNotUpdateAdminAccess'));
       }
     });
   }

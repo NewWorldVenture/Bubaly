@@ -78,7 +78,7 @@ export function ProjectsModule() {
     const { error } = await createClient().from('home_projects').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setOpenId(null);
-    success('Project deleted');
+    success(tr('projectsModule.projectDeleted'));
   }
 
   const loading = projects.loading || materials.loading || quotes.loading;
@@ -183,7 +183,7 @@ export function ProjectsModule() {
 
       {projectForm.open && (
         <ProjectForm familyId={familyId} userId={userId} members={members} contractors={contractors.data} project={projectForm.project} defaultOwner={selfMember?.id ?? null}
-          onClose={() => setProjectForm({ open: false, project: null })} onSaved={(id) => { setProjectForm({ open: false, project: null }); setOpenId(id); success('Project saved'); }} />
+          onClose={() => setProjectForm({ open: false, project: null })} onSaved={(id) => { setProjectForm({ open: false, project: null }); setOpenId(id); success(tr('projectsModule.projectSaved')); }} />
       )}
       {openProject && (
         <ProjectDetail project={openProject} familyId={familyId} userId={userId} members={members} contractors={contractors.data} materials={materials.data.filter((m) => m.project_id === openProject.id)} quotes={quotes.data.filter((q) => q.project_id === openProject.id)} today={today}
@@ -210,7 +210,7 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = title.trim();
-    if (!name) return toastError('Name the project');
+    if (!name) return toastError(tr('projectsModule.nameTheProject'));
     setLoading(true);
     const payload = {
       title: name, description: description.trim() || null, room: String(f.get('room') ?? '').trim() || null, kind, is_diy: diy,
@@ -309,15 +309,15 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   async function deleteMaterial(m: Material) {
     const { error } = await createClient().from('project_materials').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Material removed');
+    success(tr('projectsModule.materialRemoved'));
   }
 
   async function suggestMaterials() {
     const t = templates[0];
-    if (!t) return toastError('No starter scope matches this project — add materials by hand.');
+    if (!t) return toastError(tr('projectsModule.noStarterScopeMatchesThis'));
     const have = new Set(materials.map((m) => m.name.toLowerCase()));
     const fresh = t.materials.filter((m) => !have.has(m.name.toLowerCase()));
-    if (!fresh.length) return toastError('Every suggested material is already listed.');
+    if (!fresh.length) return toastError(tr('projectsModule.everySuggestedMaterialIsAlready'));
     setSuggesting(true);
     const { error } = await createClient().from('project_materials').insert(fresh.map((m) => ({ family_id: familyId, project_id: project.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
     setSuggesting(false);
@@ -347,7 +347,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   async function deleteQuote(q: Quote) {
     const { error } = await createClient().from('project_quotes').delete().eq('id', q.id);
     if (error) return toastError(describeDbError(error));
-    success('Quote removed');
+    success(tr('projectsModule.quoteRemoved'));
   }
 
   const nextStatuses: HomeProjectStatus[] = project.status === 'done' || project.status === 'cancelled' ? ['planning'] : project.status === 'idea' ? ['planning', 'cancelled'] : project.status === 'in_progress' ? ['done', 'on_hold'] : project.status === 'scheduled' ? ['in_progress', 'on_hold'] : project.status === 'on_hold' ? ['planning', 'cancelled'] : ['quoting', 'scheduled', 'in_progress', 'done'];
@@ -446,8 +446,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
           )
         )}
 
-        {materialForm.open && <MaterialForm familyId={familyId} userId={userId} projectId={project.id} material={materialForm.material} onClose={() => setMaterialForm({ open: false, material: null })} onSaved={() => { setMaterialForm({ open: false, material: null }); success('Material saved'); }} />}
-        {quoteForm.open && <QuoteForm familyId={familyId} userId={userId} projectId={project.id} contractors={contractors} quote={quoteForm.quote} onClose={() => setQuoteForm({ open: false, quote: null })} onSaved={() => { setQuoteForm({ open: false, quote: null }); success('Quote saved'); }} />}
+        {materialForm.open && <MaterialForm familyId={familyId} userId={userId} projectId={project.id} material={materialForm.material} onClose={() => setMaterialForm({ open: false, material: null })} onSaved={() => { setMaterialForm({ open: false, material: null }); success(tr('projectsModule.materialSaved')); }} />}
+        {quoteForm.open && <QuoteForm familyId={familyId} userId={userId} projectId={project.id} contractors={contractors} quote={quoteForm.quote} onClose={() => setQuoteForm({ open: false, quote: null })} onSaved={() => { setQuoteForm({ open: false, quote: null }); success(tr('projectsModule.quoteSaved')); }} />}
       </div>
     </Modal>
   );
@@ -463,7 +463,7 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name the material');
+    if (!name) return toastError(tr('projectsModule.nameTheMaterial'));
     const quantity = Math.max(0.01, Number(f.get('quantity') ?? 1) || 1);
     setLoading(true);
     const payload = {
@@ -516,10 +516,10 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const contractorName = String(f.get('contractor_name') ?? '').trim() || chosen?.name || '';
-    if (!contractorName) return toastError('Who is the quote from?');
+    if (!contractorName) return toastError(tr('projectsModule.whoIsTheQuoteFrom'));
     const status = String(f.get('status') ?? 'received') as ProjectQuoteStatus;
     const amount = dollarsToCents(f.get('amount'));
-    if (status !== 'requested' && amount === null) return toastError('Enter the quoted amount');
+    if (status !== 'requested' && amount === null) return toastError(tr('projectsModule.enterTheQuotedAmount'));
     setLoading(true);
     const payload = {
       contractor_id: contractorId || null, contractor_name: contractorName, amount_cents: amount ?? 0, includes_materials: includesMaterials,

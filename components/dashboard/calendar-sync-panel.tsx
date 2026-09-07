@@ -65,7 +65,7 @@ export function CalendarSyncPanel() {
     if (!confirm(`Remove "${feed.name}" and its imported events?`)) return;
     const res = await removeCalendarFeed(feed.id);
     if (!res.ok) { toastError(res.error); return; }
-    success('Calendar removed');
+    success(t('calendarSyncPanel.calendarRemoved'));
   }
 
   return (

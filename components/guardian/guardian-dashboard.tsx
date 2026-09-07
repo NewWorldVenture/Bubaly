@@ -125,7 +125,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
 
   async function handleAcknowledge(id: string) {
     const res = await acknowledgeEscalationAction(id);
-    if (res.ok) { toastSuccess('Escalation acknowledged'); router.refresh(); }
+    if (res.ok) { toastSuccess(t('guardianDashboard.escalationAcknowledged')); router.refresh(); }
     else toastError(res.error);
   }
 

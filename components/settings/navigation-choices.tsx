@@ -120,7 +120,7 @@ export function NavigationChoices() {
     void persist(next, childMap);
   }
   function remove(href: string) {
-    if (keys.length <= 1) { toastError('Keep at least one destination in your sidebar.'); return; }
+    if (keys.length <= 1) { toastError(t('navigationChoices.keepAtLeastOneDestination')); return; }
     // Drop any saved sub-page layout for a removed group so it doesn't linger.
     const { [href]: _gone, ...restChildren } = childMap;
     void persist(keys.filter((k) => k !== href), restChildren);
@@ -132,7 +132,7 @@ export function NavigationChoices() {
   function reset() {
     if (isDefault) return;
     void persist([...DEFAULT_SIDEBAR_NAV_KEYS], {});
-    success('Sidebar reset to the default layout');
+    success(t('navigationChoices.sidebarResetToTheDefault'));
   }
 
   // ── Sub-page (child) ops ─────────────────────────────────────────────────────

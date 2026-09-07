@@ -119,7 +119,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.item.trim()) return toastError('Add a food item');
+    if (!v.item.trim()) return toastError(t('nutritionView.addAFoodItem'));
     setSaving(true);
     const { error } = await createClient().from('nutrition_logs').insert({
       family_id: familyId, member_id: v.member_id || null, logged_on: v.logged_on, meal: v.meal, item: v.item.trim(),
@@ -128,7 +128,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Logged');
+    success(t('nutritionView.logged'));
     onClose();
   }
 

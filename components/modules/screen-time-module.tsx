@@ -81,9 +81,9 @@ export function ScreenTimeModule() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('screenTimeModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('screen_time_entries').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('screenTimeModule.deleted'));
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -94,7 +94,7 @@ export function ScreenTimeModule() {
       .from('screen_time_limits')
       .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
     if (error) return toastError(describeDbError(error));
-    success('Daily limit saved');
+    success(t('screenTimeModule.dailyLimitSaved'));
     setLimitFor(null);
   }
 

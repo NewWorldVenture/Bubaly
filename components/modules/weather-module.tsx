@@ -168,7 +168,7 @@ export function WeatherModule() {
     await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
     const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
     if (err) return toastError(describeDbError(err));
-    success('Default city set');
+    success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 

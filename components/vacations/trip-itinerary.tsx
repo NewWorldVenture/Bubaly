@@ -72,12 +72,12 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   const [busy, setBusy] = useState(false);
 
   async function generateDays() {
-    if (!trip?.start_date || !trip?.end_date) return toastError('Set trip start and end dates first');
+    if (!trip?.start_date || !trip?.end_date) return toastError(t('tripItinerary.setTripStartAndEnd'));
     setBusy(true);
     const range = dateRange(trip.start_date, trip.end_date);
     const existing = new Set(days.map((d) => d.day_date));
     const toAdd = range.filter((d) => !existing.has(d)).map((d) => ({ family_id: familyId, vacation_id: vacationId, day_date: d, created_by: userId }));
-    if (toAdd.length === 0) { setBusy(false); return toastError('All days already exist'); }
+    if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
     if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
@@ -85,7 +85,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError('Title required');
+    if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
     const row = {
       day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
       title: form.title.trim(), location: form.location.trim() || null,
@@ -102,7 +102,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   }
 
   async function removeItem(id: string) {
-    if (!confirm('Delete this item?')) return;
+    if (!confirm(t('tripItinerary.deleteThisItem'))) return;
     const { error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id);
     if (error) toastError(error.message);
   }

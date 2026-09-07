@@ -87,8 +87,8 @@ export function TimetableModule() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.member_id) { toastError('Pick a family member'); return; }
-    if (!form.subject.trim()) { toastError('Subject is required'); return; }
+    if (!form.member_id) { toastError(t('timetableModule.pickAFamilyMember')); return; }
+    if (!form.subject.trim()) { toastError(t('timetableModule.subjectIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -112,8 +112,8 @@ export function TimetableModule() {
     if (!confirm(`Remove ${c.subject} from the timetable?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('school_classes').delete().eq('id', c.id);
-    if (err) { toastError('Failed to remove class'); return; }
-    success('Class removed');
+    if (err) { toastError(t('timetableModule.failedToRemoveClass')); return; }
+    success(t('timetableModule.classRemoved'));
     refresh();
   }
 

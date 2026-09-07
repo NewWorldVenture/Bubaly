@@ -70,7 +70,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     try {
       await undoCapture(createClient(), created.undo);
       const restore = text || created.title;
-      success('Undone');
+      success(t('captureShell.undone'));
       setCreated(null);
       setText(restore);
       setMode('type');
@@ -135,7 +135,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     };
     const w = window as unknown as Record<string, unknown>;
     const SR: SRCtor | undefined = (w['SpeechRecognition'] ?? w['webkitSpeechRecognition']) as SRCtor | undefined;
-    if (!SR) { toastError('Voice input is not supported in this browser.'); return; }
+    if (!SR) { toastError(t('captureShell.voiceInputIsNotSupported')); return; }
     const recognition = new SR();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
@@ -146,7 +146,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
       setRecording(false);
       setMode('type');
     };
-    recognition.onerror = () => { setRecording(false); toastError('Could not capture voice. Try again.'); };
+    recognition.onerror = () => { setRecording(false); toastError(t('captureShell.couldNotCaptureVoiceTry')); };
     recognition.onend = () => setRecording(false);
     recognition.start();
   }

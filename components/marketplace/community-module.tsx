@@ -59,8 +59,8 @@ export function CommunityModule({
     });
 
   const copyCode = async (c: string) => {
-    try { await navigator.clipboard.writeText(formatJoinCode(c)); success('Invite code copied'); }
-    catch { toastError('Could not copy'); }
+    try { await navigator.clipboard.writeText(formatJoinCode(c)); success(t('communityModule.inviteCodeCopied')); }
+    catch { toastError(t('communityModule.couldNotCopy')); }
   };
 
   return (

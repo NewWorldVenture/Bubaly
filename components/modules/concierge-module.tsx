@@ -110,7 +110,7 @@ export function ConciergeModule() {
       const assistantMsg: ChatMessage = { role: 'assistant', content: data.message ?? 'I couldn\'t generate a response.' };
       setMessages(prev => [...prev, assistantMsg]);
     } catch {
-      toastError('Could not reach the concierge AI. Please try again.');
+      toastError(tr('conciergeModule.couldNotReachTheConcierge'));
     } finally {
       setSending(false);
     }
@@ -129,7 +129,7 @@ export function ConciergeModule() {
       status: 'planning',
     });
     if (error) { toastError(describeDbError(error)); return; }
-    success('Plan saved!');
+    success(tr('conciergeModule.planSaved'));
     void refreshPlans();
     setActiveKind(null);
     setMessages([]);
@@ -501,6 +501,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
 function AddPlanModal({ familyId, userId, onClose, onSaved }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -518,7 +519,7 @@ function AddPlanModal({ familyId, userId, onClose, onSaved }: {
     const budgetStr = String(form.get('budget') ?? '').trim();
     const budget_cents = budgetStr ? Math.round(parseFloat(budgetStr) * 100) : null;
 
-    if (!title) return toastError('Add a plan title');
+    if (!title) return toastError(tr('conciergeModule.addAPlanTitle'));
 
     setLoading(true);
     const supabase = createClient();

@@ -122,7 +122,7 @@ export function HomeModule() {
       status: 'done', completed_at: new Date().toISOString(),
     }).eq('id', id);
     if (error) return toastError(describeDbError(error));
-    success('Task completed');
+    success(tr('homeModule.taskCompleted'));
     void refreshTasks();
   }
 
@@ -130,7 +130,7 @@ export function HomeModule() {
     const supabase = createClient();
     const { error } = await supabase.from('home_assets').delete().eq('id', id);
     if (error) return toastError(describeDbError(error));
-    success('Asset removed');
+    success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
 
@@ -335,7 +335,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
       .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
-    success('Warranty date saved');
+    success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }
 
@@ -362,7 +362,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
       await removeFamilyDocument(supabase, path);
       return toastError(describeDbError(insertError));
     }
-    success('Warranty document saved');
+    success(tr('homeModule.warrantyDocumentSaved'));
     onChanged();
   }
 
@@ -381,7 +381,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     const { error } = await supabase.from('documents').delete().eq('id', doc.id);
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
-    success('File removed');
+    success(tr('homeModule.fileRemoved'));
     onChanged();
   }
 
@@ -452,7 +452,7 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(tr('homeModule.nameIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.from('home_assets').insert({
@@ -465,7 +465,7 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
     });
     setLoading(false);
     if (error) return toastError(describeDbError(error));
-    success('Asset added');
+    success(tr('homeModule.assetAdded'));
     onCreated();
   }
 
@@ -507,7 +507,7 @@ function NewTaskModal({ familyId, userId, assets, onClose, onCreated }: {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
-    if (!title) return toastError('Title is required');
+    if (!title) return toastError(tr('homeModule.titleIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.from('maintenance_tasks').insert({
@@ -521,7 +521,7 @@ function NewTaskModal({ familyId, userId, assets, onClose, onCreated }: {
     });
     setLoading(false);
     if (error) return toastError(describeDbError(error));
-    success('Task created');
+    success(tr('homeModule.taskCreated'));
     onCreated();
   }
 

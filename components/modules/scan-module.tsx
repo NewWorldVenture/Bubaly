@@ -42,7 +42,7 @@ export function ScanModule() {
 
   async function onFile(file: File | null) {
     if (!file) return;
-    if (file.size > MAX_BYTES) { toastError('File is too large (5 MB max).'); return; }
+    if (file.size > MAX_BYTES) { toastError(t('scanModule.fileIsTooLarge5')); return; }
     setEvents(null);
     setFileName(file.name);
     setPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
@@ -59,9 +59,9 @@ export function ScanModule() {
       const found: ProposedEvent[] = json.events ?? [];
       setEvents(found);
       setSelected(new Set(found.map((_, i) => i)));
-      if (found.length === 0) toastError('No events found on that flyer.');
+      if (found.length === 0) toastError(t('scanModule.noEventsFoundOnThat'));
     } catch {
-      toastError('Something went wrong reading the file.');
+      toastError(t('scanModule.somethingWentWrongReadingThe'));
     } finally {
       setScanning(false);
     }
@@ -90,7 +90,7 @@ export function ScanModule() {
       success(`Added ${json.created} event${json.created === 1 ? '' : 's'} to your calendar.`);
       setEvents(null); setSelected(new Set()); setPreview(null); setFileName(null);
     } catch {
-      toastError('Network error. Please try again.');
+      toastError(t('scanModule.networkErrorPleaseTryAgain'));
     } finally {
       setAdding(false);
     }

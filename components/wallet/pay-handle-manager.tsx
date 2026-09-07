@@ -43,14 +43,14 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
   async function copy(h: string) {
     const url = payHandleUrl(baseUrl, h);
     try { await navigator.clipboard.writeText(url); setCopied(h); setTimeout(() => setCopied(null), 1500); }
-    catch { toastError('Could not copy'); }
+    catch { toastError(t('payHandleManager.couldNotCopy')); }
   }
 
   async function release(id: string) {
-    if (typeof window !== 'undefined' && !window.confirm('Release this Pay-ID? The link will stop working.')) return;
+    if (typeof window !== 'undefined' && !window.confirm(t('payHandleManager.releaseThisPayIdThe'))) return;
     const res = await releasePayHandleAction({ id });
     if (!res.ok) return toastError(res.error ?? 'Could not release');
-    success('Pay-ID released');
+    success(t('payHandleManager.payIdReleased'));
     router.refresh();
   }
 

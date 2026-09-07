@@ -86,7 +86,7 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success('Playbook started — your checklist is ready');
+    success(tr('lifeEventsModule.playbookStartedYourChecklistIs'));
     setStartTemplate(null);
   }
 
@@ -103,9 +103,9 @@ export function LifeEventsModule() {
     if (!res.ok) toastError(res.error);
   }
   async function removeFact(f: Fact) {
-    if (!confirm('Remove this?')) return;
+    if (!confirm(tr('lifeEventsModule.removeThis'))) return;
     const res = await forgetFactAction(f.id);
-    if (!res.ok) toastError(res.error); else success('Removed');
+    if (!res.ok) toastError(res.error); else success(tr('lifeEventsModule.removed'));
   }
 
   if (loading) return <SkeletonList count={5} />;

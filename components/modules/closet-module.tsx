@@ -109,7 +109,7 @@ export function ClosetModule() {
   const memberName = (id: string) => members.find((m) => m.id === id)?.display_name ?? 'Member';
 
   async function logWear(itemIds: string[], outfitId: string | null) {
-    if (!itemIds.length) return toastError('Pick at least one item first');
+    if (!itemIds.length) return toastError(t('closetModule.pickAtLeastOneItem'));
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.from('outfit_logs').insert({
@@ -124,11 +124,11 @@ export function ClosetModule() {
     setBusy(false);
     const failed = results.find((r) => r.error);
     if (failed?.error) return toastError(describeDbError(failed.error));
-    success('Logged today’s outfit');
+    success(t('closetModule.loggedTodaySOutfit'));
   }
 
   async function saveSuggestionAsOutfit() {
-    if (!suggestion.picks.length) return toastError('Nothing to save yet');
+    if (!suggestion.picks.length) return toastError(t('closetModule.nothingToSaveYet'));
     const band = tempBand(tempC);
     const { error } = await createClient().from('outfits').insert({
       family_id: familyId, member_id: memberId,
@@ -136,7 +136,7 @@ export function ClosetModule() {
       occasion, item_ids: suggestion.picks.map((p) => p.item.id), temp_min_c: band.min, temp_max_c: band.max, created_by: userId,
     });
     if (error) return toastError(describeDbError(error));
-    success('Outfit saved');
+    success(t('closetModule.outfitSaved'));
   }
 
   async function setItemStatus(item: Item, status: WardrobeStatus) {
@@ -149,7 +149,7 @@ export function ClosetModule() {
     if (!confirm(`Remove ${item.name} from the closet?`)) return;
     const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
-    success('Item removed');
+    success(t('closetModule.itemRemoved'));
   }
 
   async function toggleFavorite(outfit: Outfit) {
@@ -161,7 +161,7 @@ export function ClosetModule() {
     if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
     const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
     if (error) return toastError(describeDbError(error));
-    success('Outfit deleted');
+    success(t('closetModule.outfitDeleted'));
   }
 
   const loading = items.loading || outfits.loading || logs.loading;
@@ -386,7 +386,7 @@ export function ClosetModule() {
       {builderOpen && memberId && (
         <OutfitBuilder
           familyId={familyId} userId={userId} memberId={memberId} items={memberItems.filter((i) => i.status === 'active')}
-          onClose={() => setBuilderOpen(false)} onSaved={() => { setBuilderOpen(false); success('Outfit saved'); }}
+          onClose={() => setBuilderOpen(false)} onSaved={() => { setBuilderOpen(false); success(t('closetModule.outfitSaved')); }}
         />
       )}
     </div>
@@ -422,7 +422,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('closetModule.nameIsRequired'));
     setLoading(true);
     const payload = {
       member_id: String(f.get('member_id') ?? memberId),
@@ -519,8 +519,8 @@ function OutfitBuilder({ familyId, userId, memberId, items, onClose, onSaved }: 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Give the outfit a name');
-    if (selected.length === 0) return toastError('Pick at least one item');
+    if (!name) return toastError(t('closetModule.giveTheOutfitAName'));
+    if (selected.length === 0) return toastError(t('closetModule.pickAtLeastOneItem2'));
     setLoading(true);
     const { error } = await createClient().from('outfits').insert({
       family_id: familyId, member_id: memberId, name, occasion: String(f.get('occasion') ?? 'everyday') as OutfitOccasion,

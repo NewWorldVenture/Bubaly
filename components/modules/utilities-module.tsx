@@ -61,22 +61,22 @@ export function UtilitiesModule() {
     };
     const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
     if (error) return toastError(describeDbError(error));
-    success('Bill added'); setForm(null);
+    success(t('utilitiesModule.billAdded')); setForm(null);
   }
   async function remove(id: string) {
-    if (!confirm('Delete this bill?')) return;
+    if (!confirm(t('utilitiesModule.deleteThisBill'))) return;
     const { error } = await createClient().from('utility_bills').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('utilitiesModule.deleted'));
   }
   async function analyze() {
     setAnalyzing(true);
     try {
       const res = await fetch('/api/ai/home/utility-savings', { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not analyse utilities'); return; }
+      if (!res.ok) { toastError(data.error ?? t('utilitiesModule.couldNotAnalyseUtilities')); return; }
       setSavings(data as SavingsResult);
     } catch {
-      toastError('Could not analyse utilities');
+      toastError(t('utilitiesModule.couldNotAnalyseUtilities'));
     } finally {
       setAnalyzing(false);
     }

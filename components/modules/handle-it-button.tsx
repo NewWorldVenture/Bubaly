@@ -9,6 +9,7 @@
 // quieter way to make Bubaly act. A plan lands on the run page like any other,
 // so a person still sees what it intends to do before it does it.
 import { useCallback, useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useRouter } from 'next/navigation';
 import { Loader2, Sparkles } from 'lucide-react';
 import { submitAIRequest } from '@/lib/ai/chat-request';
@@ -16,6 +17,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
 export function HandleItButton({ request, label = 'Let Bubaly handle it', className }: { request: string; label?: string; className?: string }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState(false);
@@ -30,11 +32,11 @@ export function HandleItButton({ request, label = 'Let Bubaly handle it', classN
       return;
     }
     const data = result.data;
-    if (data.outcome === 'plan' && data.redirect) { success('Bubaly is on it.'); router.push(data.redirect); return; }
+    if (data.outcome === 'plan' && data.redirect) { success(t('handleItButton.bubalyIsOnIt')); router.push(data.redirect); return; }
     // An answer, a question or a recommendation has nowhere to navigate to;
     // the summary is the reply, and saying it is better than a silent button.
     success(data.summary || 'Bubaly had a look.');
-  }, [busy, request, router, success, toastError]);
+  }, [busy, request, router, success, toastError, t]);
 
   return (
     <button

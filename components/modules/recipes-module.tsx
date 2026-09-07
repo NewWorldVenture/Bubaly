@@ -145,7 +145,7 @@ export function RecipesModule() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
-      success('AI variant saved to your recipes');
+      success(tr('recipesModule.aiVariantSavedToYour'));
       setViewing(null);
     } catch (err) {
       toastError(describeDbError(err, 'Could not generate variant'));
@@ -161,7 +161,7 @@ export function RecipesModule() {
       last_made_at: new Date().toISOString(),
     }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Marked as made today! 🍴');
+    success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
 
@@ -380,7 +380,7 @@ export function RecipesModule() {
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm('Delete this recipe?')) deleteRecipe(viewing.id); }}
+                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -612,7 +612,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
       instructions: instructions.filter((s) => s.text.trim()),
       allergy_flags: selectedFlags,
     };
-    if (!payload.name) return toastError('Recipe name is required');
+    if (!payload.name) return toastError(tr('recipesModule.recipeNameIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { error } = recipe

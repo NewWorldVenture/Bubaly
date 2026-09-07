@@ -76,7 +76,7 @@ export function DecisionsModule() {
     const results = await Promise.all(updates);
     const err = results.find((x) => x.error)?.error;
     if (err) { toastError(describeDbError(err)); return; }
-    success('Scores saved to the decision');
+    success(t('decisionsModule.scoresSavedToTheDecision'));
   }
 
   async function choose(optionId: string) {
@@ -85,7 +85,7 @@ export function DecisionsModule() {
     const { error } = await sb.from('family_decisions')
       .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Decision recorded');
+    success(t('decisionsModule.decisionRecorded'));
   }
 
   const loading = ld || lo;
@@ -214,13 +214,13 @@ export function DecisionsModule() {
       {addDecision && (
         <AddDecisionModal familyId={familyId} userId={userId}
           onClose={() => setAddDecision(false)}
-          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success('Decision created'); }}
+          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success(t('decisionsModule.decisionCreated')); }}
           onError={toastError} />
       )}
       {addOption && selected && (
         <AddOptionModal familyId={familyId} userId={userId} decisionId={selected.id}
           onClose={() => setAddOption(false)}
-          onSaved={() => { setAddOption(false); success('Option added'); }}
+          onSaved={() => { setAddOption(false); success(t('decisionsModule.optionAdded')); }}
           onError={toastError} />
       )}
     </div>

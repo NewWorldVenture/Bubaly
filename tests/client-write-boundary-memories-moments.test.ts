@@ -26,7 +26,7 @@ describe('memories create-memory undo surfaces a failed delete', () => {
   it('does not claim success before the delete is confirmed', () => {
     const start = src.indexOf('async function undo(');
     const undo = src.slice(start, src.indexOf('async function', start + 20));
-    const successIdx = undo.indexOf("success('Memory undone");
+    const successIdx = undo.indexOf("success(t('createMemory.memoryUndoneNothingWasSaved')");
     const guardIdx = undo.indexOf('if (delErr)');
     expect(guardIdx).toBeGreaterThan(-1);
     expect(successIdx).toBeGreaterThan(guardIdx); // success only after the error guard

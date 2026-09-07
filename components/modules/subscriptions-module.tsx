@@ -84,16 +84,16 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
   async function markUsed(id: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ last_used: new Date().toISOString().slice(0, 10) }).eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Marked used today');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this subscription?')) return;
+    if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
     const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);

@@ -84,7 +84,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
         visitedAt: logForm.when ? new Date(logForm.when + 'T19:00:00').toISOString() : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
-      success('Visit logged.');
+      success(t('diningModule.visitLogged'));
       setLogOpen(false);
       setLogForm({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
       router.refresh();

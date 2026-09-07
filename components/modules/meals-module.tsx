@@ -210,7 +210,7 @@ export function MealsModule() {
       vote_id: voteData.vote.id, option_id: optionId, family_id: familyId, member_id: selfId, choice: 'yes',
     });
     if (error) return toastError(describeDbError(error));
-    success('Vote recorded');
+    success(tr('mealsModule.voteRecorded'));
     void loadVote();
   }
 
@@ -650,7 +650,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
   }
 
   async function run() {
-    if (selected.length === 0) return toastError('Pick at least one meal to plan');
+    if (selected.length === 0) return toastError(tr('mealsModule.pickAtLeastOneMeal'));
     setLoading(true);
     try {
       const res = await fetch('/api/ai/meals/plan', {
@@ -666,7 +666,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
       success(`Planned ${data.count ?? data.assignments?.length ?? 0} meals for the week! 🍽️`);
       onPlanned();
     } catch {
-      toastError('Network error — please try again');
+      toastError(tr('mealsModule.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
@@ -741,11 +741,11 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
       });
       setCached(json.cached);
     } catch {
-      toastError('Network error — please try again');
+      toastError(tr('mealsModule.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
-  }, [weekStart, toastError]);
+  }, [weekStart, toastError, tr]);
 
   useEffect(() => { setData(null); setCached(false); }, [weekStart]);
 
@@ -806,7 +806,7 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
     const meal_type = String(form.get('meal_type') ?? 'dinner') as MealType;
     const image_url = String(form.get('image_url') ?? '').trim() || null;
     const recipe_url = String(form.get('recipe_url') ?? '').trim() || null;
-    if (!name) return toastError('Name required');
+    if (!name) return toastError(tr('mealsModule.nameRequired'));
     setLoading(true);
     const { error } = await createClient().from('meals').insert({ family_id: familyId, name, meal_type, image_url, recipe_url, ingredients: [], created_by: userId });
     setLoading(false);

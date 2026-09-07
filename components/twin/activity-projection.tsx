@@ -86,7 +86,7 @@ export function ActivityProjection({
     startTransition(async () => {
       const res = await saveSimulationAction(currentInput(), result);
       if (!res.ok) { toastError(res.error); return; }
-      success('Scenario saved.'); router.refresh();
+      success(t('activityProjection.scenarioSaved')); router.refresh();
     });
   }
   function remove(id: string) {

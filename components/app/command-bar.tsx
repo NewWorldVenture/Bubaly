@@ -109,14 +109,14 @@ export function CommandBar() {
       setOpen(false);
       success(
         res.count > 1 ? `${res.count} items added` : r.label,
-        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo')); } },
+        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
       toastError(describeDbError(err, 'Could not save that.'));
     } finally {
       setBusy(false);
     }
-  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError]);
+  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { setOpen(false); return; }

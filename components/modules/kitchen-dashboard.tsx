@@ -182,7 +182,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Food score saved');
+    success(tr('kitchenDashboard.foodScoreSaved'));
     router.refresh();
   }
 
@@ -326,7 +326,7 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Give the leftover a name.');
+    if (!name) return toastError(tr('kitchenDashboard.giveTheLeftoverAName'));
     setLoading(true);
     const res = await addLeftoverAction({
       name,
@@ -337,7 +337,7 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Leftover logged');
+    success(tr('kitchenDashboard.leftoverLogged'));
     onClose();
     router.refresh();
   }
@@ -403,7 +403,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
       setReply(json.reply);
       setSource(json.source);
     } catch {
-      toastError('Network problem — please try again.');
+      toastError(tr('kitchenDashboard.networkProblemPleaseTryAgain'));
     } finally {
       setLoading(false);
     }

@@ -67,12 +67,12 @@ export function PaperworkModule({ items }: { items: Item[] }) {
     startTransition(async () => {
       const res = await draftPaperworkReplyAction(itemId);
       setBusyKey(null);
-      if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success('AI drafted a reply'); }
+      if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success(t('paperworkModule.aiDraftedAReply')); }
       else toastError(res.error);
     });
   };
   const copyDraft = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); success('Copied'); } catch { toastError('Could not copy'); }
+    try { await navigator.clipboard.writeText(text); success(t('paperworkModule.copied')); } catch { toastError(t('paperworkModule.couldNotCopy')); }
   };
 
   const counts = useMemo(() => {

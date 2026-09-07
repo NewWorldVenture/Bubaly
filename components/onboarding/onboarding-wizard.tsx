@@ -313,7 +313,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
     const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined });
     setLoading(null);
     if (!res.ok) { toastError(res.error); return; }
-    if (!res.data) { toastError('Could not read that calendar'); return; }
+    if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }
     setBrief(res.data.brief);
     update({ importedEvents: res.data.events, importSource: res.data.source });
     trackOnboarding('value', 'step');

@@ -44,8 +44,8 @@ export function FridgeChef() {
 
   async function onFile(file: File | null) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) { toastError('Please choose a photo (JPG/PNG/WebP).'); return; }
-    if (file.size > MAX_BYTES) { toastError('Photo is too large (5 MB max).'); return; }
+    if (!file.type.startsWith('image/')) { toastError(t('fridgeChef.pleaseChooseAPhotoJpg')); return; }
+    if (file.size > MAX_BYTES) { toastError(t('fridgeChef.photoIsTooLarge5')); return; }
     setRecipes(null);
     setAdded(new Set());
     setPlanned(new Set());
@@ -62,9 +62,9 @@ export function FridgeChef() {
       if (!res.ok) { toastError(json.error ?? 'Could not read that photo.'); return; }
       const found: Recipe[] = json.recipes ?? [];
       setRecipes(found);
-      if (found.length === 0) toastError('No food spotted — try a clearer, well-lit photo.');
+      if (found.length === 0) toastError(t('fridgeChef.noFoodSpottedTryA'));
     } catch {
-      toastError('Something went wrong reading the photo.');
+      toastError(t('fridgeChef.somethingWentWrongReadingThe'));
     } finally {
       setScanning(false);
     }
@@ -80,11 +80,11 @@ export function FridgeChef() {
         body: JSON.stringify({ addToGrocery: recipe.need }),
       });
       const json = await res.json();
-      if (!res.ok) { toastError(json.error ?? 'Could not update your grocery list.'); return; }
+      if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
       success(`Added ${json.added ?? recipe.need.length} item${(json.added ?? 0) === 1 ? '' : 's'} to your grocery list.`);
     } catch {
-      toastError('Could not update your grocery list.');
+      toastError(t('fridgeChef.couldNotUpdateYourGrocery'));
     } finally {
       setAddingIndex(null);
     }
@@ -100,11 +100,11 @@ export function FridgeChef() {
         body: JSON.stringify({ addToPlan: { title: recipe.title, steps: recipe.steps, have: recipe.have, need: recipe.need } }),
       });
       const json = await res.json();
-      if (!res.ok) { toastError(json.error ?? 'Could not add that to your meal plan.'); return; }
+      if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotAddThatTo')); return; }
       setPlanned((prev) => new Set(prev).add(index));
       success(`“${recipe.title}” planned for tonight's dinner.`);
     } catch {
-      toastError('Could not add that to your meal plan.');
+      toastError(t('fridgeChef.couldNotAddThatTo'));
     } finally {
       setPlanningIndex(null);
     }

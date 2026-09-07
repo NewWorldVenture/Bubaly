@@ -30,7 +30,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
     const res = await activateFamilyWalletAction();
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not activate the wallet');
-    success('Family Wallet activated 🎉');
+    success(t('walletActivation.familyWalletActivated'));
     router.refresh();
   }
 

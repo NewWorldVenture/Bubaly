@@ -83,9 +83,9 @@ export function BehaviorModule() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {

@@ -130,7 +130,7 @@ export function NextActionsModule() {
     const result = await completeTodoAction(taskId, true);
     if (!result.ok) { toastError(result.error); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
-    success('Nice — one less thing');
+    success(i18nT('nextActionsModule.niceOneLessThing'));
   }
 
   if (loading) return <SkeletonList count={6} />;

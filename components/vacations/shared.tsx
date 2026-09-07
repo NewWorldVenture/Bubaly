@@ -135,9 +135,9 @@ export function TripCrudSection<T extends Row>({
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this item?')) return;
+    if (!confirm(t('shared.deleteThisItem'))) return;
     const { error } = await (createClient() as any).from(table).delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('shared.deleted'));
   }
 
   return (

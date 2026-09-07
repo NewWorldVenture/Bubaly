@@ -57,7 +57,7 @@ export function JournalModule() {
     const supabase = createClient();
     const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
     if (delErr) return toastError(describeDbError(delErr));
-    success('Entry deleted');
+    success(t('journalModule.entryDeleted'));
     void refresh();
   }
 
@@ -94,7 +94,7 @@ export function JournalModule() {
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
                     <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm('Delete this entry?')) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (
@@ -185,7 +185,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim() || null;
     const finalBody = body.trim();
-    if (!finalBody && !title) return toastError('Write something first');
+    if (!finalBody && !title) return toastError(t('journalModule.writeSomethingFirst'));
     setLoading(true);
     const supabase = createClient();
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };

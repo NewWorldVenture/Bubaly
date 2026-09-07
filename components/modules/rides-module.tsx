@@ -99,7 +99,7 @@ export function RidesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(tr('ridesModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -128,7 +128,7 @@ export function RidesModule() {
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Ride deleted');
+    success(tr('ridesModule.rideDeleted'));
   }
 
   async function setStatus(r: Ride, status: RideStatus) {

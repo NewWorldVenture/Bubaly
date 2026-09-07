@@ -103,9 +103,9 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     setSaving(field);
     const res = await saveAISettingsAction(patch);
     setSaving(null);
-    if (res.ok) { setSettings(res.settings); success('Saved'); }
+    if (res.ok) { setSettings(res.settings); success(t('aiSettings.saved')); }
     else { toastError(res.error); const reload = await loadAISettingsAction(); if (reload.ok) setSettings(reload.settings); }
-  }, [success, toastError]);
+  }, [success, toastError, t]);
 
   if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
   if (!settings) {

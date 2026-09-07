@@ -67,7 +67,7 @@ export function PlanningModule() {
     const res = await generatePrepPlansAction();
     setGenerating(false);
     if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
-    if (res.plans === 0) { toastError('Nothing on the horizon yet — add a trip, birthday, or document date.'); return; }
+    if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
     success(`${res.plans} prep ${res.plans === 1 ? 'plan' : 'plans'} ready`);
   }
 
@@ -80,7 +80,7 @@ export function PlanningModule() {
     const sb = createClient();
     const { error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Plan dismissed');
+    success(t('planningModule.planDismissed'));
   }
 
   return (

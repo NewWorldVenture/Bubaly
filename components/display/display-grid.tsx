@@ -543,7 +543,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
     setSaving(false);
     if (error) { toastError(error.message); return; }
-    success('Display saved'); setEditing(false);
+    success(tr('displayGrid.displaySaved')); setEditing(false);
   }
 
   const dayIcon = part === 'night' || part === 'evening' ? Moon : Sun;

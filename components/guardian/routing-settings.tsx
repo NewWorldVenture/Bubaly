@@ -124,7 +124,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
       context_overrides: form.context_overrides,
     });
     setSaving(false);
-    if (res.ok) toastSuccess('Settings saved');
+    if (res.ok) toastSuccess(tr('routingSettings.settingsSaved'));
     else toastError(res.error);
   }
 

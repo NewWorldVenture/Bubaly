@@ -85,7 +85,7 @@ export function MoneyCardsView({
     const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Virtual card created!');
+    success(t('moneyCardsView.virtualCardCreated'));
     router.refresh();
   }
 
@@ -458,6 +458,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 // ─── Card Controls Editor ─────────────────────────────────────────────────────
 
 function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [limitDollars, setLimitDollars] = useState(card.spendLimitCents != null ? String(card.spendLimitCents / 100) : '');
@@ -475,12 +476,12 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
     const spendLimitCents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
     if (spendLimitCents != null && (!Number.isFinite(spendLimitCents) || spendLimitCents <= 0)) {
       setSaving(false);
-      return toastError('Enter a valid limit, or leave it blank for no limit.');
+      return toastError(t('moneyCardsView.enterAValidLimitOr'));
     }
     const res = await updateCardControlsAction({ cardId: card.id, spendLimitCents, spendWindow: windowVal, blockedCategories: blocked });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save controls.');
-    success('Controls saved');
+    success(t('moneyCardsView.controlsSaved'));
     onSaved();
   }
 

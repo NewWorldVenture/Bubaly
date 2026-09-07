@@ -111,7 +111,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
         start_minutes: s.startMinutes, duration_minutes: s.durationMinutes, assignee_id: s.assigneeId, sort_order: 0,
       });
       if (e2) throw e2;
-      success('Routine saved');
+      success(tr('routinesPanel.routineSaved'));
       refreshAll();
     });
   }
@@ -127,13 +127,13 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
 
   function applyTemplate(t: Template) {
     const its = itemsByTemplate.get(t.id) ?? [];
-    if (its.length === 0) { toastError('Add a step to this routine first.'); return; }
+    if (its.length === 0) { toastError(tr('routinesPanel.addAStepToThis')); return; }
     return run(`apply:${t.id}`, async () => {
       const rows = materializeRoutine(
         { weekday_mask: t.weekday_mask, items: its.map((i) => ({ title: i.title, category: i.category, start_minutes: i.start_minutes, duration_minutes: i.duration_minutes, assignee_id: i.assignee_id })) },
         weekStartMonday, 1,
       );
-      if (rows.length === 0) { toastError('This routine has no active days.'); return; }
+      if (rows.length === 0) { toastError(tr('routinesPanel.thisRoutineHasNoActive')); return; }
       // One write, and one composition. Applying this routine to this week twice
       // used to add the week twice; the batch carries a key derived from the id
       // below, so the second Apply is answered with the events the first created.
@@ -160,7 +160,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             // routine and week is a NEW composition — otherwise the batch key
             // would answer it with events that no longer exist.
             delete applyIds.current[key];
-            success('Undone');
+            success(tr('routinesPanel.undone'));
             onApplied();
           });
         },
@@ -174,7 +174,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     return run(`del:${t.id}`, async () => {
       const { error } = await createClient().from('routine_templates').delete().eq('id', t.id);
       if (error) throw error;
-      success('Routine deleted');
+      success(tr('routinesPanel.routineDeleted'));
       refreshAll();
     });
   }
@@ -288,10 +288,10 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
 
   async function save() {
     const cleanName = name.trim();
-    if (!cleanName) { toastError('Name your routine'); return; }
+    if (!cleanName) { toastError(tr('routinesPanel.nameYourRoutine')); return; }
     const steps = rows.filter((r) => r.title.trim());
-    if (steps.length === 0) { toastError('Add at least one step'); return; }
-    if (mask === 0) { toastError('Pick at least one day'); return; }
+    if (steps.length === 0) { toastError(tr('routinesPanel.addAtLeastOneStep')); return; }
+    if (mask === 0) { toastError(tr('routinesPanel.pickAtLeastOneDay')); return; }
     setSaving(true);
     try {
       const sb = createClient();

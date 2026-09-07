@@ -94,7 +94,7 @@ export function VotingModule() {
     e.preventDefault();
     if (!form || !form.question.trim()) return;
     const opts = form.options.filter((o) => o.label.trim());
-    if (opts.length < 2) return toastError('Add at least two options');
+    if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
     const supabase = createClient();
     const { data: poll, error } = await supabase.from('family_polls').insert({
       family_id: familyId,
@@ -118,12 +118,12 @@ export function VotingModule() {
       })),
     );
     if (oErr) return toastError(describeDbError(oErr));
-    success('Poll created');
+    success(tr('votingModule.pollCreated'));
     setForm(null);
   }
 
   async function vote(poll: Poll, optionId: string) {
-    if (!meId) return toastError('Join the family as a member to vote');
+    if (!meId) return toastError(tr('votingModule.joinTheFamilyAsA'));
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
@@ -147,9 +147,9 @@ export function VotingModule() {
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this poll?')) return;
+    if (!confirm(tr('votingModule.deleteThisPoll'))) return;
     const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('votingModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

@@ -132,10 +132,10 @@ function FocusQueue() {
         if (!active.current) return;
         if (outcome === 'completed') {
           setDoneCount((n) => n + 1);
-          success('To-do saved as done.');
+          success(tr('focusModule.toDoSavedAsDone'));
         } else if (outcome === 'submitted') {
           setSubmittedCount((n) => n + 1);
-          success('Chore submitted for approval.');
+          success(tr('focusModule.choreSubmittedForApproval'));
         }
         setIndex((i) => i + 1);
       });

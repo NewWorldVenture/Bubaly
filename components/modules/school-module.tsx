@@ -227,8 +227,8 @@ export function SchoolModule() {
       member_id: eventForm.member_id || null, school_name: eventForm.school_name || null, created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save event'); return; }
-    success('Event added!');
+    if (err) { toastError(tr('schoolModule.failedToSaveEvent')); return; }
+    success(tr('schoolModule.eventAdded'));
     setEventOpen(false);
     setEventForm({ title: '', event_type: 'assignment', starts_at: '', notes: '', member_id: '', school_name: '' });
     refreshEvents();
@@ -245,8 +245,8 @@ export function SchoolModule() {
       school_name: classForm.school_name || null, created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save class'); return; }
-    success('Class added!');
+    if (err) { toastError(tr('schoolModule.failedToSaveClass')); return; }
+    success(tr('schoolModule.classAdded'));
     setClassOpen(false);
     setClassForm({ member_id: '', subject: '', teacher: '', room: '', time_slot: '', day_of_week: '1', school_name: '' });
     refreshClasses();
@@ -264,8 +264,8 @@ export function SchoolModule() {
       date: gradeForm.date || new Date().toISOString().split('T')[0], created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save grade'); return; }
-    success('Grade added!');
+    if (err) { toastError(tr('schoolModule.failedToSaveGrade')); return; }
+    success(tr('schoolModule.gradeAdded'));
     setGradeOpen(false);
     setGradeForm({ member_id: '', subject: '', title: '', grade: '', grade_type: 'test', score: '', max_score: '100', date: '' });
     refreshGrades();

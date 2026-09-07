@@ -224,7 +224,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     const res = await deletePolicyAction({ id: p.id });
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not delete');
-    success('Policy deleted'); router.refresh();
+    success(tr('trustModule.policyDeleted')); router.refresh();
   }
 
   function subjectLabel(p: Policy) {
@@ -547,7 +547,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
     const res = await revokeDelegationAction({ id });
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not revoke');
-    success('Delegation revoked'); router.refresh();
+    success(tr('trustModule.delegationRevoked')); router.refresh();
   }
 
   return (
@@ -601,8 +601,8 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
     const toMemberId = String(form.get('to') ?? '');
     const reason = String(form.get('reason') ?? '').trim();
     const expiresAt = String(form.get('expiresAt') ?? '');
-    if (!fromMemberId || !toMemberId) return toastError('Pick both members');
-    if (!expiresAt) return toastError('Pick an expiry');
+    if (!fromMemberId || !toMemberId) return toastError(tr('trustModule.pickBothMembers'));
+    if (!expiresAt) return toastError(tr('trustModule.pickAnExpiry'));
     setLoading(true);
     const res = await createDelegationAction({ fromMemberId, toMemberId, domains, reason, expiresAt: new Date(expiresAt).toISOString() });
     setLoading(false);
@@ -657,7 +657,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     const res = await activateEmergencyAction({ kind, reason: undefined, elevatedDomains: domains });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not activate');
-    success('Emergency mode activated'); router.refresh();
+    success(tr('trustModule.emergencyModeActivated')); router.refresh();
   }
   async function end() {
     if (!active || loading) return;
@@ -665,7 +665,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     const res = await endEmergencyAction({ id: active.id });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not end');
-    success('Emergency mode ended'); router.refresh();
+    success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
 
   if (active) {
@@ -761,6 +761,7 @@ function EmptyCard({ icon: Icon, title, sub }: { icon: React.ComponentType<{ cla
 }
 
 function EndEmergencyButton({ id }: { id: string }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -769,7 +770,7 @@ function EndEmergencyButton({ id }: { id: string }) {
     const res = await endEmergencyAction({ id });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not end');
-    success('Emergency mode ended'); router.refresh();
+    success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
   return (
     <button onClick={end} disabled={loading} className="flex-shrink-0 rounded-lg bg-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/30 transition">

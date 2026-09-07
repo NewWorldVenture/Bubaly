@@ -275,7 +275,7 @@ export function AssistantModule() {
   }
 
   async function deleteConversation(id: string) {
-    if (!confirm('Delete this conversation?')) return;
+    if (!confirm(t('assistantModule.deleteThisConversation'))) return;
     const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
     if (error) {
       console.error('[assistant] conversation delete failed', error);
@@ -287,7 +287,7 @@ export function AssistantModule() {
   }
 
   async function renameConversation(id: string, current: string) {
-    const title = window.prompt('Rename conversation', current || '')?.trim();
+    const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
     const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
     if (error) {

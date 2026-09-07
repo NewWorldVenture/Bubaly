@@ -121,7 +121,7 @@ export function NotesModule() {
   async function remove(id: string) {
     const res = await deleteNoteAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Note deleted');
+    success(t('notesModule.noteDeleted'));
     void refresh();
     if (viewing?.id === id) setViewing(null);
   }
@@ -139,7 +139,7 @@ export function NotesModule() {
     // Only the id: the copy is made from the note as the database has it.
     const res = await duplicateNoteAction(note.id);
     if (!res.ok) return toastError(res.error);
-    success('Note duplicated');
+    success(t('notesModule.noteDuplicated'));
     void refresh();
   }
 
@@ -224,7 +224,7 @@ export function NotesModule() {
                   {t('notes.edit')}
                 </button>
               </div>
-              <button onClick={() => { if (confirm('Delete this note?')) remove(viewing.id); }}
+              <button onClick={() => { if (confirm(t('notesModule.deleteThisNote'))) remove(viewing.id); }}
                 className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -401,7 +401,7 @@ function NoteModal({ note, onClose, onSaved }: {
     if (!insights) return;
     setBodyValue((v) => (v.trimEnd() + formatInsightsForNote(insights)).trimStart());
     setInsights(null);
-    success('AI summary added to note');
+    success(t('notesModule.aiSummaryAddedToNote'));
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -409,12 +409,12 @@ function NoteModal({ note, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim() || null;
     const body = bodyValue.trim() || null;
-    if (!body && !title) return toastError('Note must have content');
+    if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
     const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success(note ? 'Note saved' : 'Note created');
+    success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
     onSaved();
   }
 

@@ -41,9 +41,9 @@ export function FavoritesView() {
   }, [favorites]);
 
   async function remove(id: string) {
-    if (!confirm('Remove this favorite?')) return;
+    if (!confirm(t('favoritesView.removeThisFavorite'))) return;
     const { error } = await createClient().from('family_favorites').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(error.message); else success(t('favoritesView.removed'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -114,7 +114,7 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim()) return toastError('Add a name');
+    if (!v.name.trim()) return toastError(t('favoritesView.addAName'));
     setSaving(true);
     const { error } = await createClient().from('family_favorites').insert({
       family_id: familyId, member_id: memberId, kind: v.kind, name: v.name.trim(),
@@ -123,7 +123,7 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Favorite added');
+    success(t('favoritesView.favoriteAdded'));
     onClose();
   }
 

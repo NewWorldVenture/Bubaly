@@ -89,7 +89,7 @@ export function PasswordsModule() {
   async function copy(text: string, what: string) {
     if (!text) return;
     try { await navigator.clipboard.writeText(text); success(`${what} copied`); }
-    catch { toastError('Could not copy'); }
+    catch { toastError(t('passwordsModule.couldNotCopy')); }
   }
 
   function toggleReveal(id: string) {
@@ -111,7 +111,7 @@ export function PasswordsModule() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.label.trim()) { toastError('A name/label is required'); return; }
+    if (!form.label.trim()) { toastError(t('passwordsModule.aNameLabelIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const payload = {
@@ -141,7 +141,7 @@ export function PasswordsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('family_credentials').update({ deleted_at: new Date().toISOString() }).eq('id', c.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Entry deleted'); refresh();
+    success(t('passwordsModule.entryDeleted')); refresh();
   }
 
   if (loading) return <SkeletonList />;

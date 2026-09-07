@@ -70,7 +70,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.label.trim() || !form.value.trim()) { toastError('Add both a label and a value'); return; }
+    if (!form.label.trim() || !form.value.trim()) { toastError(t('knowledgeBaseModule.addBothALabelAnd')); return; }
     setSaving(true);
     const res = await saveFactAction(form.id || null, {
       memberId: form.member_id || null,
@@ -90,7 +90,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
     const sb = createClient();
     const res = await forgetFactAction(f.id);
     if (!res.ok) { toastError(res.error); return; }
-    success('Removed');
+    success(t('knowledgeBaseModule.removed'));
   }
 
   async function togglePin(f: Fact) {

@@ -132,12 +132,12 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('allowanceView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await saveAllowanceRuleAction({ id: row.ruleId ?? undefined, childWalletId: row.childWalletId, amountCents: Math.round(dollars * 100), cadence });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save allowance');
-    success('Allowance saved');
+    success(t('allowanceView.allowanceSaved'));
     onClose();
     router.refresh();
   }

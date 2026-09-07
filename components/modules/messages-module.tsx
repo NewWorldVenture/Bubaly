@@ -428,7 +428,7 @@ export function MessagesModule() {
   async function startRecording() {
     if (recording || uploadingFile || !activeConv) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof MediaRecorder === 'undefined') {
-      toastError('Voice recording isn’t supported in this browser.');
+      toastError(tr('messagesModule.voiceRecordingIsnTSupported'));
       return;
     }
     try {
@@ -456,7 +456,7 @@ export function MessagesModule() {
       setRecSeconds(0);
       recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
     } catch {
-      toastError('Microphone access was blocked.');
+      toastError(tr('messagesModule.microphoneAccessWasBlocked'));
     }
   }
   function stopRecording(discard = false) {
@@ -695,9 +695,9 @@ export function MessagesModule() {
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button onClick={() => toastError('Video calling isn’t available yet.')} aria-label={tr('messages.startVideoCall')}
+              <button onClick={() => toastError(tr('messagesModule.videoCallingIsnTAvailable'))} aria-label={tr('messages.startVideoCall')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
-              <button onClick={() => toastError('Voice calling isn’t available yet.')} aria-label={tr('messages.startVoiceCall')}
+              <button onClick={() => toastError(tr('messagesModule.voiceCallingIsnTAvailable'))} aria-label={tr('messages.startVoiceCall')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
               <button onClick={() => setShowAbout(true)} aria-label={tr('messages.aboutThisChat')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>

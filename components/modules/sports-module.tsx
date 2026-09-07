@@ -110,8 +110,8 @@ export function SportsModule() {
       created_by: userId, member_id: eventForm.member_id || null,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save event'); return; }
-    success('Event added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveEvent')); return; }
+    success(tr('sportsModule.eventAdded'));
     setEventOpen(false);
     setEventForm({ title: '', event_type: 'game', sport: '', team: '', starts_at: '', location: '', notes: '', member_id: '' });
     refreshEvents();
@@ -127,8 +127,8 @@ export function SportsModule() {
       member_id: teamForm.member_id || null, is_active: true, created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to add team'); return; }
-    success('Team added!');
+    if (err) { toastError(tr('sportsModule.failedToAddTeam')); return; }
+    success(tr('sportsModule.teamAdded'));
     setTeamOpen(false);
     setTeamForm({ sport: '', team_name: '', season: '', coach: '', member_id: '' });
     refreshTeams();
@@ -146,8 +146,8 @@ export function SportsModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save result'); return; }
-    success('Game result added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveResult')); return; }
+    success(tr('sportsModule.gameResultAdded'));
     setGameOpen(false);
     setGameForm({ team_id: '', opponent: '', our_score: '', their_score: '', date: '', result: 'win', notes: '' });
     refreshGames();

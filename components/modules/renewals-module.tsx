@@ -84,8 +84,8 @@ export function RenewalsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
-    if (!form.expires_at) { toastError('Expiry date is required'); return; }
+    if (!form.title.trim()) { toastError(t('renewalsModule.titleIsRequired')); return; }
+    if (!form.expires_at) { toastError(t('renewalsModule.expiryDateIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -115,7 +115,7 @@ export function RenewalsModule() {
       expires_at: rollForward(r.expires_at, 12), status: 'active',
     }).eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Renewed for another year');
+    success(t('renewalsModule.renewedForAnotherYear'));
   }
 
   async function remove(r: Renewal) {
@@ -123,7 +123,7 @@ export function RenewalsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('renewals').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Renewal deleted');
+    success(t('renewalsModule.renewalDeleted'));
   }
 
   const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

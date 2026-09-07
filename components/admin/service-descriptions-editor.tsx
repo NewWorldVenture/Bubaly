@@ -49,7 +49,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
     setValues((v) => ({ ...v, [key]: description }));
     setJustSaved(key);
     setTimeout(() => setJustSaved((k) => (k === key ? null : k)), 1500);
-    success('Description saved.');
+    success(t('serviceDescriptionsEditor.descriptionSaved'));
   }
 
   function resetToDefault(key: string) {

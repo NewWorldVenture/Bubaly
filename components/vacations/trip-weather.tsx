@@ -38,14 +38,14 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
 
   async function refresh() {
     const loc = (location || trip?.destination || '').trim();
-    if (!loc) return toastError('Enter a destination to fetch weather');
+    if (!loc) return toastError(t('tripWeather.enterADestinationToFetch'));
     setBusy(true);
     try {
       const res = await fetch('/api/vacations/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vacationId, location: loc }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed to fetch weather');
       else success(data.note || `Updated forecast for ${data.location}`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(t('tripWeather.networkError')); }
     setBusy(false);
   }
 

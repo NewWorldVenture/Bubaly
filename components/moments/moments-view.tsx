@@ -119,7 +119,7 @@ export function MomentsView() {
         },
       });
     } else {
-      success('Already on your list');
+      success(t('momentsView.alreadyOnYourList'));
     }
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
@@ -136,7 +136,7 @@ export function MomentsView() {
     });
     setPending((p) => { const n = new Set(p); n.delete(key); return n; });
     if (!res.ok) return toastError(res.error ?? 'Could not set reminder');
-    success('Reminder set');
+    success(t('momentsView.reminderSet'));
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 

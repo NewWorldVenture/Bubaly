@@ -80,7 +80,7 @@ export function PhotosModule() {
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
     const media = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
-    if (!media.length) { toastError('Choose image or video files to upload.'); return; }
+    if (!media.length) { toastError(tr('photosModule.chooseImageOrVideoFiles')); return; }
     // Skip anything over the family-media bucket limit before it fails mid-upload.
     const { ok: valid, tooBig } = partitionBySize(media);
     const overMsg = oversizeMessage(tooBig.length);
@@ -115,9 +115,9 @@ export function PhotosModule() {
           media_type: isVideo ? 'video' : 'image',
         }).select('id').single();
         if (insertError || !photo) {
-          toastError('The file uploaded, but its library record could not be saved.');
+          toastError(tr('photosModule.theFileUploadedButIts'));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
-          if (cleanupError) toastError('The uploaded file could not be cleaned up.');
+          if (cleanupError) toastError(tr('photosModule.theUploadedFileCouldNot'));
         } else {
           uploaded++;
         }
@@ -166,7 +166,7 @@ export function PhotosModule() {
     const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
     if (error) { toastError(describeDbError(error)); return; }
     await supabase.storage.from('family-media').remove([photo.storage_path]);
-    success('Photo deleted');
+    success(tr('photosModule.photoDeleted'));
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);
   }
@@ -437,7 +437,7 @@ export function PhotosModule() {
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
-                <button onClick={() => { if (confirm('Delete this photo?')) deletePhoto(photos[lightboxIdx]); }}
+                <button onClick={() => { if (confirm(tr('photosModule.deleteThisPhoto'))) deletePhoto(photos[lightboxIdx]); }}
                   aria-label={tr('photos.deletePhoto')}
                   className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
                   <Trash2 className="h-4 w-4" />

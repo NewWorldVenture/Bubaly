@@ -37,12 +37,12 @@ export function PlayDatesView() {
 
   async function setStatus(pd: PlayDate, status: string) {
     const { error } = await createClient().from('play_dates').update({ status }).eq('id', pd.id);
-    if (error) toastError(error.message); else success('Updated');
+    if (error) toastError(error.message); else success(t('playDatesView.updated'));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this play date?')) return;
+    if (!confirm(t('playDatesView.deleteThisPlayDate'))) return;
     const { error } = await createClient().from('play_dates').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('playDatesView.deleted'));
   }
 
   const Card = ({ pd }: { pd: PlayDate }) => {
@@ -114,7 +114,7 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.title.trim() || !v.starts_at) return toastError('Add a title and date/time');
+    if (!v.title.trim() || !v.starts_at) return toastError(t('playDatesView.addATitleAndDate'));
     setSaving(true);
     const { error } = await createClient().from('play_dates').insert({
       family_id: familyId, title: v.title.trim(), member_id: v.member_id || null,
@@ -124,7 +124,7 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Play date scheduled');
+    success(t('playDatesView.playDateScheduled'));
     onClose();
   }
 

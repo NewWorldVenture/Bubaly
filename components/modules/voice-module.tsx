@@ -107,7 +107,7 @@ export function VoiceModule() {
       success(
         `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
         { label: 'Undo', onClick: () => {
-          undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo'));
+          undoCapture(createClient(), res.undo).then(() => success(tr('voiceModule.undone'))).catch(() => toastError(tr('voiceModule.couldNotUndo')));
         } },
       );
       journey.complete();

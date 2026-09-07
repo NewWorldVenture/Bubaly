@@ -28,7 +28,7 @@ export function AlertComposer() {
       const res = await createSavedSearchAction({ query, kind, category, maxPrice });
       if (!res.ok) { toastError(res.error); return; }
       setQuery(''); setKind(''); setCategory(''); setMaxPrice('');
-      success('Alert saved — we’ll match new listings for you');
+      success(t('alertComposer.alertSavedWeLlMatch'));
       router.refresh();
     });
   }

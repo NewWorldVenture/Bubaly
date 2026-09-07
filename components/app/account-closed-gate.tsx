@@ -23,7 +23,7 @@ export function AccountClosedGate() {
     setBusy(true);
     const res = await reopenAccountAction();
     setBusy(false);
-    if (res.ok) { success('Welcome back! Your account is open again.'); window.location.reload(); }
+    if (res.ok) { success(t('accountClosedGate.welcomeBackYourAccountIs')); window.location.reload(); }
     else toastError(res.error);
   }
 

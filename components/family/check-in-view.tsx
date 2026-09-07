@@ -55,7 +55,7 @@ export function CheckInView() {
     });
     setBusy(null);
     if (error) return toastError(error.message);
-    success('Checked in');
+    success(t('checkInView.checkedIn'));
     setPlace(''); setNote('');
   }
 

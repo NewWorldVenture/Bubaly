@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const actions = readFileSync('app/(app)/admin/support-tickets/actions.ts', 'utf8');
@@ -21,6 +22,6 @@ describe('Support Ticket action boundaries', () => {
     expect(client).toContain('toastError');
     expect(client).toContain('success');
     expect(client).toContain('if (!result.ok)');
-    expect(client).toContain('Please try again.');
+    expectSays(client, 'ticketRowActions.couldNotUpdateThatTicket', 'Could not update that ticket. Please try again.');
   });
 });

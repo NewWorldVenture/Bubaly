@@ -121,7 +121,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not add that link');
     setLinkUrl('');
-    success('Added to your feed');
+    success(tr('socialFeedModule.addedToYourFeed'));
     router.refresh();
   }
 

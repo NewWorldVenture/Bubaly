@@ -84,7 +84,7 @@ export function HomeworkModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(t('homeworkModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const isDone = form.status === 'done' || form.status === 'submitted';
@@ -121,7 +121,7 @@ export function HomeworkModule() {
     const sb = createClient();
     const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Homework deleted');
+    success(t('homeworkModule.homeworkDeleted'));
   }
 
   const fmtDue = (iso: string | null) => {

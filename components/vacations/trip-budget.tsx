@@ -53,7 +53,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     const { error } = existing
       ? await createClient().from('vacation_budgets').update({ planned_cents: cents }).eq('id', existing.id)
       : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId });
-    if (error) toastError(error.message); else success('Budget updated');
+    if (error) toastError(error.message); else success(t('tripBudget.budgetUpdated'));
     setEditing(null);
   }
 

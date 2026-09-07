@@ -69,7 +69,7 @@ export function PantryModule() {
     const supabase = createClient();
     const res = await removePantryItemAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(t('pantryModule.removed'));
     void refresh();
   }
 
@@ -245,7 +245,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('pantryModule.nameIsRequired'));
     const payload = {
       name,
       category: String(form.get('category') ?? '').trim() || null,

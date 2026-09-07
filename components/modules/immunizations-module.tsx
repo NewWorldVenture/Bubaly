@@ -71,9 +71,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this immunization record?')) return;
+    if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
     const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {

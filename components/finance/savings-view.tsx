@@ -39,13 +39,13 @@ export function SavingsView() {
     // each adding the same amount at once both wrote the same figure and one of
     // the contributions vanished. The service applies it under a compare-and-set.
     const res = await contributeToGoalAction(g.id, delta);
-    if (!res.ok) toastError(res.error); else success('Updated');
+    if (!res.ok) toastError(res.error); else success(t('savingsView.updated'));
     setContribute(null);
   }
   async function remove(id: string) {
-    if (!confirm('Delete this goal?')) return;
+    if (!confirm(t('savingsView.deleteThisGoal'))) return;
     const res = await deleteSavingsGoalAction(id);
-    if (!res.ok) toastError(res.error); else success('Deleted');
+    if (!res.ok) toastError(res.error); else success(t('savingsView.deleted'));
   }
 
   return (
@@ -100,7 +100,7 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim() || !v.target_amount) return toastError('Add a name and target');
+    if (!v.name.trim() || !v.target_amount) return toastError(t('savingsView.addANameAndTarget'));
     setSaving(true);
     const res = await createSavingsGoalAction({
       name: v.name.trim(),
@@ -111,7 +111,7 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Goal created');
+    success(t('savingsView.goalCreated'));
     onClose();
   }
 

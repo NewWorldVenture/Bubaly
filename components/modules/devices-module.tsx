@@ -52,9 +52,9 @@ export function DevicesModule() {
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this device?')) return;
+    if (!confirm(tr('devicesModule.deleteThisDevice'))) return;
     const { error } = await createClient().from('smart_devices').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('devicesModule.deleted'));
   }
   function edit(d: Device) {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });

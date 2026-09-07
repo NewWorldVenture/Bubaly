@@ -132,12 +132,12 @@ function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose:
     const options: { recipeId: string | null; label: string; photoUrl: string | null }[] =
       recipes.filter((r) => picked[r.id]).map((r) => ({ recipeId: r.id, label: r.name, photoUrl: r.photoUrl }));
     for (const line of extra.split('\n').map((s) => s.trim()).filter(Boolean)) options.push({ recipeId: null, label: line, photoUrl: null });
-    if (!title.trim()) return toastError('Add a title.');
-    if (options.length < 2) return toastError('Pick at least two options.');
+    if (!title.trim()) return toastError(tr('voteClient.addATitle'));
+    if (options.length < 2) return toastError(tr('voteClient.pickAtLeastTwoOptions'));
     setSaving(true);
     const res = await createMealVote({ title, mealDate: mealDate || null, options });
     setSaving(false);
-    if (res.ok) { success('Vote created'); onClose(); } else toastError(res.error);
+    if (res.ok) { success(tr('voteClient.voteCreated')); onClose(); } else toastError(res.error);
   }
 
   return (

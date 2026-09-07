@@ -179,8 +179,8 @@ export function FamilyModule() {
 
   async function copyCode() {
     if (!family?.family_code) return;
-    try { await navigator.clipboard.writeText(family.family_code); success('Family code copied'); }
-    catch { toastError('Could not copy the code'); }
+    try { await navigator.clipboard.writeText(family.family_code); success(t('familyModule.familyCodeCopied')); }
+    catch { toastError(t('familyModule.couldNotCopyTheCode')); }
   }
 
   const sharedCards = [
@@ -456,7 +456,7 @@ export function FamilyModule() {
               const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
-              success('Member removed'); void refreshMembers();
+              success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
         </div>
@@ -566,7 +566,7 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
       .eq('id', family.id).select('*').maybeSingle();
     setSaving(false);
     if (err || !data) { toastError(err ? describeDbError(err) : 'Could not save'); return; }
-    success('Family profile updated');
+    success(t('familyModule.familyProfileUpdated'));
     onSaved(data as Family);
   }
 

@@ -49,9 +49,9 @@ export function BinderModule() {
     success(form.id ? 'Updated' : 'Saved'); setForm(null);
   }
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('binderModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('household_info').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('binderModule.deleted'));
   }
   function edit(i: Info) {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });

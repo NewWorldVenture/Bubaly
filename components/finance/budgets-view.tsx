@@ -40,9 +40,9 @@ export function BudgetsView() {
   const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
 
   async function remove(id: string) {
-    if (!confirm('Delete this budget?')) return;
+    if (!confirm(t('budgetsView.deleteThisBudget'))) return;
     const res = await deleteBudgetAction(id);
-    if (!res.ok) toastError(res.error); else success('Deleted');
+    if (!res.ok) toastError(res.error); else success(t('budgetsView.deleted'));
   }
 
   return (
@@ -96,7 +96,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.amount) return toastError('Add an amount');
+    if (!v.amount) return toastError(t('budgetsView.addAnAmount'));
     setSaving(true);
     // SETS the category's budget rather than inserting another row: the raw
     // insert let a family end up with two Groceries budgets, each reporting the
@@ -104,7 +104,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
     const res = await setBudgetAction(v.category, Math.abs(parseFloat(v.amount) || 0), v.period as Period);
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Budget added');
+    success(t('budgetsView.budgetAdded'));
     onClose();
   }
 

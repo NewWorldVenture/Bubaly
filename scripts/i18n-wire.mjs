@@ -168,6 +168,35 @@ if (!wanted.size) {
 }
 
 let unplaced = 0;
+/**
+ * The offset of the `{` that opens a function's BODY, from the offset of its
+ * `function` keyword.
+ *
+ * Not `indexOf('{', indexOf(')'))`: a signature can contain both. In
+ * `components/wallet/wallet-hub.tsx` the parameter's own type is
+ *
+ *   action: (i: Record<string, unknown>) => Promise<{ ok: boolean; … }>
+ *
+ * so the first `)` closes the INNER arrow's parameters and the first `{` after
+ * it opens the return TYPE. The declaration landed inside
+ * `Promise<{ … }>` and left an unparseable file. Balance instead: walk from the
+ * name, track ( ) < > depth, and take the first `{` seen at depth zero.
+ */
+function bodyBrace(src, at) {
+  let paren = 0;
+  let angle = 0;
+  for (let i = src.indexOf('(', at); i !== -1 && i < src.length; i += 1) {
+    const c = src[i];
+    if (c === '(') paren += 1;
+    else if (c === ')') paren -= 1;
+    else if (c === '<') angle += 1;
+    else if (c === '>' && src[i - 1] !== '=') angle -= 1;   // `=>` is not a close
+    else if (c === '{' && paren === 0 && angle === 0) return i;
+    else if (c === ';' && paren === 0 && angle === 0) return -1;  // an overload
+  }
+  return -1;
+}
+
 for (const [path, byName] of wanted) {
   let src = readFileSync(path, 'utf8');
   if (isSharedModule(path)) {
@@ -200,7 +229,8 @@ for (const [path, byName] of wanted) {
 
     // Rewrite from the bottom so earlier offsets stay valid.
     for (const { at, text } of [...targets.values()].sort((a, b) => b.at - a.at)) {
-      const open = src.indexOf('{', src.indexOf(')', at));
+      const open = bodyBrace(src, at);
+      if (open === -1) { unplaced += 1; console.error(`  ${path} — could not find the body of ${text}; wire by hand`); continue; }
       // Per FUNCTION, not per file: a page can declare `tr` in its default
       // export and still need one in the failure component above it.
       if (src.slice(open, open + 140).includes(`const ${name} =`)) continue;
