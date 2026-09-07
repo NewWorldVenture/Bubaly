@@ -22,6 +22,13 @@ export type LocaleContext = {
  * The geo header is Vercel's `x-vercel-ip-country`, set at the edge on every
  * request; `x-country` is accepted too so the value can be forced in local
  * development and in E2E without standing up a proxy.
+ *
+ * NOT memoised per request, deliberately. React's `cache()` would be the tool,
+ * and this project is on React 18.3, which does not export it. What is left to
+ * repeat per call is cheap: `cookies()` and `headers()` read the request store
+ * Next has already built, and `resolveLocale` looks at three short strings.
+ * The expensive half — assembling the catalogue — is memoised per LOCALE in
+ * `getMessages`, which is where the cost actually was.
  */
 export async function getLocaleContext(): Promise<LocaleContext> {
   const signals = await requestSignals();
