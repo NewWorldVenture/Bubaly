@@ -64,7 +64,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" /> Approve</button>
+                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" />{' '}{t('giftView.approve')}</button>
                     <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label={t('giftView.decline')}><X className="h-3.5 w-3.5" /></button>
                   </div>
                 )}

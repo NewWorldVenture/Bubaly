@@ -103,9 +103,7 @@ export default async function SocialOverviewPage() {
           <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSocial.manageAccounts')}</Link>
         </div>
         <p className="mb-3 text-xs text-muted">
-          {t('dashboardSocial.aPlatformIs')} <strong>ready</strong> only when its app credentials are configured in this environment. Others show
-          a clear setup requirement instead of pretending to connect.
-        </p>
+          {t('dashboardSocial.aPlatformIs')} <strong>ready</strong>{' '}{t('social.onlyWhenItsAppCredentials')}</p>
         <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2 py-1 text-xs">

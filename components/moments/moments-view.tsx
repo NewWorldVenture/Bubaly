@@ -255,8 +255,7 @@ export function MomentsView() {
                             disabled={pending.has(key)}
                             className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
                           >
-                            <Bell className="h-3.5 w-3.5" /> Remind
-                          </button>
+                            <Bell className="h-3.5 w-3.5" />{' '}{t('momentsView.remind')}</button>
                         ) : item.actionHref ? (
                           <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={`Open: ${item.label}`}>
                             <ChevronRight className="h-4 w-4" />

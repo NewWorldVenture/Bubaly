@@ -52,11 +52,11 @@ export function InvestView(props: {
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title={tr('invest.invest')} description="A safe place to learn investing with pretend money." />
+      <PageHeader title={tr('invest.invest')} description={tr('invest.aSafePlaceToLearn')} />
 
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
-        <p>{tr('invest.thisIsAn')} <strong>{tr('invest.educationalSimulation')}</strong> — kids practice with pretend money from their Invest bucket. It’s not real investing, there are no real companies, and values can go up or down. Nothing here is financial advice.</p>
+        <p>{tr('invest.thisIsAn')} <strong>{tr('invest.educationalSimulation')}</strong>{' '}{tr('invest.kidsPracticeWithPretendMoney')}</p>
       </div>
 
       {/* Manager: pending orders */}

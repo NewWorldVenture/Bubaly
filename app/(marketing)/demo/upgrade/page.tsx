@@ -19,10 +19,7 @@ export default async function DemoUsedUpgradePage() {
           <Clock className="h-6 w-6 text-brand-text" />
         </div>
         <h1 className="mt-4 text-2xl font-black">{t('upgrade.youVeAlreadyUsedYour')}</h1>
-        <p className="mt-2 text-sm text-white/65">
-          Each email gets one 5-minute demo — and yours is done. Make it your family’s for real:
-          pick a plan to keep going. A real account starts fresh and stays.
-        </p>
+        <p className="mt-2 text-sm text-white/65">{t('upgrade.eachEmailGetsOne5')}</p>
 
         <DemoUpgradeChoices />
 

@@ -56,9 +56,7 @@ export function MealPlanCardView({ card, compact = false, onAsk, className }: { 
                     type="button"
                     onClick={() => onAsk(`Swap ${day.label}'s dinner for something else`)}
                     className="focus-ring coarse:min-h-11 shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-elevated"
-                  >
-                    Swap
-                  </button>
+                  >{t('mealPlan.swap')}</button>
                 )}
               </li>
             );

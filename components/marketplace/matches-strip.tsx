@@ -66,8 +66,7 @@ export function MarketplaceMatchesStrip({ matches }: { matches: EnrichedMatch[] 
                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-400"
                 aria-label={t('matchesStrip.markAsConnected')}
               >
-                <Check className="h-3 w-3" /> Got it
-              </button>
+                <Check className="h-3 w-3" />{' '}{t('matchesStrip.gotIt')}</button>
               <button
                 type="button"
                 onClick={() => act(m.id, 'dismissed')}

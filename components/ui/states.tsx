@@ -1,31 +1,22 @@
 // Shared UI primitives, rendered from BOTH server and client components — 285
-// files import this one module. That is why the screen-reader labels here are
-// PROPS with an English default rather than `t(...)` calls:
+// files import this one module, which is why it can use neither translator:
+// `getTranslations()` drags `next/headers` into the browser and fails the
+// build, and `useTranslations()` is a hook a server component cannot run.
 //
-//   * `await getTranslations()` pulls `next/headers` into every client importer
-//     and fails the build (it did — `join-invite.tsx` is a client component);
-//   * `'use client'` is worse than it looks, because `EmptyState` takes an
-//     `icon` COMPONENT and a component cannot cross a server→client boundary as
-//     a prop. It would break every one of those 285 call sites, and neither
-//     `tsc` nor the tests would say so.
-//
-// So a caller that wants a translated label passes one. The default is the
-// string these components have always rendered.
-import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
-
-export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={cn('h-5 w-5 animate-spin text-muted', className)} />;
-}
-
-export function LoadingBlock({ label = 'Loading…' }: { label?: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
-      <Spinner />
-      {label}
-    </div>
-  );
-}
+// Everything with words in it therefore lives in `states-client.tsx` and is
+// re-exported from here, so no call site had to change. `EmptyState` is the one
+// that stays: it takes an `icon` COMPONENT, and a component reference cannot
+// cross a server→client boundary. Its words are all props, so it needs no
+// translator of its own.
+export {
+  ErrorState,
+  LoadingBlock,
+  Skeleton,
+  SkeletonCard,
+  SkeletonList,
+  SkeletonText,
+  Spinner,
+} from './states-client';
 
 /** Empty state used across every module so blank lists never look broken. */
 export function EmptyState({
@@ -49,68 +40,6 @@ export function EmptyState({
       <h3 className="text-base font-semibold">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
-    </div>
-  );
-}
-
-/**
- * Skeleton primitive — a shimmering placeholder block. Prefer these over a bare
- * spinner for content areas: matching the eventual layout makes load feel faster
- * and avoids layout shift. Respects reduced-motion (the pulse is a CSS animation
- * Tailwind disables under `motion-reduce`).
- */
-export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn('animate-pulse rounded-lg bg-elevated/70 motion-reduce:animate-none', className)} />;
-}
-
-/** A few stacked text-line skeletons. */
-export function SkeletonText({ lines = 3, className, label = 'Loading' }: { lines?: number; className?: string; label?: string }) {
-  return (
-    <div className={cn('space-y-2', className)} role="status" aria-label={label}>
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton key={i} className={cn('h-4', i === lines - 1 ? 'w-2/3' : 'w-full')} />
-      ))}
-    </div>
-  );
-}
-
-/** A card-shaped skeleton (icon + title + lines), matching the app's card rhythm. */
-export function SkeletonCard({ className, label = 'Loading' }: { className?: string; label?: string }) {
-  return (
-    <div className={cn('rounded-2xl border border-border bg-surface/40 p-4', className)} role="status" aria-label={label}>
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-10 w-10 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-1/3" />
-          <Skeleton className="h-3 w-1/2" />
-        </div>
-      </div>
-      <div className="mt-4 space-y-2">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-5/6" />
-      </div>
-    </div>
-  );
-}
-
-/** A list of card skeletons for list/grid screens while data loads. */
-export function SkeletonList({ count = 3, className }: { count?: number; className?: string }) {
-  return (
-    <div className={cn('space-y-3', className)}>
-      {Array.from({ length: count }).map((_, i) => <SkeletonCard key={i} />)}
-    </div>
-  );
-}
-
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
-  return (
-    <div className="rounded-2xl border border-danger/30 bg-danger/5 px-5 py-6 text-center">
-      <p className="text-sm text-danger">{message}</p>
-      {onRetry && (
-        <button onClick={onRetry} className="mt-3 text-sm font-medium underline">
-          Try again
-        </button>
-      )}
     </div>
   );
 }

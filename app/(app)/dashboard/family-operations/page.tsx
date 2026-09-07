@@ -22,7 +22,7 @@ async function ReadFailure() {
   const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Operations</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('familyOperations.familyOperations')}</h1>
       <ErrorState message="Could not load family operations data from Supabase. Refresh and try again." />
       <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">{t('familyOperations.refreshFamilyOperations')}</Link>
     </div>

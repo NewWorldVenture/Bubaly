@@ -52,8 +52,8 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
                 {driverName(v.primary_driver) && <Badge tone="accent">{driverName(v.primary_driver)}</Badge>}
               </div>
               <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                <button onClick={() => { setEditing(v); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                <button onClick={() => start(async () => { await deleteVehicleAction(v.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                <button onClick={() => { setEditing(v); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('vehiclesClient.edit')}</button>
+                <button onClick={() => start(async () => { await deleteVehicleAction(v.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('vehiclesClient.delete')}</button>
               </div>
             </Card>
           ))}

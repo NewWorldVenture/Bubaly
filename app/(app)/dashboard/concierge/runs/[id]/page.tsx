@@ -41,12 +41,12 @@ export const dynamic = 'force-dynamic';
 
 const RERUNNABLE_STEP_STATES: readonly StepState[] = ['failed', 'blocked', 'cancelled'];
 
-function RunUnavailable({ message }: { message: string }) {
+async function RunUnavailable({ message }: { message: string }) {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
       <Link href="/home" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted hover:text-fg coarse:min-h-11">
-        <ArrowLeft className="h-4 w-4" aria-hidden /> Home
-      </Link>
+        <ArrowLeft className="h-4 w-4" aria-hidden />{' '}{t('runs.home')}</Link>
       <ErrorState message={message} />
     </div>
   );

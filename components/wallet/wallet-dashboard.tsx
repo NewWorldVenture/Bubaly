@@ -219,8 +219,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setRequestFor(c)}
                     className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text">
-                    <HandCoins className="h-3.5 w-3.5" /> Spend
-                  </button>
+                    <HandCoins className="h-3.5 w-3.5" />{' '}{tr('walletDashboard.spend')}</button>
                   {canManage && (
                     <button onClick={() => setAddFor(c)}
                       className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">

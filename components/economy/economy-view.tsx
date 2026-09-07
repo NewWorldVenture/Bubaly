@@ -146,13 +146,11 @@ export function EconomyView(props: {
                   <button type="button" disabled={busy === `decide-${r.id}`}
                     onClick={() => run(`decide-${r.id}`, () => decideRedemptionAction({ redemptionId: r.id, approve: true }), 'Approved')}
                     className="inline-flex items-center gap-1 rounded-lg bg-success/15 px-2.5 py-1.5 text-xs font-medium text-success hover:bg-success/25">
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
+                    <Check className="h-3.5 w-3.5" />{' '}{t('economyView.approve')}</button>
                   <button type="button" disabled={busy === `decide-${r.id}`}
                     onClick={() => run(`decide-${r.id}`, () => decideRedemptionAction({ redemptionId: r.id, approve: false }), 'Rejected')}
                     className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-danger">
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
+                    <X className="h-3.5 w-3.5" />{' '}{t('economyView.reject')}</button>
                 </div>
               </div>
             ))}

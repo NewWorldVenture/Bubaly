@@ -165,15 +165,13 @@ export default async function MarketplaceOrdersPage() {
                 {fee && (
                   <p className="mt-1 text-xs text-muted">
                     {role === 'buyer' ? (
-                      <>
-                        You pay <span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
+                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
                         {fee.serviceFeeCents > 0 && (
                           <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
                         )}
                       </>
                     ) : (
-                      <>
-                        You receive <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
+                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
                         <span> · Bubaly takes {formatCents(fee.platformReceivesCents)}</span>
                       </>
                     )}

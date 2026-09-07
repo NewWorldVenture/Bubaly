@@ -104,6 +104,21 @@ function isClientModule(file, seen = new Set()) {
   return answer;
 }
 
+/**
+ * A module imported from BOTH sides can use neither translator: the hook throws
+ * where a server component renders it, and `getTranslations()` drags
+ * `next/headers` into the browser. `components/ui/states.tsx` is the example —
+ * 285 files import it, some client, some server pages. There is no automatic
+ * answer, so this reports and leaves it: the fix is a prop with an English
+ * default, or splitting the module, and either is a decision for a person.
+ */
+function isSharedModule(file) {
+  const abs = resolve(ROOT, file);
+  if (!isClientModule(abs)) return false;
+  if (SOURCES.get(abs)?.declaresClient) return false;   // it IS a client module
+  return [...(IMPORTERS.get(abs) ?? [])].some((importer) => !isClientModule(importer));
+}
+
 const SERVER_IMPORT = "import { getTranslations } from '@/lib/i18n/server';\n";
 const CLIENT_IMPORT = "import { useTranslations } from '@/components/i18n/locale-provider';\n";
 
@@ -147,6 +162,14 @@ if (!wanted.size) {
 let unplaced = 0;
 for (const [path, byName] of wanted) {
   let src = readFileSync(path, 'utf8');
+  if (isSharedModule(path)) {
+    unplaced += 1;
+    console.error(
+      `  ${relative(ROOT, resolve(ROOT, path))} — imported from BOTH server and client;`
+      + ' neither translator is safe here. Take the text as a prop, or split the module.',
+    );
+    continue;
+  }
   const isClient = isClientModule(path);
   let wired = 0;
 

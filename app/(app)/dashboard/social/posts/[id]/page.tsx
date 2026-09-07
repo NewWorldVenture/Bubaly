@@ -77,8 +77,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
                 <PlatformDot platform={t.platform as SocialPlatform} />
                 <Badge tone={TARGET_TONE[t.status] ?? 'neutral'}>{t.status}</Badge>
                 {t.permalink_url ? (
-                  <a href={t.permalink_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-text underline">
-                    View <ExternalLink className="h-3 w-3" />
+                  <a href={t.permalink_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-text underline">{tr('posts.view')}{' '}<ExternalLink className="h-3 w-3" />
                   </a>
                 ) : (
                   <span className="ml-auto text-xs text-muted">{t.error ?? '—'}</span>

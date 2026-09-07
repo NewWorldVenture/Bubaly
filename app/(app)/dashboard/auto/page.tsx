@@ -64,8 +64,8 @@ export default async function AutoOverviewPage() {
                   {p.coverage_summary && <p className="mt-1 text-xs text-muted">{p.coverage_summary}</p>}
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-danger px-2.5 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.fileAClaim')}</a>}
-                    {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> Roadside</a>}
-                    {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> Agent</a>}
+                    {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.roadside')}</a>}
+                    {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.agent')}</a>}
                   </div>
                 </div>
               ))}

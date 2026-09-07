@@ -79,17 +79,21 @@ const NOT_COPY = [
   // an expression that happened to sit between a `>` and a `<`.
   /&&|\|\|/,                    // `todayStr && i.due_date`
   /===|!==/,                    // `( items.length === 0 ?`
-  // snake_case. Measured against the 7,245 English strings already in the
-  // catalogue, this rule excludes exactly ONE piece of real copy — the hint
+  // snake_case. Every rule in this block was measured the only way that proves
+  // anything: replayed against all 7,449 English strings already in the
+  // catalogue, which are copy by construction. Between them they exclude
+  // exactly TWO pieces of real copy — the hint
   // "plays, at, coached_by, needs, affects…", which lists relationship kinds by
-  // their column names — and that string is already translated, so the cost is
-  // that the scanner would not notice it regressing.
+  // their column names, and the admin label "UTM source(s), comma-sep", whose
+  // "(s)," reads as a closing paren followed by an argument. Both are already
+  // translated, so the cost is that the scanner would not notice them
+  // regressing. That is the whole price; it is written down rather than implied.
   /[a-z][A-Za-z0-9]*_[a-z]/,    // `ai_handle_first`
   // A line comment ANYWHERE in the match, not just at its start: the `>` the
   // scanner sliced from is often several tokens earlier, so the fragment reads
   // `( // eslint-disable-next-line @next/next/no-img-element`.
   /\/\//,
-  /\b[A-Za-z_$][\w$]*:\s*(?:string|number|boolean|unknown|any|void|never|Promise)\b/,
+  /\b[A-Za-z_$][\w$]*:\s*(?:string|number|boolean|unknown|any|void|never|Promise)/,
   /^\s*,\s*[A-Za-z_$][\w$]*:\s*$/,  // `, blocked:` — an object literal, sliced
   /\.[A-Za-z_$][\w$]*\(/,       // `sb.from('marketplace_offers')`
   // Bare TYPE names, by name. `Promise` reads as one capitalised word of
@@ -99,6 +103,17 @@ const NOT_COPY = [
   // both real copy in this product ("Record payment", a form field called
   // "Number"), and excluding them cost more than they were worth.
   /^Promise(?:Like)?$/,
+  /^\s*:\s.*\?\s*$/,           // `: error ?` — the middle of a ternary
+  /\s\?\s*$/,                   // `on ?` — the head of one. English copy does
+                                //   not put a space before its question mark;
+                                //   French does, but only translations do, and
+                                //   this scanner reads English source.
+  /^\s*=\s/,                    // `= TIER_RANK[it.tier] ?`
+  /\?\?/,                       // `(assignments ?? []).map`
+  /`/,                          // a template literal is code, not a sentence
+  /\[\]|\)\s*:/,               // `, fields: FieldDef[]): Record`
+  /\b[a-z][\w$]{2,}\([\w$]{2,}/,  // `generate(tab as Exclude` — a call, not a phrase
+  /\)\s*[,)\]]/,                // `isProviderConfigured(p)]), )`
 ];
 
 const PROP_PATTERN =
@@ -124,8 +139,27 @@ function looksLikeCopy(raw) {
 }
 
 /** Findings for one file. */
+/**
+ * Blank out comments, keeping every byte in place so line numbers still hold.
+ *
+ * A comment is not copy, and the scanner sliced through several as if it were:
+ * `( // eslint-disable-next-line @next/next/no-img-element` and
+ * `(no JS/hydration), shown only` are both fragments of a note to a reader of
+ * the source. Excluding them shape by shape was a losing game — a comment can
+ * say anything, including a whole English sentence — so they are removed before
+ * anything is matched at all.
+ *
+ * `https://` is not a comment. The `:` before it is the whole difference.
+ */
+function withoutComments(source) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ');
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, lead) => lead + blank(m.slice(lead.length)));
+}
+
 export function scanFile(file) {
-  const source = readFileSync(file, 'utf8');
+  const source = withoutComments(readFileSync(file, 'utf8'));
   const findings = [];
   const seen = new Set();
 

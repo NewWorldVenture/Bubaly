@@ -160,9 +160,7 @@ export default async function SecurityPage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="#architecture" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow transition hover:-translate-y-0.5">{t('security.exploreOurSecurity')}{' '}<ArrowRight className="h-4 w-4" />
               </Link>
-              <Link href="#faq" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">
-                Security FAQ
-              </Link>
+              <Link href="#faq" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">{t('security.securityFaq')}</Link>
             </div>
             <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4 lg:grid-cols-2">
               {PILLARS.map(({ icon: Icon, title, desc }) => (

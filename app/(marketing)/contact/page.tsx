@@ -65,11 +65,7 @@ export default async function ContactPage() {
               </>
             ) : (
               <>
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  Big idea, tiny nitpick, or a feature you’re quietly wishing for? We treasure them all. Log in to
-                  drop your enhancement requests straight into our roadmap — every gift gets unwrapped, and the best
-                  ones shape what we build next.
-                </p>
+                <p className="mt-3 text-sm leading-6 text-muted">{t('contact.bigIdeaTinyNitpickOr')}</p>
                 {/* Same primary CTA as the logged-in state, but gated: logged-out
                     visitors are sent to log in first and returned to /feedback
                     afterwards (login-form honours ?redirect=). */}

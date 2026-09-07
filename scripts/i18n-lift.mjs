@@ -172,7 +172,13 @@ for (const { text } of result.findings) {
   // inside a TypeScript generic — `async <T,>(label: string, q: PromiseLike<…`
   // — where rewriting it produces a syntax error rather than a translation.
   // Punctuation that belongs to code and not to a sentence rules it out.
-  const looksLikeCode = /[{}|;=<>]|=>|:\s*[A-Za-z]/.test(text);
+  // `:\s*[A-Za-z]` used to stand in for "a type annotation" and swallowed real
+  // prose with a colon in it — "Make it your family's for real: pick a plan to
+  // keep going" was skipped for years on that basis. A type annotation is a
+  // colon followed by a PRIMITIVE, or by a capitalised name that is then
+  // subscripted or generic; a sentence's colon is followed by an ordinary word.
+  const TYPE_AFTER_COLON = /:\s*(?:string|number|boolean|unknown|any|void|never|Promise|React\b|[A-Z]\w*(?:\[\]|<|\s*\|))/;
+  const looksLikeCode = /[{}|;=<>]|=>/.test(text) || TYPE_AFTER_COLON.test(text);
   // `>text<` is a JSX text node only if that `>` really closes a tag. In
   // `(fn: () => Promise<{ ok: boolean }>)` the `>` belongs to an ARROW, and the
   // scanner reports `Promise` as prose — so the naive check rewrote a type
@@ -188,22 +194,30 @@ for (const { text } of result.findings) {
   // it needs every run of whitespace to be flexible; matching it literally is
   // why this tool used to leave the longest, most visible copy on the page
   // behind and lift only the short labels around it.
-  // The wrapped-prose path is deliberately narrow: it may only fire for text
-  // that unmistakably reads as a SENTENCE. A looser rule matched a lint
-  // directive (`eslint-disable-next-line @next/next/no-img-element`) and a set
-  // of object keys, and rewrote both into JSX — because the scanner reports
-  // those as prose and a whitespace-flexible pattern is happy to span them.
-  const readsAsSentence = /^[A-Z]/.test(text)
-    && text.split(/\s+/).length >= 3
-    && !/[_@\\/]|--|\bnext\b/.test(text);
-  if (!form && !looksLikeCode && readsAsSentence) {
+  // This path used to be narrow to the point of uselessness — capitalised, three
+  // words or more — because a looser rule had matched a lint directive
+  // (`eslint-disable-next-line @next/next/no-img-element`) and a set of object
+  // keys and rewritten both into JSX. Both of those causes are gone: the
+  // scanner now strips comments before it matches anything, and excludes
+  // snake_case. So the rule can be what it should always have been — reads like
+  // words, not like code — which is what finally reaches `<Phone /> Call` and
+  // the forty other short labels sitting next to an icon.
+  //
+  // The pattern stays tightly bounded whatever the text: `>`, whitespace, the
+  // text, whitespace, `<`. It cannot run away across a file.
+  const readsAsCopy = /^[A-Za-z]/.test(text) && !/[_@\\]|--/.test(text);
+  if (!form && !looksLikeCode && readsAsCopy) {
     // The whitespace around the sentence is CAPTURED rather than swallowed. In
     // JSX a run of whitespace that contains a newline is stripped by the
     // compiler, but a plain space is a rendered word gap — and `The magic is in
     // the <GradientText>AI</GradientText>` loses its only space if the match
     // eats it, so the heading renders "The magic is in theAI".
+    // `(?<![=-])` is the same arrow-versus-tag guard the literal path has, and
+    // the loose path needs it just as much: `const Cell = ({ on }) =>\n  on ? <Check …`
+    // has an `on ?` sitting between a `>` and a `<` exactly the way a label
+    // beside an icon does. Rewriting it produced a file that would not parse.
     const loose = new RegExp(
-      `>([^\\S\\n]*\\s*)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(\\s*)<`,
+      `(?<![=-])>([^\\S\\n]*\\s*)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(\\s*)<`,
     );
     if (loose.test(src)) form = { from: loose, kind: 'jsxText' };
   }

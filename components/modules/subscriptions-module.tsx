@@ -132,7 +132,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
       {reviewMonthly > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong> have recorded use more than 60 days ago. Confirm current household use before deciding what to keep. This amount is not confirmed savings.</p>
+          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong>{' '}{t('subscriptionsModule.haveRecordedUseMoreThan')}</p>
         </div>
       )}
 

@@ -63,7 +63,7 @@ export default async function MorePage() {
   const t = await getTranslations();
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-6 sm:py-8">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight">More</h1>
+      <h1 className="mb-6 text-2xl font-bold tracking-tight">{t('more.more')}</h1>
       <div className="space-y-6">
         <Group title={t('more.browse')} rows={BROWSE} />
         <Group title={t('more.account')} rows={ACCOUNT} />

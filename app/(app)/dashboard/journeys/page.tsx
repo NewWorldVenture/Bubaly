@@ -89,8 +89,7 @@ export default async function JourneysPage() {
       </SectionCard>
 
       <p className="text-xs text-muted">
-        Scope: this family only (RLS). Cross-family aggregate medians for the Scorecard would use a
-        service-role read. Instrument more flows by calling <code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
+        {t('journeys.scopeThisFamilyOnly')}{' '}<code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
       </p>
     </div>
   );

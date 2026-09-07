@@ -42,7 +42,7 @@ export function TripDocuments({ vacationId }: { vacationId: string }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">{k.emoji} {d.title}</p>
-              {warn && <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300"><AlertTriangle className="h-3 w-3" /> Expiring</span>}
+              {warn && <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300"><AlertTriangle className="h-3 w-3" />{' '}{t('tripDocuments.expiring')}</span>}
             </div>
             <p className="mt-0.5 text-xs text-muted">
               {[k.label, who?.display_name, d.number && `#${d.number}`, d.expires_on && `Expires ${fmtDate(d.expires_on)}`].filter(Boolean).join(' · ')}

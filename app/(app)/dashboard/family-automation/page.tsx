@@ -156,8 +156,7 @@ export default async function FamilyAutomationPage() {
                 {r.is_enabled ? <ToggleRight className="h-5 w-5 shrink-0 text-emerald-400" /> : <ToggleLeft className="h-5 w-5 shrink-0 text-muted" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{r.name}</p>
-                  <p className="text-xs text-muted">
-                    When <span className="text-fg/80">{label(TRIGGERS, r.trigger_type)}</span> → <span className="text-fg/80">{label(ACTIONS, r.action_type)}</span>
+                  <p className="text-xs text-muted">{t('familyAutomation.when')}{' '}<span className="text-fg/80">{label(TRIGGERS, r.trigger_type)}</span> → <span className="text-fg/80">{label(ACTIONS, r.action_type)}</span>
                     {r.requires_approval && ' · needs approval'}
                   </p>
                 </div>

@@ -151,9 +151,7 @@ export function CommandBar() {
         </div>
 
         {query.trim() === '' ? (
-          <p className="px-4 py-6 text-center text-xs text-muted">
-            Jump to a page, capture a task/note/event, or ask Bubaly. Try “plan our week”, “remind me to…”, “add milk to the list”, or a page name.
-          </p>
+          <p className="px-4 py-6 text-center text-xs text-muted">{t('commandBar.jumpToAPageCapture')}</p>
         ) : (
           <ul className="max-h-[52vh] overflow-y-auto py-1">
             {results.map((r, i) => {

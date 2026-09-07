@@ -68,8 +68,7 @@ export default async function OnboardingFunnelPage() {
                     {s.label}
                     {s.key === funnel.biggestDropStep && (
                       <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300">
-                        <TrendingDown className="size-3" /> biggest drop
-                      </span>
+                        <TrendingDown className="size-3" />{' '}{t('onboardingFunnel.biggestDrop')}</span>
                     )}
                   </span>
                   <span className="text-muted">

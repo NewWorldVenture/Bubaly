@@ -235,7 +235,7 @@ export function NavigationChoices() {
               {hasGroup && open && (
                 <div className="ml-6 border-l border-border/60 px-3 pb-3 pl-3">
                   {kidItems.length === 0 ? (
-                    <p className="py-2 text-xs text-muted">{t('navigationChoices.noSubPages')}{' '}<span className="font-medium text-fg">{item.label}</span> shows as a plain link. Add some below.</p>
+                    <p className="py-2 text-xs text-muted">{t('navigationChoices.noSubPages')}{' '}<span className="font-medium text-fg">{item.label}</span>{' '}{t('navigationChoices.showsAsAPlainLink')}</p>
                   ) : (
                     <ul className="space-y-1 py-2">
                       {kidItems.map((kid, ki) => (

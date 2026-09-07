@@ -51,8 +51,8 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
                   {l.expires_on && <Badge tone="neutral">Exp {fmtDate(l.expires_on)}</Badge>}
                 </div>
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                  <button onClick={() => { setEditing(l); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                  <button onClick={() => start(async () => { await deleteLicenseAction(l.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                  <button onClick={() => { setEditing(l); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('licensesClient.edit')}</button>
+                  <button onClick={() => start(async () => { await deleteLicenseAction(l.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('licensesClient.delete')}</button>
                 </div>
               </Card>
             );

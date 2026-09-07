@@ -68,8 +68,8 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
                   <div className="flex gap-1.5">
                     {closed ? (
                       <>
-                        <button onClick={() => act(() => addWinnerToGrocery(v.id), 'Added to grocery list')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" /> Grocery</button>
-                        <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" /> Reopen</button>
+                        <button onClick={() => act(() => addWinnerToGrocery(v.id), 'Added to grocery list')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" />{' '}{tr('voteClient.grocery')}</button>
+                        <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" />{' '}{tr('voteClient.reopen')}</button>
                       </>
                     ) : (
                       <button onClick={() => act(() => closeMealVote(v.id), 'Vote closed')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white"><Lock className="h-3.5 w-3.5" />{' '}{tr('voteClient.closePickWinner')}</button>

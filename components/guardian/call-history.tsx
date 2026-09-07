@@ -200,8 +200,7 @@ export function CallHistory({ communications }: { communications: Communication[
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-text hover:bg-brand/20 transition w-fit"
                         >
-                          <Play className="h-3.5 w-3.5" /> Play Recording
-                        </a>
+                          <Play className="h-3.5 w-3.5" />{' '}{t('callHistory.playRecording')}</a>
                       )}
                     </div>
                   )}

@@ -252,8 +252,7 @@ export async function ProductMockup() {
         <div className="mt-3 grid min-h-[460px] grid-cols-[120px_1fr] gap-4 rounded-2xl bg-[#0b121d] p-4">
           <aside className="space-y-2 border-r border-white/8 pr-3">
             <div className="mb-5 flex items-center gap-2 text-xs font-bold">
-              <Sparkles className="h-4 w-4 text-violet-400" /> Bubaly
-            </div>
+              <Sparkles className="h-4 w-4 text-violet-400" />{' '}{t('visualMocks.bubaly')}</div>
             {[t('visualMocks.home'), t('visualMocks.calendar'), t('visualMocks.chores'), 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
               <div key={item} className={cn('rounded-lg px-3 py-2 text-[11px] text-white/65', index === 0 && 'bg-violet-600 text-white')}>
                 {item}

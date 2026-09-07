@@ -130,9 +130,7 @@ export function ProviderInfoSheet({
               <div className="flex items-baseline justify-between">
                 <h3 className="text-lg font-bold">{p.name}</h3>
                 {p.is_primary && (
-                  <span className="rounded-full border border-gray-400 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600">
-                    Primary
-                  </span>
+                  <span className="rounded-full border border-gray-400 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600">{t('printSheet.primary')}</span>
                 )}
               </div>
               {p.specialty && <p className="text-sm font-medium text-gray-600">{p.specialty}</p>}

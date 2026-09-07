@@ -30,12 +30,13 @@ async function safe<T>(q: PromiseLike<{ data: T[] | null; count?: number | null 
 }
 
 // One feature card in the hub grid.
-function FeatureCard({
+async function FeatureCard({
   index, title, href, icon: Icon, tint, count, countLabel, children,
 }: {
   index: number; title: string; href: string; icon: React.ComponentType<{ className?: string }>;
   tint: string; count: number; countLabel: string; children: React.ReactNode;
 }) {
+  const tr = await getTranslations();
   return (
     <section className="flex flex-col rounded-2xl border border-border bg-surface/40 p-5">
       <div className="mb-4 flex items-center justify-between">
@@ -46,8 +47,7 @@ function FeatureCard({
             <h2 className="-mt-0.5 text-sm font-bold">{title}</h2>
           </div>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>
-          Open <ChevronRight className="h-3.5 w-3.5" />
+        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>{tr('planning.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>

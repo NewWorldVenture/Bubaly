@@ -102,10 +102,7 @@ function GenerateCTA({ onGenerate, loading }: { onGenerate: () => void; loading:
         <CalendarDays className="h-8 w-8 text-emerald-400" />
       </div>
       <h2 className="text-2xl font-bold text-fg mb-3">{t('weeklyBriefing.weeklyAiBriefing')}</h2>
-      <p className="text-muted max-w-md mb-8">
-        Look back at how last week went and get ahead of the next seven days — conflicts flagged,
-        prep checklist ready, and a day-by-day plan for the whole family.
-      </p>
+      <p className="text-muted max-w-md mb-8">{t('weeklyBriefingModule.lookBackAtHowLast')}</p>
       <Button onClick={onGenerate} disabled={loading}
         className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}

@@ -246,8 +246,7 @@ export function MoneyCardsView({
                           type="button" onClick={() => { setOrderingCard(child); setIssueType('physical'); }}
                           className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition"
                         >
-                          <Package className="h-3.5 w-3.5" /> Physical
-                        </button>
+                          <Package className="h-3.5 w-3.5" />{' '}{t('moneyCardsView.physical')}</button>
                       )}
                     </div>
                   )}

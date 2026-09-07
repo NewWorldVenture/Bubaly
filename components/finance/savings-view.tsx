@@ -78,7 +78,7 @@ export function SavingsView() {
                 </div>
                 <div className="h-2 rounded-full bg-border"><div className="h-2 rounded-full bg-brand transition-all" style={{ width: `${p}%` }} /></div>
                 <div className="mt-3">
-                  <Button size="sm" variant="outline" onClick={() => setContribute(g)}><TrendingUp className="h-4 w-4" /> Add funds</Button>
+                  <Button size="sm" variant="outline" onClick={() => setContribute(g)}><TrendingUp className="h-4 w-4" />{' '}{t('savingsView.addFunds')}</Button>
                 </div>
               </div>
             );

@@ -34,9 +34,7 @@ export async function LegalPage({
     <>
       {/* Hero */}
       <Section className="pb-0 pt-20 text-center">
-        <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
-          Legal
-        </span>
+        <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">{t('legal.legal')}</span>
         <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">{summary}</p>
         <p className="mt-4 text-sm text-muted">Last updated: {lastUpdated}</p>
