@@ -388,11 +388,15 @@ async function AssistantChat() {
 
 async function TrustStrip() {
   const { families } = await getPublicStats();
+  const t = await getTranslations();
+  // The wrapped variants keep this showcase's deliberate line breaks, which the
+  // section renders with `whitespace-pre-line`; the unwrapped keys belong to the
+  // primitives TrustStrip, which wraps naturally.
   const items = [
-    [ShieldCheck, 'Private by Design', 'Family-scoped access\ncontrols'],
-    [Smartphone, 'Responsive by Design', 'Web, iOS, and Android\nlayouts'],
-    [Cloud, 'Shared Updates', 'Family changes stay\nin sync'],
-    [Heart, 'Family Community', familiesNote(families)],
+    [ShieldCheck, t('trustStrip.privateByDesign'), t('trustStrip.familyScopedAccessControlsWrapped')],
+    [Smartphone, t('trustStrip.responsiveByDesign'), t('trustStrip.webIosAndAndroidLayoutsWrapped')],
+    [Cloud, t('trustStrip.sharedUpdates'), t('trustStrip.familyChangesStayInSyncWrapped')],
+    [Heart, t('trustStrip.familyCommunity'), familiesNote(t, families)],
   ] as const;
   return (
     <section className="mx-0 mt-[18px] grid gap-6 border-t border-white/[0.06] px-7 py-6 sm:mx-[14px] sm:grid-cols-2 lg:grid-cols-4">
@@ -476,10 +480,11 @@ export async function HowItWorksReferencePage() {
 
 async function SocialProof() {
   const { families } = await getPublicStats();
+  const t = await getTranslations();
   return (
     <div className="mt-[19px] inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] text-white/70">
       <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-      {familiesNote(families)}
+      {familiesNote(t, families)}
     </div>
   );
 }

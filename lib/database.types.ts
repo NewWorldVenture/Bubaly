@@ -2401,6 +2401,11 @@ export interface Database {
         { id?: string; family_id: string; vacation_id: string; activity_id?: string | null; holder_member_id?: string | null; holder_name?: string | null; ticket_type?: string | null; confirmation_code?: string | null; price_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null }>
       >;
+      vacation_confirmation_imports: T<
+        { id: string; family_id: string; vacation_id: string; actor_user_id: string; actor_member_id: string; source_title: string; source_text: string; source_sha256: string; reviewed: Json; receipt: Json; reservation_id: string; itinerary_item_id: string; created_at: string },
+        never,
+        never
+      >;
       vacation_reservations: T<
         { id: string; family_id: string; vacation_id: string; kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; vacation_id: string; kind?: string | null; name: string; location?: string | null; reserved_at?: string | null; party_size?: number | null; confirmation_code?: string | null; cost_cents?: number | null; booked?: boolean; notes?: string | null; created_by?: string | null },
@@ -2654,6 +2659,10 @@ export interface Database {
     Functions: {
       finance_record_transaction_operation: {
         Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
+        Returns: Json;
+      };
+      vacation_import_confirmation: {
+        Args: { p_family_id: string; p_vacation_id: string; p_member_id: string; p_source: Json; p_fields: Json; p_expected?: Json | null; p_request_id?: string | null };
         Returns: Json;
       };
       move_recalculate_date: {

@@ -31,6 +31,7 @@ import { reminderTools } from './reminders';
 import { taskTools } from './tasks';
 import { financeTools } from './finances';
 import { tripTools } from './trips';
+import { travelImportTools } from './travel-import';
 import { homeTools } from './home';
 import { documentTools } from './documents';
 import { schoolTools } from './school';
@@ -64,7 +65,7 @@ function register(tool: ToolDefinition): void {
   for (const alias of tool.aliases ?? []) index(alias, tool.name);
 }
 
-for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...homeTools, ...documentTools, ...schoolTools, ...sportsTools, ...routineTools, ...noteTools]) {
+for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...travelImportTools, ...homeTools, ...documentTools, ...schoolTools, ...sportsTools, ...routineTools, ...noteTools]) {
   register(tool);
 }
 
