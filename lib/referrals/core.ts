@@ -89,3 +89,64 @@ export function summarizeReferrals(rows: ReferralRow[]): ReferralSummary {
   }
   return out;
 }
+
+// ─── X12 · the referral coefficient ──────────────────────────────────────────
+//
+// How many NEW households each existing household brings in. Above 1 the
+// product grows without spend; below it, every family is a customer you had to
+// buy. It is one number, and the whole flywheel argument rests on it, so it is
+// defined here in the same pure module as the rest of the referral logic rather
+// than assembled inside a page.
+//
+// Two sources, because a family recruits in two ways: a referral code a
+// stranger redeems, and an invite a relative accepts. Both create a household
+// that would not otherwise exist, and counting only the first understated the
+// loop by exactly the share of families who invite Grandma before they think
+// about a code.
+
+/** A referral row reduced to its status. */
+export type ReferralStatusRow = { status: string };
+/** An invite row reduced to its status. */
+export type InviteStatusRow = { status: string };
+
+export type ReferralCoefficient = {
+  /** Existing households — the denominator. */
+  households: number;
+  /** Households that arrived through a referral code. */
+  fromReferrals: number;
+  /** Households that arrived by accepting an invite. */
+  fromInvites: number;
+  /** joined / households. `null` when there are no households to divide by. */
+  coefficient: number | null;
+  /** Total new households attributable to the loop. */
+  joined: number;
+};
+
+/**
+ * Referral statuses that mean a household actually arrived.
+ *
+ * `pending` is a code that was handed out and nothing more — counting it would
+ * measure enthusiasm rather than growth, which is the mistake every viral
+ * dashboard makes once.
+ */
+const JOINED_REFERRAL_STATUSES = new Set(['signed_up', 'converted', 'rewarded']);
+const JOINED_INVITE_STATUSES = new Set(['accepted']);
+
+/** X12 — new households per existing household. */
+export function referralCoefficient(input: {
+  households: number;
+  referralRows: ReferralStatusRow[];
+  inviteRows: InviteStatusRow[];
+}): ReferralCoefficient {
+  const households = Math.max(0, Math.trunc(input.households));
+  const fromReferrals = input.referralRows.filter((r) => JOINED_REFERRAL_STATUSES.has(r.status)).length;
+  const fromInvites = input.inviteRows.filter((r) => JOINED_INVITE_STATUSES.has(r.status)).length;
+  const joined = fromReferrals + fromInvites;
+  return {
+    households,
+    fromReferrals,
+    fromInvites,
+    joined,
+    coefficient: households > 0 ? Math.round((joined / households) * 100) / 100 : null,
+  };
+}
