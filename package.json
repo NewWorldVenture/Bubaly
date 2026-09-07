@@ -19,6 +19,7 @@
     "db:reset": "supabase db reset",
     "db:push": "npm run db:audit:migrations && supabase migration list --linked && supabase db push",
     "db:audit:migrations": "node scripts/audit-migration-versions.mjs",
+    "db:audit:queries": "node scripts/audit-supabase-queries.mjs",
     "db:audit:schema": "node scripts/audit-supabase-schema.mjs",
     "db:audit:auth": "node scripts/audit-supabase-auth.mjs",
     "marketing:audit:assets": "node scripts/audit-marketing-assets.mjs",
