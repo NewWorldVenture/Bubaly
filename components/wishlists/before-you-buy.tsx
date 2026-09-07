@@ -82,7 +82,9 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
     if (open && !result && !loading) void run();
   }, [open, result, loading, run]);
 
-  const advice = result?.ok ? result.advice : null;
+  const answered = result && result.ok ? result : null;
+  const advice = answered?.advice ?? null;
+  const budgetRestricted = answered?.budgetRestricted ?? false;
 
   return (
     <>
@@ -163,7 +165,7 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
               )}
 
               <Section icon={Wallet} title={t('beforeYouBuy.budget')}>
-                {result.ok && result.budgetRestricted ? (
+                {budgetRestricted ? (
                   <p className="text-sm text-muted">{t('beforeYouBuy.theHouseholdBudgetIsPrivate')}</p>
                 ) : !advice.budget ? (
                   <p className="text-sm text-muted">{t('beforeYouBuy.addAPriceToCheck')}</p>
