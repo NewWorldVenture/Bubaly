@@ -12,6 +12,7 @@
 import { rankNextActions, type ActionInput, type ActionPriority, type NextAction } from '@/lib/opportunities/next-actions';
 import { RUN_STATE_LABELS, summarizeSteps, type RunState, type StepState } from '@/lib/ai/runs/states';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { topInsight, type ScheduleInsight } from '@/lib/schedule/intelligence';
 
 // ─── Today ───────────────────────────────────────────────────────────────────
 
@@ -34,9 +35,12 @@ export type TodayItem = {
   allDay: boolean;
   /** `family_members.id` the item is about, when the row carries one. */
   memberId: string | null;
-  /** "Due today" / "Overdue by 2 days" — from `rankNextActions`, so the copy is the same everywhere. */
+  /** "Due today" / "Overdue by 2 days" — from `rankNextActions`, so the copy is the same everywhere.
+   *  For an event with a schedule insight, the insight's reason ("Leave by 5:25 PM…"). */
   reason: string;
   bucket: NextAction['bucket'];
+  /** The most pressing schedule insight for an event (lib/schedule/intelligence), when there is one. */
+  insight?: ScheduleInsight;
 };
 
 export type TodayView = {
@@ -61,6 +65,12 @@ export type TodayInput = {
   now: Date;
   /** Cap on the task list; the schedule is never capped because a day is a day. */
   taskLimit?: number;
+  /**
+   * Schedule insights by event id (lib/schedule/intelligence). An event that
+   * has one gets the insight's reason instead of the bare "Today", and carries
+   * the insight so the strip can colour it by severity and link to the fix.
+   */
+  insights?: Record<string, ScheduleInsight[]>;
 };
 
 /**
@@ -99,9 +109,12 @@ export function buildToday(input: TodayInput): TodayView {
   const schedule: TodayItem[] = [];
   for (const e of input.events) {
     if (dayKeyInZone(e.starts_at, tz) !== todayKey) continue;
+    const insight = e.all_day ? null : topInsight(input.insights?.[e.id]);
     schedule.push({
       key: `event:${e.id}`, kind: 'event', id: e.id, title: e.title, href: '/dashboard/calendar',
-      at: e.starts_at, allDay: e.all_day, memberId: e.assignee_id ?? null, reason: e.all_day ? 'All day' : 'Today', bucket: 'today',
+      at: e.starts_at, allDay: e.all_day, memberId: e.assignee_id ?? null,
+      reason: insight ? insight.reason : e.all_day ? 'All day' : 'Today', bucket: 'today',
+      ...(insight ? { insight } : {}),
     });
   }
 
