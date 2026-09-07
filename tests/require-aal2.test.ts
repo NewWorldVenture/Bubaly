@@ -97,7 +97,7 @@ describe('requireAal2', () => {
     mocks.getAal.mockResolvedValue({ data: null, error: { message: 'session missing' } });
     await expect(requireAal2(ctx('adult'), 'documents', '/dashboard/documents')).rejects.toThrow('NEXT_REDIRECT');
     expect(mocks.redirect).toHaveBeenCalledWith('/auth/step-up?next=%2Fdashboard%2Fdocuments');
-    expect(errorSpy.mock.calls.map((c) => String(c[0]))).toContain('[auth/aal2] documents assurance level read failed');
+    expect(errorSpy.mock.calls.map((c: unknown[]) => String(c[0]))).toContain('[auth/aal2] documents assurance level read failed');
   });
 
   it('answers a verdict without acting on it, for route handlers that reply with JSON', async () => {

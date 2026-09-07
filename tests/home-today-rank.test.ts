@@ -3,12 +3,11 @@
 // as the Next Best Actions page — and the same on every render, which is the
 // property a home screen must have or it jitters.
 import { describe, expect, it } from 'vitest';
-import { buildToday, dayKeyInZone, mergeCompletedByBubaly, workingRunsFrom, type TodayInput } from '@/lib/home/today';
-import type { ScheduleInsight } from '@/lib/schedule/intelligence';
 import {
   buildToday, dayKeyInZone, excerpt, mergeCompletedByBubaly, runReason, runSources, workingRunsFrom, EMPTY_EVIDENCE, REASON_EXCERPT_LENGTH,
   type CompletedEvidence, type TodayInput,
 } from '@/lib/home/today';
+import type { ScheduleInsight } from '@/lib/schedule/intelligence';
 
 const TZ = 'America/New_York';
 const NOW = new Date('2026-09-05T14:00:00Z'); // 10:00 in New York

@@ -156,7 +156,7 @@ describe('buildFamilyExport', () => {
     failing(db, 'transactions', { code: '57014', message: 'canceling statement due to statement timeout' });
     const built = await buildFamilyExport(scopeFor(db, 'parent'));
     expect(built).toEqual({ ok: false, failed: [{ key: 'finances', error: expect.any(String) }] });
-    expect(errorSpy.mock.calls.map((c) => String(c[0]))).toContain('[privacy] export finances read failed');
+    expect(errorSpy.mock.calls.map((c: unknown[]) => String(c[0]))).toContain('[privacy] export finances read failed');
   });
 });
 
@@ -245,7 +245,7 @@ describe('GET /api/privacy/export', () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: 'export_failed', failed: ['calendar'], retryable: true });
     expect(db.table('trust_audit_logs')).toHaveLength(0);
-    expect(errorSpy.mock.calls.map((c) => String(c[0]))).toContain('[privacy] export calendar read failed');
+    expect(errorSpy.mock.calls.map((c: unknown[]) => String(c[0]))).toContain('[privacy] export calendar read failed');
   });
 
   it('refuses to send an export the ledger would not record', async () => {
@@ -257,7 +257,7 @@ describe('GET /api/privacy/export', () => {
     const res = await GET();
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'audit_failed', retryable: true });
-    expect(errorSpy.mock.calls.map((c) => String(c[0]))).toContain('[privacy] export ledger write failed');
+    expect(errorSpy.mock.calls.map((c: unknown[]) => String(c[0]))).toContain('[privacy] export ledger write failed');
   });
 
   it('scopes a teen\'s download to what a teen may read', async () => {
