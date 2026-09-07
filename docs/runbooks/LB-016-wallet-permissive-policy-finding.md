@@ -105,7 +105,65 @@ deliberate, credentialed operator action against the production database.
 **Do:** repair the ledger baseline first, then let the normal forward release
 apply `0272` onward, `0275` included.
 
-## 5. If you are an agent that just got stopped by this
+## 5. Running this by hand in the Supabase SQL editor
+
+`0254` has been applied to production by hand. That is what puts the restrictive
+guards in place, so **the money is locked** (§2). It does **not** necessarily
+clear the finding: `0254` drops policies by name, so a stray called anything
+other than `wallet_transactions_insert` / `_update` / `_delete` or
+`"Members manage wallet_transactions"` survives it.
+
+### Step 1 — find out (read-only, changes nothing)
+
+```sql
+select c.relname                                as table_name,
+       p.polname                                as policy_name,
+       case p.polcmd when 'a' then 'INSERT' when 'w' then 'UPDATE'
+                     when 'd' then 'DELETE' when '*' then 'ALL'
+                     when 'r' then 'SELECT' end as command,
+       case when p.polpermissive then 'PERMISSIVE' else 'RESTRICTIVE' end as kind,
+       pg_get_expr(p.polqual,      p.polrelid)  as using_expr,
+       pg_get_expr(p.polwithcheck, p.polrelid)  as with_check_expr
+from pg_policy p
+join pg_class c     on c.oid = p.polrelid
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname = any (array[
+    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+    'financial_accounts','transactions','budgets','bills','savings_goals'])
+order by c.relname, p.polpermissive desc, p.polcmd, p.polname;
+```
+
+Read the result like this:
+
+- A **RESTRICTIVE** row on a write command is a guard. You want these. There
+  should be three per wallet table (`_manager_insert_guard` and siblings).
+- A **PERMISSIVE** row on `INSERT`/`UPDATE`/`DELETE`/`ALL` whose name is not
+  `<table>_mng_insert` / `_mng_update` / `_mng_delete` (wallet tables) or
+  `<table>_insert` / `_update` / `_delete` (finance tables) **is the stray the
+  audit keeps reporting.** Note its name.
+- `SELECT` rows are out of scope — leave them alone (§3).
+
+### Step 2 — remove it
+
+Paste the whole of `supabase/migrations/0275_money_permissive_write_sweep.sql`
+into the SQL editor and run it. It removes strays by shape rather than by name,
+so you do not have to tell it what the policy from step 1 is called. It is
+idempotent, it re-asserts the intended policies and the guards, it touches no
+money rows, and it raises an exception rather than reporting success if a stray
+survives. Re-run step 1 afterwards: every remaining permissive write row should
+be an intended one.
+
+### A caveat about doing this by hand
+
+Applying migrations through the SQL editor does **not** record them in
+`supabase_migrations.schema_migrations`. That divergence is exactly what §4
+describes — production's ledger holds only `0001`–`0003` while the schema is far
+ahead. Hand-applying `0254` and `0275` is low risk in itself (policies only,
+idempotent, no data touched), but it widens that gap. The ledger still needs the
+operator action in §4 before the normal forward release can work again.
+
+## 6. If you are an agent that just got stopped by this
 
 1. Confirm the finding is the one described above (permissive **write** policy on
    a money table).
