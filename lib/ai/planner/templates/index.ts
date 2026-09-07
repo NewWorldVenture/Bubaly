@@ -21,6 +21,7 @@
 import type { AgentId } from '@/lib/agents/roster';
 import type { IntentKey } from '@/lib/ai/context/intents';
 import { encodeStepInput, type Plan, type PlanStep, type PlanStepType } from '../schema';
+import { chiefOfStaffTemplate } from './chief-of-staff';
 import { findVendorTemplate } from './find-vendor';
 import { organizeWeekendTemplate } from './organize-weekend';
 import { dailyBriefTemplate } from './daily-brief';
@@ -113,6 +114,11 @@ const TEMPLATES: Partial<Record<IntentKey, WorkflowTemplate>> = {
   spending_review: spendingReviewTemplate,
   find_vendor: findVendorTemplate,
   what_am_i_forgetting: whatAmIForgettingTemplate,
+  // The generic skeleton for a request that reaches across the household:
+  // reads first, acts by area, then the asker is told. `other` stays
+  // template-less on purpose — it is for text nothing recognised, and a
+  // skeleton that assumed a sweep would be the wrong shape for most of it.
+  chief_of_staff: chiefOfStaffTemplate,
 };
 
 /** The template for an intent, or null for intents that plan from scratch (answer_question, capture, other…). */

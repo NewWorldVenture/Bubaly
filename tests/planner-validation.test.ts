@@ -715,3 +715,51 @@ describe('planRequest with the scripted provider', () => {
     expect(call.messages[0].content).toContain('"key":"plan_dinners"');
   });
 });
+
+describe('validatePlan: replan steps', () => {
+  const who = step({ key: 'who', tool_name: 'family.listMembers' });
+  const decide = (extra: Partial<PlanStep> = {}) => step({ key: 'decide', step_type: 'replan', input: '{"prompt":"Pick the free evening"}', depends_on: ['who'], ...extra });
+
+  it('keeps one replan step that depends on a read, carrying its prompt and never an approval', () => {
+    const result = validatePlan(plan([who, decide()]), inputsWith());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.steps.map((s) => s.key)).toEqual(['who', 'decide']);
+    expect(result.steps[1]).toMatchObject({ stepType: 'replan', toolName: null, input: { prompt: 'Pick the free evening' }, approvalRequired: false, riskLevel: 'low', dependsOn: ['who'] });
+    expect(result.issues).toEqual([]);
+  });
+
+  it('falls back to the description when the replan step has no prompt', () => {
+    const result = validatePlan(plan([who, decide({ input: '{}', description: 'Decide what the evening needs' })]), inputsWith());
+    expect(result.ok && result.steps[1].input).toEqual({ prompt: 'Decide what the evening needs' });
+  });
+
+  it('drops a replan step with nothing to decide from: an empty depends_on, or only unknown ones', () => {
+    const empty = validatePlan(plan([who, decide({ depends_on: [] })]), inputsWith());
+    expect(empty.ok && empty.steps.map((s) => s.key)).toEqual(['who']);
+    expect(empty.issues.map((i) => i.code)).toEqual(['invalid_replan']);
+
+    const unknown = validatePlan(plan([who, decide({ depends_on: ['nope'] })]), inputsWith());
+    expect(unknown.ok && unknown.steps.map((s) => s.key)).toEqual(['who']);
+    expect(unknown.issues.map((i) => i.code)).toEqual(['unknown_dependency', 'invalid_replan']);
+  });
+
+  it('drops a second replan step, and anything that depends on a replan step', () => {
+    const result = validatePlan(plan([
+      who,
+      decide(),
+      decide({ key: 'decide_again' }),
+      step({ key: 'after', step_type: 'act', tool_name: 'tasks.createTodo', input: '{"title":"Pack"}', depends_on: ['decide'] }),
+      step({ key: 'tell', step_type: 'notify', input: '{"recipients":"family","type":"system","title":"Done"}', depends_on: ['after'] }),
+    ]), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.key)).toEqual(['who', 'decide']);
+    expect(result.issues.map((i) => i.code)).toEqual(['invalid_replan', 'invalid_replan', 'dependency_dropped']);
+    expect(result.issues[1].message).toContain('nothing may');
+  });
+
+  it('leaves follow-ups out of a plan that ends in a replan step', () => {
+    const result = validatePlan(plan([who, decide()], { followups: [{ after: '2d', prompt: 'Check the evening went well' }] }), inputsWith());
+    expect(result.ok && result.steps.map((s) => s.stepType)).toEqual(['retrieve', 'replan']);
+    expect(result.issues.map((i) => i.code)).toEqual(['invalid_followup']);
+  });
+});

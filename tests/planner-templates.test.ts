@@ -29,15 +29,17 @@ function ctxOn(todayKey: string, extra: Partial<Parameters<typeof templateContex
 describe('workflow templates are runnable skeletons', () => {
   const ctx = ctxOn('2026-09-05');
 
-  it('covers the seven signature workflows plus the two proactive asks', () => {
+  it('covers the seven signature workflows, the two proactive asks and the chief-of-staff sweep', () => {
     expect(allTemplates().map((t) => t.intent).sort()).toEqual([
-      'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
+      'chief_of_staff', 'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
     ]);
     for (const intent of INTENT_KEYS) {
       const template = templateFor(intent);
       if (template) expect(template.intent).toBe(intent);
     }
     expect(templateFor('answer_question')).toBeNull();
+    // `other` plans from scratch on purpose: it is for text nothing recognised.
+    expect(templateFor('other')).toBeNull();
   });
 
   it('names a real roster agent for every workflow', () => {
