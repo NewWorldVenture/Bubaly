@@ -25,6 +25,7 @@ import type {
   AiRequestKind, AiRiskLevel, AiRunEventType, AiRunType, AiStepType, Database, Json, Tables,
 } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { remapBindings } from './bindings';
@@ -769,8 +770,8 @@ export async function loadRunDetail(
     run.plan_id
       ? db.from('ai_plan_steps').select('*').eq('plan_id', run.plan_id).eq('family_id', scope.familyId).order('sequence', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    db.from('ai_run_events').select('*').eq('run_id', runId).eq('family_id', scope.familyId)
-      .order('created_at', { ascending: true }).limit(opts?.eventLimit ?? 200),
+    settle(db.from('ai_run_events').select('*').eq('run_id', runId).eq('family_id', scope.familyId)
+      .order('created_at', { ascending: true }).limit(opts?.eventLimit ?? 200)),
   ]);
 
   // A run header without its steps would render as an empty, finished-looking

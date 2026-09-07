@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Activity, AlertTriangle, Lightbulb, Gauge } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
@@ -34,9 +35,9 @@ export default async function FamilyStressPage() {
 
   const [signalsResult, membersResult, loggedSignalsResult] = await Promise.all([
     gatherSignalsResult(familyId),
-    supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('family_stress_signals').select('*').eq('family_id', familyId)
-      .order('occurred_on', { ascending: false }).limit(12),
+    settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('family_stress_signals').select('*').eq('family_id', familyId)
+      .order('occurred_on', { ascending: false }).limit(12)),
   ]);
 
   const readError = signalsResult.error ?? membersResult.error ?? loggedSignalsResult.error;

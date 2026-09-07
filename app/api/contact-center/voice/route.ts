@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import {
   validateTwilioSignature, wrapTwiml, twimlSay, twimlDial, twimlRecord, twimlHangup,
 } from '@/lib/guardian/twilio';
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   const [channelResult, familyResult] = await Promise.all([
     getOrCreateChannelResult(admin, familyId),
-    admin.from('families').select('name').eq('id', familyId).maybeSingle(),
+    settle(admin.from('families').select('name').eq('id', familyId).maybeSingle()),
   ]);
   if (channelResult.error || familyResult.error) {
     console.error('[contact-center] voice family context read failed', channelResult.error ?? familyResult.error);

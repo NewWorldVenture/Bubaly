@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { saveSetting } from '../actions';
@@ -34,7 +35,7 @@ export default async function MarketingSettingsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
   const [{ data: settings, error: settingsError }, aiConfig] = await Promise.all([
-    supabase.from('marketing_settings').select('*'),
+    settle(supabase.from('marketing_settings').select('*')),
     getAIConfigView(supabase),
   ]);
   if (settingsError) {

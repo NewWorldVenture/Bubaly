@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessagesSquare, ExternalLink, Github } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import type { IdeaRow } from '@/lib/feedback/board';
 import { githubRepoStatus } from '@/lib/integrations/github';
 import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/components/admin/feedback-admin';
@@ -16,19 +17,19 @@ export default async function AdminFeedbackPage() {
   const supabase = createServiceClient();
 
   const [ideasResult, commentsResult, notesResult, gh] = await Promise.all([
-    supabase.from('feedback_ideas')
+    settle(supabase.from('feedback_ideas')
       .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, github_issue_number, github_issue_url, created_at')
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(1000),
-    supabase.from('feedback_comments')
+      .limit(1000)),
+    settle(supabase.from('feedback_comments')
       .select('id, idea_id, author_name, is_team, body, created_at')
       .order('created_at', { ascending: true })
-      .limit(3000),
-    supabase.from('admin_notifications')
+      .limit(3000)),
+    settle(supabase.from('admin_notifications')
       .select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(50)),
     githubRepoStatus(),
   ]);
 

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CheckCircle2, XCircle, Users, Home, DollarSign, FolderLock, Database, RefreshCw } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -48,11 +49,11 @@ export default async function AdminSystemPage() {
     documentsResult,
   ] = await Promise.all([
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase.from('families').select('id', { count: 'exact', head: true }),
-    supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).limit(2000),
-    supabase.from('subscriptions').select('plan, status'),
-    supabase.from('documents').select('size_bytes'),
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
+    settle(supabase.from('families').select('id', { count: 'exact', head: true })),
+    settle(supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).limit(2000)),
+    settle(supabase.from('subscriptions').select('plan, status')),
+    settle(supabase.from('documents').select('size_bytes')),
   ]);
 
   const readError = [
