@@ -297,7 +297,7 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
     case 'meals': {
       const [plans, mealRows] = await Promise.all([
         sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30),
-        sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
+        sb.from('meals').select('id, name, meal_type, notes').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
       ]);
       return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
     }
