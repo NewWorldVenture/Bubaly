@@ -265,7 +265,9 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <Voicemail className="h-4 w-4 text-brand-text" />
               <p className="flex-1 text-sm font-semibold">{tr('frontDesk.callsToTheFamilyNumber')}</p>
-              <span className="text-[11px] text-muted">{voice.length}</span>
+              {/* Same rule as the tiles: a count of rows nobody could read is
+                  not 0, so the card header carries no number at all. */}
+              <span className="text-[11px] text-muted">{unavailable?.voice ? '—' : voice.length}</span>
             </div>
             {unavailable?.voice ? (
               <div className="flex items-center gap-3 px-4 py-6">
