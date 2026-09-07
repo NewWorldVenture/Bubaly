@@ -4231,6 +4231,7 @@
   "familyCfo.couldNotLoadYourFamily": "Could not load your family finances from Supabase. Refresh and try again.",
   "familyCfo.covered": "Covered",
   "familyCfo.coveredAutopay": "Covered · autopay",
+  "familyCfo.currentOfTargetPct": "{current} of {target} · {pct}%",
   "familyCfo.dueNext12Wks": "Due · next 12 wks",
   "familyCfo.everyBillInTheNext12": "Every one of the {n} bills in the next 12 weeks is covered — autopay or already paid. Nothing to do by hand.",
   "familyCfo.explainThisMonth": "Explain this month",

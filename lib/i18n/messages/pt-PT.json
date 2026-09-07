@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Quando",
   "familyCfo.billsGoalSetAsidesAndThe": "Contas, reservas para objetivos e os compromissos que os seus planos já carregam: viagens, mudanças, obras em casa, subscrições.",
   "familyCfo.couldNotLoadYourFamily": "Não foi possível carregar as finanças da sua família do Supabase. Atualize e tente novamente.",
+  "familyCfo.currentOfTargetPct": "{current} de {target} · {pct} %",
   "familyCfo.covered": "Coberto",
   "familyCfo.coveredAutopay": "Coberta · débito direto",
   "familyCfo.dueNext12Wks": "A pagar · próximas 12 sem.",

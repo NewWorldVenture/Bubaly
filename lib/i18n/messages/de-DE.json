@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Wann",
   "familyCfo.billsGoalSetAsidesAndThe": "Rechnungen, Rücklagen für Ziele und die Verpflichtungen, die Ihre Pläne bereits tragen – Reisen, Umzüge, Hausprojekte, Abonnements.",
   "familyCfo.couldNotLoadYourFamily": "Fehler beim Laden: Ihre Familienfinanzen aus Supabase. Bitte aktualisieren und erneut versuchen.",
+  "familyCfo.currentOfTargetPct": "{current} von {target} · {pct} %",
   "familyCfo.covered": "Gedeckt",
   "familyCfo.coveredAutopay": "Gedeckt · Lastschrift",
   "familyCfo.dueNext12Wks": "Fällig · nächste 12 Wo.",

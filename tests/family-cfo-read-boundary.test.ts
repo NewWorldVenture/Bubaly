@@ -92,3 +92,32 @@ describe('EXPLAIN_MONTH_REQUEST', () => {
     expect(classifyIntentFast(EXPLAIN_MONTH_REQUEST)?.intent).toBe('spending_review');
   });
 });
+
+
+// Every outbound link on the CFO surface must land on a route that exists.
+// A plan-linked commitment badge pointing at /dashboard/moves or
+// /dashboard/home-projects (neither route exists — they are /dashboard/moving
+// and /dashboard/projects) is an inert control dressed as a working one.
+describe('family-cfo outbound links resolve to real routes', () => {
+  const scenario = fs.readFileSync('components/finance/affordability-scenario.tsx', 'utf8');
+  const routes = (source: string) =>
+    [...source.matchAll(/(?:href|viewAllHref)\s*[=:]\s*["'](\/dashboard\/[a-z0-9-]+)["']/g)].map((m) => m[1]);
+
+  it('the page and the affordability form only link to dashboard routes with a page.tsx', () => {
+    const hrefs = [...new Set([...routes(page), ...routes(scenario)])];
+    // billing, money-timeline, family-digital-twin + the four plan-source modules.
+    expect(hrefs).toEqual(expect.arrayContaining([
+      '/dashboard/money-timeline', '/dashboard/family-digital-twin',
+      '/dashboard/subscriptions', '/dashboard/vacations', '/dashboard/moving', '/dashboard/projects',
+    ]));
+    const missing = hrefs.filter((h) => !fs.existsSync(`app/(app)${h}/page.tsx`));
+    expect(missing).toEqual([]);
+  });
+
+  it('each plan source badge points at the module that owns the plan', () => {
+    expect(page).toContain("subscription: { labelKey: 'familyCfo.subscription', icon: Repeat, href: '/dashboard/subscriptions' }");
+    expect(page).toContain("vacation: { labelKey: 'familyCfo.trip', icon: Plane, href: '/dashboard/vacations' }");
+    expect(page).toContain("move: { labelKey: 'familyCfo.move', icon: Truck, href: '/dashboard/moving' }");
+    expect(page).toContain("project: { labelKey: 'familyCfo.homeProject', icon: Hammer, href: '/dashboard/projects' }");
+  });
+});

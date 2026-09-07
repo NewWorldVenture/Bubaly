@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Cuándo",
   "familyCfo.billsGoalSetAsidesAndThe": "Facturas, apartados para metas y los compromisos que tus planes ya llevan: viajes, mudanzas, proyectos del hogar, suscripciones.",
   "familyCfo.couldNotLoadYourFamily": "Error al cargar las finanzas de tu familia de Supabase. Actualiza y vuelve a intentarlo.",
+  "familyCfo.currentOfTargetPct": "{current} de {target} · {pct} %",
   "familyCfo.covered": "Cubierto",
   "familyCfo.coveredAutopay": "Cubierta · domiciliada",
   "familyCfo.dueNext12Wks": "Vence · próximas 12 sem.",

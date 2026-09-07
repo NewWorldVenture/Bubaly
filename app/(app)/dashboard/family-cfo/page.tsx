@@ -26,8 +26,8 @@ const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', c
 const PLAN_SOURCE: Record<PlanSource, { labelKey: string; icon: typeof Plane; href: string }> = {
   subscription: { labelKey: 'familyCfo.subscription', icon: Repeat, href: '/dashboard/subscriptions' },
   vacation: { labelKey: 'familyCfo.trip', icon: Plane, href: '/dashboard/vacations' },
-  move: { labelKey: 'familyCfo.move', icon: Truck, href: '/dashboard/moves' },
-  project: { labelKey: 'familyCfo.homeProject', icon: Hammer, href: '/dashboard/home-projects' },
+  move: { labelKey: 'familyCfo.move', icon: Truck, href: '/dashboard/moving' },
+  project: { labelKey: 'familyCfo.homeProject', icon: Hammer, href: '/dashboard/projects' },
 };
 
 export default async function FamilyCfoPage() {
@@ -111,7 +111,7 @@ export default async function FamilyCfoPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label={tr('dashboardFamilyCfo.netPosition')} value={usd(netWorth)} icon={Wallet} accent="bg-emerald-600" href="/dashboard/billing" sublabel="Accounts" />
+        <StatTile label={tr('dashboardFamilyCfo.netPosition')} value={usd(netWorth)} icon={Wallet} accent="bg-emerald-600" href="/dashboard/billing" sublabel={tr('finances.accounts')} />
         <StatTile label={tr('dashboardFamilyCfo.dueIn30Days')} value={usd(upcomingTotal)} icon={CalendarClock} accent="bg-orange-500" />
         <StatTile label={tr('dashboardFamilyCfo.spentThisMonth')} value={usd(monthSpend)} icon={TrendingDown} accent="bg-rose-500" />
         <StatTile label={tr('dashboardFamilyCfo.savingsGoals')} value={goals?.length ?? 0} icon={PiggyBank} accent="bg-violet-600" />
@@ -239,7 +239,7 @@ export default async function FamilyCfoPage() {
                 <div key={g.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                   <div className="flex items-center gap-2"><span className="text-xl">{g.emoji ?? '🎯'}</span><span className="font-semibold">{g.name}</span></div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} /></div>
-                  <p className="mt-2 text-xs text-muted">{usd(Number(g.current_amount))} of {usd(Number(g.target_amount))} · {pct}%</p>
+                  <p className="mt-2 text-xs text-muted">{tr('familyCfo.currentOfTargetPct', { current: usd(Number(g.current_amount)), target: usd(Number(g.target_amount)), pct })}</p>
                 </div>
               );
             })}

@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Quando",
   "familyCfo.billsGoalSetAsidesAndThe": "Bollette, accantonamenti per gli obiettivi e gli impegni che i tuoi piani già portano: viaggi, traslochi, lavori di casa, abbonamenti.",
   "familyCfo.couldNotLoadYourFamily": "Impossibile caricare le finanze della tua famiglia da Supabase. Aggiorna e riprova.",
+  "familyCfo.currentOfTargetPct": "{current} di {target} · {pct}%",
   "familyCfo.covered": "Coperto",
   "familyCfo.coveredAutopay": "Coperta · addebito automatico",
   "familyCfo.dueNext12Wks": "In scadenza · prossime 12 sett.",

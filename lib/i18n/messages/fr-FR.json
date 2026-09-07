@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Quand",
   "familyCfo.billsGoalSetAsidesAndThe": "Factures, mises de côté pour les objectifs et les engagements que vos projets portent déjà : voyages, déménagements, travaux, abonnements.",
   "familyCfo.couldNotLoadYourFamily": "Impossible de charger les finances de votre famille depuis Supabase. Actualisez et réessayez.",
+  "familyCfo.currentOfTargetPct": "{current} sur {target} · {pct} %",
   "familyCfo.covered": "Couvert",
   "familyCfo.coveredAutopay": "Couverte · prélèvement",
   "familyCfo.dueNext12Wks": "À payer · 12 prochaines sem.",

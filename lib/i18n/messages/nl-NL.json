@@ -4226,6 +4226,7 @@
   "familyAutomation.when": "Wanneer",
   "familyCfo.billsGoalSetAsidesAndThe": "Rekeningen, reserveringen voor doelen en de verplichtingen die je plannen al dragen: reizen, verhuizingen, klusprojecten, abonnementen.",
   "familyCfo.couldNotLoadYourFamily": "Kon de financiën van je gezin uit Supabase niet laden. Ververs en probeer het opnieuw.",
+  "familyCfo.currentOfTargetPct": "{current} van {target} · {pct}%",
   "familyCfo.covered": "Gedekt",
   "familyCfo.coveredAutopay": "Gedekt · incasso",
   "familyCfo.dueNext12Wks": "Te betalen · komende 12 wk",
