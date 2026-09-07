@@ -18,3 +18,33 @@ export function validateCredentials(email: string, password: string): string | n
   if (!password) return 'Enter your password.';
   return null;
 }
+
+/**
+ * Is this auth failure transient — a network blip, a timeout, a rate limit, a
+ * Supabase 5xx — rather than a real "your session is gone"?
+ *
+ * Mirrors `isRetryableAuthError` in lib/auth/session.ts (parity is asserted in
+ * the root test suite). It is duplicated rather than imported because Metro
+ * only bundles this project and ../design, so a runtime import from the web
+ * app's lib/ would not resolve — unlike the type-only imports elsewhere here.
+ *
+ * On this side it decides whether a cold start with no network shows the sign-in
+ * screen. The refresh token is still in the Keychain and the auto-refresh ticker
+ * will use it the moment the network returns, so a transient failure must not be
+ * read as "signed out".
+ */
+export function isRetryableAuthError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { name?: unknown; status?: unknown; code?: unknown; message?: unknown };
+
+  if (e.name === 'AuthRetryableFetchError') return true;
+
+  const status = typeof e.status === 'number' ? e.status : null;
+  if (status !== null && (status === 0 || status === 408 || status === 429 || status >= 500)) return true;
+
+  const code = typeof e.code === 'string' ? e.code : '';
+  if (/^(?:network_error|request_timeout|over_request_rate_limit|unexpected_failure)$/.test(code)) return true;
+
+  const message = typeof e.message === 'string' ? e.message : '';
+  return /fetch failed|network ?error|failed to fetch|timed? ?out|econnreset|enotfound|eai_again|socket hang up/i.test(message);
+}

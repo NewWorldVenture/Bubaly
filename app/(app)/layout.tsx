@@ -5,13 +5,15 @@ import { resolveEntitlement } from '@/lib/server/entitlement';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
+import { SessionKeeper } from '@/components/auth/session-keeper';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
-// admin, family, missions, etc. Its only job is the opt-in App Lock: when the
-// signed-in user has set a PIN, the whole app is gated behind the lock screen
-// (not just the dashboard). It intentionally does NOT enforce auth/redirects —
-// each section's own layout still does that — so this can never change sign-in
-// behavior; it just wraps children with the gate when a lock exists.
+// admin, family, missions, etc. It does two things: mounts the SessionKeeper so
+// a signed-in user stays signed in until they sign out (see that component),
+// and applies the opt-in App Lock — when the signed-in user has set a PIN, the
+// whole app is gated behind the lock screen (not just the dashboard). It
+// intentionally does NOT enforce auth/redirects — each section's own layout
+// still does that — so this can never change sign-in behavior.
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
@@ -37,11 +39,19 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   const appLockRaw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
   const appLock = isAppLockConfig(appLockRaw) ? appLockRaw : null;
 
-  if (!appLock?.enabled) return <>{children}</>;
-
+  // The keeper sits outside the App Lock gate on purpose: the session must keep
+  // refreshing while the lock screen is up, so unlocking with the PIN lands on a
+  // live session rather than a login page.
   return (
-    <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={user.id}>
-      {children}
-    </AppLockGate>
+    <>
+      <SessionKeeper />
+      {appLock?.enabled
+        ? (
+          <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={user.id}>
+            {children}
+          </AppLockGate>
+        )
+        : children}
+    </>
   );
 }
