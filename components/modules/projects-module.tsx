@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Hammer, Plus, Check, Pencil, Trash2, Wallet, CalendarClock, FileText, Package, Wand2, ShoppingCart, ExternalLink, ArrowRight, XCircle, Users } from 'lucide-react';
+import { Hammer, Plus, Check, Pencil, Trash2, Wallet, CalendarClock, FileText, Package, Wand2, ShoppingCart, ExternalLink, ArrowRight, XCircle, Users, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -20,6 +20,7 @@ import {
   PROJECT_KINDS, PROJECT_STATUSES, PRIORITIES, QUOTE_STATUSES, BOARD, kindMeta, statusLabel, columnFor, suggestScope, materialsTotals, materialLineCents,
   compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
+import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Project = Tables<'home_projects'>;
@@ -297,6 +298,9 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   const bh = budgetHealth(project, materials, quotes, today);
   const mt = materialsTotals(materials, project.id);
   const qc = compareQuotes(quotes, project.id, today);
+  // The ranked comparison is pure over the persisted rows this detail already
+  // holds — the same function the assistant's services.compareQuotes reads.
+  const ranking = rankQuotes(quotes, { today });
   const sc = schedule(project, today);
   const templates = suggestScope(`${project.title} ${project.description ?? ''}`).slice(0, 1);
   const contractorOf = (id: string | null) => contractors.find((c) => c.id === id) ?? null;
@@ -420,6 +424,20 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
           ) : (
             <ul className="space-y-1.5">
               {qc.spreadPct !== null && <li className="px-1 text-xs text-muted">{tr('projects.liveQuotesSpan')} {qc.spreadPct}{tr('projects.fromLowestToHighest')}{qc.lowest ? ` · lowest ${money(qc.lowest.amount_cents)} (${qc.lowest.contractor_name})` : ''}</li>}
+              {ranking.ranked.length >= 2 && (
+                <li className="rounded-xl border border-brand/25 bg-brand/5 px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-text"><Sparkles className="h-3.5 w-3.5" /> {tr('projects.bubalysComparison')}</p>
+                  <p className="text-[11px] text-muted">{tr('projects.rankedByPriceLeadTime')}</p>
+                  <ol className="mt-1.5 space-y-1">
+                    {ranking.ranked.map((r) => (
+                      <li key={r.quote.id} className="text-xs">
+                        <span className="font-semibold">{r.rank}. {r.quote.contractor_name}</span>
+                        <span className="text-muted"> · {money(r.quote.amount_cents)} · {r.reasons.map((x) => tr(x.labelKey, x.params)).join(' · ')}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </li>
+              )}
               {qc.rows.map((q) => {
                 const c = contractorOf(q.contractor_id);
                 return (

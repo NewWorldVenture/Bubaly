@@ -45,7 +45,8 @@ function offendingFiles(): string[] {
 // fixed — never add. New entries here mean the class grew, which defeats the point.
 const BASELINE = new Set<string>([
   'app/(app)/dashboard/billing/page.tsx',
-  'app/(app)/dashboard/concierge-calls/page.tsx',
+  // concierge-calls page fixed under M26 honesty (wave 3b) — a failed read now
+  // renders a retryable ErrorState instead of an empty queue; removed.
   'app/(app)/dashboard/independence/page.tsx',
   // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
   // and render MiniError instead of a false-empty; removed from baseline.
@@ -62,7 +63,8 @@ const BASELINE = new Set<string>([
   // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message
   // reads keep prior state on error instead of false-emptying; removed.
   'components/modules/billing-module.tsx',
-  'components/modules/concierge-calls-module.tsx',
+  // concierge-calls-module fixed under M26 honesty (wave 3b) — the realtime
+  // refresh keeps the list on screen when its read fails; removed.
   // grocery-module fixed under A-10 (PLA-0625), then deleted as an unreachable
   // duplicate of shopping-module; it is neither an offender nor a file any more.
   // settings-module fixed under A-05 (PLA-0791) — profile read now captures
