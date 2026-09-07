@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Scale, Inbox, Users, Share2, Siren, ScrollText, Plus, Check, X,
-  Trash2, Loader2, Lock, ChevronRight, Clock, Power,
+  Trash2, Loader2, Lock, ChevronRight, Clock, Power, Activity,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -15,6 +15,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { cn } from '@/lib/utils/cn';
 import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
+import { TrustActivityTab } from '@/components/modules/trust-activity-tab';
+import type { BasedOn, TrustActivity } from '@/lib/trust/activity';
 import {
   TRUST_DOMAINS, CAPABILITIES, DOMAIN_LABELS, CAPABILITY_LABELS,
   ROLE_DEFAULTS, type Capability, type TrustRole,
@@ -42,6 +44,12 @@ type Audit = { id: string; actor_kind: string; actor_id: string | null; domain: 
 export type TrustData = {
   members: Member[]; policies: Policy[]; grants: Grant[]; delegations: Delegation[];
   approvals: Approval[]; emergencies: Emergency[]; audit: Audit[];
+  /** M24 — the Activity tab's ledger, dials and read/withheld list; null when its read failed. */
+  activity?: TrustActivity | null;
+  /** Already-translated copy for that failure, so the tab fails closed instead of showing an empty ledger. */
+  activityError?: string | null;
+  /** Context slice names per APPROVAL id, for the card's "Based on" expander. */
+  basedOn?: Record<string, BasedOn>;
 };
 
 const EFFECT_STYLES: Record<string, string> = {
@@ -59,7 +67,7 @@ const DECISION_STYLES: Record<string, string> = {
   require_approval: 'text-amber-400', emergency_override: 'text-rose-400',
 };
 
-type Tab = 'approvals' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
+type Tab = 'approvals' | 'activity' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
 
 function fmtAmount(cents: number | null) {
   if (cents == null) return null;
@@ -85,6 +93,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }[] = [
     { key: 'approvals', label: 'Approvals', icon: Inbox, badge: pendingApprovals.length || undefined },
+    { key: 'activity', label: tr('trustActivity.activity'), icon: Activity },
     { key: 'policies', label: 'Policies', icon: Scale },
     { key: 'permissions', label: 'Permissions', icon: Users },
     { key: 'delegations', label: 'Delegations', icon: Share2 },
@@ -139,7 +148,8 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
         ))}
       </div>
 
-      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} />}
+      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} basedOn={data.basedOn} />}
+      {tab === 'activity' && <TrustActivityTab activity={data.activity ?? null} error={data.activityError ?? null} policies={data.policies} />}
       {tab === 'policies' && <PoliciesTab policies={data.policies} members={data.members} canManage={canManage} />}
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
@@ -150,7 +160,13 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 }
 
 // ─── Approvals inbox ──────────────────────────────────────────────────────────
-function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]; members: Member[]; canManage: boolean }) {
+function ApprovalsTab({ approvals, members, canManage, basedOn }: {
+  approvals: Approval[];
+  members: Member[];
+  canManage: boolean;
+  /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
+  basedOn?: Record<string, BasedOn>;
+}) {
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -172,7 +188,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
           {pending.map(a => (
             <ApprovalCard
               key={a.id}
-              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage, managerCount })}
+              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage, managerCount, basedOn: basedOn?.[a.id] })}
               canDecide={canManage}
               onResult={(result) => {
                 if (result.decision !== 'pending') setGone((g) => new Set(g).add(a.id));
