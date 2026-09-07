@@ -100,10 +100,18 @@ deliberate, credentialed operator action against the production database.
 **Do not:**
 - disable or weaken `hasUnrecordedBaseline`;
 - pass `--enforce-history` off to "get past" it;
-- hand-apply `0275` to production out of band.
+- hand-apply anything that touches **data or schema** out of band — that is what
+  the ledger exists to keep honest.
 
-**Do:** repair the ledger baseline first, then let the normal forward release
-apply `0272` onward, `0275` included.
+**Do:** repair the ledger baseline, then let the normal forward release apply
+`0272` onward, `0275` included.
+
+`0275` itself is a defensible exception, and §5 walks through running it by hand:
+it changes policies only, touches no row and no column, is idempotent, and
+asserts its own end state. Applying it early closes the finding now rather than
+after the ledger work. It does widen the ledger gap by one more unrecorded
+migration, which is a real cost — see the caveat at the end of §5 — so it is a
+trade, not a free action.
 
 ## 5. Running this by hand in the Supabase SQL editor
 
