@@ -168,7 +168,7 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
 
   const { data: held, error: heldError } = await supabase.from('trust_policies')
     .select('id, domain, capability, effect, enabled, conditions')
-    .eq('family_id', familyId).eq('subject_kind', 'ai').eq('enabled', true).limit(200);
+    .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200);
   if (heldError) return actionFailure(heldError, t('actions.couldNotCreateThatPolicy'));
   const alreadyHeld = (held ?? []).some((p) => policyCoversTool(p, proposal.domain, proposal.capability, proposal.tool));
 

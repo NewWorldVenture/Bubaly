@@ -62,9 +62,11 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
     supabase.from('ai_tool_calls')
       .select('id, tool_name, state, created_at')
       .eq('family_id', familyId).gte('created_at', sinceIso).limit(2000),
+    // A policy addressed to `everyone` reaches Bubaly too, so an offer under it
+    // would be redundant the moment it was accepted.
     supabase.from('trust_policies')
       .select('id, domain, capability, effect, enabled, conditions')
-      .eq('family_id', familyId).eq('subject_kind', 'ai').eq('enabled', true).limit(200),
+      .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200),
     supabase.from('autopilot_suggestions')
       .select('id, dedupe_key, status, detail, confidence')
       .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).limit(200),
