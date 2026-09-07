@@ -38,6 +38,22 @@ export type InboxItemKind = 'message' | 'paperwork' | 'communication';
  */
 export type InboxReason = 'urgent' | 'soon' | 'unread' | 'recent';
 
+/**
+ * WHO closed a row, which is not the same question as whether it is closed.
+ *
+ *   'bubaly' — `family_inbox_messages.ai_handled`: an `ai_requests` row exists
+ *              for this message. That is ALL it proves. The run may still be
+ *              queued, parked waiting for a parent's answer, or failed, so the
+ *              only honest word for it is "filed with Bubaly" — never "handled".
+ *   'family' — a person moved the row to a terminal status (paperwork done or
+ *              archived, a communication replied to or archived).
+ *
+ * The component picks its wording from this; a single "Handled" badge across
+ * both would claim Bubaly finished work a person actually did, and claim
+ * completion for a run that has not run.
+ */
+export type InboxHandledBy = 'bubaly' | 'family';
+
 export type UnifiedInboxItem = {
   kind: InboxItemKind;
   /** Unique across sources: `<source>:<row id>`, so React keys and form values never collide. */
@@ -56,6 +72,8 @@ export type UnifiedInboxItem = {
    * a terminal status for paperwork and communications. Never optimistic.
    */
   handled: boolean;
+  /** Which of those two facts made `handled` true; null when it is false. */
+  handledBy: InboxHandledBy | null;
   reason: InboxReason;
   /** 0 = most urgent. Exposed so a test can pin the ordering contract. */
   rank: number;
@@ -193,8 +211,10 @@ function messageItem(row: InboxMessageRow, now: Date): UnifiedInboxItem {
     occurredAt: row.occurred_at,
     source: 'contact_center',
     // The row is the only authority: `ai_handled` is set after a request was
-    // persisted, never before.
+    // persisted, never before — and it says the message reached Bubaly, not
+    // that Bubaly finished with it.
     handled: row.ai_handled === true,
+    handledBy: row.ai_handled === true ? 'bubaly' : null,
     reason,
     rank: rankFor(reason),
     intent: row.ai_intent,
@@ -219,6 +239,8 @@ function paperworkItem(row: PaperworkRow, now: Date): UnifiedInboxItem {
     occurredAt: row.created_at,
     source: 'paperwork',
     handled: row.status === 'done' || row.status === 'archived',
+    // A person moved it; nothing here is a claim about Bubaly.
+    handledBy: row.status === 'done' || row.status === 'archived' ? 'family' : null,
     reason,
     rank: rankFor(reason),
     intent: null,
@@ -241,6 +263,7 @@ function communicationItem(row: CommunicationRow, now: Date): UnifiedInboxItem {
     occurredAt: row.received_at,
     source: 'communications',
     handled: row.status === 'replied' || row.status === 'archived',
+    handledBy: row.status === 'replied' || row.status === 'archived' ? 'family' : null,
     reason,
     rank: rankFor(reason),
     intent: null,

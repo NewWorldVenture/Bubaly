@@ -71,12 +71,22 @@ const CLASS_CONFIG: Record<string, { label: string; color: string }> = {
 
 type FilterTab = 'all' | 'important' | 'voicemail' | 'screened' | 'blocked';
 
-/** Stat tiles. Each value is a count of persisted rows, resolved at render. */
+/**
+ * Stat tiles. Every one of them counts the SAME persisted rows — the voice
+ * messages the Contact Center filed — so one failed read invalidates all three
+ * together and they can be blanked as a group.
+ *
+ * There used to be a fourth, labelled "Voicemail", counting `call_logs` rows
+ * somebody typed by hand. It sat beside three live numbers, went to 0 without a
+ * word when its own query failed, and every live voice row already IS a
+ * transcribed voicemail. It is gone; the frozen log keeps its own section.
+ */
 const STATS = [
-  { key: 'calls',   label: 'Calls',     labelKey: 'frontDesk.calls',        icon: '📞', color: 'text-brand-text' },
-  { key: 'handled', label: 'Handled',   labelKey: 'frontDesk.handled',      icon: '✅', color: 'text-green-400' },
-  { key: 'urgent',  label: 'Urgent',    labelKey: 'frontDesk.urgent',       icon: '🚨', color: 'text-red-400' },
-  { key: 'legacy',  label: 'Voicemail', labelKey: 'frontDesk.voicemail',    icon: '🎙️', color: 'text-violet-400' },
+  { key: 'calls',  label: 'Calls',  labelKey: 'frontDesk.calls',  icon: '📞', color: 'text-brand-text' },
+  // "Filed", not "Handled": `ai_handled` proves a request was persisted, which
+  // is Bubaly having taken the message on — not the work being finished.
+  { key: 'filed',  label: 'Filed',  labelKey: 'frontDesk.filed',  icon: '📥', color: 'text-green-400' },
+  { key: 'urgent', label: 'Urgent', labelKey: 'frontDesk.urgent', icon: '🚨', color: 'text-red-400' },
 ] as const;
 
 const HOW_IT_WORKS = [
@@ -173,7 +183,6 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
   }, [calls, filterTab, search]);
 
   const blockedCount = useMemo(() => calls.filter(c => c.status === 'blocked').length, [calls]);
-  const vmCount = useMemo(() => calls.filter(c => c.status === 'voicemail').length, [calls]);
   // What the family's real number actually did — read from the rows the
   // webhooks filed, never from a toggle.
   const voiceHandled = useMemo(() => voice.filter(v => v.ai_handled).length, [voice]);
@@ -289,10 +298,14 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                           <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted">{v.ai_intent}</span>
                         )}
                         {/* Only from the row: `ai_handled` is written after a
-                            request was persisted, never optimistically. */}
+                            request was persisted, never optimistically — and
+                            that is ALL it proves. The run may still be queued,
+                            waiting on a parent's answer, or failed, so the
+                            badge claims the thing the flag establishes (the
+                            message reached Bubaly) and not the outcome. */}
                         {v.ai_handled && (
                           <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
-                            {tr('frontDesk.handled')}
+                            {tr('frontDesk.filedWithBubaly')}
                           </span>
                         )}
                       </div>
@@ -338,20 +351,32 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
             <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
           </Link>
 
-          {/* Stats — every number below is a count of persisted rows. */}
+          {/* Stats — every number below is a count of persisted rows, and when
+              the read that would have produced them failed there is no number
+              to show. An em dash, never a 0: "nothing called" and "the database
+              did not answer" are different facts, and three tiles reading
+              0 Calls / 0 Filed / 0 Urgent over a failed read assert the first
+              while the truth is the second. */}
           <div className="grid-stats">
             {STATS.map(stat => (
               <div key={stat.key} className="stat-card">
                 <span className="text-2xl">{stat.icon}</span>
                 <div>
-                  <div className={cn('text-2xl font-bold', stat.color)}>
-                    {stat.key === 'calls' ? voice.length : stat.key === 'handled' ? voiceHandled : stat.key === 'urgent' ? voiceUrgent : vmCount}
+                  <div className={cn('text-2xl font-bold', unavailable?.voice ? 'text-muted' : stat.color)}>
+                    {unavailable?.voice
+                      ? '—'
+                      : stat.key === 'calls' ? voice.length
+                        : stat.key === 'filed' ? voiceHandled
+                          : voiceUrgent}
                   </div>
                   <div className="text-[11px] text-muted">{tr(stat.labelKey)}</div>
                 </div>
               </div>
             ))}
           </div>
+          {unavailable?.voice && (
+            <p className="mt-1 px-1 text-[11px] text-muted">{tr('frontDesk.theseCountsCouldNotBe')}</p>
+          )}
 
           {/* The frozen half: what someone typed into the old call log before
               the family had a number. Readable, never written. */}
