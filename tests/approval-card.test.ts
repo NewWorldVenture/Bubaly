@@ -20,13 +20,22 @@ const { ToastProvider } = await import('@/components/ui/toast');
 const { toApprovalCardData, editableFieldsFor } = await import('@/lib/approvals/card-data');
 const { PendingApprovals, toPendingCard } = await import('@/components/home/pending-approvals');
 
+// The card renders expiry against the real clock, so a fixture with an absolute
+// expiry date is a time bomb: this one read '2026-09-07T10:00:00Z' and the suite
+// began failing the moment that timestamp passed, on a test about redaction that
+// has nothing to do with dates. Anchoring it to now keeps "Expires in" true
+// forever. The two cases that need a *fixed* answer — the expired card below and
+// the formatExpiry unit tests — pass their own explicit instants, so they stay
+// deterministic.
+const TWO_HOURS_OUT = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
 const row = {
   id: 'appr-1', domain: 'calendar', capability: 'automate', requested_by_kind: 'ai', requested_by_member_id: null,
   agent: 'concierge', title: 'Schedule Saturday family plan', summary: 'Four changes to Saturday.',
   payload: { name: 'calendar.createEvent', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z', all_day: false, guests: 3, secret_token: 'abc' } },
   payload_kind: 'tool', amount_cents: 4200, confidence: 0.91,
   reasoning: 'CHAIN OF THOUGHT: the model considered three options', required_approvals: 1, approvals: [],
-  status: 'pending', priority: 'normal', created_at: '2026-09-05T10:00:00Z', expires_at: '2026-09-07T10:00:00Z',
+  status: 'pending', priority: 'normal', created_at: '2026-09-05T10:00:00Z', expires_at: TWO_HOURS_OUT,
   run_id: 'run-1', plan_step_id: null, plan_step_ids: [],
   consequences: ['Adds soccer at 9:00 AM Saturday', 'Reserves 12:00–2:00 PM for family lunch', 'Reminds Emma to pack her uniform'],
   edited_payload: null,
