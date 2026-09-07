@@ -4,6 +4,7 @@
 // property a home screen must have or it jitters.
 import { describe, expect, it } from 'vitest';
 import { buildToday, dayKeyInZone, mergeCompletedByBubaly, workingRunsFrom, type TodayInput } from '@/lib/home/today';
+import type { ScheduleInsight } from '@/lib/schedule/intelligence';
 
 const TZ = 'America/New_York';
 const NOW = new Date('2026-09-05T14:00:00Z'); // 10:00 in New York
@@ -88,6 +89,43 @@ describe('buildToday', () => {
     const view = buildToday({ ...base, todos, taskLimit: 3 });
     expect(view.tasks).toHaveLength(3);
     expect(view.overdue).toBe(10);
+  });
+});
+
+describe('buildToday with schedule insights (M8)', () => {
+  const insight = (over: Partial<ScheduleInsight> & { kind: ScheduleInsight['kind']; severity: ScheduleInsight['severity'] }): ScheduleInsight => ({
+    id: `${over.kind}:e1`, eventId: 'e1', reason: '', reasonKey: `scheduleInsight.${over.kind}`, params: {}, href: '/dashboard/calendar', at: null, relatedIds: [], ...over,
+  });
+
+  it("uses the event's most pressing insight as its reason and carries it for the strip", () => {
+    const view = buildToday({
+      ...base,
+      events: [
+        { id: 'e1', title: 'Soccer', starts_at: '2026-09-05T19:00:00Z', all_day: false },
+        { id: 'e0', title: 'Teacher day', starts_at: '2026-09-05T04:00:00Z', all_day: true },
+        { id: 'e2', title: 'Dentist', starts_at: '2026-09-05T21:00:00Z', all_day: false },
+      ],
+      insights: {
+        e1: [
+          insight({ kind: 'leave_by', severity: 'info', reason: 'Leave by 2:25 PM — 35 min to City Fields' }),
+          insight({ kind: 'care_gap', severity: 'urgent', reason: 'No adult is free for Emma during Soccer (3:00 PM–4:30 PM) and no sitter is booked', href: '/wallet/babysitters' }),
+        ],
+        e0: [insight({ kind: 'leave_by', severity: 'info', reason: 'should be ignored for an all-day row' })],
+      },
+    });
+    const soccer = view.schedule.find((s) => s.key === 'event:e1')!;
+    expect(soccer.reason).toBe('No adult is free for Emma during Soccer (3:00 PM–4:30 PM) and no sitter is booked');
+    expect(soccer.insight).toMatchObject({ kind: 'care_gap', severity: 'urgent', reasonKey: 'scheduleInsight.care_gap', href: '/wallet/babysitters' });
+    expect(view.schedule.find((s) => s.key === 'event:e0')).toMatchObject({ reason: 'All day' });
+    expect(view.schedule.find((s) => s.key === 'event:e0')?.insight).toBeUndefined();
+    expect(view.schedule.find((s) => s.key === 'event:e2')).toMatchObject({ reason: 'Today' });
+    expect(view.schedule.find((s) => s.key === 'event:e2')?.insight).toBeUndefined();
+  });
+
+  it('is unchanged without insights', () => {
+    const events = [{ id: 'e1', title: 'Soccer', starts_at: '2026-09-05T19:00:00Z', all_day: false }];
+    expect(buildToday({ ...base, events, insights: {} })).toEqual(buildToday({ ...base, events }));
+    expect(buildToday({ ...base, events }).schedule[0]).toMatchObject({ reason: 'Today' });
   });
 });
 
