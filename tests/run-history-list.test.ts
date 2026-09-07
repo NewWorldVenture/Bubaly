@@ -102,9 +102,9 @@ describe('run history filters', () => {
 
 describe('runHistoryItems', () => {
   const rows: RunHistoryRunRow[] = [
-    { id: 'b', summary: 'Older', state: 'completed', progress: { summary: '3 of 3 steps completed.' }, created_at: '2026-09-04T10:00:00Z', completed_at: '2026-09-04T11:00:00Z', updated_at: '2026-09-04T11:00:00Z', request_id: null, plan_id: 'p-b', error: null },
-    { id: 'a', summary: '  ', state: 'failed', progress: {}, created_at: '2026-09-05T10:00:00Z', completed_at: null, updated_at: '2026-09-05T10:00:00Z', request_id: 'req-a', plan_id: null, error: 'The calendar refused the write.' },
-    { id: 'c', summary: 'Same instant', state: 'executing', progress: {}, created_at: '2026-09-05T10:00:00Z', completed_at: null, updated_at: '2026-09-05T10:00:00Z', request_id: 'req-c', plan_id: null, error: 'stale' },
+    { id: 'b', summary: 'Older', state: 'completed', progress: { summary: '3 of 3 steps completed.' }, created_at: '2026-09-04T10:00:00Z', completed_at: '2026-09-04T11:00:00Z', updated_at: '2026-09-04T11:00:00Z', request_id: 'req-b', run_type: 'routine', plan_id: 'p-b', error: null },
+    { id: 'a', summary: '  ', state: 'failed', progress: {}, created_at: '2026-09-05T10:00:00Z', completed_at: null, updated_at: '2026-09-05T10:00:00Z', request_id: 'req-a', run_type: 'concierge', plan_id: null, error: 'The calendar refused the write.' },
+    { id: 'c', summary: 'Same instant', state: 'executing', progress: {}, created_at: '2026-09-05T10:00:00Z', completed_at: null, updated_at: '2026-09-05T10:00:00Z', request_id: 'req-c', run_type: 'concierge', plan_id: null, error: 'stale' },
   ];
 
   it('orders newest first with a stable id tie-break, and maps each row to what a person reads', () => {
@@ -115,6 +115,24 @@ describe('runHistoryItems', () => {
     // An error line only belongs to a run that failed or is blocked.
     expect(items[1].error).toBeNull();
     expect(items[2]).toMatchObject({ title: 'Older', startedByRoutine: true, detail: '3 of 3 steps completed.', finishedAt: '2026-09-04T11:00:00Z' });
+  });
+
+  it('says a routine started a run only when the row says so, not when a request is missing', () => {
+    // The two rows that make the obvious shortcut wrong. A plan a PERSON
+    // accepted is written with no request at all
+    // (app/(app)/dashboard/concierge/actions.ts), and a cron routine creates a
+    // request first and carries its id (app/api/cron/family-routines/route.ts)
+    // — so `request_id === null` labels exactly the wrong half.
+    const [accepted, routine] = runHistoryItems([
+      { id: 'accepted', summary: 'Plan the week', state: 'completed', progress: {}, created_at: '2026-09-05T12:00:00Z', completed_at: '2026-09-05T12:30:00Z', updated_at: '2026-09-05T12:30:00Z', request_id: null, run_type: 'concierge_plan', plan_id: 'p-1', error: null },
+      { id: 'cron', summary: 'Sunday meal plan', state: 'completed', progress: {}, created_at: '2026-09-05T11:00:00Z', completed_at: '2026-09-05T11:20:00Z', updated_at: '2026-09-05T11:20:00Z', request_id: 'req-cron', run_type: 'routine', plan_id: 'p-2', error: null },
+    ]);
+    expect(accepted).toMatchObject({ id: 'accepted', startedByRoutine: false });
+    expect(routine).toMatchObject({ id: 'cron', startedByRoutine: true });
+    // A trigger is a routine as far as a reader is concerned; a row from before
+    // 0250 backfilled run_type claims nothing.
+    expect(runHistoryItems([{ ...rows[1], id: 't', run_type: 'trigger' }])[0].startedByRoutine).toBe(true);
+    expect(runHistoryItems([{ ...rows[1], id: 'u', run_type: null }])[0].startedByRoutine).toBe(false);
   });
 
   it('carries the source and reason from evidence, and nothing without it', () => {

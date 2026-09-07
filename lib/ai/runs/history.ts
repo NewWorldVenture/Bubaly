@@ -122,6 +122,8 @@ export type RunHistoryRunRow = {
   completed_at: string | null;
   updated_at: string;
   request_id: string | null;
+  /** 0250: 'concierge' | 'routine' | 'trigger' | 'handle_it' | 'concierge_plan'. */
+  run_type?: string | null;
   plan_id: string | null;
   error: string | null;
 };
@@ -174,7 +176,12 @@ export function runHistoryItems(runs: readonly RunHistoryRunRow[], evidence: Com
         finishedAt: r.completed_at,
         detail: progressSummary(r.progress),
         error: state === 'failed' || state === 'blocked' ? r.error : null,
-        startedByRoutine: r.request_id === null,
+        // Read provenance off the column that records it. `request_id === null`
+        // says the opposite of the truth in both directions: a plan a PERSON
+        // accepted is written without a request (app/(app)/dashboard/concierge/
+        // actions.ts), while a cron routine creates a request first and carries
+        // its id (app/api/cron/family-routines/route.ts).
+        startedByRoutine: r.run_type === 'routine' || r.run_type === 'trigger',
         sources: runSources(r, evidence),
         reason: runReason(r, evidence),
       };
