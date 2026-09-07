@@ -50,9 +50,7 @@ export async function LegalPage({
               only < lg; the sidebar owns lg+. */}
           {sections.length > 1 && (
             <details className="group rounded-2xl border border-border bg-surface/40 lg:hidden">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">
-                On this page
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden />
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">{t('legal.onThisPage')}<ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden />
               </summary>
               <ul className="space-y-1 border-t border-border px-3 py-2">
                 {sections.map((s) => (

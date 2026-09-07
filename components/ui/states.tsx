@@ -1,3 +1,16 @@
+// Shared UI primitives, rendered from BOTH server and client components — 285
+// files import this one module. That is why the screen-reader labels here are
+// PROPS with an English default rather than `t(...)` calls:
+//
+//   * `await getTranslations()` pulls `next/headers` into every client importer
+//     and fails the build (it did — `join-invite.tsx` is a client component);
+//   * `'use client'` is worse than it looks, because `EmptyState` takes an
+//     `icon` COMPONENT and a component cannot cross a server→client boundary as
+//     a prop. It would break every one of those 285 call sites, and neither
+//     `tsc` nor the tests would say so.
+//
+// So a caller that wants a translated label passes one. The default is the
+// string these components have always rendered.
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -51,9 +64,9 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 /** A few stacked text-line skeletons. */
-export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
+export function SkeletonText({ lines = 3, className, label = 'Loading' }: { lines?: number; className?: string; label?: string }) {
   return (
-    <div className={cn('space-y-2', className)} role="status" aria-label="Loading">
+    <div className={cn('space-y-2', className)} role="status" aria-label={label}>
       {Array.from({ length: lines }).map((_, i) => (
         <Skeleton key={i} className={cn('h-4', i === lines - 1 ? 'w-2/3' : 'w-full')} />
       ))}
@@ -62,9 +75,9 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
 }
 
 /** A card-shaped skeleton (icon + title + lines), matching the app's card rhythm. */
-export function SkeletonCard({ className }: { className?: string }) {
+export function SkeletonCard({ className, label = 'Loading' }: { className?: string; label?: string }) {
   return (
-    <div className={cn('rounded-2xl border border-border bg-surface/40 p-4', className)} role="status" aria-label="Loading">
+    <div className={cn('rounded-2xl border border-border bg-surface/40 p-4', className)} role="status" aria-label={label}>
       <div className="flex items-center gap-3">
         <Skeleton className="h-10 w-10 rounded-xl" />
         <div className="flex-1 space-y-2">

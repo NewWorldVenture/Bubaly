@@ -668,7 +668,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-xs text-white/60">Section
+                    <label className="block text-xs text-white/60">{tr('displayGrid.section')}
                       <select
                         value={tile.widget === 'service' ? `service:${tile.href ?? ''}` : tile.widget}
                         onChange={(e) => {
@@ -690,7 +690,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                         </optgroup>
                       </select>
                     </label>
-                    <label className="block text-xs text-white/60">Size
+                    <label className="block text-xs text-white/60">{tr('displayGrid.size')}
                       <select value={tile.size} onChange={(e) => update(tile.id, { size: e.target.value as TileSize })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
                         {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                       </select>

@@ -71,6 +71,34 @@ const NOT_COPY = [
   /^\s*[)\]}]/,
   /[([{]\s*$/,
   /\)\s*$/,
+  // The leaks that survived all of the above, each one seen in this repo. They
+  // are grouped by the signal rather than by the file, because the file changes
+  // and the signal does not: prose in this product never contains a logical
+  // operator, a strict comparison, a snake_case identifier, a line comment or a
+  // method call, and never OPENS on `:`, `=` or `,` — those are all fragments of
+  // an expression that happened to sit between a `>` and a `<`.
+  /&&|\|\|/,                    // `todayStr && i.due_date`
+  /===|!==/,                    // `( items.length === 0 ?`
+  // snake_case. Measured against the 7,245 English strings already in the
+  // catalogue, this rule excludes exactly ONE piece of real copy — the hint
+  // "plays, at, coached_by, needs, affects…", which lists relationship kinds by
+  // their column names — and that string is already translated, so the cost is
+  // that the scanner would not notice it regressing.
+  /[a-z][A-Za-z0-9]*_[a-z]/,    // `ai_handle_first`
+  // A line comment ANYWHERE in the match, not just at its start: the `>` the
+  // scanner sliced from is often several tokens earlier, so the fragment reads
+  // `( // eslint-disable-next-line @next/next/no-img-element`.
+  /\/\//,
+  /\b[A-Za-z_$][\w$]*:\s*(?:string|number|boolean|unknown|any|void|never|Promise)\b/,
+  /^\s*,\s*[A-Za-z_$][\w$]*:\s*$/,  // `, blocked:` — an object literal, sliced
+  /\.[A-Za-z_$][\w$]*\(/,       // `sb.from('marketplace_offers')`
+  // Bare TYPE names, by name. `Promise` reads as one capitalised word of
+  // four-plus letters, which is exactly the shape of a real one-word label, so
+  // nothing structural can tell them apart. The list is deliberately the two
+  // that have actually leaked and not every global: `Record` and `Number` are
+  // both real copy in this product ("Record payment", a form field called
+  // "Number"), and excluding them cost more than they were worth.
+  /^Promise(?:Like)?$/,
 ];
 
 const PROP_PATTERN =

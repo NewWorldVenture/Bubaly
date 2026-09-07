@@ -690,7 +690,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
           <Siren className="h-5 w-5 text-rose-400" />
           <p className="text-sm font-bold">{tr('trust.emergencyOperationsMode')}</p>
         </div>
-        <p className="text-xs text-muted">Temporarily elevate permissions so the family can act fast during a crisis. Every action taken under Emergency Mode is fully logged and reviewable.</p>
+        <p className="text-xs text-muted">{tr('trustModule.temporarilyElevatePermissionsSoThe')}</p>
         {!canManage ? (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {tr('trust.onlyAParentOrAdultCan')}</p>
         ) : (

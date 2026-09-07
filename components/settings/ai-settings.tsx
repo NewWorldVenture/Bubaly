@@ -125,10 +125,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="flex items-center gap-2 text-base font-semibold"><Bot className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiSettings.bubalyAi')}</h3>
-            <p className="mt-1 text-sm text-muted">
-              What Bubaly may do without asking. Whatever you choose, money moves, document sharing and
-              anything high-risk still wait for a person.
-            </p>
+            <p className="mt-1 text-sm text-muted">{t('aiSettings.whatBubalyMayDoWithout')}</p>
           </div>
           <Button
             variant={settings.enabled ? 'secondary' : 'primary'}
@@ -207,10 +204,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           look for was one nobody could reach. */}
       <Card className="p-4">
         <h4 className="flex items-center gap-2 text-sm font-semibold"><Moon className="h-4 w-4 text-brand-text" aria-hidden /> {t('aiSettings.quietHours')}</h4>
-        <p id="quiet-hint" className="mt-1 text-sm text-muted">
-          Bubaly holds notifications raised in this window until it ends. Anything urgent — a safety alert —
-          still comes through, and a reminder you asked for at a specific time still arrives then.
-        </p>
+        <p id="quiet-hint" className="mt-1 text-sm text-muted">{t('aiSettings.bubalyHoldsNotificationsRaisedIn')}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label className="text-sm text-muted" htmlFor="quiet-start">{t('aiSettings.from')}</label>
           <select

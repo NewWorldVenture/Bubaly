@@ -73,12 +73,8 @@ export async function SiteFooter() {
       <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-8 px-5 py-10 sm:px-8 md:grid-cols-3 lg:grid-cols-6 lg:px-10">
         <div className="col-span-2 md:col-span-3 lg:col-span-2">
           <Logo />
-          <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">
-            Less Managing Life. More Living It.
-          </p>
-          <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">
-            The AI operating system for family life.
-          </p>
+          <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">{t('siteFooter.lessManagingLifeMoreLiving')}</p>
+          <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">{t('siteFooter.theAiOperatingSystemFor')}</p>
           <div className="mt-5">
             <LanguageBar />
           </div>
@@ -129,7 +125,7 @@ export async function SiteFooter() {
           <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
             <Link href="/privacy" className="transition hover:text-fg">{t('siteFooter.privacy')}</Link>
             <Link href="/terms" className="transition hover:text-fg">{t('siteFooter.terms')}</Link>
-            <Link href="/acceptable-use" className="transition hover:text-fg">Acceptable Use</Link>
+            <Link href="/acceptable-use" className="transition hover:text-fg">{t('siteFooter.acceptableUse')}</Link>
             <Link href="/cookies" className="transition hover:text-fg">{t('siteFooter.cookies')}</Link>
             <ConsentReopenLink />
           </nav>

@@ -232,7 +232,7 @@ export function CommunityModule({
                   </p>
                   <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                      {f.isMine ? 'Shared by your family' : <>From <span className="font-semibold text-fg">{f.fromFamily}</span> — message them to arrange it</>}
+                      {f.isMine ? t('communityModule.sharedByYourFamily') : <>{t('communityModule.from')}{' '}<span className="font-semibold text-fg">{f.fromFamily}</span>{' '}{t('communityModule.messageThemToArrangeIt')}</>}
                     </p>
                     {f.isMine && (
                       <button

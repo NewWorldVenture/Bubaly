@@ -163,7 +163,7 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
             {/* Greeting */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[14px] font-bold text-white">Good Morning, Sarah! <span className="text-amber-300">☀</span></p>
+                <p className="text-[14px] font-bold text-white">{t('visualMocks.goodMorningSarah')}{' '}<span className="text-amber-300">☀</span></p>
                 <p className="text-[10px] text-white/55">{t('visualMocks.thursdayMay16')}</p>
               </div>
               <div className="relative shrink-0">
@@ -442,8 +442,7 @@ export async function FamilyMomentsBand({ compact = false }: { compact?: boolean
   return (
     <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
       <div className="grid gap-7 lg:grid-cols-[270px_1fr]">
-        <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">
-          Built for the moments that keep <GradientText>{t('visualMocks.familyLifeMoving')}</GradientText>
+        <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">{t('visualMocks.builtForTheMomentsThat')}{' '}<GradientText>{t('visualMocks.familyLifeMoving')}</GradientText>
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
           {moments.map(([title, body]) => (

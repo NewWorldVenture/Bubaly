@@ -72,7 +72,7 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
                         <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" /> Reopen</button>
                       </>
                     ) : (
-                      <button onClick={() => act(() => closeMealVote(v.id), 'Vote closed')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white"><Lock className="h-3.5 w-3.5" /> Close & pick winner</button>
+                      <button onClick={() => act(() => closeMealVote(v.id), 'Vote closed')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white"><Lock className="h-3.5 w-3.5" />{' '}{tr('voteClient.closePickWinner')}</button>
                     )}
                   </div>
                 </div>
