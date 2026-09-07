@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot } from 'lucide-react';
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -27,18 +27,21 @@ import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
 import { AppLockSettings } from '@/components/settings/app-lock-settings';
+import { SecurityPanel } from '@/components/settings/security-panel';
+import { PrivacyCenter } from '@/components/settings/privacy-center';
 import { NavigationChoices } from '@/components/settings/navigation-choices';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SETTINGS_TABS = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'family', label: 'Family', icon: Users },
-  { id: 'ai', label: 'Bubaly AI', icon: Bot },
-  { id: 'navigation', label: 'Navigation Choices', icon: Compass },
-  { id: 'calendar', label: 'Calendar', icon: RefreshCw },
-  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'profile', label: 'Profile', labelKey: 'settingsModule.tabProfile', icon: User },
+  { id: 'family', label: 'Family', labelKey: 'settingsModule.tabFamily', icon: Users },
+  { id: 'ai', label: 'Bubaly AI', labelKey: 'settingsModule.tabAi', icon: Bot },
+  { id: 'navigation', label: 'Navigation Choices', labelKey: 'settingsModule.tabNavigation', icon: Compass },
+  { id: 'calendar', label: 'Calendar', labelKey: 'settingsModule.tabCalendar', icon: RefreshCw },
+  { id: 'security', label: 'Security', labelKey: 'settingsModule.tabSecurity', icon: Lock },
+  { id: 'privacy', label: 'Privacy', labelKey: 'settingsModule.tabPrivacy', icon: FileJson },
 ] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 
@@ -51,10 +54,11 @@ const TAB_BY_HASH: Record<string, SettingsTab> = {
   ai: 'ai', bubaly: 'ai', autonomy: 'ai',
   navigation: 'navigation', 'navigation-choices': 'navigation', sidebar: 'navigation',
   calendar: 'calendar', sync: 'calendar',
-  security: 'security', 'app-lock': 'security',
+  security: 'security', 'app-lock': 'security', 'two-step': 'security',
+  privacy: 'privacy', 'privacy-center': 'privacy', export: 'privacy',
 };
 const HASH_BY_TAB: Record<SettingsTab, string> = {
-  profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock',
+  profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock', privacy: 'privacy',
 };
 
 export function SettingsModule() {
@@ -177,7 +181,7 @@ export function SettingsModule() {
 
       {/* Tab switcher */}
       <div className="tab-bar" role="tablist" aria-label={t('settings.settingsSections')}>
-        {SETTINGS_TABS.map(({ id, label, icon: Icon }) => (
+        {SETTINGS_TABS.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -187,7 +191,7 @@ export function SettingsModule() {
             className={cn('tab-item inline-flex items-center gap-1.5', tab === id ? 'tab-item-active' : 'tab-item-inactive')}
           >
             <Icon className="h-4 w-4" />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
@@ -362,8 +366,16 @@ export function SettingsModule() {
         </Card>
       )}
 
-      {/* Security tab — opt-in App Lock */}
-      {tab === 'security' && <AppLockSettings />}
+      {/* Security tab — two-step sign-in (Supabase Auth TOTP) above the opt-in App Lock */}
+      {tab === 'security' && (
+        <div className="space-y-4">
+          <SecurityPanel />
+          <AppLockSettings />
+        </div>
+      )}
+
+      {/* Privacy tab — export, access log, this device's session, deletion path */}
+      {tab === 'privacy' && <PrivacyCenter />}
 
       {inviteOpen && (
         <InviteModal

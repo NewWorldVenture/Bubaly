@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
 import { insightDedupeKey } from '@/lib/finance/timeline';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function MoneyTimelinePage() {
   const ctx = await requireUserContext();
+  await requireAal2(ctx, 'money', '/dashboard/money-timeline');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 

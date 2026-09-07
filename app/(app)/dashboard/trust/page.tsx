@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 export default async function TrustPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  await requireAal2(ctx, 'trust', '/dashboard/trust');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const nowIso = new Date().toISOString();
