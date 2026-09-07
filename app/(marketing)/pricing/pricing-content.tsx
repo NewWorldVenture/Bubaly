@@ -6,12 +6,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive, PlayCircle, Loader2 } from 'lucide-react';
 import { startDemoAction } from '@/app/(marketing)/demo/actions';
+// From `primitives`, not `visual-mocks`: this is a client component, and
+// `visual-mocks` imports `lib/i18n/server` → `next/headers`, which cannot be
+// bundled for the browser.
 import {
   Container,
   GradientText,
   PageWrap,
   TrustStrip,
-} from '@/components/marketing/visual-mocks';
+} from '@/components/marketing/primitives';
 import { cn } from '@/lib/utils/cn';
 import { familiesNote } from '@/lib/marketing/format';
 import {

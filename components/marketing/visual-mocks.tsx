@@ -1,6 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
+// Re-exported so the many server consumers of this module keep one import.
+// They LIVE in `primitives.tsx` because client components need them too, and
+// this file imports `lib/i18n/server` — which pulls `next/headers` into any
+// bundle that reaches it. See the note at the top of that file.
+import { Container, GradientText, IconOrb, PageWrap, TrustStrip } from './primitives';
+
+export { Container, GradientText, IconOrb, PageWrap, TrustStrip };
 import {
   Apple,
   Bot,
@@ -27,17 +34,8 @@ import {
 import { AssistantConversation } from '@/components/marketing/homepage-interactions';
 import { cn } from '@/lib/utils/cn';
 
-export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('homepage-reference-bg min-h-dvh overflow-x-clip text-fg transition-colors duration-300', className)}>{children}</div>;
-}
 
-export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('mx-auto max-w-[1360px] px-6 sm:px-10 lg:px-12', className)}>{children}</div>;
-}
 
-export function GradientText({ children }: { children: React.ReactNode }) {
-  return <span className="gradient-text-violet">{children}</span>;
-}
 
 export function Pill({
   children,
@@ -91,29 +89,6 @@ export function OutlineLink({ href, children }: { href: string; children: React.
   );
 }
 
-export function IconOrb({
-  icon: Icon,
-  tone = 'violet',
-  className,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  tone?: 'violet' | 'green' | 'orange' | 'blue' | 'pink';
-  className?: string;
-}) {
-  const tones = {
-    violet: 'text-violet-400 bg-violet-500/12',
-    green: 'text-emerald-400 bg-emerald-500/12',
-    orange: 'text-orange-400 bg-orange-500/12',
-    blue: 'text-blue-400 bg-blue-500/12',
-    pink: 'text-rose-400 bg-rose-500/12',
-  };
-
-  return (
-    <span className={cn('icon-orb h-16 w-16', tones[tone], className)}>
-      <Icon className="h-8 w-8" />
-    </span>
-  );
-}
 
 const FACE_POSITIONS = ['54% 34%', '67% 38%', '79% 31%', '91% 40%', '72% 36%'] as const;
 
@@ -750,27 +725,6 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   );
 }
 
-export function TrustStrip({ familiesNote = 'Built for modern family life' }: { familiesNote?: string }) {
-  const items = [
-    [Shield, 'Private by Design', 'Family-scoped access controls'],
-    [Home, 'Responsive by Design', 'Web, iOS, and Android layouts'],
-    [Sparkles, 'Shared Updates', 'Family changes stay in sync'],
-    [Heart, 'Family Community', familiesNote],
-  ] as const;
-  return (
-    <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">
-      {items.map(([Icon, title, body]) => (
-        <div key={title} className="flex items-start gap-4">
-          <IconOrb icon={Icon} className="h-12 w-12" />
-          <div>
-            <h3 className="font-bold">{title}</h3>
-            <p className="mt-1 text-sm leading-6 text-white/65">{body}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function FeaturePreviewCard({
   icon,
