@@ -15,6 +15,7 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 import { OUTCOMES, OUTCOME_INTENT, buildOutcomeLaunchRequest } from '@/lib/outcomes/launcher';
 import { classifyIntentFast, INTENT_KEYS } from '@/lib/ai/context/intents';
 import { templateFor } from '@/lib/ai/planner/templates/index';
+import type { ServiceScope } from '@/lib/services/types';
 
 const buildContext = vi.fn();
 const planRequest = vi.fn();
@@ -31,11 +32,11 @@ const MEMBER = '33333333-3333-4333-8333-333333333333';
 
 let db: InMemorySupabase;
 
-function scope() {
+function scope(): ServiceScope {
   return {
     db: db as never, familyId: FAMILY, userId: USER, memberId: MEMBER,
-    role: 'parent', actorKind: 'member' as const, tz: 'America/New_York',
-  };
+    role: 'parent', actorKind: 'member', tz: 'America/New_York',
+  } as ServiceScope;
 }
 
 beforeEach(() => {

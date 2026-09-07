@@ -4,8 +4,16 @@
 // the same known checklist every time. These templates turn a one-tap "Start"
 // into a real, dated plan: each item has an offset relative to the event date, so
 // launching a template on a chosen date materializes a scheduled checklist. This
-// is the DOM-free core — the catalog + the date math; the server persists the
-// plan + items to Supabase and the module renders + checks them off.
+// is the DOM-free core — the catalog + the date math; `lib/life-events/launch.ts`
+// persists the plan, its items, the real to-dos and reminders they imply and the
+// handoff to the module that owns the transition, and the module renders and
+// checks them off.
+//
+// The catalogue is eleven playbooks: the original six, plus `holidays` and
+// `emergency_prep` (M25 — so a household that has Bubaly's actions turned off
+// still gets the season and its readiness as a dated list) and `camp`,
+// `aging_parent` and `renovation` (M34 — the three transitions
+// `lib/life-events/detect.ts` can spot in a family's own rows).
 
 export type LifeEventItemCategory =
   | 'plan' | 'buy' | 'book' | 'notify' | 'document' | 'health' | 'home' | 'celebrate';

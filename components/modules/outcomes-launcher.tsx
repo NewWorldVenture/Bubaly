@@ -8,7 +8,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Sun, UtensilsCrossed, Plane, GraduationCap, Wallet, HeartPulse, Cake, ShieldAlert,
-  ArrowRight, ChevronRight, Sparkles, Loader2, AlertTriangle,
+  ArrowRight, ChevronRight, Sparkles, AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,10 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
     const result = await submitAIRequest({
       text: request.text,
       context: request.context,
-      // A double tap must not file the work twice; the route replays the first answer.
+      // One key per press: a retried POST of THIS submission (a dropped
+      // connection, a proxy retry) is answered with the request it already
+      // filed rather than planned again. A deliberate second launch later is a
+      // new press and a new key, which is what the family asked for.
       clientRequestId: `outcome-${id}-${Date.now()}`,
     });
     if (!result.ok) {
@@ -126,11 +129,10 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
                 <Button
                   size="sm"
                   onClick={() => void launchOutcome(selected.outcome.id)}
+                  loading={launchForSelected?.status === 'filing'}
                   disabled={launchForSelected?.status === 'filing'}
                 >
-                  {launchForSelected?.status === 'filing'
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Sparkles className="h-4 w-4" />}
+                  {launchForSelected?.status !== 'filing' && <Sparkles className="h-4 w-4" />}
                   {t('outcomesLauncher.haveBubalyDoIt')}
                 </Button>
               </div>

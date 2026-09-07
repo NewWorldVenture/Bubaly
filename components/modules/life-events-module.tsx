@@ -4,7 +4,14 @@
 //  1. "What Bubaly has learned": the family's accumulated preferences, routines
 //     and traditions (family_facts), shown back to them and fully editable.
 //  2. Life-event playbooks: one-tap templates (New Baby, Moving, School Start,
-//     Vacation, New Pet, New Job) that materialize a real, dated checklist.
+//     Vacation, New Pet, New Job, The Holidays, Emergency Readiness, Camp,
+//     Caring for a Parent, Home Renovation) that materialize a real, dated
+//     checklist — plus the to-dos, reminders and module handoff the launcher
+//     creates alongside it.
+//  3. "Coming up" (M34): the transitions the household's OWN rows say are
+//     already here, each with the evidence it was derived from. The proposals
+//     are computed on the server (see the page) so a failed read shows an
+//     error rather than an empty section that reads as "nothing coming".
 // 100% Supabase-wired + realtime. Launch is atomic via a server action.
 import { useMemo, useState } from 'react';
 import {
@@ -194,7 +201,9 @@ export function LifeEventsModule({
             <CalendarClock className="h-4 w-4 text-brand-text" /> {tr('lifeEvents.comingUp')}
           </h2>
           {suggestionsUnavailable ? (
-            <ErrorState message={tr('lifeEventsModule.couldNotWorkOutWhatIsComingUp')} onRetry={refresh} />
+            /* The proposals are computed on the server, so the only honest
+               retry is one that asks the server again. */
+            <ErrorState message={tr('lifeEventsModule.couldNotWorkOutWhatIsComingUp')} onRetry={() => window.location.reload()} />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {suggestions.map((s) => {
