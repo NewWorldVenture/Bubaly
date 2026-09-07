@@ -276,12 +276,12 @@ export async function FeaturesReferencePage() {
           <div className="flex items-center gap-5 lg:min-w-0 lg:flex-1">
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
-              <h2 className="text-[19px] font-semibold tracking-[-0.02em]">One app. Every part of your family life.</h2>
+              <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{t('referenceShowcases.oneAppEveryPartOf')}</h2>
               <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, Bubaly brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
             </div>
           </div>
-          <PrimaryButton>Get Started Free</PrimaryButton>
-          <OutlineButton>See How It Works</OutlineButton>
+          <PrimaryButton>{t('referenceShowcases.getStartedFree')}</PrimaryButton>
+          <OutlineButton>{t('referenceShowcases.seeHowItWorks')}</OutlineButton>
         </section>
 
         <TrustStrip />
@@ -290,18 +290,19 @@ export async function FeaturesReferencePage() {
   );
 }
 
-function MiniCalendar() {
+async function MiniCalendar() {
+  const t = await getTranslations();
   const days = ['28', '29', '30', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '1'];
   return (
     <div className="relative h-full text-[8px] text-white/65">
-      <div className="flex items-center justify-between text-[10px] text-white/85"><span>May 2024</span><span className="text-white/45">⌄　×</span></div>
+      <div className="flex items-center justify-between text-[10px] text-white/85"><span>{t('referenceShowcases.may2024')}</span><span className="text-white/45">⌄　×</span></div>
       <div className="mt-3 grid grid-cols-7 gap-y-2 text-center text-[6px] text-white/55">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="mt-1.5 grid grid-cols-7 gap-y-2 text-center">
         {days.map((day, index) => <span key={`${day}-${index}`} className={cn(index < 3 && 'text-white/30', index === 11 && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{day}</span>)}
       </div>
-      <div className="absolute left-[43px] top-[66px] w-[112px] rounded-md border border-blue-400/30 bg-blue-600/25 px-2 py-1 text-[8px] leading-[10px] text-white">School Drop-off<br /><span className="text-white/55">8:00 AM</span></div>
+      <div className="absolute left-[43px] top-[66px] w-[112px] rounded-md border border-blue-400/30 bg-blue-600/25 px-2 py-1 text-[8px] leading-[10px] text-white">{t('referenceShowcases.schoolDropOff')}<br /><span className="text-white/55">8:00 AM</span></div>
       <div className="absolute left-[43px] top-[95px] w-[112px] rounded-md border border-violet-400/30 bg-violet-600/25 px-2 py-1 text-[8px] leading-[10px] text-white">Soccer Practice<br /><span className="text-white/55">4:00 PM</span></div>
-      <div className="absolute left-[43px] top-[124px] w-[112px] rounded-md border border-fuchsia-400/30 bg-fuchsia-600/20 px-2 py-1 text-[8px] leading-[10px] text-white">Piano Lesson<br /><span className="text-white/55">5:30 PM</span></div>
+      <div className="absolute left-[43px] top-[124px] w-[112px] rounded-md border border-fuchsia-400/30 bg-fuchsia-600/20 px-2 py-1 text-[8px] leading-[10px] text-white">{t('referenceShowcases.pianoLesson')}<br /><span className="text-white/55">5:30 PM</span></div>
       <div className="absolute left-[43px] top-[153px] w-[112px] rounded-md border border-rose-400/30 bg-rose-600/20 px-2 py-1 text-[8px] leading-[10px] text-white">Family Dinner<br /><span className="text-white/55">7:00 PM</span></div>
     </div>
   );
@@ -325,7 +326,8 @@ function TaskList() {
   );
 }
 
-function MealPlan() {
+async function MealPlan() {
+  const t = await getTranslations();
   const meals = [['Mon', 'Garlic Butter Salmon', 'with Asparagus'], ['Tue', 'Chicken Tacos', 'with Rice'], ['Wed', 'Spaghetti Bolognese', 'with Salad'], ['Thu', 'Teriyaki Chicken', 'with Veggies']];
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col">
@@ -333,25 +335,27 @@ function MealPlan() {
       <div className="flex-1 space-y-4 px-3 pt-3">
         {meals.map(([day, meal, side]) => <div key={day} className="grid grid-cols-[27px_1fr] text-[9px] leading-[12px]"><span className="text-white/55">{day}</span><span>{meal}<br /><span className="text-white/72">{side}</span></span></div>)}
       </div>
-      <div className="border-t border-white/[0.07] px-3 py-2 text-center text-[9px] text-violet-300">View Full Plan</div>
+      <div className="border-t border-white/[0.07] px-3 py-2 text-center text-[9px] text-violet-300">{t('referenceShowcases.viewFullPlan')}</div>
     </div>
   );
 }
 
-function GroceryList() {
+async function GroceryList() {
+  const t = await getTranslations();
   const items = ['Milk', 'Eggs', 'Chicken Breast', 'Broccoli', 'Avocados', 'Whole Wheat Bread'];
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
-      <p className="mb-2.5 text-[10px] font-semibold">My Grocery List</p>
+      <p className="mb-2.5 text-[10px] font-semibold">{t('referenceShowcases.myGroceryList')}</p>
       <div className="flex-1 space-y-2.5">{items.map((item) => <p key={item} className="flex items-center gap-2 text-[9px]"><Circle className="h-[13px] w-[13px] text-white/55" />{item}</p>)}</div>
       <div className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] text-white/55"><Plus className="mr-1 inline h-3 w-3" /> Add item</div>
     </div>
   );
 }
 
-function SchoolList() {
+async function SchoolList() {
+  const t = await getTranslations();
   const items = [['Math Homework', 'Due Tomorrow'], ['Science Project', 'Due May 10'], ['Field Trip', 'May 16']];
-  return <ListPanel title="Upcoming" footer="View All Assignments">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className={cn('grid h-6 w-6 place-items-center rounded-md', ['bg-pink-500/55', 'bg-indigo-500/55', 'bg-blue-500/55'][i])}><FileText className="h-3.5 w-3.5" /></span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+  return <ListPanel title={t('referenceShowcases.upcoming')} footer="View All Assignments">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className={cn('grid h-6 w-6 place-items-center rounded-md', ['bg-pink-500/55', 'bg-indigo-500/55', 'bg-blue-500/55'][i])}><FileText className="h-3.5 w-3.5" /></span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 function HealthList() {
@@ -359,22 +363,24 @@ function HealthList() {
   return <ListPanel title="Today&apos;s Reminders" footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><TinyAvatar index={i + 1} className="h-6 w-6" /><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
-function HomeList() {
+async function HomeList() {
+  const t = await getTranslations();
   const items = [['HVAC Filter Change', 'May 5'], ['Garage Door Service', 'May 20'], ['Water Heater Flush', 'June 2']];
-  return <ListPanel title="Upcoming" footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+  return <ListPanel title={t('referenceShowcases.upcoming')} footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 function ListPanel({ title, footer, children }: { title: string; footer: string; children: React.ReactNode }) {
   return <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3"><p className="mb-3 text-[10px] font-semibold">{title}</p><div className="flex-1 space-y-3">{children}</div><div className="rounded-lg border border-white/[0.06] py-2 text-center text-[9px] text-violet-300">{footer}</div></div>;
 }
 
-function AssistantChat() {
+async function AssistantChat() {
+  const t = await getTranslations();
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3 text-[8px] leading-[11px]">
       <div className="ml-auto rounded-lg bg-violet-600 px-2.5 py-2">What&apos;s happening this week?</div>
-      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">You have 6 events this week,<br />2 chores due, and 1 appointment.</div>
-      <div className="mt-2 ml-auto rounded-lg bg-violet-600 px-2.5 py-2">Plan dinners for the week</div>
-      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">Here&apos;s your meal plan<br />based on your preferences.</div>
+      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">{t('referenceShowcases.youHave6EventsThis')}<br />2 chores due, and 1 appointment.</div>
+      <div className="mt-2 ml-auto rounded-lg bg-violet-600 px-2.5 py-2">{t('referenceShowcases.planDinnersForTheWeek')}</div>
+      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">Here&apos;s your meal plan<br />{t('referenceShowcases.basedOnYourPreferences')}</div>
       <span className="mx-auto mt-auto h-8 w-8 shrink-0 rounded-full border border-blue-300 bg-[radial-gradient(circle,#fff_0,#48baf7_12%,#8a45e8_42%,#07101b_72%)] shadow-[0_0_15px_rgba(114,80,255,.75)]" />
     </div>
   );
@@ -478,18 +484,19 @@ async function SocialProof() {
   );
 }
 
-function DetailedPhone() {
+async function DetailedPhone() {
+  const t = await getTranslations();
   return (
     <div className="dark relative h-[443px] w-[216px] rounded-[35px] border-[3px] border-[#595959] bg-[#030507] p-[8px] text-white shadow-[0_22px_70px_rgba(0,0,0,.52),inset_0_0_0_1px_#111]">
       <div className="absolute left-1/2 top-[7px] z-10 h-[21px] w-[84px] -translate-x-1/2 rounded-full bg-black" />
       <div className="h-full overflow-hidden rounded-[27px] bg-[#07101a] px-[10px] pb-[10px] pt-[14px]">
         <div className="flex items-center justify-between px-1 text-[8px] font-semibold"><span>9:41</span><span>⌁ ▴ ▰</span></div>
-        <div className="mt-[22px] flex items-start justify-between px-1"><h3 className="text-[13px] font-semibold leading-4">Good morning,<br />The Johnson Family 👋</h3><Bell className="h-4 w-4" /></div>
+        <div className="mt-[22px] flex items-start justify-between px-1"><h3 className="text-[13px] font-semibold leading-4">{t('referenceShowcases.goodMorning')}<br />{t('referenceShowcases.theJohnsonFamily')}</h3><Bell className="h-4 w-4" /></div>
         <PhonePanel title="Today&apos;s Snapshot" className="mt-3">
           {[['3 Events Today','orange'],['2 Tasks Due','amber'],['1 Medication Reminder','blue'],['No Conflicts','green']].map(([item, color], i) => <div key={item} className="flex items-center gap-2 py-1 text-[7px]"><span className={cn('grid h-3.5 w-3.5 place-items-center rounded-full', color === 'orange' && 'bg-orange-500/20 text-orange-400', color === 'amber' && 'bg-amber-500/20 text-amber-400', color === 'blue' && 'bg-blue-500/20 text-blue-400', color === 'green' && 'bg-emerald-500/20 text-emerald-400')}>{i < 3 ? <CalendarDays className="h-2.5 w-2.5" /> : <Check className="h-2.5 w-2.5" />}</span>{item}</div>)}
         </PhonePanel>
-        <PhonePanel title="Upcoming" className="mt-2">
-          {[['Soccer Practice','Today · 5:00 PM'],['Math Test','Tomorrow · 9:00 AM'],['Family Dinner','Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/55">{date}</p></div></div>)}
+        <PhonePanel title={t('referenceShowcases.upcoming')} className="mt-2">
+          {[[t('referenceShowcases.soccerPractice'),'Today · 5:00 PM'],['Math Test','Tomorrow · 9:00 AM'],[t('referenceShowcases.familyDinner'),'Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/55">{date}</p></div></div>)}
         </PhonePanel>
         <div className="mt-2 flex items-center justify-between border-t border-white/[0.06] px-1 pt-2 text-[6px] text-white/50"><Home className="h-3.5 w-3.5 text-violet-400" /><CalendarDays className="h-3.5 w-3.5" /><span className="grid h-8 w-8 place-items-center rounded-full bg-violet-600 text-lg text-white">+</span><CheckSquare2 className="h-3.5 w-3.5" /><span className="text-sm leading-none">•••</span></div>
       </div>
@@ -527,13 +534,14 @@ async function StepsPanel() {
   );
 }
 
-function MagicPanel() {
+async function MagicPanel() {
+  const t = await getTranslations();
   const bullets = ['Snap a photo of a school flyer', 'AI extracts events, dates & details', 'Automatically adds to your calendar', 'Creates tasks, reminders & lists', 'Notifies the right people', 'Saves you hours every week'];
   return (
     <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
         <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">The magic is in the <GradientText>AI</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
-        <p className="mt-2 text-[14px] leading-6 text-white/68">Bubaly turns scattered information into<br />organized action—automatically.</p>
+        <p className="mt-2 text-[14px] leading-6 text-white/68">{t('referenceShowcases.bubalyTurnsScatteredInformationInto')}<br />{t('referenceShowcases.organizedActionAutomatically')}</p>
         <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/73"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
       </div>
       <div className="grid items-start gap-3 sm:grid-cols-3 lg:grid-cols-[166px_28px_176px_28px_1fr]">
@@ -561,16 +569,19 @@ function Flyer({ className }: { className?: string }) {
   return <div className={cn('bg-[#f0f0ec] p-2 text-[#17191d] shadow-lg', className)}><p className="text-[12px] font-black leading-[12px]">SPRING<br />SOCCER<br />TOURNAMENT</p><p className="mt-2 text-[10px] font-black">MAY 18-19</p><p className="mt-1 border-y border-black py-1 text-[5px] font-bold">LOCATION: RIVER PARK</p><p className="mt-2 text-[5px] font-bold leading-[7px]">CHECK IN: 8:30 AM<br />GAMES START: 9:00 AM</p><div className="absolute bottom-2 right-1 grid h-10 w-10 place-items-center rounded-full border-[5px] border-[#15181b] text-[17px]">⚽</div></div>;
 }
 
-function MagicDetails() {
-  const rows: [LucideIcon, string][] = [[CalendarDays, 'Spring Soccer Tournament'], [CalendarDays, 'May 18–19, 2024'], [Bell, 'Check in: 8:30 AM'], [Bell, 'Games start: 9:00 AM'], [MapPin, 'Riverside Park'], [CheckSquare2, 'Bring: Water bottle, shin\nguards, team jersey']];
-  return <div><p className="mb-2 text-center text-[11px] font-semibold">2. AI understands it</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-4"><Sparkles className="h-6 w-6 text-violet-400" /><h3 className="mt-3 text-[10px] font-semibold">AI Extracted Details</h3><div className="mt-3 space-y-3">{rows.map(([Icon, text]) => <p key={text} className="flex gap-2 whitespace-pre-line text-[9px] leading-[12px] text-white/76"><Icon className="h-3 w-3 shrink-0 text-violet-400" />{text}</p>)}</div></div></div>;
+async function MagicDetails() {
+  const t = await getTranslations();
+  const rows: [LucideIcon, string][] = [[CalendarDays, t('referenceShowcases.springSoccerTournament')], [CalendarDays, 'May 18–19, 2024'], [Bell, 'Check in: 8:30 AM'], [Bell, 'Games start: 9:00 AM'], [MapPin, t('referenceShowcases.riversidePark')], [CheckSquare2, 'Bring: Water bottle, shin\nguards, team jersey']];
+  return <div><p className="mb-2 text-center text-[11px] font-semibold">2. AI understands it</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-4"><Sparkles className="h-6 w-6 text-violet-400" /><h3 className="mt-3 text-[10px] font-semibold">{t('referenceShowcases.aiExtractedDetails')}</h3><div className="mt-3 space-y-3">{rows.map(([Icon, text]) => <p key={text} className="flex gap-2 whitespace-pre-line text-[9px] leading-[12px] text-white/76"><Icon className="h-3 w-3 shrink-0 text-violet-400" />{text}</p>)}</div></div></div>;
 }
 
-function MagicCalendar() {
-  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">3. It&apos;s organized for your family</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>May 2024</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">Spring Soccer Tournament</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">May 18 – May 19<br />8:30 AM – 12:00 PM<br />Riverside Park</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">Tasks Created</p>{['Pack soccer gear','Bring snacks','Team jersey'].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
+async function MagicCalendar() {
+  const t = await getTranslations();
+  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">3. It&apos;s organized for your family</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>{t('referenceShowcases.may2024')}</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">Spring Soccer Tournament</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">{t('referenceShowcases.may18May19')}<br />8:30 AM – 12:00 PM<br />Riverside Park</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">{t('referenceShowcases.tasksCreated')}</p>{['Pack soccer gear','Bring snacks','Team jersey'].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
 }
 
-function FamilyWorkflowPanel() {
+async function FamilyWorkflowPanel() {
+  const t = await getTranslations();
   const workflows = [
     ['Morning ready', 'Schedules, reminders, and handoffs in one calm view.'],
     ['School paperwork', 'Turn forms and messages into clear next actions.'],
@@ -580,7 +591,7 @@ function FamilyWorkflowPanel() {
   ];
   return (
     <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
-      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]">One place for <GradientText>real family workflows</GradientText></h2>
+      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]">One place for <GradientText>{t('referenceShowcases.realFamilyWorkflows')}</GradientText></h2>
       <div className="mt-3 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">{workflows.map(([title,body]) => <article key={title} className="min-h-[142px] rounded-[10px] border border-white/[0.07] bg-white/[0.035] p-3"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="mt-3 text-[9px] font-semibold">{title}</h3><p className="mt-2 text-[8.5px] leading-[13px] text-white/70">{body}</p></article>)}</div>
     </section>
   );

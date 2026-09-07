@@ -129,7 +129,8 @@ export async function PlatformBadges() {
   );
 }
 
-export function HeroPhoneMockup({ className }: { className?: string }) {
+export async function HeroPhoneMockup({ className }: { className?: string }) {
+  const t = await getTranslations();
   const schedule = [
     { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', avatar: 3, color: 'bg-rose-400' },
     { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', avatar: 0, color: 'bg-blue-400' },
@@ -163,7 +164,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[14px] font-bold text-white">Good Morning, Sarah! <span className="text-amber-300">☀</span></p>
-                <p className="text-[10px] text-white/55">Thursday, May 16</p>
+                <p className="text-[10px] text-white/55">{t('visualMocks.thursdayMay16')}</p>
               </div>
               <div className="relative shrink-0">
                 <FaceAvatar index={2} className="h-9 w-9 border border-white/20" />
@@ -175,7 +176,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-3 flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-violet-400" />
-                <span className="text-[11px] font-semibold text-white">AI Daily Briefing</span>
+                <span className="text-[11px] font-semibold text-white">{t('visualMocks.aiDailyBriefing')}</span>
               </div>
               <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-bold text-white">New</span>
             </div>
@@ -200,7 +201,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-4 flex-1">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[11px] font-bold text-white">Today&apos;s Schedule</p>
-                <span className="text-[9px] text-violet-400">View all</span>
+                <span className="text-[9px] text-violet-400">{t('visualMocks.viewAll')}</span>
               </div>
               <div className="space-y-3.5">
                 {schedule.map(({ time, title, person, avatar, color }) => (
@@ -224,7 +225,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
               <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />Tasks</span>
-              <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />More</span>
+              <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />{t('visualMocks.more')}</span>
             </div>
           </div>
         </div>
@@ -233,7 +234,8 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
   );
 }
 
-export function ProductMockup() {
+export async function ProductMockup() {
+  const t = await getTranslations();
   const schedule = [
     ['8:00 AM', 'School Drop-off'],
     ['10:00 AM', 'Math Meeting'],
@@ -252,7 +254,7 @@ export function ProductMockup() {
             <div className="mb-5 flex items-center gap-2 text-xs font-bold">
               <Sparkles className="h-4 w-4 text-violet-400" /> Bubaly
             </div>
-            {['Home', 'Calendar', 'Chores', 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
+            {[t('visualMocks.home'), t('visualMocks.calendar'), t('visualMocks.chores'), 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
               <div key={item} className={cn('rounded-lg px-3 py-2 text-[11px] text-white/65', index === 0 && 'bg-violet-600 text-white')}>
                 {item}
               </div>
@@ -260,7 +262,7 @@ export function ProductMockup() {
           </aside>
           <main>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold">Welcome back, Sarah!</h3>
+              <h3 className="text-lg font-bold">{t('visualMocks.welcomeBackSarah')}</h3>
               <div className="flex gap-2">
                 <span className="h-7 w-7 rounded-full bg-amber-300" />
                 <span className="h-7 w-7 rounded-full bg-cyan-300" />
@@ -268,7 +270,7 @@ export function ProductMockup() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <MiniPanel title="Today's Schedule">
+              <MiniPanel title={t('visualMocks.todaySSchedule')}>
                 {schedule.map(([time, label]) => (
                   <div key={label} className="flex justify-between border-b border-white/5 py-2 text-xs">
                     <span className="text-white/50">{time}</span>
@@ -276,11 +278,11 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Upcoming">
+              <MiniPanel title={t('visualMocks.upcoming')}>
                 {['Math Test', 'Doctor Appointment', 'Field Trip'].map((item) => (
                   <div key={item} className="py-2 text-xs">
                     <p className="font-semibold">{item}</p>
-                    <p className="text-white/55">This week</p>
+                    <p className="text-white/55">{t('visualMocks.thisWeek')}</p>
                   </div>
                 ))}
               </MiniPanel>
@@ -293,7 +295,7 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Meal Plan">
+              <MiniPanel title={t('visualMocks.mealPlan')}>
                 {meals.map((item) => (
                   <div key={item} className="flex items-center gap-2 py-2 text-xs">
                     <UtensilsCrossed className="h-4 w-4 text-orange-400" />
@@ -301,14 +303,14 @@ export function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Grocery List">
+              <MiniPanel title={t('visualMocks.groceryList')}>
                 {['Milk', 'Eggs', 'Bread', 'Avocados'].map((item) => (
                   <div key={item} className="flex items-center gap-2 py-1.5 text-xs text-white/70">
                     <Circle className="h-3.5 w-3.5" /> {item}
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Family AI Assistant">
+              <MiniPanel title={t('visualMocks.familyAiAssistant')}>
                 <div className="grid min-h-28 place-items-center">
                   <div className="glow-dot h-12 w-12" />
                 </div>
@@ -323,7 +325,8 @@ export function ProductMockup() {
   );
 }
 
-export function PhoneMockup({ className }: { className?: string }) {
+export async function PhoneMockup({ className }: { className?: string }) {
+  const t = await getTranslations();
   const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', 'Family Dinner'];
   return (
     <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
@@ -332,8 +335,8 @@ export function PhoneMockup({ className }: { className?: string }) {
           <span>9:41</span>
           <span className="h-3 w-12 rounded-full bg-black" />
         </div>
-        <h4 className="text-lg font-bold">Hi, Sarah</h4>
-        <MiniPanel title="Today" className="mt-4 p-3">
+        <h4 className="text-lg font-bold">{t('visualMocks.hiSarah')}</h4>
+        <MiniPanel title={t('visualMocks.today')} className="mt-4 p-3">
           {items.map((item, index) => (
             <div key={item} className="flex justify-between border-l-2 border-violet-500 py-1.5 pl-2 text-[10px]">
               <span>{item}</span>
@@ -361,7 +364,7 @@ export function PhoneMockup({ className }: { className?: string }) {
   );
 }
 
-export function MiniPanel({
+export async function MiniPanel({
   title,
   children,
   className,
@@ -370,11 +373,12 @@ export function MiniPanel({
   children: React.ReactNode;
   className?: string;
 }) {
+  const t = await getTranslations();
   return (
     <div className={cn('rounded-xl border border-white/8 bg-white/[0.045] p-4', className)}>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-bold">{title}</p>
-        <span className="text-[10px] text-violet-300">View all</span>
+        <span className="text-[10px] text-violet-300">{t('visualMocks.viewAll')}</span>
       </div>
       {children}
     </div>
@@ -439,7 +443,7 @@ export async function FamilyMomentsBand({ compact = false }: { compact?: boolean
     <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
       <div className="grid gap-7 lg:grid-cols-[270px_1fr]">
         <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">
-          Built for the moments that keep <GradientText>family life moving</GradientText>
+          Built for the moments that keep <GradientText>{t('visualMocks.familyLifeMoving')}</GradientText>
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
           {moments.map(([title, body]) => (
@@ -494,11 +498,12 @@ export async function DeviceShowcase() {
 
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
 
-function ScheduleScreen() {
+async function ScheduleScreen() {
+  const t = await getTranslations();
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <div className="mt-1.5 rounded-md bg-gradient-to-r from-violet-500/20 to-blue-500/20 px-1.5 py-1">
@@ -529,11 +534,12 @@ function ScheduleScreen() {
   );
 }
 
-function TasksScreen() {
+async function TasksScreen() {
+  const t = await getTranslations();
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <p className="mt-1.5 text-[5px] font-semibold text-white/70">Today&apos;s Tasks</p>
@@ -563,17 +569,18 @@ function TasksScreen() {
   );
 }
 
-function DashboardScreen() {
+async function DashboardScreen() {
+  const t = await getTranslations();
   return (
     <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <div className="mt-1.5 grid grid-cols-4 gap-1">
         {[
           { value: '5', label: 'Events', color: 'text-violet-400' },
-          { value: '3', label: 'Tasks', color: 'text-emerald-400' },
+          { value: '3', label: t('visualMocks.tasks'), color: 'text-emerald-400' },
           { value: '72°', label: 'Weather', color: 'text-blue-400' },
           { value: '2', label: 'Alerts', color: 'text-rose-400' },
         ].map(({ value, label, color }) => (
@@ -585,9 +592,9 @@ function DashboardScreen() {
       </div>
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         <div className="space-y-0.5">
-          <p className="text-[5px] font-semibold text-white/60">Schedule</p>
+          <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.schedule')}</p>
           {[
-            { title: 'Dentist 8:00', color: 'bg-rose-400' },
+            { title: t('visualMocks.dentist800'), color: 'bg-rose-400' },
             { title: 'Soccer 3:30', color: 'bg-emerald-400' },
             { title: 'Dinner 6:00', color: 'bg-violet-400' },
           ].map(({ title, color }) => (
@@ -615,7 +622,8 @@ function DashboardScreen() {
   );
 }
 
-function WebAppScreen() {
+async function WebAppScreen() {
+  const t = await getTranslations();
   return (
     <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-1">
       <div className="flex h-full gap-0.5">
@@ -626,13 +634,13 @@ function WebAppScreen() {
         </div>
         <div className="flex-1 overflow-hidden">
           <div className="flex items-center justify-between px-0.5">
-            <span className="text-[4.5px] font-bold text-white">Dashboard</span>
+            <span className="text-[4.5px] font-bold text-white">{t('visualMocks.dashboard')}</span>
             <span className="h-1 w-1 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
           </div>
           <div className="mt-0.5 grid grid-cols-3 gap-0.5 px-0.5">
             {[
               { v: '5', l: 'Events', c: 'text-violet-400' },
-              { v: '3', l: 'Tasks', c: 'text-emerald-400' },
+              { v: '3', l: t('visualMocks.tasks'), c: 'text-emerald-400' },
               { v: '72°', l: 'Weather', c: 'text-blue-400' },
             ].map(({ v, l, c }) => (
               <div key={l} className="rounded-sm bg-white/[0.06] py-0.5 text-center">
@@ -642,7 +650,7 @@ function WebAppScreen() {
             ))}
           </div>
           <div className="mt-0.5 space-y-[2px] px-0.5">
-            {['Dentist 8:00', 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
+            {[t('visualMocks.dentist800'), 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
               <div key={item} className="flex items-center gap-0.5 rounded-sm bg-white/[0.04] px-0.5 py-[2px]">
                 <span className={cn('h-1 w-1 shrink-0 rounded-full', i === 0 ? 'bg-rose-400' : i === 1 ? 'bg-emerald-400' : 'bg-violet-400')} />
                 <span className="text-[3.5px] text-white/70">{item}</span>
@@ -655,7 +663,8 @@ function WebAppScreen() {
   );
 }
 
-function DeviceArtwork({ device }: { device: DeviceName }) {
+async function DeviceArtwork({ device }: { device: DeviceName }) {
+  const t = await getTranslations();
   if (device === 'iPhone' || device === 'Android') {
     return (
       <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
@@ -715,9 +724,9 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   return (
     <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
       <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[rgb(var(--device-bezel))] bg-black shadow-2xl sm:h-[104px]">
-        <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
+        <Image src="/images/family-ai-lifestyle.png" alt={t('visualMocks.bubalySmartDisplay')} fill sizes="160px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
-        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
+        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">{t('visualMocks.goodEveningFamily')}</span>
       </div>
       <div className="h-3 w-8 bg-[rgb(var(--device-bezel))]" />
       <div className="h-1.5 w-16 rounded-full bg-[rgb(var(--device-accent))]" />
@@ -752,11 +761,12 @@ export function FeaturePreviewCard({
   );
 }
 
-export function MiniCalendar() {
+export async function MiniCalendar() {
+  const t = await getTranslations();
   return (
     <div className="space-y-3 text-xs">
       <div className="flex items-center justify-between text-white/75">
-        <span>May 2024</span>
+        <span>{t('visualMocks.may2024')}</span>
         <span>+</span>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-white/55">
@@ -813,7 +823,7 @@ export async function ManifestoBand() {
     <section className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-violet-500/[0.06] via-transparent to-blue-500/[0.05] px-6 py-14 sm:px-10 sm:py-20">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
       <div className="mx-auto max-w-3xl text-center">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Our Manifesto</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">{t('visualMocks.ourManifesto')}</span>
 
         <p className="mx-auto mt-6 max-w-2xl text-balance text-xl font-medium leading-snug text-white/75 sm:text-2xl sm:leading-snug">
           {t('visualMocks.manifestoLead')}
