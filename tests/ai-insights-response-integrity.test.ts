@@ -60,7 +60,15 @@ beforeEach(() => {
   mocks.settled.length = 0;
   mocks.requireUserContext.mockResolvedValue({
     user: { id: 'user-1' },
-    active: { familyId: 'family-1', role: 'parent', family: { name: 'Test household', timezone: 'UTC' } },
+    active: {
+      familyId: 'family-1',
+      role: 'parent',
+      // The route passes the caller's role and member id to `fetchRows`: the
+      // reads that carry remembered facts or gift state have to know who is
+      // asking before they can decide what they may say.
+      member: { id: 'member-1' },
+      family: { name: 'Test household', timezone: 'UTC' },
+    },
   });
   mocks.isAIConfigured.mockResolvedValue(true);
   mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });

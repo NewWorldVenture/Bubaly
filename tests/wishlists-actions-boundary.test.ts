@@ -38,6 +38,7 @@ function client(results: Record<string, TableResult>, seen: Seen[]) {
       const chain: Record<string, unknown> = {
         select: () => chain,
         eq: (key: string, value: unknown) => { entry.filters.push([key, value]); return chain; },
+        order: () => chain,
         limit: () => Promise.resolve(result),
         then: (onF: (v: TableResult) => unknown) => Promise.resolve(result).then(onF),
       };
@@ -45,6 +46,19 @@ function client(results: Record<string, TableResult>, seen: Seen[]) {
     },
   };
 }
+
+/** A `family_facts` row as the memory service reads it — whole, not a projection. */
+const factRow = (over: Record<string, unknown>): Row => ({
+  member_id: null,
+  category: 'preference',
+  is_pinned: false,
+  expires_at: null,
+  source: 'user',
+  confidence: 100,
+  notes: null,
+  updated_at: '2026-01-01T00:00:00.000Z',
+  ...over,
+});
 
 const OK_ROWS: Record<string, TableResult> = {
   inventory_items: {
@@ -158,6 +172,97 @@ describe('adviseBeforeBuying', () => {
     expect(result.ok).toBe(false);
   });
 
+  // The action used to read `family_facts` with a raw select, which walks
+  // straight past the memory service's boundary: medical and account facts (and
+  // sensitive wording anywhere) are for the adults who manage the family, and an
+  // expired fact is not a current preference.
+  const MEMORY_ROWS: Record<string, TableResult> = {
+    ...OK_ROWS,
+    inventory_items: { data: [], error: null },
+    family_facts: {
+      data: [
+        factRow({ id: 'f-1', category: 'medical', label: 'Liam allergy', value: 'Peanuts' }),
+        factRow({ id: 'f-2', category: 'preference', label: 'Butter', value: 'Prefers unsalted butter' }),
+      ],
+      error: null,
+    },
+  };
+
+  it('never hands a child a medical fact, whatever the purchase matches', async () => {
+    mocks.requireUserContext.mockResolvedValue({
+      active: { familyId: 'fam-1', role: 'child', member: { id: 'mem-2' }, family: { timezone: 'UTC' } },
+      user: { id: 'user-2' },
+    });
+    mocks.createServer.mockResolvedValue(client(MEMORY_ROWS, []));
+    const { adviseBeforeBuying } = await import('@/app/(app)/dashboard/wishlists/actions');
+
+    const result = await adviseBeforeBuying({ text: 'peanut butter maker' });
+    if (!result.ok) throw new Error('expected advice');
+    expect(result.advice.preferences.map((p) => p.id)).toEqual(['f-2']);
+  });
+
+  it('still shows the same fact to a parent, so it is a role boundary and not a blanket drop', async () => {
+    mocks.createServer.mockResolvedValue(client(MEMORY_ROWS, []));
+    const { adviseBeforeBuying } = await import('@/app/(app)/dashboard/wishlists/actions');
+
+    const result = await adviseBeforeBuying({ text: 'peanut butter maker' });
+    if (!result.ok) throw new Error('expected advice');
+    expect(result.advice.preferences.map((p) => p.id).sort()).toEqual(['f-1', 'f-2']);
+  });
+
+  it('does not render a fact whose shelf life has run out as a current preference', async () => {
+    mocks.createServer.mockResolvedValue(client({
+      ...OK_ROWS,
+      inventory_items: { data: [], error: null },
+      family_facts: {
+        data: [factRow({ id: 'f-3', label: 'Coat size', value: 'Winter coat 6Y', expires_at: '2020-01-01T00:00:00.000Z' })],
+        error: null,
+      },
+    }, []));
+    const { adviseBeforeBuying } = await import('@/app/(app)/dashboard/wishlists/actions');
+
+    const result = await adviseBeforeBuying({ text: 'winter coat' });
+    if (!result.ok) throw new Error('expected advice');
+    expect(result.advice.preferences).toEqual([]);
+  });
+
+  it('does not report the wish it was opened from as already on a wish list', async () => {
+    mocks.createServer.mockResolvedValue(client({
+      ...OK_ROWS,
+      inventory_items: { data: [], error: null },
+      wishlist_items: {
+        data: [{ id: 'w-1', member_id: 'mem-9', title: 'Lego botanicals set', price: null, is_purchased: true }],
+        error: null,
+      },
+    }, []));
+    const { adviseBeforeBuying } = await import('@/app/(app)/dashboard/wishlists/actions');
+
+    const result = await adviseBeforeBuying({ text: 'Lego botanicals set', excludeWishId: 'w-1' });
+    if (!result.ok) throw new Error('expected advice');
+    expect(result.advice.alreadyOnList).toEqual([]);
+    expect(result.advice.reason).toBe('clear');
+    expect(result.advice.verdict).toBe('clear');
+  });
+
+  it('never tells the owner of a wish that their present has been bought', async () => {
+    mocks.createServer.mockResolvedValue(client({
+      ...OK_ROWS,
+      inventory_items: { data: [], error: null },
+      wishlist_items: {
+        data: [{ id: 'w-2', member_id: 'mem-1', title: 'Lego botanicals set', price: null, is_purchased: true }],
+        error: null,
+      },
+    }, []));
+    const { adviseBeforeBuying } = await import('@/app/(app)/dashboard/wishlists/actions');
+
+    // mem-1 is the caller: this is their own wish, and 00431_wishlists.sql keeps
+    // `is_purchased` hidden from them so the gift stays a surprise.
+    const result = await adviseBeforeBuying({ text: 'Lego botanicals set' });
+    if (!result.ok) throw new Error('expected advice');
+    expect(result.advice.alreadyOnList.map((w) => w.purchased)).toEqual([false]);
+    expect(result.advice.reason).toBe('clear');
+  });
+
   it('words both refusals through the catalogue', () => {
     expectTranslates(source, 'wishlistsActions.couldNotCheckWhatYou', 'Could not check what you already own. Refresh and try again.');
     expectTranslates(source, 'wishlistsActions.sayWhatYouReThinking', 'Say what you’re thinking of buying.');
@@ -166,6 +271,22 @@ describe('adviseBeforeBuying', () => {
 
 describe('the Before you buy panel', () => {
   const panel = fs.readFileSync('components/wishlists/before-you-buy.tsx', 'utf8');
+  const module_ = fs.readFileSync('components/modules/wishlists-module.tsx', 'utf8');
+
+  it('is offered on someone else’s list only, like every other gift signal', () => {
+    // The advice carries whether a wish has already been bought. The owner of
+    // the wish is the one person the product hides that from, so the trigger
+    // lives inside the same `!isOwnList` gate as the badge and Mark bought.
+    const gate = module_.indexOf('{!isOwnList && (');
+    expect(gate).toBeGreaterThan(-1);
+    expect(module_.indexOf('<BeforeYouBuy')).toBeGreaterThan(gate);
+    expect(module_.match(/<BeforeYouBuy/g)).toHaveLength(1);
+  });
+
+  it('tells the advisor which wish it was opened from', () => {
+    expect(module_).toContain('wishId={w.id}');
+    expect(panel).toContain('excludeWishId: wishId ?? null');
+  });
 
   it('renders the deterministic verdict itself, with the model only as an extra', () => {
     expect(panel).toContain('import { adviseBeforeBuying');
@@ -188,5 +309,33 @@ describe('the Before you buy panel', () => {
       'beforeYouBuy.nothingHereIsSponsoredNo',
       'Checked against your family’s own records. Nothing here is sponsored and no retailer pays for a place in it.',
     );
+  });
+});
+
+// The optional "market ideas" button re-runs the same advice inside an LLM
+// prompt. That path has its own boundary to keep: it is the only place
+// `family_facts` reaches a model, and an unchecked read there would assert a
+// healthy "nothing owned" to the model off a query that never returned.
+describe('the market-ideas insight route', () => {
+  const route = fs.readFileSync('app/api/ai/insights/route.ts', 'utf8');
+  const advisorCase = route.slice(route.indexOf("case 'purchase_advisor'"), route.indexOf("case 'home'"));
+
+  it('fails closed on every read rather than describing an empty result as nothing owned', () => {
+    for (const table of ['inventory_items', 'home_locations', 'home_assets', 'wardrobe_items', 'wishlist_items', 'family_facts']) {
+      expect(advisorCase, table).toContain(`['${table}', `);
+    }
+    expect(advisorCase).toContain('required([');
+    expect(route).toContain('function required(');
+  });
+
+  it('applies the memory service’s boundary to the facts it puts in the prompt', () => {
+    expect(route).toContain("import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory'");
+    expect(advisorCase).toContain('isExpiredFact(');
+    expect(advisorCase).toContain('isSensitiveMemory(');
+    expect(advisorCase).toContain('isManager(viewer.role)');
+  });
+
+  it('strips gift state from the caller’s own wishes before the model sees them', () => {
+    expect(advisorCase).toContain('is_purchased: false');
   });
 });

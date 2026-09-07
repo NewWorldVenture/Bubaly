@@ -51,16 +51,37 @@ const SOURCE_KEYS: Record<OwnedSource, string> = {
   wardrobe: 'beforeYouBuy.closet',
 };
 
+/**
+ * A matched row that is not simply sitting where it belongs says so. "You
+ * already own one" reads very differently when the one you own is lent out, in
+ * for repair or in the wash, and leaving the status off makes the panel sound
+ * more certain than the row is. Statuses that mean the family no longer has the
+ * thing at all (disposed, lost, donated, outgrown) never reach here — the
+ * advisor drops those rows before matching.
+ */
+const STATUS_KEYS: Record<string, string> = {
+  lent: 'beforeYouBuy.lentOut',
+  in_repair: 'beforeYouBuy.beingRepaired',
+  laundry: 'beforeYouBuy.inTheWash',
+  storage: 'beforeYouBuy.inStorage',
+};
+
 type Props = {
   /** What the family is thinking of buying. */
   text: string;
   priceDollars?: number | null;
   url?: string | null;
+  /**
+   * The wish this panel hangs off, when it hangs off one. It is excluded from
+   * the wish-list check: a wish always matches its own title, and reporting the
+   * card you are looking at back to you is a finding with nothing behind it.
+   */
+  wishId?: string | null;
   /** Compact trigger for a card footer. */
   className?: string;
 };
 
-export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
+export function BeforeYouBuy({ text, priceDollars, url, wishId, className }: Props) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -69,14 +90,21 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
   const run = useCallback(async () => {
     setLoading(true);
     try {
-      setResult(await adviseBeforeBuying({ text, priceDollars: priceDollars ?? null, url: url ?? null }));
+      setResult(
+        await adviseBeforeBuying({
+          text,
+          priceDollars: priceDollars ?? null,
+          url: url ?? null,
+          excludeWishId: wishId ?? null,
+        }),
+      );
     } catch (err) {
       console.error('[purchase-advisor] advice request failed', err);
       setResult({ ok: false, error: t('beforeYouBuy.couldNotCheckThisPurchase') });
     } finally {
       setLoading(false);
     }
-  }, [text, priceDollars, url, t]);
+  }, [text, priceDollars, url, wishId, t]);
 
   useEffect(() => {
     if (open && !result && !loading) void run();
@@ -129,7 +157,12 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
               {advice.duplicates.length > 0 && (
                 <Section icon={PackageCheck} title={t('beforeYouBuy.youAlreadyOwn')}>
                   {advice.duplicates.map((match) => (
-                    <MatchRow key={`${match.source}-${match.id}`} match={match} sourceLabel={t(SOURCE_KEYS[match.source])} lentLabel={t('beforeYouBuy.lentOut')} />
+                    <MatchRow
+                      key={`${match.source}-${match.id}`}
+                      match={match}
+                      sourceLabel={t(SOURCE_KEYS[match.source])}
+                      statusLabel={match.status && STATUS_KEYS[match.status] ? t(STATUS_KEYS[match.status]) : null}
+                    />
                   ))}
                 </Section>
               )}
@@ -137,7 +170,12 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
               {advice.compatibility.length > 0 && (
                 <Section icon={Plug} title={t('beforeYouBuy.checkItFitsWhatYou')}>
                   {advice.compatibility.map((match) => (
-                    <MatchRow key={`${match.source}-${match.id}`} match={match} sourceLabel={t(SOURCE_KEYS[match.source])} lentLabel={t('beforeYouBuy.lentOut')} />
+                    <MatchRow
+                      key={`${match.source}-${match.id}`}
+                      match={match}
+                      sourceLabel={t(SOURCE_KEYS[match.source])}
+                      statusLabel={match.status && STATUS_KEYS[match.status] ? t(STATUS_KEYS[match.status]) : null}
+                    />
                   ))}
                 </Section>
               )}
@@ -194,7 +232,7 @@ export function BeforeYouBuy({ text, priceDollars, url, className }: Props) {
                 <AiInsight
                   kind="purchase_advisor"
                   label={t('beforeYouBuy.marketIdeas')}
-                  params={{ item: text, priceCents: advice.priceCents ?? null }}
+                  params={{ item: text, priceCents: advice.priceCents ?? null, wishId: wishId ?? null }}
                 />
                 <Button type="button" variant="ghost" size="sm" onClick={() => void run()}>
                   {t('beforeYouBuy.checkAgain')}
@@ -227,7 +265,7 @@ function Section({
   );
 }
 
-function MatchRow({ match, sourceLabel, lentLabel }: { match: OwnedMatch; sourceLabel: string; lentLabel: string }) {
+function MatchRow({ match, sourceLabel, statusLabel }: { match: OwnedMatch; sourceLabel: string; statusLabel: string | null }) {
   const spec = [match.brand, match.model].filter(Boolean).join(' ');
   return (
     <div className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
@@ -236,7 +274,7 @@ function MatchRow({ match, sourceLabel, lentLabel }: { match: OwnedMatch; source
         <span>{sourceLabel}</span>
         {spec && <span>· {spec}</span>}
         {match.detail && <span>· {match.detail}</span>}
-        {match.status === 'lent' && <span>· {lentLabel}</span>}
+        {statusLabel && <span>· {statusLabel}</span>}
       </div>
     </div>
   );

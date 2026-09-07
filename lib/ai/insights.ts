@@ -396,6 +396,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
         wardrobe: r(d, 'wardrobe_items') as unknown as WardrobeRow[],
         wishes: r(d, 'wishlist_items') as unknown as WishRow[],
         facts: r(d, 'family_facts') as unknown as FactRow[],
+        // The wish the panel was opened from matches its own title every time.
+        // Telling the model "this is already on a wish list" about the very item
+        // it was asked about is a finding with nothing behind it.
+        excludeWishId: typeof d.params?.wishId === 'string' ? d.params.wishId : null,
       });
       const price = priceCents !== null && priceCents > 0
         ? `\nAsking price: ${money(priceCents)} (the family sees their own budget check in the app; do not guess at it).`

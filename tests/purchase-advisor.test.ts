@@ -144,6 +144,28 @@ describe('owned duplicates', () => {
     expect(advice.verdict).toBe('clear');
   });
 
+  it('does not count an outgrown garment as one the family already owns', () => {
+    // 0240_closet_outfits.sql: active|laundry|storage|outgrown|donated|lost.
+    // Replacing a coat that no longer fits is precisely the purchase this must
+    // never argue against.
+    const advice = adviseOnPurchase({
+      candidate: { text: 'Winter coat' },
+      wardrobe: [wardrobe({ id: 'c-1', name: 'Winter coat', status: 'outgrown' })],
+    });
+    expect(advice.duplicates).toEqual([]);
+    expect(advice.compatibility).toEqual([]);
+    expect(advice.verdict).toBe('clear');
+    expect(advice.reason).toBe('clear');
+  });
+
+  it('says where a duplicate actually is, so "you own one" is not overstated', () => {
+    const advice = adviseOnPurchase({
+      candidate: { text: 'Cordless drill' },
+      inventory: [item({ id: 'i-1', name: 'Cordless drill', status: 'lent' as InventoryStatus, lent_to: 'Sam' })],
+    });
+    expect(advice.duplicates.map((d) => d.status)).toEqual(['lent']);
+  });
+
   it('does not call an unrelated item a duplicate just because a brand matched', () => {
     const advice = adviseOnPurchase({
       candidate: { text: 'Bosch dishwasher' },
@@ -244,6 +266,46 @@ describe('preferences and wish lists', () => {
     expect(advice.alreadyOnList.map((w) => w.id)).toEqual(['w-1']);
     expect(advice.reason).toBe('already_purchased');
     expect(advice.verdict).toBe('tight');
+  });
+
+  it('does not report the wish it was opened from — an item is not evidence about itself', () => {
+    const wishes = [wish({ id: 'w-1', title: 'Lego botanicals set', is_purchased: true })];
+    // Without the exclusion this is the card's own row coming back as a finding:
+    // "already on a wish list", "already bought", verdict downgraded — all of it
+    // read off the very thing the family is looking at.
+    expect(adviseOnPurchase({ candidate: { text: 'Lego botanicals set' }, wishes }).alreadyOnList).toHaveLength(1);
+
+    const advice = adviseOnPurchase({ candidate: { text: 'Lego botanicals set' }, wishes, excludeWishId: 'w-1' });
+    expect(advice.alreadyOnList).toEqual([]);
+    expect(advice.reason).toBe('clear');
+    expect(advice.verdict).toBe('clear');
+  });
+
+  it('still reports a MATCHING wish on someone else’s list when one exists', () => {
+    const advice = adviseOnPurchase({
+      candidate: { text: 'Lego botanicals set' },
+      wishes: [
+        wish({ id: 'w-1', title: 'Lego botanicals set' }),
+        wish({ id: 'w-2', member_id: 'm-2', title: 'Lego botanicals set', is_purchased: true }),
+      ],
+      excludeWishId: 'w-1',
+    });
+    expect(advice.alreadyOnList.map((w) => w.id)).toEqual(['w-2']);
+    expect(advice.reason).toBe('already_purchased');
+  });
+
+  it('never tells the owner of a wish that their present has been bought', () => {
+    // 00431_wishlists.sql: `is_purchased` is "hidden from the owner in the UI so
+    // it stays a surprise". A second opinion on a purchase is not a licence to
+    // spoil it.
+    const wishes = [wish({ id: 'w-1', member_id: 'm-1', title: 'Lego botanicals set', is_purchased: true })];
+    const owner = adviseOnPurchase({ candidate: { text: 'Lego botanicals set' }, wishes, viewerMemberId: 'm-1' });
+    expect(owner.alreadyOnList.map((w) => w.purchased)).toEqual([false]);
+    expect(owner.reason).toBe('clear');
+
+    const relative = adviseOnPurchase({ candidate: { text: 'Lego botanicals set' }, wishes, viewerMemberId: 'm-2' });
+    expect(relative.alreadyOnList.map((w) => w.purchased)).toEqual([true]);
+    expect(relative.reason).toBe('already_purchased');
   });
 
   it('does not call every wish a match on one short shared word', () => {

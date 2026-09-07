@@ -7,6 +7,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, MANAGER_ONLY_INSIGHTS, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import { isManager } from '@/lib/constants/roles';
+import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -65,7 +66,10 @@ export async function POST(req: Request) {
 
   let rows: Rows = {};
   try {
-    rows = await fetchRows(kind, supabase, familyId, params);
+    rows = await fetchRows(kind, supabase, familyId, params, {
+      role: ctx.active.role,
+      memberId: ctx.active.member.id,
+    });
   } catch (err) {
     console.error('AI insights data load failed:', err);
     return NextResponse.json({ error: t('insights.couldNotLoadDataFor') }, { status: 500 });
@@ -121,7 +125,26 @@ export async function POST(req: Request) {
 
 const eq = (sb: SupabaseClient, table: string, familyId: string) => sb.from(table).select('*').eq('family_id', familyId);
 
-async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string, params: Record<string, unknown>): Promise<Rows> {
+/**
+ * Fail closed on a read the prompt would otherwise describe as an empty, healthy
+ * state. The route catches this and answers "could not load data" — a refused
+ * query must never reach a model as "nothing found".
+ */
+function required(reads: [string, { message?: string } | null][]): void {
+  const failed = reads.find(([, error]) => Boolean(error));
+  if (failed) throw new Error(`${failed[0]} read failed: ${failed[1]?.message ?? 'unknown error'}`);
+}
+
+/** Who is asking. Only `purchase_advisor` needs it so far, and it needs both. */
+type Viewer = { role: string; memberId: string | null };
+
+async function fetchRows(
+  kind: InsightKind,
+  sb: SupabaseClient,
+  familyId: string,
+  params: Record<string, unknown>,
+  viewer: Viewer,
+): Promise<Rows> {
   const nowIso = new Date().toISOString();
   const since = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
 
@@ -264,6 +287,12 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
     // remembers preferring. No budgets or transactions: the money check is the
     // deterministic panel's job (it goes through the finance service's role
     // boundary), so this prompt never carries the family's finances.
+    //
+    // Every read is CHECKED. `describeAdvice` states "nothing matching in the
+    // household inventory, home assets or closet" when a list comes back empty,
+    // and an empty list from a refused query would make that a lie told to the
+    // model and echoed to the family. A throw here becomes the route's "could
+    // not load data" 500, which is the truth.
     case 'purchase_advisor': {
       const [inventory, locations, assets, wardrobe, wishes, facts] = await Promise.all([
         eq(sb, 'inventory_items', familyId).limit(200),
@@ -273,13 +302,44 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
         eq(sb, 'wishlist_items', familyId).limit(60),
         eq(sb, 'family_facts', familyId).limit(120),
       ]);
+      required([
+        ['inventory_items', inventory.error],
+        ['home_locations', locations.error],
+        ['home_assets', assets.error],
+        ['wardrobe_items', wardrobe.error],
+        ['wishlist_items', wishes.error],
+        ['family_facts', facts.error],
+      ]);
+      // The memory service's boundary, applied here because this is the one
+      // insight that puts `family_facts` in a prompt: medical and account facts
+      // (and sensitive wording in any category) are for the adults who manage
+      // the family, and an expired fact is not a current preference. Without
+      // this a child could ask about "peanut butter" and have a medical fact
+      // read back to them by the model.
+      const now = new Date();
+      const canSeeSensitive = viewer.role === 'system' || isManager(viewer.role);
+      const visibleFacts = (facts.data ?? []).filter((f) => {
+        const expiresAt = typeof f.expires_at === 'string' ? f.expires_at : null;
+        if (isExpiredFact({ expires_at: expiresAt }, now)) return false;
+        if (canSeeSensitive) return true;
+        return !isSensitiveMemory({
+          category: typeof f.category === 'string' ? f.category : null,
+          key: String(f.label ?? ''),
+          content: String(f.value ?? ''),
+        });
+      });
+      // Gift state is hidden from the person the wish belongs to, so their own
+      // rows reach the prompt with it stripped rather than not at all.
+      const visibleWishes = (wishes.data ?? []).map((w) =>
+        viewer.memberId && String(w.member_id ?? '') === viewer.memberId ? { ...w, is_purchased: false } : w,
+      );
       return {
         inventory_items: inventory.data ?? [],
         home_locations: locations.data ?? [],
         home_assets: assets.data ?? [],
         wardrobe_items: wardrobe.data ?? [],
-        wishlist_items: wishes.data ?? [],
-        family_facts: facts.data ?? [],
+        wishlist_items: visibleWishes,
+        family_facts: visibleFacts,
       };
     }
     case 'home': {

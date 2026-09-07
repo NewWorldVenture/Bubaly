@@ -94,6 +94,20 @@ export interface AdviceInput {
   wishes?: WishRow[];
   facts?: FactRow[];
   budgets?: BudgetRow[];
+  /**
+   * The wish this advice was opened FROM. A wish's own row matches its own
+   * title every time, so without this the panel reports the very item the
+   * family is looking at as "already on a wish list" — a finding with no
+   * evidence behind it but itself.
+   */
+  excludeWishId?: string | null;
+  /**
+   * The `family_members` id of whoever is asking. Gift state is deliberately
+   * hidden from the person a wish belongs to (0043/00431_wishlists.sql: "Hidden
+   * from the owner in the UI so it stays a surprise"), so a match on the
+   * viewer's OWN wish never carries whether someone has bought it.
+   */
+  viewerMemberId?: string | null;
 }
 
 // ── Outputs ──────────────────────────────────────────────────────────────────
@@ -144,6 +158,11 @@ export interface WishMatch {
   memberId: string;
   title: string;
   priceCents: number | null;
+  /**
+   * Whether a gift has been bought — always false for the viewer's own wishes,
+   * whatever the row says, because the surprise is the product's whole point.
+   * It is a "we can tell you this" flag, never a claim that nobody bought it.
+   */
   purchased: boolean;
 }
 
@@ -242,7 +261,12 @@ const STRONG_FIELDS = new Set(['name', 'brand', 'model', 'serial', 'tags']);
 
 type Adapted = { row: ItemLike; source: OwnedSource; detail: string | null; status: string | null };
 
-const NOT_OWNED = new Set(['disposed', 'lost', 'donated', 'sold', 'retired']);
+// Statuses that mean the family cannot use the thing any more. `outgrown` is a
+// wardrobe status (0240_closet_outfits.sql: active|laundry|storage|outgrown|
+// donated|lost) and belongs here for the same reason `donated` does: a coat
+// that no longer fits is not a reason to refuse to buy one that does. Replacing
+// an outgrown garment is precisely the purchase this must never block.
+const NOT_OWNED = new Set(['disposed', 'lost', 'donated', 'sold', 'retired', 'outgrown']);
 
 function adaptInventory(rows: InventoryRow[], locations: LocationLike[]): Adapted[] {
   return rows
@@ -371,9 +395,16 @@ function matchPreferences(facts: FactRow[], tokens: string[]): PreferenceMatch[]
     .slice(0, 6);
 }
 
-function matchWishes(wishes: WishRow[], tokens: string[]): WishMatch[] {
+function matchWishes(
+  wishes: WishRow[],
+  tokens: string[],
+  opts: { excludeWishId?: string | null; viewerMemberId?: string | null },
+): WishMatch[] {
   const out: WishMatch[] = [];
   for (const wish of wishes) {
+    // The wish the family is looking at is not independent evidence about the
+    // wish the family is looking at.
+    if (opts.excludeWishId && wish.id === opts.excludeWishId) continue;
     const hay = normalize(wish.title);
     const hits = tokens.filter((token) => hay.includes(token));
     if (!hits.length) continue;
@@ -384,7 +415,7 @@ function matchWishes(wishes: WishRow[], tokens: string[]): WishMatch[] {
       memberId: wish.member_id,
       title: wish.title,
       priceCents: wish.price != null ? Math.round(wish.price * 100) : null,
-      purchased: wish.is_purchased,
+      purchased: opts.viewerMemberId && wish.member_id === opts.viewerMemberId ? false : wish.is_purchased,
     });
   }
   return out.slice(0, 5);
@@ -466,7 +497,12 @@ export function adviseOnPurchase(input: AdviceInput): PurchaseAdvice {
   compatibility.sort(byStrength);
 
   const preferences = tokens.length ? matchPreferences(input.facts ?? [], tokens) : [];
-  const alreadyOnList = tokens.length ? matchWishes(input.wishes ?? [], tokens) : [];
+  const alreadyOnList = tokens.length
+    ? matchWishes(input.wishes ?? [], tokens, {
+        excludeWishId: input.excludeWishId ?? null,
+        viewerMemberId: input.viewerMemberId ?? null,
+      })
+    : [];
 
   // Affordability — the twin's own spend simulator, so "can we afford it?"
   // answers the same way here as it does in the decision simulator.

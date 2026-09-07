@@ -16,10 +16,12 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { budgetVsActual } from '@/lib/services/finances';
+import { recallFacts } from '@/lib/services/memory';
 import { SERVICE_CODES } from '@/lib/services/types';
 import {
   adviseOnPurchase,
   type BudgetRow,
+  type FactRow,
   type PurchaseAdvice,
 } from '@/lib/purchases/advisor';
 
@@ -30,6 +32,12 @@ export type BeforeYouBuyInput = {
   /** Dollars, as typed on the wish. */
   priceDollars?: number | null;
   budgetCategory?: string | null;
+  /**
+   * The wish this was opened from, when it was opened from one. Its own row is
+   * not evidence about itself, so it is dropped before the advisor sees the
+   * family's lists.
+   */
+  excludeWishId?: string | null;
 };
 
 export type BeforeYouBuyResult =
@@ -56,6 +64,7 @@ export async function adviseBeforeBuying(input: BeforeYouBuyInput): Promise<Befo
   if (!text) return { ok: false, error: t('wishlistsActions.sayWhatYouReThinking') };
 
   const supabase = await createServer();
+  const scope = scopeFromUserContext(ctx, supabase);
 
   const [inventory, locations, assets, wardrobe, wishes, facts] = await Promise.all([
     supabase
@@ -79,11 +88,12 @@ export async function adviseBeforeBuying(input: BeforeYouBuyInput): Promise<Befo
       .select('id, member_id, title, price, is_purchased')
       .eq('family_id', familyId)
       .limit(MAX_ROWS),
-    supabase
-      .from('family_facts')
-      .select('id, member_id, category, label, value, is_pinned')
-      .eq('family_id', familyId)
-      .limit(MAX_ROWS),
+    // Memories come through the memory service, never a raw query: it is what
+    // hides medical and account facts (and sensitive wording in any category)
+    // from a child or teen, and drops facts whose `expires_at` has passed. A
+    // raw select would put last winter's coat size and "Liam — peanut allergy"
+    // in front of whoever opened the panel.
+    recallFacts(scope, { limit: 200 }),
   ]);
 
   const failed = [
@@ -92,7 +102,7 @@ export async function adviseBeforeBuying(input: BeforeYouBuyInput): Promise<Befo
     ['home_assets', assets.error],
     ['wardrobe_items', wardrobe.error],
     ['wishlist_items', wishes.error],
-    ['family_facts', facts.error],
+    ['family_facts', facts.ok ? null : facts.error],
   ].find(([, error]) => Boolean(error));
 
   if (failed) {
@@ -100,12 +110,22 @@ export async function adviseBeforeBuying(input: BeforeYouBuyInput): Promise<Befo
     return { ok: false, error: t('wishlistsActions.couldNotCheckWhatYou') };
   }
 
+  const visibleFacts: FactRow[] = facts.ok
+    ? facts.data.map((f) => ({
+        id: f.id,
+        member_id: f.member_id,
+        category: f.category,
+        label: f.label,
+        value: f.value,
+        is_pinned: f.is_pinned,
+      }))
+    : [];
+
   // Budgets carry the household's money, so they come through the finance
   // service and its role boundary rather than a raw query. A refusal is not a
   // read failure: the advice still stands, minus the affordability half.
   let budgets: BudgetRow[] = [];
   let budgetRestricted = false;
-  const scope = scopeFromUserContext(ctx, supabase);
   const status = await budgetVsActual(scope);
   if (!status.ok) {
     if (status.code === SERVICE_CODES.denied) {
@@ -136,8 +156,12 @@ export async function adviseBeforeBuying(input: BeforeYouBuyInput): Promise<Befo
     homeAssets: assets.data ?? [],
     wardrobe: wardrobe.data ?? [],
     wishes: wishes.data ?? [],
-    facts: facts.data ?? [],
+    facts: visibleFacts,
     budgets,
+    // A wish is not evidence about itself, and gift state is never shown to the
+    // person the wish belongs to.
+    excludeWishId: input.excludeWishId ?? null,
+    viewerMemberId: ctx.active.member.id,
   });
 
   return { ok: true, advice, budgetRestricted };
