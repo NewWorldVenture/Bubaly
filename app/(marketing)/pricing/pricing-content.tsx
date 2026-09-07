@@ -33,35 +33,43 @@ const plusSavings  = Math.round((1 - PLUS_ANNUAL_CENTS  / (PLUS_MONTHLY_CENTS  *
 
 // ── Feature lists ──────────────────────────────────────────────────────────
 const FREE_FEATURES = [
-  { section: 'Family Organization', items: ['Shared family calendar', 'Shared shopping lists', 'Shared to-do lists', 'Shared recipes', 'Family messenger', 'Family contact book'] },
-  { section: 'Family Members',      items: ['Up to 5 family members'] },
-  { section: 'Platforms',           items: ['Web', 'iPhone', 'Android', 'iPad'] },
-  { section: 'Basic Features',      items: ['Calendar sync', 'Basic reminders', 'Shared notes', 'Shared photos', 'Shared documents'] },
+  { section: 'pricingContent.familyOrganization', items: ['pricingContent.sharedFamilyCalendar', 'pricingContent.sharedShoppingLists', 'pricingContent.sharedToDoLists', 'pricingContent.sharedRecipes', 'pricingContent.familyMessenger', 'pricingContent.familyContactBook'] },
+  { section: 'pricingContent.familyMembers',      items: ['pricingContent.upTo5FamilyMembers'] },
+  { section: 'pricingContent.platforms',           items: ['Web', 'iPhone', 'pricingContent.android', 'iPad'] },
+  { section: 'pricingContent.basicFeatures',      items: ['pricingContent.calendarSync', 'pricingContent.basicReminders', 'pricingContent.sharedNotes', 'pricingContent.sharedPhotos', 'pricingContent.sharedDocuments'] },
   { section: 'AI',                  items: ['10 AI requests/month'] },
 ];
 
 const BASIC_FEATURES = [
-  { section: 'Unlimited Family Members', items: ['Parents', 'Kids', 'Grandparents', 'Caregivers'] },
-  { section: 'Family Hub',               items: ['Chores', 'Rewards', 'Meal planning', 'Grocery planning', 'School hub', 'Sports hub'] },
-  { section: 'Unlimited Storage',        items: ['Photos', 'Videos', 'Documents'] },
-  { section: 'Kitchen Display Mode',     items: ['iPad', 'Android tablet', 'Browser', 'Smart display'] },
-  { section: 'AI Features (Unlimited)', items: ['AI Daily Briefing', 'AI Meal Planning', 'AI Grocery Builder', 'AI Schedule Assistant'] },
-  { section: 'Smart Imports',            items: ['Upload school flyers, PDFs, screenshots, photos', 'AI auto-creates calendar events, tasks & reminders'] },
+  { section: 'pricingContent.unlimitedFamilyMembers', items: ['pricingContent.parents', 'pricingContent.kids', 'pricingContent.grandparents', 'pricingContent.caregivers'] },
+  { section: 'pricingContent.familyHub',               items: ['pricingContent.chores', 'pricingContent.rewards', 'pricingContent.mealPlanning', 'pricingContent.groceryPlanning', 'pricingContent.schoolHub', 'pricingContent.sportsHub'] },
+  { section: 'pricingContent.unlimitedStorage',        items: ['pricingContent.photos', 'pricingContent.videos', 'pricingContent.documents'] },
+  { section: 'pricingContent.kitchenDisplayMode',     items: ['iPad', 'pricingContent.androidTablet', 'pricingContent.browser', 'pricingContent.smartDisplay'] },
+  { section: 'AI Features (Unlimited)', items: ['pricingContent.aiDailyBriefing', 'pricingContent.aiMealPlanning', 'pricingContent.aiGroceryBuilder', 'pricingContent.aiScheduleAssistant'] },
+  { section: 'pricingContent.smartImports',            items: ['pricingContent.uploadSchoolFlyersPdfsScreenshots', 'pricingContent.aiAutoCreatesCalendarEvents'] },
 ];
 
 const PLUS_FEATURES = [
-  { section: 'AI Concierge', items: ['"What\'s happening today?"', '"What do the kids need?"', '"What forms are due?"', '"What\'s for dinner?"', '"Who can pick up Jackson?"'] },
-  { section: 'AI School Assistant',  items: ['School emails', 'Permission slips', 'Assignments', 'Deadlines'] },
-  { section: 'AI Sports Assistant',  items: ['Team schedules', 'Schedule changes', 'Game updates', 'Practice reminders'] },
-  { section: 'AI Family Briefings',  items: ['Morning & evening daily briefing', 'Weekly: upcoming conflicts, school deadlines, financial reminders'] },
-  { section: 'AI Family Command Center', items: ['Family readiness score', 'Schedule conflict detection', 'Family stress prediction', 'Transportation planning', 'Missing item detection'] },
-  { section: 'Family Digital Twin',  items: ['Learns family preferences, routines, habits & activities', 'Proactively makes recommendations'] },
+  { section: 'pricingContent.aiConcierge', items: ['pricingContent.whatSHappeningToday', 'pricingContent.whatDoTheKidsNeed', 'pricingContent.whatFormsAreDue', 'pricingContent.whatSForDinner', 'pricingContent.whoCanPickUpJackson'] },
+  { section: 'pricingContent.aiSchoolAssistant',  items: ['pricingContent.schoolEmails', 'pricingContent.permissionSlips', 'pricingContent.assignments', 'pricingContent.deadlines'] },
+  { section: 'pricingContent.aiSportsAssistant',  items: ['pricingContent.teamSchedules', 'pricingContent.scheduleChanges', 'pricingContent.gameUpdates', 'pricingContent.practiceReminders'] },
+  { section: 'pricingContent.aiFamilyBriefings',  items: ['pricingContent.morningEveningDailyBriefing', 'pricingContent.weeklyUpcomingConflictsSchoolDeadlines'] },
+  { section: 'pricingContent.aiFamilyCommandCenter', items: ['pricingContent.familyReadinessScore', 'pricingContent.scheduleConflictDetection', 'pricingContent.familyStressPrediction', 'pricingContent.transportationPlanning', 'pricingContent.missingItemDetection'] },
+  { section: 'pricingContent.familyDigitalTwin',  items: ['pricingContent.learnsFamilyPreferencesRoutinesHabits', 'pricingContent.proactivelyMakesRecommendations'] },
 ];
 
 // ── Above-the-fold differentiators ──────────────────────────────────────────
 // The highest-value Bubaly features, made easy to understand and find (vs. the
 // market). Each is a real, shipped surface — this strip just raises visibility.
 type HiTier = 'Free' | 'Family Basic' | 'Family+';
+// HiTier doubles as a lookup key and as the badge's visible label, so the
+// members stay identifiers and the display text lives here.
+const HI_TIER_LABEL: Record<HiTier, string> = {
+  'Free': 'pricingContent.free',
+  'Family Basic': 'pricingContent.familyBasic',
+  'Family+': 'pricingContent.familyPlus',
+};
+
 const HI_BADGE: Record<HiTier, string> = {
   'Free': 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
   'Family Basic': 'bg-blue-500/15 text-blue-300 ring-blue-400/30',
@@ -69,22 +77,22 @@ const HI_BADGE: Record<HiTier, string> = {
 };
 
 const SWITCH_HIGHLIGHTS: { emoji: string; title: string; desc: string; tier: HiTier }[] = [
-  { emoji: '🛒', title: 'Shopping & Lists', tier: 'Free',
-    desc: 'Shared shopping and grocery lists the whole family keeps in sync — front and center.' },
-  { emoji: '📥', title: 'AI Family Inbox & Front Desk', tier: 'Family+',
-    desc: 'One place for calls, emails, forms, school notes and appointments — Bubaly reads them and acts.' },
-  { emoji: '📸', title: 'Smart Imports', tier: 'Family Basic',
-    desc: 'Snap a school flyer, PDF or screenshot — AI creates the calendar events, tasks and reminders.' },
-  { emoji: '🖥️', title: 'Kitchen Mode', tier: 'Family Basic',
-    desc: 'Turn any tablet or smart display into a family command center on the counter.' },
-  { emoji: '👛', title: 'Family Wallet & Allowance', tier: 'Free',
-    desc: 'Allowances, chores-to-rewards and family money — built in, not a separate app.' },
-  { emoji: '🩺', title: 'Health, Meds & Records', tier: 'Family Basic',
-    desc: 'Medications, appointments and a secure medical-records locker where competitors are weak.' },
-  { emoji: '🛟', title: 'Emergency Hub', tier: 'Family+',
-    desc: 'Critical info, documents and contacts ready the moment your family needs them.' },
-  { emoji: '🚗', title: 'Transportation & Rides', tier: 'Family+',
-    desc: 'Who’s picking up whom — rides, carpools and pickups planned for you by AI.' },
+  { emoji: '🛒', title: 'pricingContent.shoppingLists', tier: 'Free',
+    desc: 'pricingContent.sharedShoppingAndGroceryLists' },
+  { emoji: '📥', title: 'pricingContent.aiFamilyInboxFrontDesk', tier: 'Family+',
+    desc: 'pricingContent.onePlaceForCallsEmails' },
+  { emoji: '📸', title: 'pricingContent.smartImports', tier: 'Family Basic',
+    desc: 'pricingContent.snapASchoolFlyerPdf' },
+  { emoji: '🖥️', title: 'pricingContent.kitchenMode', tier: 'Family Basic',
+    desc: 'pricingContent.turnAnyTabletOrSmart' },
+  { emoji: '👛', title: 'pricingContent.familyWalletAllowance', tier: 'Free',
+    desc: 'pricingContent.allowancesChoresToRewardsAnd' },
+  { emoji: '🩺', title: 'pricingContent.healthMedsRecords', tier: 'Family Basic',
+    desc: 'pricingContent.medicationsAppointmentsAndASecure' },
+  { emoji: '🛟', title: 'pricingContent.emergencyHub', tier: 'Family+',
+    desc: 'pricingContent.criticalInfoDocumentsAndContacts' },
+  { emoji: '🚗', title: 'pricingContent.transportationRides', tier: 'Family+',
+    desc: 'pricingContent.whoSPickingUpWhom' },
 ];
 
 function WhySwitch() {
@@ -101,11 +109,11 @@ function WhySwitch() {
             <div className="flex items-center justify-between gap-2">
               <span className="text-2xl" aria-hidden>{h.emoji}</span>
               <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1', HI_BADGE[h.tier])}>
-                {h.tier}
+                {tr(HI_TIER_LABEL[h.tier])}
               </span>
             </div>
-            <p className="mt-3 text-sm font-bold">{h.title}</p>
-            <p className="mt-1 text-xs leading-relaxed text-white/65">{h.desc}</p>
+            <p className="mt-3 text-sm font-bold">{tr(h.title)}</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(h.desc)}</p>
           </div>
         ))}
       </div>
@@ -115,14 +123,14 @@ function WhySwitch() {
 
 // ── How the free trial works ────────────────────────────────────────────────
 const TRIAL_STEPS: { icon: React.ReactNode; title: string; desc: string }[] = [
-  { icon: <Sparkles className="h-5 w-5 text-violet-300" />, title: 'Start free',
-    desc: 'Full Family Basic access for 5 days — no credit card required.' },
-  { icon: <Lock className="h-5 w-5 text-violet-300" />, title: 'After 5 days',
-    desc: 'Your account locks. Log back in anytime and choose Family Basic or Family+ to unlock it all.' },
-  { icon: <ArrowLeftRight className="h-5 w-5 text-violet-300" />, title: 'Switch anytime',
-    desc: 'On Family+? Downgrade to Family Basic whenever you like — no need to start over.' },
-  { icon: <Archive className="h-5 w-5 text-violet-300" />, title: 'Yours to keep',
-    desc: 'Close your account anytime. We keep your data safe, so it’s all here if you come back.' },
+  { icon: <Sparkles className="h-5 w-5 text-violet-300" />, title: 'pricingContent.startFree',
+    desc: 'pricingContent.fullFamilyBasicAccessFor' },
+  { icon: <Lock className="h-5 w-5 text-violet-300" />, title: 'pricingContent.after5Days',
+    desc: 'pricingContent.yourAccountLocksLogBack' },
+  { icon: <ArrowLeftRight className="h-5 w-5 text-violet-300" />, title: 'pricingContent.switchAnytime',
+    desc: 'pricingContent.onFamilyDowngradeToFamily' },
+  { icon: <Archive className="h-5 w-5 text-violet-300" />, title: 'pricingContent.yoursToKeep',
+    desc: 'pricingContent.closeYourAccountAnytimeWe' },
 ];
 
 function HowTrialWorks() {
@@ -139,8 +147,8 @@ function HowTrialWorks() {
             <li key={s.title} className="relative flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <span className="absolute right-3 top-3 text-xs font-black text-white/25">{i + 1}</span>
               <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25">{s.icon}</span>
-              <p className="mt-3 text-sm font-bold">{s.title}</p>
-              <p className="mt-1 text-xs leading-relaxed text-white/65">{s.desc}</p>
+              <p className="mt-3 text-sm font-bold">{tr(s.title)}</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(s.desc)}</p>
             </li>
           ))}
         </ol>
@@ -165,6 +173,7 @@ function PlanCard({
   prelude?: string;
   featureSections: { section: string; items: string[] }[];
 }) {
+  const tr = useTranslations();
   return (
     <article className={cn(
       'relative flex flex-col rounded-2xl p-5 sm:p-7',
@@ -185,7 +194,7 @@ function PlanCard({
 
       <div className="mt-5 flex items-end gap-1">
         <span className="text-4xl font-black">{price}</span>
-        {price !== 'Free' && <span className="pb-1.5 text-white/60">/mo</span>}
+        {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">/mo</span>}
       </div>
       <p className="mt-1 min-h-[18px] text-xs text-white/50">{priceSub}</p>
 
@@ -204,8 +213,8 @@ function PlanCard({
       <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
         {prelude && <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">{prelude}</p>}
         {featureSections.map((fs) => (
-          <div key={fs.section}>
-            <p className="mb-1.5 text-xs font-bold text-white/70">{fs.section}</p>
+          <div key={tr(fs.section)}>
+            <p className="mb-1.5 text-xs font-bold text-white/70">{tr(fs.section)}</p>
             <ul className="space-y-1.5">
               {fs.items.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm text-white/80">
@@ -227,7 +236,7 @@ type FeatureMatrix = { section: string; items: { label: string; tier: MatrixTier
 
 const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
   { key: 'free', label: '5-Day Trial', dot: 'bg-emerald-400' },
-  { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400' },
+  { key: 'basic', label: 'pricingContent.familyBasic', dot: 'bg-blue-400' },
   { key: 'plus', label: 'Family+', dot: 'bg-violet-400' },
 ];
 const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
@@ -235,22 +244,23 @@ const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
 // Competitor-positioning callouts (how each tier stacks up vs the market).
 const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
   { key: 'free', label: '5-Day Free Trial', dot: 'bg-emerald-400',
-    line: 'Get full Family Basic free for 5 days — no credit card. After that, keep Family Basic or upgrade to Family+.' },
-  { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400',
-    line: 'A direct replacement for Cozi Gold, FamilyWall Premium, OurHome, FamCal, and Skylight — at one family price.' },
+    line: 'pricingContent.getFullFamilyBasicFree' },
+  { key: 'basic', label: 'pricingContent.familyBasic', dot: 'bg-blue-400',
+    line: 'pricingContent.aDirectReplacementForCozi' },
   { key: 'plus', label: 'Family+', dot: 'bg-violet-400',
-    line: 'Category creator: your family’s AI Chief of Staff — beyond a traditional organizer.' },
+    line: 'pricingContent.categoryCreatorYourFamilyS' },
 ];
 
 function PositioningCallouts() {
+  const tr = useTranslations();
   return (
     <div className="mt-7 grid gap-3 sm:grid-cols-3">
       {TIER_POSITIONING.map((t) => (
         <div key={t.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="flex items-center gap-1.5 text-sm font-bold">
-            <span className={cn('h-2 w-2 rounded-full', t.dot)} /> {t.label}
+            <span className={cn('h-2 w-2 rounded-full', t.dot)} /> {tr(t.label)}
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-white/65">{t.line}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-white/65">{tr(t.line)}</p>
         </div>
       ))}
     </div>
@@ -272,14 +282,14 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
               <th className="px-4 py-3 text-left font-bold">{tr('pricingPricingContent.feature')}</th>
               {TIER_COL.map((t) => (
                 <th key={t.key} className="px-4 py-3 text-center font-bold">
-                  <span className="inline-flex items-center gap-1.5"><span className={cn('h-2 w-2 rounded-full', t.dot)} />{t.label}</span>
+                  <span className="inline-flex items-center gap-1.5"><span className={cn('h-2 w-2 rounded-full', t.dot)} />{tr(t.label)}</span>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {matrix.map((sec) => (
-              <FeatureMatrixSection key={sec.section} section={sec.section} items={sec.items} />
+              <FeatureMatrixSection key={tr(sec.section)} section={tr(sec.section)} items={sec.items} />
             ))}
           </tbody>
         </table>
@@ -289,14 +299,15 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
 }
 
 function FeatureMatrixSection({ section, items }: { section: string; items: { label: string; tier: MatrixTier }[] }) {
+  const tr = useTranslations();
   return (
     <>
       <tr className="bg-white/[0.04]">
         <td colSpan={4} className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white/55">{section}</td>
       </tr>
       {items.map((it) => (
-        <tr key={it.label} className="border-t border-white/[0.06]">
-          <td className="px-4 py-2.5 text-white/85">{it.label}</td>
+        <tr key={tr(it.label)} className="border-t border-white/[0.06]">
+          <td className="px-4 py-2.5 text-white/85">{tr(it.label)}</td>
           {TIER_COL.map((t) => (
             <td key={t.key} className="px-4 py-2.5 text-center">
               {TIER_RANK[t.key] >= TIER_RANK[it.tier]
@@ -378,39 +389,39 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         <section className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           <PlanCard
             name="5-Day Free Trial"
-            goal="Full Family Basic access — free, no credit card."
+            goal={tr('pricingContent.fullFamilyBasicAccessFree')}
             icon={<Zap className="h-7 w-7 text-white/60" />}
-            price="Free"
-            priceSub="Family Basic for 5 days, then choose a plan"
-            cta="Start your free trial"
+            price={tr('pricingContent.free')}
+            priceSub={tr('pricingContent.familyBasicFor5Days')}
+            cta={tr('pricingContent.startYourFreeTrial')}
             ctaHref="/signup"
-            prelude="Your free trial includes Family Basic:"
+            prelude={tr('pricingContent.yourFreeTrialIncludesFamily')}
             featureSections={FREE_FEATURES}
           />
 
           <PlanCard
-            name="Family Basic"
-            goal="The best family organizer on earth."
+            name={tr('pricingContent.familyBasic')}
+            goal={tr('pricingContent.theBestFamilyOrganizerOn')}
             icon={<Crown className="h-7 w-7 text-yellow-400" />}
             price={basicPrice}
             priceSub={basicPriceSub}
-            cta="Start Family Basic"
+            cta={tr('pricingContent.startFamilyBasic')}
             ctaHref={`/signup?plan=basic&billing=${period}`}
             featured
             badge="MOST POPULAR"
-            prelude="Everything in your trial, plus:"
+            prelude={tr('pricingContent.everythingInYourTrialPlus')}
             featureSections={BASIC_FEATURES}
           />
 
           <PlanCard
             name="Family+"
-            goal="The Family Chief of Staff."
+            goal={tr('pricingContent.theFamilyChiefOfStaff')}
             icon={<Sparkles className="h-7 w-7 text-violet-400" />}
             price={plusPrice}
             priceSub={plusPriceSub}
-            cta="Start Family+"
+            cta={tr('pricingContent.startFamily')}
             ctaHref={`/signup?plan=plus&billing=${period}`}
-            prelude="Everything in Family Basic, plus:"
+            prelude={tr('pricingContent.everythingInFamilyBasicPlus')}
             featureSections={PLUS_FEATURES}
           />
         </section>

@@ -25,51 +25,51 @@ const DEMOS: Demo[] = [
   {
     icon: Calendar,
     prompt: 'Add soccer practice every Tuesday and Thursday at 5pm.',
-    reply: 'Done — I added a repeating practice and a 30-minute leave-by reminder so you’re never late.',
+    reply: 'aiShowcase.doneIAddedARepeating',
     actions: [
-      { icon: Calendar, title: 'aiShowcase.soccerPractice', meta: 'Repeats Tue & Thu · 5:00–6:30 PM', tone: 'brand' },
+      { icon: Calendar, title: 'aiShowcase.soccerPractice', meta: 'aiShowcase.repeatsTueThu500', tone: 'brand' },
       { icon: Bell, title: 'aiShowcase.leaveByReminder', meta: '4:30 PM · 12 min drive to the field', tone: 'accent' },
     ],
   },
   {
     icon: UtensilsCrossed,
     prompt: 'Plan dinners for this week — nothing too heavy.',
-    reply: 'Here’s a light, balanced week. Want me to turn it into a grocery list?',
+    reply: 'aiShowcase.hereSALightBalanced',
     actions: [
-      { icon: UtensilsCrossed, title: '5 dinners planned', meta: 'Honey-garlic chicken · Taco bowls · Salmon · Pasta primavera · Sheet-pan veggies', tone: 'brand' },
+      { icon: UtensilsCrossed, title: '5 dinners planned', meta: 'aiShowcase.honeyGarlicChickenTacoBowls', tone: 'brand' },
     ],
   },
   {
     icon: ShoppingCart,
     prompt: 'Build a grocery list from our meal plan.',
-    reply: 'Added 23 items, grouped by aisle, and merged the ones you already have in the pantry.',
+    reply: 'aiShowcase.added23ItemsGroupedBy',
     actions: [
-      { icon: ShoppingCart, title: 'aiShowcase.groceryList23Items', meta: 'Produce 8 · Meat 4 · Dairy 3 · Pantry 8', tone: 'green' },
+      { icon: ShoppingCart, title: 'aiShowcase.groceryList23Items', meta: 'aiShowcase.produce8Meat4Dairy', tone: 'green' },
     ],
   },
   {
     icon: CheckSquare,
     prompt: 'Give the kids age-appropriate chores for the weekend.',
-    reply: 'Assigned and split them fairly. Emma and Jack can check them off from their own logins.',
+    reply: 'aiShowcase.assignedAndSplitThemFairly',
     actions: [
-      { icon: CheckSquare, title: 'aiShowcase.makeYourBedEmma', meta: 'Sat morning · 10 pts', tone: 'brand' },
-      { icon: CheckSquare, title: 'aiShowcase.takeOutRecyclingJack', meta: 'Sun evening · 15 pts', tone: 'brand' },
+      { icon: CheckSquare, title: 'aiShowcase.makeYourBedEmma', meta: 'aiShowcase.satMorning10Pts', tone: 'brand' },
+      { icon: CheckSquare, title: 'aiShowcase.takeOutRecyclingJack', meta: 'aiShowcase.sunEvening15Pts', tone: 'brand' },
     ],
   },
   {
     icon: Bell,
     prompt: 'Remind us to change the HVAC filter in 90 days.',
-    reply: 'Set for you — and I’ll nudge the whole household, not just whoever asked.',
+    reply: 'aiShowcase.setForYouAndI',
     actions: [
-      { icon: Bell, title: 'aiShowcase.changeHvacFilter', meta: 'Due in 90 days · notifies everyone', tone: 'accent' },
+      { icon: Bell, title: 'aiShowcase.changeHvacFilter', meta: 'aiShowcase.dueIn90DaysNotifies', tone: 'accent' },
     ],
   },
   {
     icon: PiggyBank,
     prompt: 'How are we doing on the summer vacation fund?',
-    reply: 'You’re 68% there and on pace for July if you keep the current weekly transfer.',
+    reply: 'aiShowcase.youRe68ThereAnd',
     actions: [
-      { icon: PiggyBank, title: 'aiShowcase.vacationFund20403', meta: 'On track for July · $60/wk', tone: 'green' },
+      { icon: PiggyBank, title: 'aiShowcase.vacationFund20403', meta: 'aiShowcase.onTrackForJuly60', tone: 'green' },
     ],
   },
 ];
@@ -159,7 +159,7 @@ export function AiActionDemo() {
           <div className="flex items-end gap-2.5">
             <span className="glow-dot mb-1 h-7 w-7 shrink-0" />
             <div className="rounded-2xl rounded-bl-md border border-brand/15 bg-surface/80 px-4 py-2.5 text-sm leading-6 text-muted shadow-lg backdrop-blur-xl">
-              {demo.reply}
+              {tr(demo.reply)}
             </div>
           </div>
 
@@ -176,8 +176,8 @@ export function AiActionDemo() {
                   <a.icon className="h-[18px] w-[18px]" />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{a.title}</p>
-                  <p className="truncate text-xs text-muted">{a.meta}</p>
+                  <p className="truncate text-sm font-semibold">{tr(a.title)}</p>
+                  <p className="truncate text-xs text-muted">{tr(a.meta)}</p>
                 </div>
                 <span className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
                   <Check className="h-4 w-4" />

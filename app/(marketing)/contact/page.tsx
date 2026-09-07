@@ -28,9 +28,9 @@ export default async function ContactPage() {
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[
-            { icon: Mail, title: t('contact.emailUs'), body: 'support@bubaly.com — we reply within one business day.' },
-            { icon: MessageCircle, title: t('contact.support'), body: 'Logged in? Use the in-app assistant or settings to reach support.' },
-            { icon: Shield, title: t('contact.privacy'), body: 'Your message is sent securely and never shared.' },
+            { icon: Mail, title: t('contact.emailUs'), body: t('contact.supportBubalyComWeReply') },
+            { icon: MessageCircle, title: t('contact.support'), body: t('contact.loggedInUseTheIn') },
+            { icon: Shield, title: t('contact.privacy'), body: t('contact.yourMessageIsSentSecurely') },
           ].map((i) => (
             <div key={i.title} className="flex gap-4">
               <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text">

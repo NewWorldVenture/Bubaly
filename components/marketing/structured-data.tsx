@@ -5,7 +5,7 @@
 
 import { Fragment } from 'react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getSocialLinks } from '@/lib/server/social-links';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -58,7 +58,7 @@ export async function SiteStructuredData() {
     '@type': 'SoftwareApplication',
     name: 'Bubaly',
     applicationCategory: 'LifestyleApplication',
-    operatingSystem: 'Web, iOS, Android',
+    operatingSystem: t('structuredData.webIosAndroid'),
     description:
       t('structuredData.anAiNativeFamilyOperating'),
     url: SITE_URL,
@@ -94,7 +94,7 @@ export function FaqStructuredData({ items }: { items: { q: string; a: string }[]
 }
 
 /** Page-level schema for public marketing routes and their admin-managed FAQs. */
-export function MarketingPageStructuredData({
+export async function MarketingPageStructuredData({
   path,
   name,
   description,
@@ -105,6 +105,7 @@ export function MarketingPageStructuredData({
   description: string;
   questions?: { q: string; a: string }[];
 }) {
+  const { locale } = await getLocaleContext();
   const pageUrl = `${SITE_URL}${path === '/' ? '' : path}`;
   return (
     <Fragment>
@@ -115,7 +116,7 @@ export function MarketingPageStructuredData({
         description,
         url: pageUrl,
         isPartOf: { '@type': 'WebSite', name: 'Bubaly', url: SITE_URL },
-        inLanguage: 'en-US',
+        inLanguage: locale.code,
       }} />
       {questions.length > 0 ? <FaqStructuredData items={questions} /> : null}
     </Fragment>
@@ -140,7 +141,8 @@ type BlogPostSchemaInput = {
  * readable summary — headline, author, dates, section, image, keywords. All
  * values come from the DB, so JsonLd escapes `<` as defense in depth.
  */
-export function BlogPostStructuredData(post: BlogPostSchemaInput) {
+export async function BlogPostStructuredData(post: BlogPostSchemaInput) {
+  const { locale } = await getLocaleContext();
   const url = `${SITE_URL}/blog/${post.slug}`;
   const article = {
     '@context': 'https://schema.org',
@@ -162,7 +164,7 @@ export function BlogPostStructuredData(post: BlogPostSchemaInput) {
     },
     url,
     isAccessibleForFree: true,
-    inLanguage: 'en-US',
+    inLanguage: locale.code,
   };
   const breadcrumbs = {
     '@context': 'https://schema.org',
@@ -187,7 +189,7 @@ export async function BlogListStructuredData({ posts }: { posts: { slug: string;
   const data = {
     '@context': 'https://schema.org',
     '@type': 'Blog',
-    name: 'The Bubaly Blog',
+    name: t('structuredData.theBubalyBlog'),
     description: t('structuredData.practicalAdviceRealStoriesAnd'),
     url: `${SITE_URL}/blog`,
     publisher: { '@type': 'Organization', name: 'Bubaly', url: SITE_URL },

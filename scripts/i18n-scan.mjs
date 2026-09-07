@@ -32,14 +32,22 @@ export const GATED_SURFACES = {
   'app-shell': ['components/app/app-shell.tsx'],
   // The public marketing header, on every unauthenticated page.
   'marketing-header': ['components/marketing/site-header.tsx'],
-  // EVERYTHING. This surface only became addable once the count reached zero,
-  // which it now has: every string a person reads in `app/` and `components/`
-  // is a catalogue key. The three surfaces above are kept rather than folded
-  // into this one because they name WHY those files were gated first, and
-  // because a failure that says "app-shell" is more useful than one that says
-  // "everything".
-  everything: ['app', 'components'],
+  // The public marketing site: every page under (marketing) and every component
+  // it renders. This is the whole signed-out experience — home, pricing,
+  // features, the four legal documents, the FAQ, the blog chrome and the footer.
+  'marketing-pages': ['app/(marketing)'],
+  'marketing-components': ['components/marketing'],
 };
+
+// NOT gated: `everything` — ['app', 'components'].
+//
+// It used to be, on the strength of a zero from a scanner that could not see
+// copy in a data structure, could not see a JSX prop outside a fixed allowlist,
+// and skipped every directory named `mobile`. Widening it turned that zero into
+// 2,343 real strings, so the promise the gate was making had never been true;
+// it just had no way to notice. It goes back in the list when it scans clean and
+// not before, because a surface that is gated while dirty teaches everyone to
+// ignore the gate.
 
 // Build output and VCS metadata nest anywhere, so these are skipped at any
 // depth.
@@ -132,6 +140,14 @@ const NOT_COPY = [
   // names: `error: 'text-rose-300 bg-rose-500/10 border-rose-500/30'` is a
   // class list, not a sentence. Two or more Tailwind-shaped tokens say so.
   /(?:^|\s)(?:text|bg|border|ring|from|to|via|hover|focus)[-:][\w[\]/.-]+(?:\s|$).*(?:^|\s)(?:text|bg|border|ring|from|to|via|hover|focus)[-:]/,
+  // A class list in general, not only the tone maps: EVERY token is
+  // utility-shaped (a hyphen, a slash, or a variant colon, and no capitals or
+  // sentence punctuation). Written as "all tokens" rather than "contains a
+  // utility" so a real sentence with a hyphenated word — "Offline-friendly",
+  // "Real-time sync" — is untouched. Needed once copy is recognised by the
+  // VALUE rather than by an allowlist of property names, because `tint`,
+  // `iconBg`, `ring` and `cls` all hold class strings.
+  /^(?:[a-z0-9]+[-:/][\w[\]()/.,%#-]*)(?:\s+[a-z0-9[]+[-:/][\w[\]()/.,%#-]*)+$/,
   /^\s*:\s.*\?\s*$/,           // `: error ?` — the middle of a ternary
   /\s\?\s*$/,                   // `on ?` — the head of one. English copy does
                                 //   not put a space before its question mark;
@@ -151,16 +167,33 @@ const NOT_COPY = [
 // and the count said zero while a person could read English on the screen. If a
 // component takes a string a person reads, its prop name belongs here.
 //
-// `eyebrow` and `subhead` were added after `<SectionHeading eyebrow="Knowledge
-// Center" …>` shipped that label to every locale on six marketing pages.
-const COPY_PROPS = [
-  'placeholder', 'aria-label', 'title', 'alt', 'label', 'emptyLabel', 'confirmLabel',
-  'cancelLabel', 'message', 'description', 'text', 'heading', 'subheading', 'subtitle',
-  'hint', 'helper', 'helperText', 'tooltip', 'caption', 'summary', 'note', 'badge',
-  'ctaLabel', 'actionLabel', 'submitLabel', 'okLabel', 'emptyText', 'errorText', 'legend',
-  'eyebrow', 'subhead', 'headline', 'tagline', 'blurb', 'question', 'answer',
-];
-const PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.join('|')})="([^"{}]{3,})"`, 'g');
+// Recognised the same way as data literals below: by the VALUE, with the
+// properties that are never copy named in NOT_COPY_PROPS. An allowlist was
+// tried first and each gap had to be found by reading English off a shipped
+// page — `message`, then `eyebrow`, then `priceSub`.
+const NOT_COPY_PROPS = new Set([
+  'className', 'href', 'id', 'key', 'icon', 'type', 'slug', 'path', 'url', 'color',
+  'tone', 'variant', 'table', 'column', 'event', 'role', 'status', 'kind', 'provider',
+  'locale', 'tz', 'src', 'format', 'pattern', 'value', 'field', 'op', 'method', 'mode',
+  'align', 'size', 'position', 'target', 'rel', 'as', 'bucket', 'scope', 'from', 'to',
+  'env', 'model', 'sort', 'order', 'dir', 'ext', 'mime', 'tag', 'group', 'domain',
+  'host', 'port', 'prefix', 'suffix', 'sep', 'delimiter',
+  // SVG and image geometry. `d` holds a path — "M18.244 2.25h3.308l…" reads as
+  // two words of prose to any rule that does not know the attribute — and
+  // `sizes` holds a media-query list, "(min-width: 1024px) 800px, 100vw".
+  'd', 'sizes', 'viewBox', 'points', 'transform', 'fill', 'stroke', 'preserveAspectRatio',
+  // Class-string holders. The value rule above catches most, but these carry a
+  // single utility often enough to be worth naming.
+  'tint', 'bg', 'ring', 'iconBg', 'cls', 'chip', 'badgeClass', 'wrap', 'hover', 'active',
+  // An AI system prompt is instructions to a model, not text a person reads.
+  'prompt', 'system', 'instruction', 'instructions',
+  // Plan/tier identifiers. They index badge and rank maps and are typed as
+  // string-literal unions, so a key here does not compile; the visible label
+  // is a separate lookup (see HI_TIER_LABEL in pricing-content.tsx).
+  'tier', 'plan', 'level',
+]);
+
+const PROP_PATTERN = /\b([A-Za-z_$][\w$-]*)="([^"{}]{3,})"/g;
 
 /**
  * Copy sitting in a DATA structure rather than in the markup:
@@ -173,14 +206,15 @@ const PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.join('|')})="([^"{}
  * written this way. The whole site footer shipped untranslated behind this gap,
  * on every marketing page, while the surface reported clean.
  *
- * Restricted to the same prop names as above: `a string in an object` also
- * describes a table name, a sort key and a CSS class, so the property name is
- * what makes it copy. A value that is itself a catalogue key ('siteFooter.product')
- * is a single lowercase-initial token and fails `looksLikeCopy`, so migrating a
- * literal to a key clears the finding.
+ * Recognised by the VALUE, with a list of properties that are never copy. An
+ * allowlist of property names was tried first and lost: `eyebrow`, `desc`,
+ * `when`, `what` and `meta` each had to be discovered by finding untranslated
+ * text on a shipped page, which is the failure this scanner exists to prevent.
+ * A denylist is wrong in the other direction — it over-reports — and that is
+ * the direction to be wrong in.
  */
-const DATA_PATTERN = new RegExp(
-  String.raw`(?:^|[\s,{[])(?:${COPY_PROPS.join('|')})\s*:\s*'([^'\\\n]{3,})'`, 'gm');
+
+const DATA_PATTERN = /(?:^|[\s,{[])([A-Za-z_$][\w$]*)\s*:\s*'([^'\\\n]{3,})'/gm;
 
 /**
  * Copy in an ARRAY under a copy-carrying property:
@@ -195,12 +229,13 @@ const DATA_PATTERN = new RegExp(
  * The span is bounded by the matching bracket rather than a lazy `[^\]]*`, so a
  * body containing an apostrophe or a nested list still reads to its real end.
  */
-const ARRAY_PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.concat(['body', 'items', 'bullets', 'points', 'paragraphs']).join('|')})\s*:\s*\[`, 'g');
+const ARRAY_PROP_PATTERN = /\b([A-Za-z_$][\w$]*)\s*:\s*\[/g;
 const STRING_IN_ARRAY = /'((?:[^'\\\n]|\\.){3,})'/g;
 
 function arrayFindings(source) {
   const out = [];
   for (const m of source.matchAll(ARRAY_PROP_PATTERN)) {
+    if (NOT_COPY_PROPS.has(m[1])) continue;
     const open = (m.index ?? 0) + m[0].length - 1;
     let depth = 0;
     let end = open;
@@ -303,8 +338,29 @@ function toastPattern(source) {
 // Whitespace is normalised below so multi-line prose reads as one string.
 const TEXT_PATTERN = />([^<>{}]{3,})</g;
 
+/**
+ * Strings the repo has DECLARED identical in every language — brand names,
+ * proper nouns, demo-data placeholders — read from the file that already
+ * carries that decision. Without this the scanner reports "Bubaly" nine times
+ * on the marketing pages and asks for it to be translated, which is exactly
+ * what lib/i18n/messages/INVARIANT.txt exists to say it must not be.
+ */
+const INVARIANT = (() => {
+  try {
+    return new Set(
+      readFileSync(join(ROOT, 'lib/i18n/messages/INVARIANT.txt'), 'utf8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#')),
+    );
+  } catch {
+    return new Set();
+  }
+})();
+
 export function looksLikeCopy(raw) {
   const s = raw.trim();
+  if (INVARIANT.has(s)) return false;
   if (s.length < 3) return false;
   if (NOT_COPY.some((re) => re.test(s))) return false;
   if (!/[a-zA-Z]/.test(s)) return false;
@@ -358,8 +414,16 @@ export function scanFile(file) {
   // read `<em>${topicLabel}</em> — wrote:</p>` inside an HTML email template as
   // page copy — and that email goes to the operator, not to the visitor.
   if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
-  for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
-  for (const m of source.matchAll(DATA_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(PROP_PATTERN)) {
+    // `data-*` is machine state and `aria-hidden`/`aria-live` are enum values;
+    // `aria-label` is the one ARIA attribute that carries a sentence.
+    if (m[1].startsWith('data-')) continue;
+    if (m[1].startsWith('aria-') && m[1] !== 'aria-label') continue;
+    if (!NOT_COPY_PROPS.has(m[1])) push(m[2], m.index ?? 0);
+  }
+  for (const m of source.matchAll(DATA_PATTERN)) {
+    if (!NOT_COPY_PROPS.has(m[1])) push(m[2], m.index ?? 0);
+  }
   for (const [text, at] of arrayFindings(source)) push(text, at);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);

@@ -20,8 +20,8 @@ export async function generateMetadata(): Promise<Metadata> {
   title: t('blog.blogTipsStoriesInsightsFor'),
   description: t('blog.practicalAdviceRealStoriesAnd'),
   keywords: [
-    'family organization', 'parenting tips', 'family life', 'meal planning', 'family finances',
-    'kids activities', 'family wellness', 'family travel', 'home organization', 'bubaly',
+    t('blog.familyOrganization'), t('blog.parentingTips'), t('blog.familyLife'), t('blog.mealPlanning'), t('blog.familyFinances'),
+    t('blog.kidsActivities'), t('blog.familyWellness'), t('blog.familyTravel'), t('blog.homeOrganization'), 'bubaly',
   ],
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/blog` },
   openGraph: {
@@ -143,7 +143,7 @@ export default async function BlogPage({ searchParams }: Props) {
   return (
     <PageWrap>
       <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
-      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description={t('blog.practicalAdviceRealStoriesAnd')} />
+      <MarketingPageStructuredData path="/blog" name={t('blog.theBubalyBlog')} description={t('blog.practicalAdviceRealStoriesAnd')} />
 
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (
