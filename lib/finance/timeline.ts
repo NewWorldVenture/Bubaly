@@ -1,11 +1,13 @@
 // lib/finance/timeline.ts — the Financial Copilot brain (pure, tested).
 //
 // Fuses SCHEDULE (bills' due dates, recurring cadence, savings-goal target
-// dates, calendar events) with MONEY (amounts + current balances) into one
-// forward-looking, week-bucketed cash-flow timeline, then reasons over it:
-// projected running balance, "heavy weeks", goals at risk, and ranked,
-// plain-language insights with next-best actions. No Supabase / React — the page
-// fetches rows and calls buildCashflowTimeline(); everything here is unit-tested.
+// dates, calendar events, plan-linked commitments) with MONEY (amounts +
+// current balances) into one forward-looking, week-bucketed cash-flow
+// timeline, then reasons over it: projected running balance, "heavy weeks",
+// goals at risk, coverage (which bills leave on their own), an injected
+// what-if scenario, and ranked, plain-language insights with next-best
+// actions. No Supabase / React — the page fetches rows and calls
+// buildCashflowTimeline(); everything here is unit-tested.
 //
 // Amounts are DOLLARS (numeric), matching the finance tables (see hub.ts).
 
@@ -17,6 +19,8 @@ export interface TimelineBill {
   recurrence: string | null;     // 'weekly' | 'monthly' | 'quarterly' | 'yearly' | null
   status: string;                // 'paid' excluded from the forecast
   category: string | null;
+  /** The money leaves on its own — the bill is covered, nothing to do. */
+  autopay?: boolean;
 }
 
 export interface TimelineGoal {
@@ -31,7 +35,37 @@ export interface TimelineEvent {
   starts_at: string;
 }
 
-export type MomentKind = 'bill' | 'recurring' | 'goal';
+/** Where a plan-linked commitment comes from (the module that owns the plan). */
+export type PlanSource = 'subscription' | 'vacation' | 'move' | 'project';
+
+/**
+ * A commitment the family has already made somewhere else in Bubaly — a
+ * tracked subscription, a trip's remaining budget, a move's budget minus what
+ * is spent, an open home project — that the forecast would otherwise miss.
+ * One-offs land on `date`; a `recurrence` expands like a recurring bill.
+ */
+export interface TimelinePlan {
+  label: string;
+  amount: number;                // dollars still to find
+  date: string;                  // ISO date — when the money is needed
+  source: PlanSource;
+  recurrence?: string | null;
+  category?: string | null;
+}
+
+/** The cadences the "Can we afford it?" form offers; 'once' is a one-off. */
+export const SCENARIO_RECURRENCES = ['once', 'weekly', 'monthly', 'yearly'] as const;
+export type ScenarioRecurrence = (typeof SCENARIO_RECURRENCES)[number];
+
+/** "Can we afford it?" — a one-off or recurring commitment tried against the forecast. */
+export interface TimelineScenario {
+  label: string;
+  amount: number;
+  date: string;
+  recurrence?: string | null;    // null/undefined = one-off
+}
+
+export type MomentKind = 'bill' | 'recurring' | 'goal' | 'plan' | 'scenario';
 
 export interface MoneyMoment {
   date: string;                  // YYYY-MM-DD
@@ -39,6 +73,10 @@ export interface MoneyMoment {
   amount: number;
   kind: MomentKind;
   category: string | null;
+  /** Plan-linked moments say which plan they come from. */
+  source?: PlanSource;
+  /** True when the money leaves on its own (autopay) — covered, nothing to do. */
+  covered?: boolean;
 }
 
 export interface WeekBucket {
@@ -48,6 +86,20 @@ export interface WeekBucket {
   events: string[];              // overlaid calendar event titles that week
   projectedBalance: number;      // running balance at the END of this week
   heavy: boolean;
+}
+
+/**
+ * Which of the horizon's bills are covered. "Covered" is a bill the family
+ * does not have to touch: it leaves by autopay, or it is already marked paid.
+ * Everything else is "open" — someone still has to pay it by hand.
+ */
+export interface CoverageSummary {
+  coveredCount: number;          // autopay occurrences inside the horizon
+  coveredAmount: number;
+  paidCount: number;             // bills marked paid whose due date is inside the horizon
+  paidAmount: number;
+  openCount: number;
+  openAmount: number;
 }
 
 export type InsightKind =
@@ -74,9 +126,17 @@ export interface CashflowTimeline {
   lowestBalance: number;
   lowestBalanceWeek: string | null;
   insights: TimelineInsight[];
+  /** Dollars inside the horizon that come from plan-linked commitments. */
+  planOutflow: number;
+  /** Dollars inside the horizon that the injected scenario adds (0 without one). */
+  scenarioOutflow: number;
+  coverage: CoverageSummary;
 }
 
 const DAY = 86_400_000;
+
+/** The low-balance alarm line when the caller does not set one. */
+export const DEFAULT_BUFFER = 200;
 
 // ── Date helpers (UTC-stable so tests are deterministic) ─────────────────────
 function ymd(d: Date): string {
@@ -105,23 +165,22 @@ function addMonthsUTC(d: Date, n: number): Date {
 
 const RECURRENCE_STEP_DAYS: Record<string, number> = { weekly: 7, biweekly: 14, fortnightly: 14 };
 
-/** Expand a recurring bill's occurrences within [now, horizonEnd]. */
-function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): string[] {
-  const first = parseDate(bill.due_date);
+/** The dates a (possibly recurring) commitment lands on inside [now, horizonEnd]. */
+function expandDates(first: Date, recurrence: string | null | undefined, now: Date, horizonEnd: Date): string[] {
   const out: string[] = [];
 
-  if (!bill.is_recurring || !bill.recurrence) {
+  if (!recurrence) {
     if (first >= startOfDay(now) && first <= horizonEnd) out.push(ymd(first));
     return out;
   }
 
-  const rec = bill.recurrence.toLowerCase();
+  const rec = recurrence.toLowerCase();
   const monthly = rec === 'monthly';
   const quarterly = rec === 'quarterly';
   const yearly = rec === 'yearly' || rec === 'annually';
   const stepDays = RECURRENCE_STEP_DAYS[rec];
 
-  // Walk from the stored due date forward until we pass the horizon, emitting
+  // Walk from the stored date forward until we pass the horizon, emitting
   // any occurrence that lands inside [today, horizonEnd].
   let cursor = new Date(first.getTime());
   let guard = 0;
@@ -136,6 +195,11 @@ function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): str
   return out;
 }
 
+/** Expand a recurring bill's occurrences within [now, horizonEnd]. */
+function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): string[] {
+  return expandDates(parseDate(bill.due_date), bill.is_recurring ? bill.recurrence : null, now, horizonEnd);
+}
+
 function startOfDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
@@ -147,13 +211,22 @@ function round2(n: number): number {
 /** Approx monthly cost of a recurring bill (0 for one-offs). */
 export function monthlyEquivalent(bill: TimelineBill): number {
   if (!bill.is_recurring || !bill.recurrence) return 0;
-  const rec = bill.recurrence.toLowerCase();
-  if (rec === 'weekly') return bill.amount * 52 / 12;
-  if (rec === 'biweekly' || rec === 'fortnightly') return bill.amount * 26 / 12;
-  if (rec === 'monthly') return bill.amount;
-  if (rec === 'quarterly') return bill.amount / 3;
-  if (rec === 'yearly' || rec === 'annually') return bill.amount / 12;
+  return monthlyEquivalentOf(bill.amount, bill.recurrence);
+}
+
+function monthlyEquivalentOf(amount: number, recurrence: string): number {
+  const rec = recurrence.toLowerCase();
+  if (rec === 'weekly') return amount * 52 / 12;
+  if (rec === 'biweekly' || rec === 'fortnightly') return amount * 26 / 12;
+  if (rec === 'monthly') return amount;
+  if (rec === 'quarterly') return amount / 3;
+  if (rec === 'yearly' || rec === 'annually') return amount / 12;
   return 0;
+}
+
+/** Case/whitespace-insensitive name so "Netflix " and "netflix" dedupe. */
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 export interface BuildTimelineInput {
@@ -161,6 +234,10 @@ export interface BuildTimelineInput {
   goals: TimelineGoal[];
   events: TimelineEvent[];
   startingBalance: number;
+  /** Plan-linked commitments (subscriptions, trips, moves, projects). Optional so older callers keep working. */
+  plans?: TimelinePlan[];
+  /** A what-if commitment to try against the forecast. */
+  scenario?: TimelineScenario | null;
   horizonWeeks?: number;         // default 12
   buffer?: number;               // low-balance alarm threshold (default 200)
   now?: Date;
@@ -172,8 +249,9 @@ export interface BuildTimelineInput {
 export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeline {
   const now = input.now ?? new Date();
   const horizonWeeks = input.horizonWeeks ?? 12;
-  const buffer = input.buffer ?? 200;
+  const buffer = input.buffer ?? DEFAULT_BUFFER;
   const startingBalance = round2(input.startingBalance);
+  const today = startOfDay(now);
 
   const firstWeek = isoWeekStart(now);
   const horizonEnd = new Date(startOfDay(new Date(parseDate(firstWeek).getTime() + horizonWeeks * 7 * DAY)));
@@ -195,38 +273,88 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     b.outflow = round2(b.outflow + m.amount);
   };
 
-  // 1) Bills (recurring expanded across the horizon; paid ones skipped).
+  // 1) Bills (recurring expanded across the horizon; paid ones skipped) and
+  //    coverage: an autopay occurrence is covered, a paid bill was covered, and
+  //    the rest is what someone still has to pay by hand.
   let monthlyRecurring = 0;
+  const coverage: CoverageSummary = { coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 0, openAmount: 0 };
+  const recurringBillNames = new Set<string>();
   for (const bill of input.bills) {
-    if (bill.status === 'paid') continue;
+    const amount = round2(bill.amount);
+    if (bill.status === 'paid') {
+      // Paid means the money already left, so it never hits the projection —
+      // but a bill paid ahead of its date is still a covered bill of this horizon.
+      const due = parseDate(bill.due_date);
+      if (due >= today && due <= horizonEnd) { coverage.paidCount += 1; coverage.paidAmount = round2(coverage.paidAmount + amount); }
+      continue;
+    }
+    if (bill.is_recurring && bill.recurrence) recurringBillNames.add(normalizeName(bill.name));
     monthlyRecurring += monthlyEquivalent(bill);
+    const covered = bill.autopay === true;
     for (const date of expandOccurrences(bill, now, horizonEnd)) {
-      push({ date, label: bill.name, amount: round2(bill.amount), kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category });
+      push({ date, label: bill.name, amount, kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
+      if (covered) { coverage.coveredCount += 1; coverage.coveredAmount = round2(coverage.coveredAmount + amount); }
+      else { coverage.openCount += 1; coverage.openAmount = round2(coverage.openAmount + amount); }
+    }
+  }
+
+  // 2) Plan-linked commitments. A subscription the family also entered as a
+  //    recurring bill is the same money twice, so the bill wins. A one-off
+  //    commitment whose date has slipped into the past is still owed: it lands
+  //    today rather than vanishing from the forecast.
+  let planOutflow = 0;
+  for (const p of input.plans ?? []) {
+    const amount = round2(p.amount);
+    if (!(amount > 0)) continue;
+    if (p.source === 'subscription' && recurringBillNames.has(normalizeName(p.label))) continue;
+    const first = parseDate(p.date);
+    if (Number.isNaN(first.getTime())) continue;
+    const anchor = !p.recurrence && first < today ? today : first;
+    if (p.recurrence) monthlyRecurring += monthlyEquivalentOf(amount, p.recurrence);
+    for (const date of expandDates(anchor, p.recurrence, now, horizonEnd)) {
+      push({ date, label: p.label, amount, kind: 'plan', category: p.category ?? p.source, source: p.source });
+      planOutflow = round2(planOutflow + amount);
     }
   }
   monthlyRecurring = round2(monthlyRecurring);
 
-  // 2) Savings goals with a target date inside the horizon → the remaining need
+  // 3) Savings goals with a target date inside the horizon → the remaining need
   //    lands as a money moment at the target date (what you must have set aside).
   const goalRisks: { name: string; remaining: number; weeksLeft: number; perWeek: number; date: string }[] = [];
   for (const g of input.goals) {
     const remaining = Math.max(0, round2((g.target_amount ?? 0) - (g.current_amount ?? 0)));
     if (remaining <= 0 || !g.target_date) continue;
     const target = parseDate(g.target_date);
-    if (target < startOfDay(now) || target > horizonEnd) continue;
+    if (target < today || target > horizonEnd) continue;
     push({ date: ymd(target), label: `${g.name} goal`, amount: remaining, kind: 'goal', category: 'savings' });
-    const weeksLeft = Math.max(1, Math.ceil((target.getTime() - startOfDay(now).getTime()) / (7 * DAY)));
+    const weeksLeft = Math.max(1, Math.ceil((target.getTime() - today.getTime()) / (7 * DAY)));
     goalRisks.push({ name: g.name, remaining, weeksLeft, perWeek: round2(remaining / weeksLeft), date: ymd(target) });
   }
 
-  // 3) Overlay calendar events onto their week (schedule ↔ money context).
+  // 4) The what-if scenario, if any — tried exactly like a commitment would land.
+  let scenarioOutflow = 0;
+  const scenario = input.scenario;
+  if (scenario && scenario.amount > 0) {
+    const first = parseDate(scenario.date);
+    if (!Number.isNaN(first.getTime())) {
+      const amount = round2(scenario.amount);
+      const anchor = !scenario.recurrence && first < today ? today : first;
+      if (scenario.recurrence) monthlyRecurring = round2(monthlyRecurring + monthlyEquivalentOf(amount, scenario.recurrence));
+      for (const date of expandDates(anchor, scenario.recurrence, now, horizonEnd)) {
+        push({ date, label: scenario.label, amount, kind: 'scenario', category: 'scenario' });
+        scenarioOutflow = round2(scenarioOutflow + amount);
+      }
+    }
+  }
+
+  // 5) Overlay calendar events onto their week (schedule ↔ money context).
   for (const e of input.events) {
     const ws = isoWeekStart(parseDate(e.starts_at));
     const b = buckets.get(ws);
     if (b && !b.events.includes(e.title)) b.events.push(e.title);
   }
 
-  // 4) Running projected balance + heavy-week detection.
+  // 6) Running projected balance + heavy-week detection.
   const weeks = weekOrder.map((ws) => buckets.get(ws)!);
   const outflows = weeks.map((w) => w.outflow);
   const totalOutflow = round2(outflows.reduce((a, b) => a + b, 0));
@@ -248,7 +376,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
 
   const heaviestWeek = weeks.reduce<WeekBucket | null>((max, w) => (!max || w.outflow > max.outflow ? w : max), null);
 
-  // 5) Insights — ranked most-urgent first.
+  // 7) Insights — ranked most-urgent first.
   const insights: TimelineInsight[] = [];
 
   if (lowestBalanceWeek && lowestBalance < buffer) {
@@ -337,12 +465,87 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     lowestBalance: round2(lowestBalance),
     lowestBalanceWeek,
     insights,
+    planOutflow,
+    scenarioOutflow,
+    coverage,
   };
 }
 
 function weekIndex(order: string[], ws: string): number {
   const i = order.indexOf(ws);
   return i < 0 ? 1 : i + 1;
+}
+
+// ── "Can we afford it?" ──────────────────────────────────────────────────────
+
+export type AffordabilityVerdict = 'ok' | 'tight' | 'breaches';
+
+export interface AffordabilityResult {
+  verdict: AffordabilityVerdict;
+  buffer: number;
+  scenario: { label: string; total: number; occurrences: number; recurring: boolean };
+  before: { lowestBalance: number; lowestBalanceWeek: string | null };
+  after: { lowestBalance: number; lowestBalanceWeek: string | null };
+  /** Dollars left above the buffer at the lowest point once the scenario is in (negative = below it). */
+  headroom: number;
+  /**
+   * The most the family could commit per occurrence on that date/cadence and
+   * still keep the buffer everywhere in the horizon. 0 when the forecast already
+   * dips under the buffer without the scenario; null when the scenario lands
+   * outside the horizon (nothing to measure).
+   */
+  maxAffordable: number | null;
+}
+
+/**
+ * Try a commitment against the whole forward forecast — every bill, goal
+ * set-aside and plan-linked commitment, not one budget category — and answer
+ * with the lowest balance before/after and a verdict:
+ *   breaches — the lowest balance with it falls under the buffer;
+ *   tight    — it stays above, but the headroom is under one buffer or a
+ *              quarter of the commitment, whichever is larger;
+ *   ok       — otherwise.
+ * Pure and deterministic given `now`.
+ */
+export function assessAffordability(input: BuildTimelineInput, scenario: TimelineScenario): AffordabilityResult {
+  const buffer = input.buffer ?? DEFAULT_BUFFER;
+  const base = buildCashflowTimeline({ ...input, scenario: null });
+  const tried = buildCashflowTimeline({ ...input, scenario });
+
+  const occurrences = tried.weeks.reduce((n, w) => n + w.moments.filter((m) => m.kind === 'scenario').length, 0);
+  const total = tried.scenarioOutflow;
+  const headroom = round2(tried.lowestBalance - buffer);
+
+  let verdict: AffordabilityVerdict;
+  if (occurrences === 0) verdict = 'ok';
+  else if (tried.lowestBalance < buffer) verdict = 'breaches';
+  else if (headroom < Math.max(buffer, total * 0.25)) verdict = 'tight';
+  else verdict = 'ok';
+
+  // Per-occurrence cap: from the first week the scenario lands, the base
+  // balance minus the buffer, spread over however many occurrences have
+  // landed by then. The tightest week decides.
+  let maxAffordable: number | null = null;
+  if (occurrences > 0) {
+    let landed = 0;
+    let cap = Number.POSITIVE_INFINITY;
+    tried.weeks.forEach((w, i) => {
+      landed += w.moments.filter((m) => m.kind === 'scenario').length;
+      if (landed === 0) return;
+      cap = Math.min(cap, (base.weeks[i].projectedBalance - buffer) / landed);
+    });
+    maxAffordable = Math.max(0, round2(cap));
+  }
+
+  return {
+    verdict,
+    buffer,
+    scenario: { label: scenario.label, total, occurrences, recurring: Boolean(scenario.recurrence) },
+    before: { lowestBalance: base.lowestBalance, lowestBalanceWeek: base.lowestBalanceWeek },
+    after: { lowestBalance: tried.lowestBalance, lowestBalanceWeek: tried.lowestBalanceWeek },
+    headroom,
+    maxAffordable,
+  };
 }
 
 // ── Presentation helpers (also used by the module for consistency) ───────────
