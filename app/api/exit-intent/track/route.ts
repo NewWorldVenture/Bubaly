@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -9,11 +10,12 @@ export const runtime = 'nodejs';
 /** Public: bump an exit-intent offer's impression/conversion counter via the
  *  SECURITY DEFINER RPC. Best-effort; failures are silent to the visitor. */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `ei-track:${clientIp(req.headers)}`, { limit: 60 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('track.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -31,12 +33,12 @@ export async function POST(req: NextRequest) {
 
   const id = (body.id ?? '').trim();
   const metric = body.kind === 'conversion' ? 'conversion' : 'impression';
-  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 422 });
+  if (!id) return NextResponse.json({ error: t('track.idIsRequired') }, { status: 422 });
 
   const { error } = await supabase.rpc('bump_exit_intent', { p_id: id, p_metric: metric });
   if (error) {
     console.error('Exit-intent metric recording failed:', error);
-    return NextResponse.json({ error: 'Could not record the offer event.' }, { status: 500 });
+    return NextResponse.json({ error: t('track.couldNotRecordTheOffer') }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }

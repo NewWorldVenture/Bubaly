@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setAIConfig } from '@/lib/ai/settings';
@@ -8,8 +9,9 @@ import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provi
 import { describeActionError } from '@/lib/supabase/errors';
 
 export async function saveAIConfigAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: 'Forbidden' };
+  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.forbidden') };
 
   // OpenAI-only deployment.
   const model = String(formData.get('model') || '').trim() || null;
@@ -19,7 +21,7 @@ export async function saveAIConfigAction(formData: FormData): Promise<{ ok: bool
     await setAIConfig(createServiceClient(), { provider: 'openai', model, openaiKey }, user.id);
   } catch (e) {
     console.error('[admin-ai] config save failed', e);
-    return { ok: false, error: describeActionError(e, 'Could not save AI settings.') };
+    return { ok: false, error: describeActionError(e, t('actions.couldNotSaveAiSettings')) };
   }
   revalidatePath('/admin/ai');
   return { ok: true };
@@ -35,8 +37,9 @@ export type TestAIResult =
  * failure (out of credits, bad key, bad model, rate limit, network).
  */
 export async function testAIConnectionAction(): Promise<TestAIResult> {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, code: 'forbidden', message: 'Forbidden', detail: '' };
+  if (!user || !(await isSuperAdmin())) return { ok: false, code: 'forbidden', message: t('actions.forbidden'), detail: '' };
 
   if (!(await isAIConfigured())) {
     return { ok: false, code: 'unconfigured', message: 'No OpenAI key configured. Add one above and save, then test again.', detail: '' };

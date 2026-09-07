@@ -83,7 +83,7 @@ export function AnnouncementsModule() {
     });
     setSaving(false);
     if (err) return toastError(describeDbError(err));
-    success('Announcement posted');
+    success(t('announcementsModule.announcementPosted'));
     setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
   }
 
@@ -97,14 +97,14 @@ export function AnnouncementsModule() {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
     if (err) toastError(describeDbError(err));
-    else success('Announcement removed');
+    else success(t('announcementsModule.announcementRemoved'));
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('announcements.announcements')}
-        description="Broadcast updates to the whole family."
+        description={t('announcementsModule.broadcastUpdatesToTheWhole')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="announcements" iconOnly />
@@ -116,7 +116,7 @@ export function AnnouncementsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load announcements. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('announcementsModule.couldNotLoadAnnouncementsRefresh')} onRetry={refresh} />
       ) : (announcements ?? []).length === 0 ? (
         <EmptyState
           icon={Megaphone}

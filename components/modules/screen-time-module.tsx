@@ -81,9 +81,9 @@ export function ScreenTimeModule() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('screenTimeModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('screen_time_entries').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('screenTimeModule.deleted'));
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -94,12 +94,12 @@ export function ScreenTimeModule() {
       .from('screen_time_limits')
       .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
     if (error) return toastError(describeDbError(error));
-    success('Daily limit saved');
+    success(t('screenTimeModule.dailyLimitSaved'));
     setLimitFor(null);
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load screen time data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('screenTimeModule.couldNotLoadScreenTime')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -171,7 +171,7 @@ export function ScreenTimeModule() {
       {/* Recent entries */}
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={MonitorSmartphone} title={t('screenTime.noScreenTimeLogged')} description="Log time by category to track balance and limits." />
+          <EmptyState icon={MonitorSmartphone} title={t('screenTime.noScreenTimeLogged')} description={t('screenTimeModule.logTimeByCategoryTo')} />
         ) : all.slice(0, 50).map((e) => {
           const m = e.member_id ? memberById.get(e.member_id) : null;
           return (

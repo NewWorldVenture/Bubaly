@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -32,12 +33,13 @@ async function saveState(svc: ReturnType<typeof createServiceClient>, postId: st
 }
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   const slug = normalizeSlug(req.nextUrl.searchParams.get('slug'));
-  if (!slug) return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
+  if (!slug) return NextResponse.json({ error: t('save.invalidSlug') }, { status: 400 });
 
   const svc = createServiceClient();
   const postId = await loadPostId(svc, slug);
-  if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
   const { data: auth } = await (await createServer()).auth.getUser();
   const state = await saveState(svc, postId, auth.user?.id ?? null);
@@ -48,6 +50,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const svc = createServiceClient();
 
   // Must be signed in to save — this is the whole point of the feature.
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
   const limited = await enforceRequestRateLimit(svc, `blogsave:${ip}`, { limit: 60 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('save.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -75,10 +78,10 @@ export async function POST(req: NextRequest) {
   }
   const body = (parsed.value && typeof parsed.value === 'object' ? parsed.value : {}) as { slug?: unknown };
   const slug = normalizeSlug(body.slug);
-  if (!slug) return NextResponse.json({ error: 'slug required' }, { status: 400 });
+  if (!slug) return NextResponse.json({ error: t('save.slugRequired') }, { status: 400 });
 
   const postId = await loadPostId(svc, slug);
-  if (!postId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
   // Toggle: insert wins the save; a unique-violation means it existed → remove.
   const { error: insertError } = await svc.from('blog_post_saves').insert({ post_id: postId, user_id: userId });
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
     if (insertError.code === '23505') {
       await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
     } else {
-      return NextResponse.json({ error: 'Could not record the save' }, { status: 500 });
+      return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 500 });
     }
   }
 

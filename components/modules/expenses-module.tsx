@@ -70,13 +70,13 @@ export function ExpensesModule() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!form || !form.description.trim()) return toastError('Add a description');
+    if (!form || !form.description.trim()) return toastError(tr('expensesModule.addADescription'));
     if (form.description.trim().length > 120) return toastError('Description is too long (max 120 characters)');
     const parsed = parseFloat(form.amount || '0');
-    if (!Number.isFinite(parsed) || parsed <= 0) return toastError('Enter a valid amount greater than $0');
+    if (!Number.isFinite(parsed) || parsed <= 0) return toastError(tr('expensesModule.enterAValidAmountGreater'));
     const totalCents = Math.round(parsed * 100);
     const participants = form.participants.length ? form.participants : members.map((m) => m.id);
-    if (participants.length === 0) return toastError('Add a family member first');
+    if (participants.length === 0) return toastError(tr('expensesModule.addAFamilyMemberFirst'));
 
     setSaving(true);
     const supabase = createClient();
@@ -104,7 +104,7 @@ export function ExpensesModule() {
         toastError(describeDbError(sErr));
         return;
       }
-      success('Expense split');
+      success(tr('expensesModule.expenseSplit'));
       setForm(null);
     } catch (err) {
       toastError(describeDbError(err));
@@ -123,11 +123,11 @@ export function ExpensesModule() {
   }
 
   function removeSplit(id: string) {
-    if (!confirm('Delete this expense and its shares?')) return;
+    if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
       const { error } = await createClient().from('expense_splits').delete().eq('id', id);
       if (error) throw error;
-      success('Deleted');
+      success(tr('expensesModule.deleted'));
     });
   }
 
@@ -138,7 +138,7 @@ export function ExpensesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load shared expenses. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('expensesModule.couldNotLoadSharedExpenses')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -176,7 +176,7 @@ export function ExpensesModule() {
       {/* Splits */}
       <div className="space-y-2">
         {allSplits.length === 0 ? (
-          <EmptyState icon={Split} title={tr('expenses.noSharedExpensesYet')} description="Split a bill or purchase across family members and track who owes whom." />
+          <EmptyState icon={Split} title={tr('expenses.noSharedExpensesYet')} description={tr('expensesModule.splitABillOrPurchase')} />
         ) : allSplits.map((sp) => {
           const sh = sharesBySplit.get(sp.id) ?? [];
           return (

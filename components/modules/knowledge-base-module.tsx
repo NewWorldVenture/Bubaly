@@ -70,7 +70,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.label.trim() || !form.value.trim()) { toastError('Add both a label and a value'); return; }
+    if (!form.label.trim() || !form.value.trim()) { toastError(t('knowledgeBaseModule.addBothALabelAnd')); return; }
     setSaving(true);
     const res = await saveFactAction(form.id || null, {
       memberId: form.member_id || null,
@@ -90,7 +90,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
     const sb = createClient();
     const res = await forgetFactAction(f.id);
     if (!res.ok) { toastError(res.error); return; }
-    success('Removed');
+    success(t('knowledgeBaseModule.removed'));
   }
 
   async function togglePin(f: Fact) {
@@ -112,7 +112,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title={t('knowledgeBase.familyKnowledgeBase')}
-        description="Everything the family should never have to re-remember — sizes, allergies, key contacts, preferences — in one searchable place."
+        description={t('knowledgeBaseModule.everythingTheFamilyShouldNever')}
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
@@ -149,7 +149,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
 
       {visible.length === 0 ? (
         <EmptyState icon={Brain} title={t('knowledgeBase.nothingSavedYet')}
-          description="Capture the facts you always have to look up — shoe sizes, the pediatrician's number, who's allergic to what."
+          description={t('knowledgeBaseModule.captureTheFactsYouAlways')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('knowledgeBase.addAFact')}</Button>} />
       ) : (
         <div className="space-y-6">

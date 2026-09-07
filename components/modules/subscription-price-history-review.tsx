@@ -73,7 +73,7 @@ export function SubscriptionPriceHistoryReview({ context, subscription, onPrefil
             {history.coverage.state === 'limited' ? ' Truncated to the 500 most recent records; cost prefill is unavailable.' : ' This is a bounded recorded-expense review, not complete provider billing history.'}</p>
           <p className="text-xs text-muted">Excluded: {history.excluded.invalidRecords} {t('subscriptionPriceHistoryReview.invalidDuplicateIdRefundOrTransfer')} {history.excluded.unsupportedCurrencyRecords} {t('subscriptionPriceHistoryReview.unknownOrNonUsdAccountCurrency')} {history.excluded.duplicateDateRecords} {t('subscriptionPriceHistoryReview.duplicateDateRecords')}
             {' '}{history.unmatchedRecords} {t('subscriptionPriceHistoryReview.eligibleRecordsDidNotMatchThis')} {history.unresolvedSourceReferences} note source references were not found in eligible fetched records and were not used as anchors. Inaccessible, unrecorded and out-of-window charges remain unknown.</p>
-          <p className="text-xs text-muted">An observed amount increase is not a confirmed provider plan-price change. These records do not explain tax, proration, benefits or household use.</p>
+          <p className="text-xs text-muted">{t('subscriptionPriceHistoryReview.anObservedAmountIncreaseIs')}</p>
           {history.groups.map((group) => (
             <details key={group.id} open={history.state === 'matched' || undefined} className="min-w-0 rounded-xl border border-border p-3">
               <summary className="cursor-pointer break-words font-medium focus-visible:outline focus-visible:outline-2">{group.name}: {group.evidence.length} {t('subscriptionPriceHistoryReview.uniquelyDatedRecordedCharges')}{group.cadence ? `, approximately ${group.cadence}` : ', cadence unconfirmed'}</summary>
@@ -102,7 +102,7 @@ export function SubscriptionPriceHistoryReview({ context, subscription, onPrefil
               </div>
             </details>
           ))}
-          <p className="text-xs text-muted">Selecting a supported amount only opens the existing editable form. Cost is not saved until you choose Save. Status, renewal date, recorded use and notes are preserved.</p>
+          <p className="text-xs text-muted">{t('subscriptionPriceHistoryReview.selectingASupportedAmountOnly')}</p>
         </div>
       )}
     </section>

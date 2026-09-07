@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -23,18 +24,19 @@ type Rows = Record<string, Record<string, unknown>[]>;
  * model's grounded answer. Nothing is invented beyond the family's data.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('insights.unauthorized') }, { status: 401 }); }
 
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'The AI engine isn’t configured. Add an API key in Admin → AI Engine.' }, { status: 503 });
+    return NextResponse.json({ error: t('insights.theAiEngineIsnT') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('insights.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = body.kind as string;
-  if (!isInsightKind(kind)) return NextResponse.json({ error: 'Unknown insight kind' }, { status: 400 });
+  if (!isInsightKind(kind)) return NextResponse.json({ error: t('insights.unknownInsightKind') }, { status: 400 });
 
   // The route had no role check at all: `requireUserContext()` plus RLS was the
   // whole guard, and RLS on medications, family_messages, documents and the
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
   // the very areas the trust engine treats as sensitive for their role — and
   // get a helpful answer.
   if (MANAGER_ONLY_INSIGHTS.has(kind) && !isManager(ctx.active.role)) {
-    return NextResponse.json({ error: 'That summary is for the adults in this family.' }, { status: 403 });
+    return NextResponse.json({ error: t('insights.thatSummaryIsForThe') }, { status: 403 });
   }
 
   const question = typeof body.question === 'string' ? body.question.slice(0, 1000) : undefined;
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-insights:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many AI insight requests. Please try again shortly.' },
+    { error: t('insights.tooManyAiInsightRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const familyId = ctx.active.familyId;
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
     rows = await fetchRows(kind, supabase, familyId, params);
   } catch (err) {
     console.error('AI insights data load failed:', err);
-    return NextResponse.json({ error: 'Could not load data for this insight.' }, { status: 500 });
+    return NextResponse.json({ error: t('insights.couldNotLoadDataFor') }, { status: 500 });
   }
 
   const now = (() => {
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
         return answer;
       },
     );
-    if (!text) return NextResponse.json({ error: 'No suggestions just now. Please try again.' }, { status: 502 });
+    if (!text) return NextResponse.json({ error: t('insights.noSuggestionsJustNowPlease') }, { status: 502 });
     return NextResponse.json({ text });
   } catch (err) {
     console.error('AI insights error:', err);

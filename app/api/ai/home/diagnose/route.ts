@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -18,20 +19,21 @@ export const dynamic = 'force-dynamic';
  * "find a pro" hand-off is always reliable. Grounded only in what the user gave.
  */
 export async function POST(req: Request) {
+  const tr = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: tr('diagnose.unauthorized') }, { status: 401 }); }
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-home-diagnose:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many diagnosis requests. Please try again shortly.' },
+    { error: tr('diagnose.tooManyDiagnosisRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: tr('diagnose.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: tr('diagnose.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const assetName = String(body.assetName ?? '').slice(0, 120);
   const category = String(body.category ?? '').slice(0, 40);
@@ -39,7 +41,7 @@ export async function POST(req: Request) {
   const model = String(body.model ?? '').slice(0, 60);
   const symptom = String(body.symptom ?? '').slice(0, 1500).trim();
   const assetId = typeof body.assetId === 'string' ? body.assetId : null;
-  if (!symptom) return NextResponse.json({ error: 'Describe the problem first.' }, { status: 400 });
+  if (!symptom) return NextResponse.json({ error: tr('diagnose.describeTheProblemFirst') }, { status: 400 });
 
   const trade = TRADE_FOR_CATEGORY[category] ?? 'general';
   const tradeLabel = TRADES.find((t) => t.value === trade)?.label ?? 'General / Handyman';

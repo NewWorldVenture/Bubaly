@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ViewAllLink } from './view-all-link';
 
 export function StatTile({
   label, value, icon: Icon, accent = 'bg-violet-600', href, sublabel,
@@ -43,11 +44,7 @@ export function SectionCard({
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {action}
-          {viewAllHref && (
-            <Link href={viewAllHref} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text">
-              View all <ArrowRight className="h-3 w-3" />
-            </Link>
-          )}
+          {viewAllHref && <ViewAllLink href={viewAllHref} />}
         </div>
       </div>
       {children}

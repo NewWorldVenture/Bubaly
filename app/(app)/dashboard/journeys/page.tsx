@@ -40,7 +40,7 @@ export default async function JourneysPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardJourneys.journeyAnalytics')}
-        description="Real completion rates and times per user journey — the live source for the Experience Scorecard (this family)."
+        description={t('journeys.realCompletionRatesAndTimes')}
       />
 
       <div className="grid grid-cols-3 gap-3">
@@ -51,9 +51,9 @@ export default async function JourneysPage() {
 
       <SectionCard title={t('dashboardJourneys.perJourneyMedians')} description="Measured from journey_events (0124) — no estimates.">
         {error ? (
-          <MiniError text="Couldn’t load journey telemetry. Refresh to try again." />
+          <MiniError text={t('journeys.couldnTLoadJourneyTelemetry')} />
         ) : rows.length === 0 ? (
-          <MiniEmpty icon={Activity} text="No journey events yet. Use the app (e.g. Quick Capture) to generate telemetry, then refresh." />
+          <MiniEmpty icon={Activity} text={t('journeys.noJourneyEventsYetUse')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
@@ -89,8 +89,7 @@ export default async function JourneysPage() {
       </SectionCard>
 
       <p className="text-xs text-muted">
-        Scope: this family only (RLS). Cross-family aggregate medians for the Scorecard would use a
-        service-role read. Instrument more flows by calling <code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
+        {t('journeys.scopeThisFamilyOnly')}{' '}<code className="rounded bg-elevated px-1">useJourney(&apos;key&apos;)</code>.
       </p>
     </div>
   );

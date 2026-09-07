@@ -15,7 +15,7 @@ export default async function FridgeChefPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFridgeChef.fridgeChef')}
-        description="Snap your fridge or pantry — get allergy-aware dinner ideas and send what you're missing straight to your grocery list."
+        description={t('fridgeChef.snapYourFridgeOrPantry')}
       />
       <FridgeChef />
     </div>

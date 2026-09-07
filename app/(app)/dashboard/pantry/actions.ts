@@ -13,6 +13,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { pantryAdjust, removePantryItem, savePantryItem, type SavePantryItemInput } from '@/lib/services/groceries';
@@ -32,7 +33,8 @@ async function pantryScope() {
 
 /** `delta`, never a total: the browser must not compute what the column becomes. */
 export async function adjustPantryQuantityAction(itemId: string, delta: number): Promise<PantryActionResult> {
-  if (!itemId) return { ok: false, error: 'That pantry item could not be found.' };
+  const t = await getTranslations();
+  if (!itemId) return { ok: false, error: t('actions.thatPantryItemCouldNot') };
   const scope = await pantryScope();
 
   try {
@@ -43,7 +45,7 @@ export async function adjustPantryQuantityAction(itemId: string, delta: number):
     return { ok: true, id: result.data.item.id };
   } catch (err) {
     console.error('[pantry-action] adjust failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that item.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatItem')) };
   }
 }
 
@@ -51,6 +53,7 @@ export async function savePantryItemAction(
   itemId: string | null,
   input: SavePantryItemInput,
 ): Promise<PantryActionResult> {
+  const t = await getTranslations();
   const scope = await pantryScope();
 
   try {
@@ -61,12 +64,13 @@ export async function savePantryItemAction(
     return { ok: true, id: result.data.item.id };
   } catch (err) {
     console.error('[pantry-action] save failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not save that item.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSaveThatItem')) };
   }
 }
 
 export async function removePantryItemAction(itemId: string): Promise<PantryActionResult> {
-  if (!itemId) return { ok: false, error: 'That pantry item could not be found.' };
+  const t = await getTranslations();
+  if (!itemId) return { ok: false, error: t('actions.thatPantryItemCouldNot') };
   const scope = await pantryScope();
 
   try {
@@ -77,6 +81,6 @@ export async function removePantryItemAction(itemId: string): Promise<PantryActi
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[pantry-action] remove failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that item.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatItem')) };
   }
 }

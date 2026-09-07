@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const capabilities = readFileSync('lib/stripe/capabilities.ts', 'utf8');
@@ -15,6 +16,6 @@ describe('admin Stripe read boundary', () => {
     expect(page).toContain('moneyFlagsError');
     expect(page).toContain('stripeCfgResult.error');
     expect(page).toContain('webhooksResult.error');
-    expect(page).toContain('Could not load Stripe financial data from Supabase. Refresh and try again.');
+    expectSays(page, 'stripe.couldNotLoadStripeFinancial', 'Could not load Stripe financial data from Supabase. Refresh and try again.');
   });
 });

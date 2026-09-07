@@ -9,7 +9,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Audit Logs', robots: { index: false } };
+export const metadata: Metadata = { title: 'audit.auditLogs', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 40;
@@ -123,9 +123,9 @@ export default async function AdminAuditPage({ searchParams }: Params) {
                             <Avatar name={actor.full_name || actor.email || '?'} size={22} />
                             <span className="text-muted">{actor.full_name || actor.email}</span>
                           </div>
-                        ) : <span className="text-muted">System</span>}
+                        ) : <span className="text-muted">{t('audit.system')}</span>}
                       </td>
-                      <td className="px-3 py-2.5">{viaAdmin ? <Badge tone="brand">Site Admin</Badge> : <span className="text-xs text-muted">In-family</span>}</td>
+                      <td className="px-3 py-2.5">{viaAdmin ? <Badge tone="brand">{t('audit.siteAdmin')}</Badge> : <span className="text-xs text-muted">In-family</span>}</td>
                       <td className="px-3 py-2.5 text-muted">{fmtDate(l.created_at, 'MMM d, h:mm a')}</td>
                     </tr>
                   );
@@ -153,15 +153,16 @@ export default async function AdminAuditPage({ searchParams }: Params) {
   );
 }
 
-function AdminAuditReadError() {
+async function AdminAuditReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted">An append-only record of sensitive actions across every family and the site admin.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('audit.auditLogs')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('audit.anAppendOnlyRecordOf')}</p>
       </div>
-      <ErrorState message="Could not load audit logs from Supabase. Refresh and try again." />
-      <a href="/admin/audit" className="text-sm font-medium text-brand-text underline">Refresh audit logs</a>
+      <ErrorState message={t('audit.couldNotLoadAuditLogs')} />
+      <a href="/admin/audit" className="text-sm font-medium text-brand-text underline">{t('audit.refreshAuditLogs')}</a>
     </div>
   );
 }

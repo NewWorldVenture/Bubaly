@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 describe('child login persistence boundaries', () => {
@@ -14,7 +15,7 @@ describe('child login persistence boundaries', () => {
     const source = readFileSync('app/(auth)/actions.ts', 'utf8');
 
     expect(source.match(/await recordFailure\(\)/g)?.length).toBe(2);
-    expect(source).toContain("Kid sign-in is temporarily unavailable. Try again shortly.");
+    expectTranslates(source, 'actions.kidSignInIsTemporarily', "Kid sign-in is temporarily unavailable. Try again shortly.");
   });
 
   it('rolls back child provisioning when active-family preference persistence fails', () => {

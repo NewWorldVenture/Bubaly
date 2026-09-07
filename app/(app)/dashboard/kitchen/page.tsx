@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -20,6 +21,7 @@ function mondayOf(d: Date): string {
 }
 
 export default async function KitchenPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -51,7 +53,7 @@ export default async function KitchenPage() {
     .find((e) => e && !isMissingTableError(e));
   if (coreError) {
     console.error('[dashboard/kitchen] kitchen read failed', coreError);
-    return <ErrorState message="Could not load your kitchen from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('kitchen.couldNotLoadYourKitchen')} />;
   }
 
   // ── Meal plan rows → tonight + upcoming + variety ──

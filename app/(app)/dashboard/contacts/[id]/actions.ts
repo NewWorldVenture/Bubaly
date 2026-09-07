@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -14,6 +15,7 @@ import {
 
 /** Log a visit / call / gift / favor / note against a contact. */
 export async function logInteractionAction(formData: FormData): Promise<void> {
+  const t = await getTranslations();
   const contactId = String(formData.get('contact_id') ?? '');
   const kind = String(formData.get('kind') ?? 'note');
   const title = String(formData.get('title') ?? '').trim();
@@ -35,17 +37,18 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
     amount: Number.isFinite(amount as number) ? amount : null,
     created_by: ctx.user.id,
   });
-  if (error) throw new Error(describeActionError(error, 'Could not log that interaction.'));
+  if (error) throw new Error(describeActionError(error, t('actions.couldNotLogThatInteraction')));
   revalidatePath(`/dashboard/contacts/${contactId}`);
 }
 
 /** Remove a logged interaction (family-scoped). */
 export async function deleteInteractionAction(input: { id: string; contactId: string }): Promise<void> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase.from('contact_interactions')
     .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not delete that interaction.'));
+  if (error) throw new Error(describeActionError(error, t('actions.couldNotDeleteThatInteraction')));
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
 }
 
@@ -64,7 +67,8 @@ export async function draftReconnectMessageAction(
   contactId: string,
   tone: 'warm' | 'brief' | 'playful' = 'warm',
 ): Promise<ReconnectResult> {
-  if (!contactId) return { ok: false, error: 'Invalid contact' };
+  const t = await getTranslations();
+  if (!contactId) return { ok: false, error: t('actions.invalidContact') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -72,10 +76,10 @@ export async function draftReconnectMessageAction(
   const { data: contact } = await supabase
     .from('family_contacts').select('*')
     .eq('id', contactId).eq('family_id', familyId).maybeSingle();
-  if (!contact) return { ok: false, error: 'Contact not found' };
+  if (!contact) return { ok: false, error: t('actions.contactNotFound') };
 
   if (!(await isAIConfigured())) {
-    return { ok: false, error: 'AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft messages.' };
+    return { ok: false, error: t('actions.aiIsnTConfiguredYet') };
   }
 
   // Ground strictly in logged history + linked communications + birthday.
@@ -139,7 +143,7 @@ export async function draftReconnectMessageAction(
         return out;
       },
     );
-    if (!message) return { ok: false, error: 'Could not draft a message. Please try again.' };
+    if (!message) return { ok: false, error: t('actions.couldNotDraftAMessage') };
     return { ok: true, message, tone };
   } catch (err) {
     return { ok: false, error: describeAIError(err).message };

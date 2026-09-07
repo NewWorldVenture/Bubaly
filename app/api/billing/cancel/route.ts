@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
@@ -17,10 +18,11 @@ export const runtime = 'nodejs';
  * we also write the flag optimistically so the UI updates instantly.
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     if (!isAdmin(ctx.active.role)) {
-      return NextResponse.json({ error: 'Only a parent can change the plan.' }, { status: 403 });
+      return NextResponse.json({ error: t('cancel.onlyAParentCanChange') }, { status: 403 });
     }
     const familyId = ctx.active.familyId;
     const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const { resume } = (body.value && typeof body.value === 'object' ? body.value : {}) as { resume?: boolean };
-    if (typeof resume !== 'boolean') return NextResponse.json({ error: 'Invalid cancellation request.' }, { status: 400 });
+    if (typeof resume !== 'boolean') return NextResponse.json({ error: t('cancel.invalidCancellationRequest') }, { status: 400 });
 
     const supabase = await createServer();
     const { data: sub, error: subError } = await supabase
@@ -41,17 +43,17 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (subError) {
       console.error('[billing-cancel] Subscription read failed', subError);
-      return NextResponse.json({ error: 'Subscription status is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('cancel.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
     }
 
     if (!sub?.provider_ref) {
-      return NextResponse.json({ error: 'No active subscription to change.' }, { status: 404 });
+      return NextResponse.json({ error: t('cancel.noActiveSubscriptionToChange') }, { status: 404 });
     }
 
     const cancelAtPeriodEnd = !resume;
     const limited = await enforceRequestRateLimit(supabase, `billing:cancel:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many billing requests. Please try again shortly.' },
+      { error: t('cancel.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
@@ -62,12 +64,12 @@ export async function POST(req: NextRequest) {
       .eq('family_id', familyId);
     if (syncError) {
       console.error('[billing-cancel] Subscription sync write failed', syncError);
-      return NextResponse.json({ error: 'Stripe updated the subscription, but local billing sync is pending. Please refresh before retrying.', providerUpdated: true }, { status: 503 });
+      return NextResponse.json({ error: t('cancel.stripeUpdatedTheSubscriptionBut'), providerUpdated: true }, { status: 503 });
     }
 
     return NextResponse.json({ ok: true, cancel_at_period_end: cancelAtPeriodEnd });
   } catch (err) {
     console.error('cancel error:', err);
-    return NextResponse.json({ error: 'Could not update the subscription. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('cancel.couldNotUpdateTheSubscription') }, { status: 500 });
   }
 }

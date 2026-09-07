@@ -43,7 +43,7 @@ export function RegistrationClient({
           <Button onClick={() => { setRegEdit(null); setRegOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {registrations.length === 0 ? (
-          <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description="Track each vehicle's registration renewal date." />
+          <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description={tr('registrationClient.trackEachVehicleSRegistration')} />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {registrations.map((r) => {
@@ -55,8 +55,8 @@ export function RegistrationClient({
                     <Badge tone={s.tone}>{s.label}</Badge>
                   </div>
                   <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                    <button onClick={() => { setRegEdit(r); setRegOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                    <button onClick={() => start(async () => { await deleteRegistrationAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                    <button onClick={() => { setRegEdit(r); setRegOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{tr('registrationClient.edit')}</button>
+                    <button onClick={() => start(async () => { await deleteRegistrationAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{tr('registrationClient.delete')}</button>
                   </div>
                 </Card>
               );
@@ -72,7 +72,7 @@ export function RegistrationClient({
           <Button onClick={() => { setInspEdit(null); setInspOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {inspections.length === 0 ? (
-          <EmptyState icon={ClipboardCheck} title={tr('registrationClient.noInspections')} description="Track safety/emissions sticker expiry." />
+          <EmptyState icon={ClipboardCheck} title={tr('registrationClient.noInspections')} description={tr('registrationClient.trackSafetyEmissionsStickerExpiry')} />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {inspections.map((i) => {
@@ -84,8 +84,8 @@ export function RegistrationClient({
                     <Badge tone={s.tone}>{s.label}</Badge>
                   </div>
                   <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                    <button onClick={() => { setInspEdit(i); setInspOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                    <button onClick={() => start(async () => { await deleteInspectionAction(i.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                    <button onClick={() => { setInspEdit(i); setInspOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('registrationClient.edit')}</button>
+                    <button onClick={() => start(async () => { await deleteInspectionAction(i.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('registrationClient.delete')}</button>
                   </div>
                 </Card>
               );

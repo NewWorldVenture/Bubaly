@@ -23,7 +23,7 @@ export default async function MediaLibraryPage() {
       <div className="space-y-3 lg:col-span-2">
         <h2 className="text-sm font-semibold">{t('dashboardSocialMediaLibrary.assets')}</h2>
         {assets.length === 0 ? (
-          <EmptyState icon={ImageIcon} title={t('dashboardSocialMediaLibrary.noMediaYet')} description="Add an asset by URL, or record a prompt/storyboard for AI generation. Generated media is only stored when a real generation provider returns a file." />
+          <EmptyState icon={ImageIcon} title={t('dashboardSocialMediaLibrary.noMediaYet')} description={t('mediaLibrary.addAnAssetByUrl')} />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {assets.map((a) => {

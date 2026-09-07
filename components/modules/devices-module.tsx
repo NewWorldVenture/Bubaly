@@ -52,16 +52,16 @@ export function DevicesModule() {
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this device?')) return;
+    if (!confirm(tr('devicesModule.deleteThisDevice'))) return;
     const { error } = await createClient().from('smart_devices').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('devicesModule.deleted'));
   }
   function edit(d: Device) {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family devices. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('devicesModule.couldNotLoadFamilyDevices')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -80,7 +80,7 @@ export function DevicesModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Cpu} title={tr('devices.noDevicesYet')} description="Add your smart lights, locks, cameras and sensors to see them all in one place." />
+        <EmptyState icon={Cpu} title={tr('devices.noDevicesYet')} description={tr('devicesModule.addYourSmartLightsLocks')} />
       ) : groups.map((g) => (
         <div key={g.room}>
           <h4 className="mb-2 text-sm font-semibold">{g.room}</h4>

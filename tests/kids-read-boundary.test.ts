@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/kids/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('kids page read boundary', () => {
   it('logs and returns an ErrorState on a read failure', () => {
     expect(page).toContain('if (kidsError) {');
     expect(page).toContain("console.error('[kids] kids dashboard read failed', kidsError);");
-    expect(page).toContain('return <ErrorState message="We couldn\'t load your day right now. Try again in a moment!" />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'kids.weCouldnTLoadYour', "We couldn't load your day right now. Try again in a moment!");
   });
 
   it('derives the kids data only after the fail-closed guard', () => {

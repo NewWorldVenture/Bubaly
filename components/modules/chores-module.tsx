@@ -178,7 +178,7 @@ export function ChoresModule() {
     const res = await payChoreRewardAction({ choreAssignmentId: a.id });
     setPaying(null);
     if (!res.ok) return toastError(res.error ?? 'Payment failed');
-    success('Paid to wallet!'); void refresh();
+    success(tr('choresModule.paidToWallet')); void refresh();
   }
 
   async function removeChore(a: Assignment) {
@@ -189,11 +189,11 @@ export function ChoresModule() {
     const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);
     if (!result.ok) return toastError(result.error);
-    success('Chore removed'); void refresh();
+    success(tr('choresModule.choreRemoved')); void refresh();
   }
 
   async function redeem(r: Reward) {
-    if (!selfMember) return toastError('No member profile to redeem for');
+    if (!selfMember) return toastError(tr('choresModule.noMemberProfileToRedeem'));
     if (busy) return;
     setBusy(r.id);
     const supabase = createClient();
@@ -225,7 +225,7 @@ export function ChoresModule() {
         <div className="module-page">
           <PageHeader
             title={tr('chores.chores')}
-            description="Build responsibility, earn rewards, and keep our home running smoothly."
+            description={tr('choresModule.buildResponsibilityEarnRewardsAnd')}
             action={manager ? (
               <>
                 <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> {tr('chores.addChore')}</Button>
@@ -309,7 +309,7 @@ export function ChoresModule() {
           {tab === 'approvals' && (
             <div className="space-y-2">
               {pendingApprovals.length === 0 ? (
-                <EmptyState icon={CheckCircle2} title={tr('chores.nothingToReview')} description="Submitted chores will appear here for approval." />
+                <EmptyState icon={CheckCircle2} title={tr('chores.nothingToReview')} description={tr('choresModule.submittedChoresWillAppearHere')} />
               ) : pendingApprovals.map((a) => {
                 const m = memberById.get(a.member_id);
                 return (
@@ -336,7 +336,7 @@ export function ChoresModule() {
             <div className="grid-cards">
               {(rewards ?? []).length === 0 ? (
                 <div className="col-span-full"><EmptyState icon={Gift} title={tr('chores.noRewardsYet')}
-                  description="Set up rewards your family can earn with chore points."
+                  description={tr('choresModule.setUpRewardsYourFamily')}
                   action={<Button variant="outline" onClick={() => router.push('/dashboard/rewards')}>{tr('chores.manageRewards')}</Button>} /></div>
               ) : (rewards ?? []).map((r) => {
                 const selfPts = selfMemberId ? pointsMap.get(selfMemberId) ?? 0 : 0;
@@ -638,7 +638,7 @@ function CompletedStrip({ rows, memberById, onViewAll }: { rows: Assignment[]; m
 
 function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: Map<string, Tables<'family_members'>> }) {
   const tr = useTranslations();
-  if (rows.length === 0) return <EmptyState icon={CheckCircle2} title={tr('chores.noCompletedChoresYet')} description="Approved chores show up here." />;
+  if (rows.length === 0) return <EmptyState icon={CheckCircle2} title={tr('chores.noCompletedChoresYet')} description={tr('choresModule.approvedChoresShowUpHere')} />;
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map((a) => <CompletedCard key={a.id} a={a} member={memberById.get(a.member_id)} />)}
@@ -728,10 +728,10 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     const due_at = String(form.get('due_at') ?? '') || null;
     const icon = String(form.get('icon') ?? '').trim() || null;
 
-    if (!title) return toastError('Add a chore title');
+    if (!title) return toastError(tr('choresModule.addAChoreTitle'));
     if (title.length > 160) return toastError('Title is too long (max 160 characters)');
-    if (!memberId) return toastError('Pick who this chore is for');
-    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Reward must be between 0 and 1000 points');
+    if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
+    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
     setLoading(true);
     try {

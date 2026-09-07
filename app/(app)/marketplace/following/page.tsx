@@ -28,7 +28,7 @@ export default async function MarketplaceFollowingPage() {
 
   if (followsError) {
     console.error('[marketplace-following] Follows read failed', followsError);
-    return <ErrorState message="Could not load the creators you follow. Refresh and try again." />;
+    return <ErrorState message={t('following.couldNotLoadTheCreators')} />;
   }
   if (savesError) {
     console.error('[marketplace-following] Saved listings read failed', savesError);
@@ -63,7 +63,7 @@ export default async function MarketplaceFollowingPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('marketplaceFollowing.following')}
-        description="The latest from the creators you follow — all in one feed."
+        description={t('following.theLatestFromTheCreators')}
       />
 
       {dataWarnings.length > 0 && (

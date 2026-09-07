@@ -95,7 +95,7 @@ export function AuctionPanel({
     startTransition(async () => {
       const res = await buyNowAction(listingId);
       if (!res.ok) { toastError(res.error); return; }
-      success('Bought! Check your orders to arrange pickup.');
+      success(tr('auctionPanel.boughtCheckYourOrdersTo'));
       router.refresh();
     });
   }

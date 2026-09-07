@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
@@ -15,8 +16,9 @@ export const maxDuration = 120;
 const BATCH = 200;
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('returnReminders.unauthorized') }, { status: 401 });
   }
 
   try {
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
       .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
       .not('ends_on', 'is', null)
       .limit(BATCH);
-    if (error) return NextResponse.json({ ok: false, error: 'Could not load orders.' }, { status: 500 });
+    if (error) return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadOrders') }, { status: 500 });
 
     // Titles for friendlier copy. A failed lookup is a failed batch because the
     // job must not acknowledge a partial notification run as healthy.
@@ -57,7 +59,7 @@ export async function GET(req: NextRequest) {
       : { data: [], error: null };
     if (listingError) {
       console.error('Return-reminders listing lookup failed:', listingError);
-      return NextResponse.json({ ok: false, error: 'Could not load listing titles.' }, { status: 502 });
+      return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadListingTitles') }, { status: 502 });
     }
     const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
 
@@ -112,6 +114,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok, reminded, overdue, failed }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('Return-reminders cron error:', err);
-    return NextResponse.json({ ok: false, error: 'Return-reminders cron failed' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: t('returnReminders.returnRemindersCronFailed') }, { status: 500 });
   }
 }

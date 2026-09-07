@@ -18,7 +18,7 @@ describe('photos module mutations surface failures (A-05)', () => {
     expect(fn).toContain('if (error) { toastError(describeDbError(error)); return; }');
     // Row delete + its guard must precede both the storage removal and the success toast.
     expect(fn.indexOf('.delete()')).toBeLessThan(fn.indexOf(".storage.from('family-media').remove"));
-    expect(fn.indexOf('if (error)')).toBeLessThan(fn.indexOf("success('Photo deleted')"));
+    expect(fn.indexOf('if (error)')).toBeLessThan(fn.indexOf("success(tr('photosModule.photoDeleted'))"));
   });
 
   it('toggleFavorite and updateCaption surface write errors instead of swallowing them', () => {

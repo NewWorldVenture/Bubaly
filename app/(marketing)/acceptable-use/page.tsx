@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
+  // The browser tab title is copy too — a French visitor should not get an
+  // English <title> above a French page.
+  const t = await getTranslations();
   return resolveMarketingMetadata('/acceptable-use', {
-  title: 'Acceptable Use Policy',
+  title: t('acceptableUse.acceptableUsePolicy'),
   description: 'The rules for using Bubaly responsibly and keeping every family safe.',
   });
 }
@@ -74,12 +78,13 @@ const SECTIONS: LegalSection[] = [
   },
 ];
 
-export default function AcceptableUsePage() {
+export default async function AcceptableUsePage() {
+  const t = await getTranslations();
   return (
     <>
       <LegalPage
-        title="Acceptable Use Policy"
-        summary="Simple rules that keep Bubaly safe, reliable, and welcoming for every family."
+        title={t('acceptableUse.acceptableUsePolicy')}
+        summary={t('acceptableUse.simpleRulesThatKeepBubaly')}
         lastUpdated="June 24, 2026"
         path="/acceptable-use"
         sections={SECTIONS}

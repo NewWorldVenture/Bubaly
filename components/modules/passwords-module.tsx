@@ -89,7 +89,7 @@ export function PasswordsModule() {
   async function copy(text: string, what: string) {
     if (!text) return;
     try { await navigator.clipboard.writeText(text); success(`${what} copied`); }
-    catch { toastError('Could not copy'); }
+    catch { toastError(t('passwordsModule.couldNotCopy')); }
   }
 
   function toggleReveal(id: string) {
@@ -111,7 +111,7 @@ export function PasswordsModule() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.label.trim()) { toastError('A name/label is required'); return; }
+    if (!form.label.trim()) { toastError(t('passwordsModule.aNameLabelIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const payload = {
@@ -141,7 +141,7 @@ export function PasswordsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('family_credentials').update({ deleted_at: new Date().toISOString() }).eq('id', c.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Entry deleted'); refresh();
+    success(t('passwordsModule.entryDeleted')); refresh();
   }
 
   if (loading) return <SkeletonList />;
@@ -151,7 +151,7 @@ export function PasswordsModule() {
     <div className="module-page">
       <PageHeader
         title={t('passwords.wiFiPasswords')}
-        description="Shared family logins, Wi-Fi, PINs and cards — in one safe place."
+        description={t('passwordsModule.sharedFamilyLoginsWiFi')}
         action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addEntry')}</Button>}
       />
 
@@ -184,10 +184,10 @@ export function PasswordsModule() {
       {filtered.length === 0 ? (
         data.length === 0 ? (
           <EmptyState icon={KeyRound} title={t('passwords.noEntriesYet')}
-            description="Save your family Wi-Fi, streaming logins, door codes and more — everyone can find them, no one has to text “what’s the password?” again."
+            description={t('passwordsModule.saveYourFamilyWiFi')}
             action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addYourFirstEntry')}</Button>} />
         ) : (
-          <EmptyState icon={Search} title={t('passwords.noMatches')} description="Try a different search or clear the filter." />
+          <EmptyState icon={Search} title={t('passwords.noMatches')} description={t('passwordsModule.tryADifferentSearchOr')} />
         )
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

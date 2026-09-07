@@ -62,7 +62,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
       </div>
 
       {warranties.length === 0 ? (
-        <EmptyState icon={Shield} title={t('warrantiesClient.noWarrantiesYet')} description="Add your first warranty so it's always a click away when something breaks." action={<Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>} />
+        <EmptyState icon={Shield} title={t('warrantiesClient.noWarrantiesYet')} description={tr('warrantiesClient.addYourFirstWarrantySo')} action={<Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {warranties.map((w) => {
@@ -86,15 +86,15 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
 
                 {/* One-tap claim row */}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {w.claim_phone && <a href={`tel:${w.claim_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" /> Call to claim</a>}
-                  {w.claim_url && <a href={w.claim_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><ExternalLink className="h-3.5 w-3.5" /> File claim</a>}
-                  {w.claim_email && <a href={`mailto:${w.claim_email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Mail className="h-3.5 w-3.5" /> Email</a>}
-                  {w.document_id && <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-muted"><FileText className="h-3.5 w-3.5" /> Doc attached</span>}
+                  {w.claim_phone && <a href={`tel:${w.claim_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.callToClaim')}</a>}
+                  {w.claim_url && <a href={w.claim_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><ExternalLink className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.fileClaim')}</a>}
+                  {w.claim_email && <a href={`mailto:${w.claim_email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Mail className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.email')}</a>}
+                  {w.document_id && <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-muted"><FileText className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.docAttached')}</span>}
                 </div>
 
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                  <button onClick={() => openEdit(w)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                  <button onClick={() => start(async () => { await deleteWarrantyAction(w.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                  <button onClick={() => openEdit(w)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.edit')}</button>
+                  <button onClick={() => start(async () => { await deleteWarrantyAction(w.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.delete')}</button>
                 </div>
               </Card>
             );

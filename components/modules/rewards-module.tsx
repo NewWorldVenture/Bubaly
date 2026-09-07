@@ -84,8 +84,8 @@ export function RewardsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
-    if (form.cost_points < 0) { toastError('Cost must be 0 or more'); return; }
+    if (!form.title.trim()) { toastError(t('rewardsModule.titleIsRequired')); return; }
+    if (form.cost_points < 0) { toastError(t('rewardsModule.costMustBe0Or')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
@@ -103,7 +103,7 @@ export function RewardsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Reward deleted');
+    success(t('rewardsModule.rewardDeleted'));
   }
 
   // ── Redemption flow ───────────────────────────────────────
@@ -142,7 +142,7 @@ export function RewardsModule() {
     <div>
       <PageHeader
         title={t('rewards.rewardsAllowance')}
-        description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
+        description={t('rewardsModule.turnChorePointsIntoRewards')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rewards" iconOnly />

@@ -14,12 +14,13 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Family Automation' };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Life Automation</h1>
-      <ErrorState message="Could not load family automation data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/family-automation" className="text-sm font-medium text-brand-text underline">Refresh family automation</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('familyAutomation.familyLifeAutomation')}</h1>
+      <ErrorState message={t('familyAutomation.couldNotLoadFamilyAutomation')} />
+      <Link href="/dashboard/family-automation" className="text-sm font-medium text-brand-text underline">{t('familyAutomation.refreshFamilyAutomation')}</Link>
     </div>
   );
 }
@@ -81,7 +82,7 @@ export default async function FamilyAutomationPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFamilyAutomation.familyLifeAutomation')}
-        description="Set rules that watch your real data and act — with parent approval for anything sensitive."
+        description={t('familyAutomation.setRulesThatWatchYour')}
         action={manager ? (
           <Link
             href="/dashboard/concierge"
@@ -118,7 +119,7 @@ export default async function FamilyAutomationPage() {
 
       <SectionCard
         title={t('dashboardFamilyAutomation.bubalyRoutines')}
-        description="Things you asked Bubaly to do on a schedule. Each one files a request when it is due — it is planned and gated like anything else you ask for."
+        description={t('familyAutomation.thingsYouAskedBubalyTo')}
       >
         {routines.length > 0 ? (
           <ul className="divide-y divide-border">
@@ -146,7 +147,7 @@ export default async function FamilyAutomationPage() {
 
       <SectionCard
         title={t('dashboardFamilyAutomation.automationRules')}
-        description="Older rules. Their triggers are not evaluated by anything — a routine above is what actually runs."
+        description={t('familyAutomation.olderRulesTheirTriggersAre')}
       >
         {rules && rules.length > 0 ? (
           <ul className="divide-y divide-border">
@@ -155,8 +156,7 @@ export default async function FamilyAutomationPage() {
                 {r.is_enabled ? <ToggleRight className="h-5 w-5 shrink-0 text-emerald-400" /> : <ToggleLeft className="h-5 w-5 shrink-0 text-muted" />}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{r.name}</p>
-                  <p className="text-xs text-muted">
-                    When <span className="text-fg/80">{label(TRIGGERS, r.trigger_type)}</span> → <span className="text-fg/80">{label(ACTIONS, r.action_type)}</span>
+                  <p className="text-xs text-muted">{t('familyAutomation.when')}{' '}<span className="text-fg/80">{label(TRIGGERS, r.trigger_type)}</span> → <span className="text-fg/80">{label(ACTIONS, r.action_type)}</span>
                     {r.requires_approval && ' · needs approval'}
                   </p>
                 </div>
@@ -165,7 +165,7 @@ export default async function FamilyAutomationPage() {
             ))}
           </ul>
         ) : (
-          <MiniEmpty icon={Plus} text="No older rules." />
+          <MiniEmpty icon={Plus} text={t('familyAutomation.noOlderRules')} />
         )}
       </SectionCard>
 

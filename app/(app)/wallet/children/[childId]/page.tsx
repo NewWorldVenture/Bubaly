@@ -22,7 +22,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     .from('child_wallets').select('id, member_id, is_active').eq('id', childId).eq('family_id', familyId).maybeSingle();
   if (childWalletError) {
     console.error('[wallet-child] Child wallet read failed', childWalletError);
-    return <ErrorState message="Could not load this child wallet. Refresh and try again." />;
+    return <ErrorState message={tr('children.couldNotLoadThisChild')} />;
   }
   if (!cw) notFound();
 
@@ -45,7 +45,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   ]);
   if (bucketsError || txnsError || ruleError) {
     console.error('[wallet-child] Balance reads failed', bucketsError ?? txnsError ?? ruleError);
-    return <ErrorState message="Could not load this child wallet balance. Refresh and try again." />;
+    return <ErrorState message={tr('children.couldNotLoadThisChild2')} />;
   }
   const dataWarnings: string[] = [];
   if (memberError) { console.error('[wallet-child] Member read failed', memberError); dataWarnings.push('Child profile'); }

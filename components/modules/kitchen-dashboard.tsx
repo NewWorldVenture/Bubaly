@@ -67,7 +67,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
     <div className="module-page">
       <PageHeader
         title={tr('kitchenDashboard.smartKitchen')}
-        description="Your family's food, all in one place — tonight's plan, what's expiring, and your AI Chef."
+        description={tr('kitchenDashboard.yourFamilySFoodAll')}
         action={<Button onClick={() => setChefOpen(true)}><ChefHat className="h-4 w-4" /> {tr('kitchenDashboard.askTheChef')}</Button>}
       />
 
@@ -182,7 +182,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Food score saved');
+    success(tr('kitchenDashboard.foodScoreSaved'));
     router.refresh();
   }
 
@@ -326,7 +326,7 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Give the leftover a name.');
+    if (!name) return toastError(tr('kitchenDashboard.giveTheLeftoverAName'));
     setLoading(true);
     const res = await addLeftoverAction({
       name,
@@ -337,7 +337,7 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Leftover logged');
+    success(tr('kitchenDashboard.leftoverLogged'));
     onClose();
     router.refresh();
   }
@@ -403,7 +403,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
       setReply(json.reply);
       setSource(json.source);
     } catch {
-      toastError('Network problem — please try again.');
+      toastError(tr('kitchenDashboard.networkProblemPleaseTryAgain'));
     } finally {
       setLoading(false);
     }

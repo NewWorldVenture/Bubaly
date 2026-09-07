@@ -10,7 +10,7 @@ import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } fro
 import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Video Marketing', robots: { index: false } };
+export const metadata: Metadata = { title: 'video.videoMarketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Video = Tables<'marketing_videos'>;
@@ -111,11 +111,11 @@ export default async function VideoPage() {
                 <div className="mt-2 flex items-center gap-3 text-xs">
                   <form action={toggleVideoPublishAction.bind(null, v.id, v.status !== 'published')}>
                     <button type="submit" className="inline-flex items-center gap-1 text-muted hover:text-fg">
-                      {v.status === 'published' ? <><EyeOff className="h-3 w-3" /> Unpublish</> : <><Eye className="h-3 w-3" /> Publish</>}
+                      {v.status === 'published' ? <><EyeOff className="h-3 w-3" />{' '}{tr('video.unpublish')}</> : <><Eye className="h-3 w-3" />{' '}{tr('video.publish')}</>}
                     </button>
                   </form>
                   <form action={deleteVideoAction.bind(null, v.id)}>
-                    <button type="submit" className="text-muted hover:text-rose-400">Delete</button>
+                    <button type="submit" className="text-muted hover:text-rose-400">{tr('video.delete')}</button>
                   </form>
                 </div>
               </div>
@@ -127,15 +127,16 @@ export default async function VideoPage() {
   );
 }
 
-function AdminVideoReadError() {
+async function AdminVideoReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Video Marketing</h1>
-        <p className="mt-1 text-sm text-muted">Catalog and publish video content across the site.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('video.videoMarketing')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('video.catalogAndPublishVideoContent')}</p>
       </div>
-      <ErrorState message="Could not load marketing videos from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/video" className="text-sm font-medium text-brand-text underline">Refresh videos</Link>
+      <ErrorState message={tr('video.couldNotLoadMarketingVideos')} />
+      <Link href="/admin/marketing/video" className="text-sm font-medium text-brand-text underline">{tr('video.refreshVideos')}</Link>
     </div>
   );
 }

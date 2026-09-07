@@ -77,7 +77,7 @@ export function FindTimeModal({
       if (json.error) throw new Error(json.error);
       setSlots(json.slots ?? []);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not find times'));
+      toastError(describeDbError(err, tr('findTimeModal.couldNotFindTimes')));
       setSlots([]);
     } finally {
       setLoading(false);
@@ -112,7 +112,7 @@ export function FindTimeModal({
         submissionId: bookingIdFor(slot.startISO),
       });
       if (!result.ok) { toastError(result.error); return; }
-      success('Event scheduled');
+      success(tr('findTimeModal.eventScheduled'));
       onScheduled();
     } catch (err) {
       toastError(describeDbError(err));

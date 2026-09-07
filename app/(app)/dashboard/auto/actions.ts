@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -164,6 +165,7 @@ export async function deleteRentalAction(id: string) {
 
 // ── Service log ───────────────────────────────────────────────────────────────
 export async function saveAutoServiceAction(fd: FormData) {
+  const t = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const vehicleId = str(fd, 'vehicle_id');
   const mileage = num(fd, 'mileage');
@@ -173,7 +175,7 @@ export async function saveAutoServiceAction(fd: FormData) {
     provider: str(fd, 'provider'), cost: num(fd, 'cost'), mileage, description: str(fd, 'description'),
     next_due_on: str(fd, 'next_due_on'), next_due_mileage: num(fd, 'next_due_mileage'), created_by: userId,
   });
-  if (error) throw new Error(describeActionError(error, 'Could not save that service record.'));
+  if (error) throw new Error(describeActionError(error, t('actions.couldNotSaveThatService')));
   // Keep the vehicle odometer fresh — best-effort (the record is already saved),
   // but log a failure so a broken update is observable, not silently ignored.
   if (vehicleId && mileage != null) {

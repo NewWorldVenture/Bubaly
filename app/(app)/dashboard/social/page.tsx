@@ -103,24 +103,19 @@ export default async function SocialOverviewPage() {
           <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSocial.manageAccounts')}</Link>
         </div>
         <p className="mb-3 text-xs text-muted">
-          {t('dashboardSocial.aPlatformIs')} <strong>ready</strong> only when its app credentials are configured in this environment. Others show
-          a clear setup requirement instead of pretending to connect.
-        </p>
+          {t('dashboardSocial.aPlatformIs')} <strong>ready</strong>{' '}{t('social.onlyWhenItsAppCredentials')}</p>
         <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
               <PlatformDot platform={p} />
               {isProviderConfigured(p)
-                ? <Badge tone="success">Ready</Badge>
-                : <Badge tone="neutral">Requires setup</Badge>}
+                ? <Badge tone="success">{t('social.ready')}</Badge>
+                : <Badge tone="neutral">{t('social.requiresSetup')}</Badge>}
             </span>
           ))}
         </div>
         {configured.length === 0 && (
-          <p className="mt-3 text-xs text-warning">
-            No platform credentials are configured yet, so live connecting and publishing are disabled. The full workflow
-            (drafts, AI, variants, scheduling, publish jobs) still records honestly and is ready the moment credentials are added.
-          </p>
+          <p className="mt-3 text-xs text-warning">{t('social.noPlatformCredentialsAreConfigured')}</p>
         )}
       </Card>
 
@@ -128,7 +123,7 @@ export default async function SocialOverviewPage() {
         <EmptyState
           icon={Plug}
           title={t('dashboardSocial.noAccountsConnectedYet')}
-          description="Connect a social account to start pulling a unified feed and publishing across platforms."
+          description={t('social.connectASocialAccountTo')}
           action={
             <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">
               <Plug className="h-4 w-4" /> {t('dashboardSocial.connectAnAccount')}

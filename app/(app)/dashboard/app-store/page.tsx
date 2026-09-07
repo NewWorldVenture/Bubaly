@@ -105,7 +105,8 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
   );
 }
 
-function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
+async function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
+  const t = await getTranslations();
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 p-4">
       <div className="flex items-start gap-3">
@@ -113,7 +114,7 @@ function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-bold text-fg">
             <span className="truncate">{app.name}</span>
-            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label="Official" />}
+            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label={t('appStore.official')} />}
           </p>
           <p className="truncate text-[11px] text-muted">{app.publisher} · {categoryLabel(app.category)}</p>
         </div>

@@ -210,7 +210,7 @@ export function MealsModule() {
       vote_id: voteData.vote.id, option_id: optionId, family_id: familyId, member_id: selfId, choice: 'yes',
     });
     if (error) return toastError(describeDbError(error));
-    success('Vote recorded');
+    success(tr('mealsModule.voteRecorded'));
     void loadVote();
   }
 
@@ -225,7 +225,7 @@ export function MealsModule() {
         <div className="flex-shrink-0">
           <PageHeader
             title={tr('meals.meals')}
-            description="Plan healthy meals your family will love."
+            description={tr('mealsModule.planHealthyMealsYourFamily')}
             action={
               <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('meals.addMeal')}</Button>
@@ -401,7 +401,7 @@ export function MealsModule() {
               {recipeSearch && <button onClick={() => setRecipeSearch('')} aria-label={tr('meals.clear')}><XIcon className="h-4 w-4 text-muted" /></button>}
             </div>
             {filteredRecipes.length === 0 ? (
-              <EmptyState icon={Utensils} title={tr('meals.noRecipesYet')} description="Saved recipes will appear here." />
+              <EmptyState icon={Utensils} title={tr('meals.noRecipesYet')} description={tr('mealsModule.savedRecipesWillAppearHere')} />
             ) : (
               <RecipeGrid recipes={filteredRecipes} onToggleFavorite={toggleFavorite} />
             )}
@@ -416,7 +416,7 @@ export function MealsModule() {
               <Link href="/dashboard/grocery" className="text-xs text-brand-text hover:underline">{tr('meals.openFullList')}</Link>
             </div>
             {groceryItems.length === 0 ? (
-              <EmptyState icon={Check} title={tr('meals.yourListIsEmpty')} description="Add items from the Grocery module." />
+              <EmptyState icon={Check} title={tr('meals.yourListIsEmpty')} description={tr('mealsModule.addItemsFromTheGrocery')} />
             ) : (
               <div className="space-y-1.5">
                 {groceryItems.map((item) => (
@@ -439,7 +439,7 @@ export function MealsModule() {
         {tab === 'favorites' && (
           <div className="py-3">
             {favorites.length === 0 ? (
-              <EmptyState icon={Heart} title={tr('meals.noFavoritesYet')} description="Tap the heart on a recipe to save it here." />
+              <EmptyState icon={Heart} title={tr('meals.noFavoritesYet')} description={tr('mealsModule.tapTheHeartOnA')} />
             ) : (
               <RecipeGrid recipes={favorites} onToggleFavorite={toggleFavorite} />
             )}
@@ -650,7 +650,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
   }
 
   async function run() {
-    if (selected.length === 0) return toastError('Pick at least one meal to plan');
+    if (selected.length === 0) return toastError(tr('mealsModule.pickAtLeastOneMeal'));
     setLoading(true);
     try {
       const res = await fetch('/api/ai/meals/plan', {
@@ -666,7 +666,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
       success(`Planned ${data.count ?? data.assignments?.length ?? 0} meals for the week! 🍽️`);
       onPlanned();
     } catch {
-      toastError('Network error — please try again');
+      toastError(tr('mealsModule.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
@@ -674,7 +674,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
 
   return (
     <Modal open onClose={onClose} title={tr('meals.autoPlanYourWeek')}
-      description="Our planner fills the week from your saved meals & recipes, honoring your diet and using up food before it expires.">
+      description={tr('mealsModule.ourPlannerFillsTheWeek')}>
       <div className="space-y-4">
         <div>
           <p className="mb-2 text-sm font-medium">{tr('meals.whichMeals')}</p>
@@ -688,7 +688,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
             ))}
           </div>
         </div>
-        <Field label={tr('meals.dietaryNeeds')} hint="Comma-separated, e.g. Vegetarian, Nut-free">
+        <Field label={tr('meals.dietaryNeeds')} hint={tr('mealsModule.commaSeparatedEGVegetarian')}>
           {(id) => <Input id={id} value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder={tr('meals.vegetarianDairyFree')} />}
         </Field>
         <Field label={tr('meals.anythingElse')}>
@@ -741,11 +741,11 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
       });
       setCached(json.cached);
     } catch {
-      toastError('Network error — please try again');
+      toastError(tr('mealsModule.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
-  }, [weekStart, toastError]);
+  }, [weekStart, toastError, tr]);
 
   useEffect(() => { setData(null); setCached(false); }, [weekStart]);
 
@@ -806,7 +806,7 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
     const meal_type = String(form.get('meal_type') ?? 'dinner') as MealType;
     const image_url = String(form.get('image_url') ?? '').trim() || null;
     const recipe_url = String(form.get('recipe_url') ?? '').trim() || null;
-    if (!name) return toastError('Name required');
+    if (!name) return toastError(tr('mealsModule.nameRequired'));
     setLoading(true);
     const { error } = await createClient().from('meals').insert({ family_id: familyId, name, meal_type, image_url, recipe_url, ingredients: [], created_by: userId });
     setLoading(false);
@@ -821,8 +821,8 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
         <Field label={tr('meals.type')}>
           {(id) => <Select id={id} name="meal_type">{MEAL_TYPES.map(t => <option key={t} value={t}>{MEAL_LABELS[t]}</option>)}</Select>}
         </Field>
-        <Field label={tr('meals.photoUrl')} hint="Optional">{(id) => <Input id={id} name="image_url" placeholder="https://…" />}</Field>
-        <Field label={tr('meals.recipeLink')} hint="Optional">{(id) => <Input id={id} name="recipe_url" placeholder="https://…" />}</Field>
+        <Field label={tr('meals.photoUrl')} hint={tr('mealsModule.optional')}>{(id) => <Input id={id} name="image_url" placeholder="https://…" />}</Field>
+        <Field label={tr('meals.recipeLink')} hint={tr('mealsModule.optional')}>{(id) => <Input id={id} name="recipe_url" placeholder="https://…" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" type="button" onClick={onClose} size="sm">{tr('meals.cancel')}</Button>
           <Button type="submit" disabled={loading} loading={loading} size="sm">{loading ? 'Saving…' : 'Add Meal'}</Button>

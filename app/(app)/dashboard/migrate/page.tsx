@@ -27,7 +27,7 @@ export default async function MigratePage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardMigrate.switchToBubaly')}
-        description="Bring your calendar, lists and tasks over from your old family app — in minutes."
+        description={t('migrate.bringYourCalendarListsAnd')}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">

@@ -71,9 +71,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this visit record?')) return;
+    if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
     const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Visit deleted');
+    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {
@@ -115,9 +115,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load health visits. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('healthVisitsModule.couldNotLoadHealthVisits')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
+        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description={t('healthVisitsModule.addADoctorDentistOr')} />
       ) : (
         <ul className="space-y-2">
           {scoped.map((v) => {

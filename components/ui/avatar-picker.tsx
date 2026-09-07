@@ -70,7 +70,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
       if (upErr) throw new Error(upErr);
       setSelected(url ?? '');
     } catch (err) {
-      setError(describeDbError(err, 'Upload failed'));
+      setError(describeDbError(err, t('avatarPicker.uploadFailed')));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

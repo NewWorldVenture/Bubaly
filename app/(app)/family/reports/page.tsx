@@ -8,15 +8,16 @@ import { StatTile, SectionCard, ScoreRing, LevelBadge } from '@/components/famil
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Reports' };
+export const metadata: Metadata = { title: 'reports.familyReports' };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Reports</h1>
-      <ErrorState message="Could not load family reports from Supabase. Refresh and try again." />
-      <Link href="/family/reports" className="text-sm font-medium text-brand-text underline">Refresh family reports</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('reports.familyReports')}</h1>
+      <ErrorState message={t('reports.couldNotLoadFamilyReports')} />
+      <Link href="/family/reports" className="text-sm font-medium text-brand-text underline">{t('reports.refreshFamilyReports')}</Link>
     </div>
   );
 }
@@ -34,7 +35,7 @@ export default async function FamilyReportsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('familyReports.familyReports')} description="A weekly snapshot of how your household is running — all from live data." />
+      <PageHeader title={t('familyReports.familyReports')} description={t('reports.aWeeklySnapshotOfHow')} />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <SectionCard title={t('familyReports.completion')} className="lg:col-span-1">

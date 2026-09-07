@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runTwinProjection } from '@/lib/twin/project-server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
@@ -13,8 +14,9 @@ export const maxDuration = 60;
 // updated for every family WITHOUT anyone opening the app. Reuses the exact same
 // service-callable cores the on-demand buttons call. Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('modelRefresh.unauthorized') }, { status: 401 });
   }
   try {
     const supabase = createServiceClient();
@@ -65,11 +67,11 @@ export async function GET(req: NextRequest) {
         outcomes.push({
           familyId: fam.id, ok,
           entities: twin.entities, edges: twin.edges, plans: prep.plans,
-          ...(twin.error || prep.error || dirtyWriteFailed ? { error: 'Model refresh failed.' } : {}),
+          ...(twin.error || prep.error || dirtyWriteFailed ? { error: t('modelRefresh.modelRefreshFailed') } : {}),
         });
       } catch (err) {
         console.error(`Model-refresh cron failed for family ${fam.id}:`, err);
-        outcomes.push({ familyId: fam.id, ok: false, error: 'Model refresh failed.' });
+        outcomes.push({ familyId: fam.id, ok: false, error: t('modelRefresh.modelRefreshFailed') });
       }
     }
 
@@ -78,6 +80,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok, ...summary }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('Model-refresh cron error:', err);
-    return NextResponse.json({ error: 'Model-refresh cron failed' }, { status: 500 });
+    return NextResponse.json({ error: t('modelRefresh.modelRefreshCronFailed') }, { status: 500 });
   }
 }

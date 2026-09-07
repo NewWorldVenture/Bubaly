@@ -90,7 +90,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
   async function handleDelete(id: string) {
     const res = await deleteContactAction(id);
     if (!res.ok) { toastError(res.error); return; }
-    toastSuccess('Contact removed');
+    toastSuccess(tr('contactList.contactRemoved'));
     setContacts(prev => prev.filter(c => c.id !== id));
   }
 
@@ -98,7 +98,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
     const res = await updateContactTrustAction(id, trust);
     if (!res.ok) { toastError(res.error); return; }
     setContacts(prev => prev.map(c => c.id === id ? { ...c, trust_level: trust, trust_override: true } : c));
-    toastSuccess('Trust updated');
+    toastSuccess(tr('contactList.trustUpdated'));
   }
 
   return (

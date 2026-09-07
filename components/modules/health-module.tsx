@@ -355,8 +355,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save appointment'); return; }
-    success('Appointment added!');
+    if (err) { toastError(tr('healthModule.failedToSaveAppointment')); return; }
+    success(tr('healthModule.appointmentAdded'));
     setApptOpen(false);
     setApptForm({ title: '', starts_at: '', member_id: '', provider: '', location: '', notes: '' });
   }
@@ -375,8 +375,8 @@ export function HealthModule() {
       recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
     });
     setSaving(false);
-    if (err) { toastError('Failed to log metric'); return; }
-    success('Metric logged!');
+    if (err) { toastError(tr('healthModule.failedToLogMetric')); return; }
+    success(tr('healthModule.metricLogged'));
     setMetricOpen(false);
     setMetricForm({ member_id: '', type: 'steps', value: '', recorded_at: '' });
   }
@@ -397,8 +397,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log workout'); return; }
-    success('Workout logged!');
+    if (err) { toastError(tr('healthModule.failedToLogWorkout')); return; }
+    success(tr('healthModule.workoutLogged'));
     setWorkoutOpen(false);
     setWorkoutForm({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
   }
@@ -418,8 +418,8 @@ export function HealthModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to log symptom'); return; }
-    success('Symptom logged!');
+    if (err) { toastError(tr('healthModule.failedToLogSymptom')); return; }
+    success(tr('healthModule.symptomLogged'));
     setSymptomOpen(false);
     setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
   }
@@ -427,21 +427,21 @@ export function HealthModule() {
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
-    if (err) { toastError('Failed to update symptom'); return; }
-    success('Marked resolved.');
+    if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
-    if (err) { toastError('Failed to delete symptom'); return; }
-    success('Symptom removed.');
+    if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    success(tr('healthModule.symptomRemoved'));
   }
 
   async function saveGoal() {
     if (!goalForm.member_id || !goalForm.target) return;
     const target = parseFloat(goalForm.target);
-    if (!(target > 0)) { toastError('Target must be greater than 0.'); return; }
+    if (!(target > 0)) { toastError(tr('healthModule.targetMustBeGreaterThan')); return; }
     setSaving(true);
     const sb = createClient();
     const typeInfo = METRIC_TYPES.find((t) => t.value === goalForm.metric_type);
@@ -456,8 +456,8 @@ export function HealthModule() {
       created_by: userId,
     }, { onConflict: 'member_id,metric_type,period' });
     setSaving(false);
-    if (err) { toastError('Failed to save goal'); return; }
-    success('Goal saved!');
+    if (err) { toastError(tr('healthModule.failedToSaveGoal')); return; }
+    success(tr('healthModule.goalSaved'));
     setGoalOpen(false);
     setGoalForm({ member_id: '', metric_type: 'steps', target: '', period: 'daily' });
   }
@@ -503,7 +503,7 @@ export function HealthModule() {
       <div className="module-main space-y-5">
         <PageHeader
           title={tr('health.health')}
-          description="Track fitness, wellness, and health across your whole family."
+          description={tr('healthModule.trackFitnessWellnessAndHealth')}
           action={
             <div className="flex gap-2">
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
@@ -542,7 +542,7 @@ export function HealthModule() {
               <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> {tr('health.setGoals')}</button>
             </div>
             {metrics.length === 0 ? (
-              <EmptyState icon={Activity} title={tr('health.noActivityDataYet')} description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
+              <EmptyState icon={Activity} title={tr('health.noActivityDataYet')} description={tr('healthModule.logYourFirstHealthMetric')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <>
                 <div className="flex items-center gap-6">
@@ -592,7 +592,7 @@ export function HealthModule() {
               <h2 className="font-semibold">{tr('health.familyHealthAtAGlance')}</h2>
             </div>
             {memberStats.every((ms) => ms.steps === 0 && ms.sleep === 0 && ms.hr === 0) ? (
-              <EmptyState icon={Heart} title={tr('health.noMemberHealthData')} description="Log metrics for family members to see their health at a glance." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
+              <EmptyState icon={Heart} title={tr('health.noMemberHealthData')} description={tr('healthModule.logMetricsForFamilyMembers')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <div className="max-h-[32rem] space-y-3 overflow-y-auto">
                 {memberStats.map(({ member: m, steps, sleep, hr, pct }) => (
@@ -629,7 +629,7 @@ export function HealthModule() {
               <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">{tr('health.logWorkout')}</button>
             </div>
             {workouts.length === 0 ? (
-              <EmptyState icon={Dumbbell} title={tr('health.noWorkoutsLogged')} description="Track runs, swims, bike rides, and more." action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logWorkout')}</Button>} />
+              <EmptyState icon={Dumbbell} title={tr('health.noWorkoutsLogged')} description={tr('healthModule.trackRunsSwimsBikeRides')} action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logWorkout')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {workouts.slice(0, 5).map((w) => {
@@ -686,7 +686,7 @@ export function HealthModule() {
             <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
-            <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />
+            <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />
           ) : (
             <div className="space-y-2.5">
               {sortedSymptoms.slice(0, 12).map((s) => {
@@ -868,7 +868,7 @@ export function HealthModule() {
       {/* Set Goal Modal */}
       <Modal open={goalOpen} title={tr('health.setHealthGoal')} onClose={() => setGoalOpen(false)}>
         <div className="space-y-4">
-          <p className="text-xs text-muted">Set a per-member daily or weekly target. Progress rings and insights use these goals (steps default to 10,000 when no goal is set).</p>
+          <p className="text-xs text-muted">{tr('healthModule.setAPerMemberDaily')}</p>
           <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('health.metric')}>{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>

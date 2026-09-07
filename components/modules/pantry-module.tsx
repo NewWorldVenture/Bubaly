@@ -69,7 +69,7 @@ export function PantryModule() {
     const supabase = createClient();
     const res = await removePantryItemAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(t('pantryModule.removed'));
     void refresh();
   }
 
@@ -178,7 +178,7 @@ export function PantryModule() {
       {/* Inventory by location */}
       {items.length === 0 ? (
         <EmptyState icon={Boxes} title={t('pantry.yourPantryIsEmpty')}
-          description="Add the food and household items you keep on hand to track quantities and expiration dates."
+          description={t('pantryModule.addTheFoodAndHousehold')}
           action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('pantry.addYourFirstItem')}</Button>} />
       ) : (
         groups.map(({ location, items: rows }) => (
@@ -245,7 +245,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('pantryModule.nameIsRequired'));
     const payload = {
       name,
       category: String(form.get('category') ?? '').trim() || null,
@@ -303,9 +303,9 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
         <div className="grid grid-cols-3 gap-3">
           <Field label={t('pantry.quantity')}>{(id) => <Input id={id} name="quantity" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.quantity ?? 1} />}</Field>
           <Field label={t('pantry.unit')}>{(id) => <Input id={id} name="unit" defaultValue={item?.unit ?? ''} placeholder={t('pantry.cansLbs')} />}</Field>
-          <Field label={t('pantry.lowAt')} hint="Restock threshold">{(id) => <Input id={id} name="low_threshold" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
+          <Field label={t('pantry.lowAt')} hint={t('pantryModule.restockThreshold')}>{(id) => <Input id={id} name="low_threshold" type="number" inputMode="decimal" min={0} step="any" defaultValue={item?.low_threshold ?? ''} placeholder="1" />}</Field>
         </div>
-        <Field label={t('pantry.expirationDate')} hint="Leave blank for non-perishables">
+        <Field label={t('pantry.expirationDate')} hint={t('pantryModule.leaveBlankForNonPerishables')}>
           {(id) => <Input id={id} name="expires_at" type="date" defaultValue={item?.expires_at ?? ''} />}
         </Field>
         <label className="flex items-center gap-2 text-sm">

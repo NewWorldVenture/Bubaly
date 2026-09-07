@@ -25,18 +25,19 @@ const ITEM_KINDS: { key: SyncItemKind; label: string; icon: React.ComponentType<
 
 const CONNECTABLE: SyncProvider[] = ['google', 'microsoft', 'apple'];
 
-function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: SyncItemKind }) {
+async function CapabilityCell({ provider, kind }: { provider: SyncProvider; kind: SyncItemKind }) {
+  const t = await getTranslations();
   const c = CAPABILITIES[provider][kind];
   if (c.read && c.write) {
     return <Badge tone="success" title={c.limitation}>Two-way</Badge>;
   }
   if (c.write && !c.read) {
-    return <Badge tone="accent" title={c.limitation}>Export only</Badge>;
+    return <Badge tone="accent" title={c.limitation}>{t('sync.exportOnly')}</Badge>;
   }
   if (c.read && !c.write) {
-    return <Badge tone="brand" title={c.limitation}>Import only</Badge>;
+    return <Badge tone="brand" title={c.limitation}>{t('sync.importOnly')}</Badge>;
   }
-  return <Badge tone="neutral" title={c.limitation}>Not supported</Badge>;
+  return <Badge tone="neutral" title={c.limitation}>{t('sync.notSupported')}</Badge>;
 }
 
 export default async function SyncHubPage() {
@@ -59,7 +60,7 @@ export default async function SyncHubPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSync.sync')}</h1>
-        <ErrorState message="Could not load your sync status from Supabase. Refresh and try again." />
+        <ErrorState message={t('sync.couldNotLoadYourSync')} />
         <a href="/dashboard/sync" className="text-sm font-medium text-brand-text underline">{t('dashboardSync.refreshSyncStatus')}</a>
       </div>
     );
@@ -155,7 +156,7 @@ export default async function SyncHubPage() {
                   <p className="font-medium">{PROVIDER_LABELS[p]}</p>
                   <p className="text-xs text-muted">{conn ? `Status: ${conn.sync_status}` : 'Not connected'}</p>
                 </div>
-                {conn ? <Badge tone={conn.health === 'error' ? 'danger' : 'success'}>{conn.health}</Badge> : <Badge tone="neutral">Connect</Badge>}
+                {conn ? <Badge tone={conn.health === 'error' ? 'danger' : 'success'}>{conn.health}</Badge> : <Badge tone="neutral">{t('sync.connect')}</Badge>}
               </Link>
             );
           })}

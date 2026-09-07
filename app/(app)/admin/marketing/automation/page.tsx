@@ -27,7 +27,7 @@ export default async function AutomationPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
       <div className="space-y-3">
         {(flows ?? []).length === 0 ? (
-          <EmptyState icon={Workflow} title={tr('adminMarketingAutomation.noWorkflowsYet')} description="Build your first automation on the right." />
+          <EmptyState icon={Workflow} title={tr('adminMarketingAutomation.noWorkflowsYet')} description={tr('automation.buildYourFirstAutomationOn')} />
         ) : (
           (flows ?? []).map((w) => {
             const steps = Array.isArray(w.steps) ? w.steps as { action: string }[] : [];
@@ -40,7 +40,7 @@ export default async function AutomationPage() {
                   </div>
                   <span className="text-xs text-muted">{w.run_count} runs</span>
                 </div>
-                <p className="text-xs text-muted">When <span className="text-fg">{w.trigger.replace(/_/g, ' ')}</span> → {steps.map((s) => s.action.replace(/_/g, ' ')).join(' → ') || 'no steps'}</p>
+                <p className="text-xs text-muted">{tr('automation.when')}{' '}<span className="text-fg">{w.trigger.replace(/_/g, ' ')}</span> → {steps.map((s) => s.action.replace(/_/g, ' ')).join(' → ') || 'no steps'}</p>
                 <div className="flex gap-2 pt-1">
                   {['active', 'paused', 'draft'].map((st) => (
                     <form key={st} action={setAutomationStatus}>
@@ -79,15 +79,16 @@ export default async function AutomationPage() {
   );
 }
 
-function AdminAutomationReadError() {
+async function AdminAutomationReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Automation</h1>
-        <p className="mt-1 text-sm text-muted">Build and manage marketing workflows.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('automation.automation')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('automation.buildAndManageMarketingWorkflows')}</p>
       </div>
-      <ErrorState message="Could not load marketing workflows from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/automation" className="text-sm font-medium text-brand-text underline">Refresh automation</a>
+      <ErrorState message={tr('automation.couldNotLoadMarketingWorkflows')} />
+      <a href="/admin/marketing/automation" className="text-sm font-medium text-brand-text underline">{tr('automation.refreshAutomation')}</a>
     </div>
   );
 }

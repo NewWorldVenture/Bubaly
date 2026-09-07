@@ -174,15 +174,16 @@ export default async function AdminReportsPage() {
   );
 }
 
-function AdminReportsReadError() {
+async function AdminReportsReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reports &amp; Analytics</h1>
-        <p className="mt-1 text-sm text-muted">Growth, revenue, and engagement across every family on Bubaly.</p>
+        <p className="mt-1 text-sm text-muted">{tr('reports.growthRevenueAndEngagementAcross')}</p>
       </div>
-      <ErrorState message="Could not load reports from Supabase. Refresh and try again." />
-      <a href="/admin/reports" className="text-sm font-medium text-brand-text underline">Refresh reports</a>
+      <ErrorState message={tr('reports.couldNotLoadReportsFrom')} />
+      <a href="/admin/reports" className="text-sm font-medium text-brand-text underline">{tr('reports.refreshReports')}</a>
     </div>
   );
 }

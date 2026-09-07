@@ -57,7 +57,7 @@ export function JournalModule() {
     const supabase = createClient();
     const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
     if (delErr) return toastError(describeDbError(delErr));
-    success('Entry deleted');
+    success(t('journalModule.entryDeleted'));
     void refresh();
   }
 
@@ -68,7 +68,7 @@ export function JournalModule() {
     <div className="module-page">
       <PageHeader
         title={t('journal.journal')}
-        description="A private space to reflect, process, and grow — just for you."
+        description={t('journalModule.aPrivateSpaceToReflect')}
         action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.newEntry')}</Button>}
       />
 
@@ -76,7 +76,7 @@ export function JournalModule() {
 
       {data.length === 0 ? (
         <EmptyState icon={BookHeart} title={t('journal.yourJournalIsEmpty')}
-          description="Reflection builds self-awareness. Start with today's prompt or a free write."
+          description={t('journalModule.reflectionBuildsSelfAwarenessStart')}
           action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.writeYourFirstEntry')}</Button>} />
       ) : (
         <div className="space-y-3">
@@ -94,7 +94,7 @@ export function JournalModule() {
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
                     <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm('Delete this entry?')) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (
@@ -130,10 +130,10 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
     try {
       const res = await fetch('/api/ai/journal', { method: 'POST' });
       const json = (await res.json()) as { prompt?: string; error?: string };
-      if (!res.ok || !json.prompt) throw new Error(json.error || 'Could not get a prompt');
+      if (!res.ok || !json.prompt) throw new Error(json.error || t('journalModule.couldNotGetAPrompt'));
       setPrompt(json.prompt);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not get a prompt'));
+      toastError(describeDbError(err, t('journalModule.couldNotGetAPrompt')));
     } finally {
       setLoading(false);
     }
@@ -185,7 +185,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim() || null;
     const finalBody = body.trim();
-    if (!finalBody && !title) return toastError('Write something first');
+    if (!finalBody && !title) return toastError(t('journalModule.writeSomethingFirst'));
     setLoading(true);
     const supabase = createClient();
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };

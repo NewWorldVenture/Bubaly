@@ -7,7 +7,7 @@ describe('AI meal planner persistence boundaries', () => {
   it('fails closed when candidates or expiring pantry data cannot be read', () => {
     expect(source).toContain('const candidateError = candidateResults.find((result) => result.error)?.error;');
     expect(source).toContain('const { data: pantry, error: pantryError }');
-    expect(source).toContain("return databaseUnavailable('Meal planning data is temporarily unavailable.')");
+    expect(source).toContain("return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'))");
   });
 
   it('tracks generated meals and compensates unresolved plans', () => {

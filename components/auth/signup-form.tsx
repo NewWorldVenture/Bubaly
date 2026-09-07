@@ -67,7 +67,7 @@ export function SignupForm() {
       router.push(next);
       router.refresh();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not create account'));
+      toastError(describeDbError(err, t('signupForm.couldNotCreateAccount')));
     } finally {
       setLoading(false);
     }
@@ -154,12 +154,12 @@ export function SignupForm() {
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
           <Field label={t('signup.yourName')} error={errors.fullName} required>
-            {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
+            {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder={t('signupForm.jordanRivera')} autoFocus />}
           </Field>
           <Field label={t('signup.email')} error={errors.email} required>
             {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
           </Field>
-          <Field label={t('signup.password')} error={errors.password} hint="At least 8 characters" required>
+          <Field label={t('signup.password')} error={errors.password} hint={t('signupForm.atLeast8Characters')} required>
             {(id) => <Input id={id} name="password" type="password" autoComplete="new-password" placeholder="••••••••" />}
           </Field>
           <Button type="submit" loading={loading} className="w-full">{t('signup.createAccount')}</Button>

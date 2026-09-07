@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { allSuperAdminEmails } from '@/lib/feedback/notify';
@@ -16,8 +17,9 @@ export const dynamic = 'force-dynamic';
 // no empty-run noise. CRON_SECRET-gated; dark (logs, no send) without a RESEND
 // key. Scheduled in vercel.json.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('adminDigest.unauthorized') }, { status: 401 });
   }
 
   const admin = createServiceClient();
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   if (feedError) {
     console.error('[admin-digest] notification feed read failed', feedError);
-    return NextResponse.json({ ok: false, error: 'Notification feed unavailable.' }, { status: 502 });
+    return NextResponse.json({ ok: false, error: t('adminDigest.notificationFeedUnavailable') }, { status: 502 });
   }
 
   const rows = (data ?? []) as DigestRow[];

@@ -18,6 +18,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -43,7 +44,8 @@ async function moneyScope() {
 }
 
 export async function contributeToGoalAction(goalId: string, delta: number): Promise<MoneyActionResult> {
-  if (!goalId) return { ok: false, error: 'That savings goal could not be found.' };
+  const t = await getTranslations();
+  if (!goalId) return { ok: false, error: t('actions.thatSavingsGoalCouldNot') };
   const scope = await moneyScope();
 
   try {
@@ -55,12 +57,13 @@ export async function contributeToGoalAction(goalId: string, delta: number): Pro
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] contribute failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that savings goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatSavings')) };
   }
 }
 
 export async function deleteSavingsGoalAction(goalId: string): Promise<MoneyActionResult> {
-  if (!goalId) return { ok: false, error: 'That savings goal could not be found.' };
+  const t = await getTranslations();
+  if (!goalId) return { ok: false, error: t('actions.thatSavingsGoalCouldNot') };
   const scope = await moneyScope();
 
   try {
@@ -72,12 +75,13 @@ export async function deleteSavingsGoalAction(goalId: string): Promise<MoneyActi
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] savings goal delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that savings goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatSavings')) };
   }
 }
 
 export async function deleteBudgetAction(budgetId: string): Promise<MoneyActionResult> {
-  if (!budgetId) return { ok: false, error: 'That budget could not be found.' };
+  const t = await getTranslations();
+  if (!budgetId) return { ok: false, error: t('actions.thatBudgetCouldNotBe') };
   const scope = await moneyScope();
 
   try {
@@ -89,12 +93,13 @@ export async function deleteBudgetAction(budgetId: string): Promise<MoneyActionR
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] budget delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that budget.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatBudget')) };
   }
 }
 
 export async function deleteTransactionAction(transactionId: string): Promise<MoneyActionResult> {
-  if (!transactionId) return { ok: false, error: 'That transaction could not be found.' };
+  const t = await getTranslations();
+  if (!transactionId) return { ok: false, error: t('actions.thatTransactionCouldNotBe') };
   const scope = await moneyScope();
 
   try {
@@ -106,11 +111,12 @@ export async function deleteTransactionAction(transactionId: string): Promise<Mo
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] transaction delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that transaction.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatTransaction')) };
   }
 }
 
 export async function createTransactionAction(input: CreateTransactionInput): Promise<MoneyActionResult> {
+  const t = await getTranslations();
   const scope = await moneyScope();
 
   try {
@@ -125,7 +131,7 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] transaction create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add that transaction.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatTransaction')) };
   }
 }
 
@@ -141,6 +147,7 @@ export async function createTransactionAction(input: CreateTransactionInput): Pr
 export async function setBudgetAction(
   category: string, amount: number, period?: BudgetPeriod | null,
 ): Promise<MoneyActionResult> {
+  const t = await getTranslations();
   const scope = await moneyScope();
 
   try {
@@ -152,11 +159,12 @@ export async function setBudgetAction(
     return { ok: true, id: result.data.budget.id };
   } catch (err) {
     console.error('[money-action] budget save failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not save that budget.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSaveThatBudget')) };
   }
 }
 
 export async function createSavingsGoalAction(input: CreateSavingsGoalInput): Promise<MoneyActionResult> {
+  const t = await getTranslations();
   const scope = await moneyScope();
 
   try {
@@ -168,6 +176,6 @@ export async function createSavingsGoalAction(input: CreateSavingsGoalInput): Pr
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[money-action] savings goal create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not create that savings goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotCreateThatSavings')) };
   }
 }

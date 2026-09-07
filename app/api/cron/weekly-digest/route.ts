@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
@@ -8,8 +9,9 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('weeklyDigest.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();
@@ -20,14 +22,14 @@ export async function GET(req: NextRequest) {
   const { data: families, error: familiesError } = await supabase.from('families').select('id, name');
   if (familiesError) {
     console.error('Weekly digest family read error:', familiesError);
-    return NextResponse.json({ error: 'Weekly digest processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
   if (!families?.length) return NextResponse.json({ sent: 0 });
 
   const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
   if (authUsersError) {
     console.error('Weekly digest user read error:', authUsersError);
-    return NextResponse.json({ error: 'Weekly digest processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
     (authUsers?.users ?? []).map((u) => [u.id, u.email ?? null]),

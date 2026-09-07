@@ -85,7 +85,7 @@ export function ResultPane({ messages, streaming = false, compact = false, canDe
       <EmptyState
         icon={LayoutList}
         title={t('resultPane.nothingPlannedYet')}
-        description="Ask Bubaly to plan dinners, sort out the weekend, check the budget or get a trip ready — the results show up here."
+        description={t('resultPane.askBubalyToPlanDinners')}
       />
     );
   }

@@ -600,6 +600,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.ReactNode };
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
+  const tr = useTranslations();
   const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [now, setNow] = useState(new Date());
@@ -618,7 +619,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
   }, [contextKey]);
 
   if (!contextKey) {
-    return <ErrorState message="Could not resolve your current household membership. Refresh and try again." />;
+    return <ErrorState message={tr('briefingModule.couldNotResolveYourCurrent')} />;
   }
 
   // A keyed boundary removes old content during rendering, before effect cleanup.
@@ -694,7 +695,7 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 
   // Kitchen mode renders fullscreen
   if (tab === 'kitchen') {
-    if (kitchenError) return <ErrorState message="Could not load Kitchen Mode context. Refresh and try again." onRetry={refreshKitchen} />;
+    if (kitchenError) return <ErrorState message={tr('briefingModule.couldNotLoadKitchenMode')} onRetry={refreshKitchen} />;
     return (
       <KitchenMode
         onExit={() => setTab('morning')}

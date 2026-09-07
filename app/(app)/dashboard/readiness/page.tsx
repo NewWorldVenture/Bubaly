@@ -59,7 +59,7 @@ export default async function ReadinessPage() {
   ].find(Boolean);
   if (primaryError) {
     console.error('[dashboard/readiness] readiness score read failed', primaryError);
-    return <ErrorState message="Could not load your family readiness from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('readiness.couldNotLoadYourFamily')} />;
   }
 
   const input: ReadinessInput = {

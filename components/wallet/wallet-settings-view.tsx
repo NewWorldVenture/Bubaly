@@ -33,7 +33,7 @@ export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; 
   const t = useTranslations();
   return (
     <div className="module-page">
-      <PageHeader title={t('walletSettings.familyWallet')} description="Set how each child's money is split and when you're asked to approve." />
+      <PageHeader title={t('walletSettings.familyWallet')} description={t('walletSettingsView.setHowEachChildS')} />
       <WalletSubnav />
 
       {rows.length === 0 ? (
@@ -73,7 +73,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
     if (saving) return;
     if (sum !== 100) return toastError(`Split must total 100% (currently ${sum}%).`);
     const requireApprovalOverCents = Math.round(parseFloat(threshold || '0') * 100);
-    if (!Number.isFinite(requireApprovalOverCents) || requireApprovalOverCents < 0) return toastError('Enter a valid approval threshold.');
+    if (!Number.isFinite(requireApprovalOverCents) || requireApprovalOverCents < 0) return toastError(t('walletSettingsView.enterAValidApprovalThreshold'));
     setSaving(true);
     const res = await saveWalletRuleAction({
       childWalletId: row.childWalletId, split, autoAcceptGifts: autoAccept, requireApprovalOverCents,

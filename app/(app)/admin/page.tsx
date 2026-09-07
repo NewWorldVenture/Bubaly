@@ -99,7 +99,7 @@ export default async function AdminDashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
           <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
         </div>
-        <ErrorState message="Could not load the admin dashboard from Supabase. Refresh and try again." />
+        <ErrorState message={tr('admin.couldNotLoadTheAdmin')} />
         <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
       </div>
     );
@@ -220,7 +220,7 @@ export default async function AdminDashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
           <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
         </div>
-        <ErrorState message="Could not load recent activity details from Supabase. Refresh and try again." />
+        <ErrorState message={tr('admin.couldNotLoadRecentActivity')} />
         <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
       </div>
     );

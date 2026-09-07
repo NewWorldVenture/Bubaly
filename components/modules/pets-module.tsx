@@ -77,11 +77,11 @@ export function PetsModule() {
   );
 
   async function removePet(id: string) {
-    if (!confirm('Remove this pet and all its care records?')) return;
+    if (!confirm(t('petsModule.removeThisPetAndAll'))) return;
     const { error } = await createClient().from('pets').update({ is_active: false }).eq('id', id);
     if (error) return toastError(describeDbError(error));
     setSelected(null);
-    success('Pet removed');
+    success(t('petsModule.petRemoved'));
   }
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
@@ -91,13 +91,13 @@ export function PetsModule() {
   const refresh = () => { void pets.refresh(); void records.refresh(); };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load pet care data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('petsModule.couldNotLoadPetCare')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('pets.pets')}
-        description="Profiles and complete care operations for every family pet."
+        description={t('petsModule.profilesAndCompleteCareOperations')}
         action={<div className="flex items-center gap-2"><AiInsight kind="pets" iconOnly /><Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> {t('pets.addPet')}</Button></div>}
       />
 
@@ -144,7 +144,7 @@ export function PetsModule() {
 
       {/* Pet grid */}
       {pets.data.length === 0 ? (
-        <EmptyState icon={PawPrint} title={t('pets.noPetsYet')} description="Add your first pet to track vaccinations, vet visits, medications, and grooming." />
+        <EmptyState icon={PawPrint} title={t('pets.noPetsYet')} description={t('petsModule.addYourFirstPetTo')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.data.map((pet) => {
@@ -204,7 +204,7 @@ export function PetsModule() {
       )}
 
       {addPetOpen && (
-        <PetForm familyId={familyId} userId={userId} onClose={() => setAddPetOpen(false)} onSaved={() => { setAddPetOpen(false); success('Pet added'); }} />
+        <PetForm familyId={familyId} userId={userId} onClose={() => setAddPetOpen(false)} onSaved={() => { setAddPetOpen(false); success(t('petsModule.petAdded')); }} />
       )}
 
       {selected && (
@@ -221,7 +221,7 @@ export function PetsModule() {
         <CareForm
           familyId={familyId} userId={userId} pet={careForPet}
           onClose={() => setCareForPet(null)}
-          onSaved={() => { setCareForPet(null); success('Care record added'); }}
+          onSaved={() => { setCareForPet(null); success(t('petsModule.careRecordAdded')); }}
         />
       )}
     </div>
@@ -237,7 +237,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('petsModule.nameIsRequired'));
     setLoading(true);
     const { error } = await createClient().from('pets').insert({
       family_id: familyId,
@@ -297,7 +297,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Title is required');
+    if (!title) return toastError(t('petsModule.titleIsRequired'));
     setLoading(true);
     const { error } = await createClient().from('pet_care_records').insert({
       family_id: familyId,
@@ -325,10 +325,10 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
         </div>
         <Field label={t('pets.title')} required>{(id) => <Input id={id} name="title" autoFocus placeholder={t('pets.rabiesBooster')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('pets.nextDue')} hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
+          <Field label={t('pets.nextDue')} hint={t('petsModule.powersCareReminders')}>{(id) => <Input id={id} name="next_due" type="date" />}</Field>
           <Field label={t('pets.doseAmount')}>{(id) => <Input id={id} name="dose" placeholder={t('pets.1Tablet')} />}</Field>
         </div>
-        <Field label={t('pets.weightKg')} hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
+        <Field label={t('pets.weightKg')} hint={t('petsModule.optionalForWeightCheckIns')}>{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
         <Field label={t('pets.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={t('pets.vetRemarksReactions')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{t('pets.cancel')}</Button>

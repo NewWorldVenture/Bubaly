@@ -71,9 +71,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this immunization record?')) return;
+    if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
     const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {
@@ -114,9 +114,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load immunization records. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('immunizationsModule.couldNotLoadImmunizationRecords')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Syringe} title={t('immunizations.noImmunizationsRecorded')} description="Track vaccines and next-due dates — handy for school, camp, and travel forms." />
+        <EmptyState icon={Syringe} title={t('immunizations.noImmunizationsRecorded')} description={t('immunizationsModule.trackVaccinesAndNextDue')} />
       ) : (
         <ul className="space-y-2">
           {scoped.map((s) => {

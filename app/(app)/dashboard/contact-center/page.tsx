@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateChannelResult } from '@/lib/contact-center/server';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 // Family+ only. The central contact identity (@bubaly.com address + dedicated
 // phone) plus the unified inbox everything the AI concierge handles routes into.
 export default async function ContactCenterPage() {
+  const t = await getTranslations();
   const ctx = await requirePlanLevel(2);
   const familyId = ctx.active.familyId;
   const admin = createServiceClient();
@@ -29,7 +31,7 @@ export default async function ContactCenterPage() {
 
   if (channelResult.error || messagesResult.error) {
     console.error('[contact-center] page data read failed', channelResult.error ?? messagesResult.error);
-    return <ErrorState message="The Contact Center is temporarily unavailable. Please try again." />;
+    return <ErrorState message={t('contactCenter.theContactCenterIsTemporarily')} />;
   }
 
   return (

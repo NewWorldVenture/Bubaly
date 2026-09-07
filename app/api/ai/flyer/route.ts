@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -43,6 +44,7 @@ function fmtSummary(title: string, iso: string, allDay: boolean, location: strin
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     const limited = await enforceAIRateLimit(supabase, `ai-flyer:${userId}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many flyer scans. Please try again shortly.' },
+      { error: t('flyer.tooManyFlyerScansPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
       const { data, error } = await supabase.from('calendar_events').insert(rows).select('id');
       if (error) {
         console.error('Flyer calendar write failed:', error);
-        return NextResponse.json({ error: 'Could not save the calendar events.' }, { status: 500 });
+        return NextResponse.json({ error: t('flyer.couldNotSaveTheCalendar') }, { status: 500 });
       }
       return NextResponse.json({ created: data?.length ?? 0 });
     }
@@ -85,8 +87,8 @@ export async function POST(req: NextRequest) {
     // ── Phase 1: extract events from the uploaded flyer ────────────────────
     const data = body.data ?? '';
     const mediaType = body.mediaType ?? '';
-    if (!data) return NextResponse.json({ error: 'No file received.' }, { status: 400 });
-    if (data.length > 8_000_000) return NextResponse.json({ error: 'File is too large (≈5 MB max).' }, { status: 400 });
+    if (!data) return NextResponse.json({ error: t('flyer.noFileReceived') }, { status: 400 });
+    if (data.length > 8_000_000) return NextResponse.json({ error: t('flyer.fileIsTooLarge5') }, { status: 400 });
 
     const now = new Date();
     const prompt = `Extract EVERY calendar-worthy event from this flyer/document. Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
@@ -101,7 +103,7 @@ Rules:
 
     const isPdf = mediaType === 'application/pdf';
     const isImage = IMAGE_TYPES.includes(mediaType);
-    if (!isPdf && !isImage) return NextResponse.json({ error: 'Upload an image (JPG/PNG/WebP) or PDF.' }, { status: 400 });
+    if (!isPdf && !isImage) return NextResponse.json({ error: t('flyer.uploadAnImageJpgPng') }, { status: 400 });
 
     // OpenAI-only deployment. Use the admin-configured OpenAI key/model
     // (Admin → AI Engine) with env fallback. gpt-4o reads images directly and
@@ -109,7 +111,7 @@ Rules:
     const aiConfig = await getAIConfig(createServiceClient());
     const apiKey = aiConfig.openaiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'Flyer scanning needs an OpenAI API key. Add one in Admin → AI Engine.' }, { status: 503 });
+      return NextResponse.json({ error: t('flyer.flyerScanningNeedsAnOpenai') }, { status: 503 });
     }
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
@@ -129,7 +131,7 @@ Rules:
     if (!aiRes.ok) {
       const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
       console.error('Flyer OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
-      return NextResponse.json({ error: 'Could not read that flyer. Try a clearer photo or a different file.' }, { status: 502 });
+      return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
     const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1 * 1024 * 1024);
     const text: string = aiJson.choices?.[0]?.message?.content ?? '[]';
@@ -163,6 +165,6 @@ Rules:
     return NextResponse.json({ events });
   } catch (err) {
     console.error('Flyer scan error:', err);
-    return NextResponse.json({ error: 'Could not read that flyer. Try a clearer photo.' }, { status: 500 });
+    return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer2') }, { status: 500 });
   }
 }

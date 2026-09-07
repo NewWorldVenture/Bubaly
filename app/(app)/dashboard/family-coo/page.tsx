@@ -44,7 +44,7 @@ export default async function FamilyCooPage() {
     .find((e) => e && !isMissingTableError(e));
   if (cooError) {
     console.error('[dashboard/family-coo] household read failed', cooError);
-    return <ErrorState message="Could not load your household from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('familyCoo.couldNotLoadYourHousehold')} />;
   }
 
   const members = membersRes.data;
@@ -64,7 +64,7 @@ export default async function FamilyCooPage() {
     <div className="space-y-5">
       <PageHeader
         title={tr('dashboardFamilyCoo.familyCoo')}
-        description="Run the household: tasks, routines, shopping and maintenance in one place."
+        description={tr('familyCoo.runTheHouseholdTasksRoutines')}
         action={
           <QuickAdd
             table="family_routines"
@@ -104,10 +104,10 @@ export default async function FamilyCooPage() {
                 );
               })}
             </ul>
-          ) : <MiniEmpty icon={CheckSquare} text="No open tasks — nicely done." />}
+          ) : <MiniEmpty icon={CheckSquare} text={tr('familyCoo.noOpenTasksNicelyDone')} />}
         </SectionCard>
 
-        <SectionCard title={tr('dashboardFamilyCoo.householdRoutines')} description="Recurring rhythms that keep things running">
+        <SectionCard title={tr('dashboardFamilyCoo.householdRoutines')} description={tr('familyCoo.recurringRhythmsThatKeepThings')}>
           {routines && routines.length > 0 ? (
             <ul className="divide-y divide-border">
               {routines.map((r) => {
@@ -125,7 +125,7 @@ export default async function FamilyCooPage() {
                 );
               })}
             </ul>
-          ) : <MiniEmpty icon={Repeat} text="No routines yet — add your first above." />}
+          ) : <MiniEmpty icon={Repeat} text={tr('familyCoo.noRoutinesYetAddYour')} />}
         </SectionCard>
       </div>
 
@@ -143,7 +143,7 @@ export default async function FamilyCooPage() {
                 );
               })}
             </ul>
-          ) : <MiniEmpty icon={CalendarDays} text="Nothing scheduled this week." />}
+          ) : <MiniEmpty icon={CalendarDays} text={tr('familyCoo.nothingScheduledThisWeek')} />}
         </SectionCard>
 
         <SectionCard title={tr('dashboardFamilyCoo.shoppingList')} viewAllHref="/dashboard/grocery">

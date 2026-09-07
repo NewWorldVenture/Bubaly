@@ -91,14 +91,14 @@ export function WeekendModule() {
   }, [plans, events]);
 
   async function discover() {
-    if (!isValidZip(zip)) return toastError('Enter a valid 5-digit ZIP code');
+    if (!isValidZip(zip)) return toastError(t('weekendModule.enterAValid5Digit'));
     setBusy(true);
     try {
       const res = await fetch('/api/weekend/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ zip, radius, days }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Search failed');
       else success(data.count > 0 ? `Found ${data.count} events near ${data.zip}` : `No events found near ${data.zip} in the next ${data.days} days`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(t('weekendModule.networkError')); }
     setBusy(false);
   }
 
@@ -112,21 +112,21 @@ export function WeekendModule() {
   }
   async function removePlan(id: string) {
     const { error } = await createClient().from('weekend_plans').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('weekendModule.removed'));
   }
 
   async function addFeed(e: React.FormEvent) {
     e.preventDefault();
-    if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError('Name and URL required');
-    try { new URL(feedForm.url.trim()); } catch { return toastError('Enter a valid URL'); }
+    if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError(t('weekendModule.nameAndUrlRequired'));
+    try { new URL(feedForm.url.trim()); } catch { return toastError(t('weekendModule.enterAValidUrl')); }
     const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
-    if (error) toastError(describeDbError(error)); else { success('Source added'); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
   }
   async function toggleFeed(f: Feed) {
     await createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id);
   }
   async function removeFeed(id: string) {
-    if (!confirm('Remove this source?')) return;
+    if (!confirm(t('weekendModule.removeThisSource'))) return;
     await createClient().from('weekend_feeds').delete().eq('id', id);
   }
 
@@ -214,8 +214,8 @@ export function WeekendModule() {
       )}
 
       {/* discovered events grouped by day */}
-      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load weekend planner data. Refresh and try again." onRetry={refresh} /> : grouped.length === 0 ? (
-        <EmptyState icon={Sparkles} title={t('weekend.noUpcomingEventsYet')} description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
+      {loading ? <SkeletonList /> : error ? <ErrorState message={t('weekendModule.couldNotLoadWeekendPlanner')} onRetry={refresh} /> : grouped.length === 0 ? (
+        <EmptyState icon={Sparkles} title={t('weekend.noUpcomingEventsYet')} description={t('weekendModule.enterYourZipCodeAnd')} />
       ) : (
         <div className="space-y-6">
           {grouped.map(([day, dayEvents]) => (

@@ -35,6 +35,6 @@ describe('sleep-module writes fail visibly', () => {
     expect(src).toContain("{ onConflict: 'member_id,checkin_date' }");
   });
   it('refuses a night whose wake time is not after bedtime', () => {
-    expect(src).toContain("if (duration === 0) return toastError('Wake time must be after bedtime');");
+    expect(src).toContain("if (duration === 0) return toastError(t('sleepModule.wakeTimeMustBeAfter'));");
   });
 });

@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { isAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
 import type { Json } from '@/lib/database.types';
@@ -8,9 +9,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[app-lock-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 /**
@@ -20,11 +21,12 @@ function actionFailure(operation: string, error: unknown): Result {
  * and removes the lock entirely. Stored per-user (the lock is personal).
  */
 export async function saveAppLockConfig(config: AppLockConfig | null): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   if (config !== null && !isAppLockConfig(config)) {
-    return { ok: false, error: 'Invalid lock configuration' };
+    return { ok: false, error: t('appLockActions.invalidLockConfiguration') };
   }
 
   const { data: prefs, error: prefsError } = await supabase
@@ -32,7 +34,7 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     .select('notification_prefs')
     .eq('user_id', ctx.user.id)
     .maybeSingle();
-  if (prefsError) return actionFailure('load App Lock settings', prefsError);
+  if (prefsError) return actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), prefsError);
 
   const np = ((prefs?.notification_prefs as Record<string, unknown> | null) ?? {});
   const next = { ...np };
@@ -43,6 +45,6 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     .from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: next as Json }, { onConflict: 'user_id' });
 
-  if (error) return actionFailure('save App Lock settings', error);
+  if (error) return actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), error);
   return { ok: true };
 }

@@ -52,7 +52,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const data = await res.json();
       if (!res.ok) { toastError(data.error || 'Failed'); setMessages((m) => m.slice(0, -1)); }
       else { setConversationId(data.conversationId); setMessages((m) => [...m, { role: 'assistant', content: data.reply }]); }
-    } catch { toastError('Network error'); setMessages((m) => m.slice(0, -1)); }
+    } catch { toastError(t('tripConcierge.networkError')); setMessages((m) => m.slice(0, -1)); }
     setBusy(false);
   }
 
@@ -63,7 +63,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Build failed');
       else success(`Added ${data.added.activities} activities, ${data.added.items} itinerary items, ${data.added.budget} budget lines, ${data.added.packing} packing items`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(t('tripConcierge.networkError')); }
     setBuilding(false);
   }
 

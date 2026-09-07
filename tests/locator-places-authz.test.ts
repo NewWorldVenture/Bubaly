@@ -20,7 +20,7 @@ describe('A-12 shared family-place mutations require a manager', () => {
     it(`${fn} gates on isManager before touching family_places`, () => {
       const body = src.slice(src.indexOf(`export async function ${fn}(`));
       const scope = body.slice(0, body.indexOf('\nexport async function', 1) === -1 ? undefined : body.indexOf('\nexport async function', 1));
-      expect(scope).toContain('if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;');
+      expect(scope).toContain('if (!isManager(c.active.role)) return managerOnlyPlace();');
       expect(scope.indexOf('isManager')).toBeLessThan(scope.indexOf("from('family_places')"));
     });
   }
@@ -29,7 +29,7 @@ describe('A-12 shared family-place mutations require a manager', () => {
     for (const fn of ['updateMyLocation', 'setLocationSharing']) {
       const body = src.slice(src.indexOf(`export async function ${fn}(`));
       const scope = body.slice(0, body.indexOf('\nexport async function', 1));
-      expect(scope, `${fn} should stay self-service`).not.toContain('MANAGER_ONLY_PLACE');
+      expect(scope, `${fn} should stay self-service`).not.toContain('managerOnlyPlace(');
     }
   });
 });

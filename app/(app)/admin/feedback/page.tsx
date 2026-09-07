@@ -78,15 +78,16 @@ export default async function AdminFeedbackPage() {
   );
 }
 
-function AdminFeedbackReadError() {
+async function AdminFeedbackReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Feedback &amp; Ideas</h1>
-        <p className="mt-1 text-sm text-muted">Ideas and bug reports from the public feedback board.</p>
+        <p className="mt-1 text-sm text-muted">{t('feedback.ideasAndBugReportsFrom')}</p>
       </div>
-      <ErrorState message="Could not load feedback from Supabase. Refresh and try again." />
-      <a href="/admin/feedback" className="text-sm font-medium text-brand-text underline">Refresh feedback</a>
+      <ErrorState message={t('feedback.couldNotLoadFeedbackFrom')} />
+      <a href="/admin/feedback" className="text-sm font-medium text-brand-text underline">{t('feedback.refreshFeedback')}</a>
     </div>
   );
 }

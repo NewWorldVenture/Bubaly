@@ -70,18 +70,18 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
 
   async function onCancel(id: string) {
     const res = await cancelCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Call cancelled');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.callCancelled'));
   }
   async function onRequeue(id: string) {
     const res = await requeueCallAction(id);
-    if (!res.ok) toastError(res.error); else success('Back in the queue');
+    if (!res.ok) toastError(res.error); else success(t('conciergeCallsModule.backInTheQueue'));
   }
 
   return (
     <div className="space-y-5 pb-24">
       <PageHeader
         title={t('conciergeCalls.aiCalls')}
-        description="Bubaly makes the call for you — booking, rescheduling, confirming, chasing things down."
+        description={t('conciergeCallsModule.bubalyMakesTheCallFor')}
         action={
           <Button size="sm" onClick={() => setComposerOpen((v) => !v)}>
             <Plus className="h-4 w-4" /> {t('conciergeCalls.requestACall')}
@@ -98,13 +98,13 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
       {composerOpen && (
         <Composer
           onClose={() => setComposerOpen(false)}
-          onCreated={() => { setComposerOpen(false); success('On it — Bubaly will make the call.'); }}
+          onCreated={() => { setComposerOpen(false); success(t('conciergeCallsModule.onItBubalyWillMake')); }}
         />
       )}
 
       <div className="space-y-2.5">
         {calls.length === 0 && !composerOpen && (
-          <MiniEmpty icon={PhoneCall} text="No calls yet — ask Bubaly to make one for you." />
+          <MiniEmpty icon={PhoneCall} text={t('conciergeCallsModule.noCallsYetAskBubaly')} />
         )}
         {calls.map((c) => {
           const brief = (c.brief ?? {}) as Partial<CallBrief>;

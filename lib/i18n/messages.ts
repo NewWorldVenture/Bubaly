@@ -66,15 +66,29 @@ const FALLBACK_CHAIN: Partial<Record<LocaleCode, LocaleCode[]>> = {
  * object handed to the client provider is complete and the client needs no
  * fallback logic of its own.
  */
+const MERGED = new Map<LocaleCode, Messages>();
+
 export function getMessages(locale: LocaleCode): Messages {
   const catalogue = CATALOGUES[locale];
   if (!catalogue || catalogue === enUS) return enUS;
+
+  // Built ONCE per locale. Every input is a static import, so the result cannot
+  // differ between calls — and the cost is not small: the merge spreads all
+  // 9,983 English keys and then assigns as many again over them, roughly 600 KB
+  // of strings per call. That was affordable when `getTranslations()` was
+  // called by a handful of page components. It is not now that every server
+  // action and route handler words its own failures: one render can ask for the
+  // catalogue dozens of times, and each ask was allocating the whole thing.
+  const cached = MERGED.get(locale);
+  if (cached) return cached;
 
   // Nearest relative last, so it overrides the ones further away.
   const chain = [...(FALLBACK_CHAIN[locale] ?? [])].reverse();
   const merged: Messages = { ...enUS };
   for (const step of chain) Object.assign(merged, CATALOGUES[step] ?? {});
-  return Object.assign(merged, catalogue);
+  Object.assign(merged, catalogue);
+  MERGED.set(locale, merged);
+  return merged;
 }
 
 /** The raw, unmerged catalogue — for parity tests that need to see real gaps. */

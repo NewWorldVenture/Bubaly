@@ -54,7 +54,7 @@ export function CreateMemory() {
   function addFiles(list: FileList | null) {
     if (!list) return;
     const images = Array.from(list).filter((f) => f.type.startsWith('image/'));
-    if (!images.length) { toastError('Please choose image files.'); return; }
+    if (!images.length) { toastError(t('createMemory.pleaseChooseImageFiles')); return; }
     // Drop anything over the family-media bucket limit before it can fail mid-upload.
     const { ok, tooBig } = partitionBySize(images);
     const msg = oversizeMessage(tooBig.length);
@@ -114,13 +114,13 @@ export function CreateMemory() {
           media_type: 'image',
         }).select('id').single();
         if (insErr || !row) {
-          toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
+          toastError(describeDbError(insErr ?? { message: t('createMemory.couldNotSaveMemory') }));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
-          if (cleanupError) toastError('The uploaded photo could not be cleaned up.');
+          if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
           const { error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
-          if (favoriteError) toastError('The memory was saved, but could not be added to Favorites.');
+          if (favoriteError) toastError(t('createMemory.theMemoryWasSavedBut'));
           createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }
@@ -159,12 +159,12 @@ export function CreateMemory() {
     // Rows are gone; best-effort remove the now-orphaned storage objects.
     if (paths.length) {
       const { error: rmErr } = await supabase.storage.from('family-media').remove(paths);
-      if (rmErr) toastError('The memory was undone, but its photo files could not be cleaned up.');
+      if (rmErr) toastError(t('createMemory.theMemoryWasUndoneBut'));
     }
     setCreated([]);
     setUndoing(false);
     setDone(false);
-    success('Memory undone — nothing was saved.');
+    success(t('createMemory.memoryUndoneNothingWasSaved'));
   }
 
   // ── Memory Created (screen 10) ───────────────────────────────
@@ -235,7 +235,7 @@ export function CreateMemory() {
               type="button"
               onClick={() => removeAt(i)}
               className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
-              aria-label="Remove photo"
+              aria-label={t('createMemory.removePhoto')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -268,10 +268,10 @@ export function CreateMemory() {
       {/* Details */}
       <div className="mt-6 space-y-4">
         <Field label={t('createMemory.title')} required>
-          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Beach day, first steps, Grandma’s visit…" maxLength={120} />}
+          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('createMemory.beachDayFirstStepsGrandma')} maxLength={120} />}
         </Field>
         <Field label={t('createMemory.noteOptional')}>
-          {(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What made this moment special?" className="min-h-[96px]" maxLength={1000} />}
+          {(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('createMemory.whatMadeThisMomentSpecial')} className="min-h-[96px]" maxLength={1000} />}
         </Field>
       </div>
 

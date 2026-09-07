@@ -94,7 +94,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function remove(id: string) {
     const d = byId.get(id); if (!d) return;
-    if (d.is_secure && !manager) return toastError('Only a parent or another adult can delete a file from the Secure Vault.');
+    if (d.is_secure && !manager) return toastError(t('filesHubModule.onlyAParentOrAnother'));
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${d.title}"? This can't be undone.`)) return;
     setBusy(id);
     const sb = createClient();
@@ -102,12 +102,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
     const { error: err } = await sb.from('documents').delete().eq('id', id);
     setBusy(null);
     if (err) return toastError(describeDbError(err));
-    success('File deleted'); refresh();
+    success(t('filesHubModule.fileDeleted')); refresh();
   }
 
   async function toggleSecure(id: string) {
     const d = byId.get(id); if (!d) return;
-    if (!manager) return toastError('Only a parent or another adult can move files in and out of the Secure Vault.');
+    if (!manager) return toastError(t('filesHubModule.onlyAParentOrAnother2'));
     setBusy(id);
     const { error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id);
     setBusy(null);
@@ -124,8 +124,8 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function upload(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return toastError('Choose a file to upload');
-    if (!title.trim()) return toastError('Add a name for this file');
+    if (!file) return toastError(t('filesHubModule.chooseAFileToUpload'));
+    if (!title.trim()) return toastError(t('filesHubModule.addANameForThis'));
 
     // REFUSE, DO NOT DOWNGRADE, AND DO IT BEFORE THE BYTES MOVE.
     //
@@ -157,7 +157,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     );
     setSaving(false);
     if (!outcome.ok) return toastError(outcome.reason);
-    success('File uploaded');
+    success(t('filesHubModule.fileUploaded'));
     setOpen(false); setTitle(''); setCategory(''); setFile(null); refresh();
   }
 

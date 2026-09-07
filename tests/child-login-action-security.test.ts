@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 describe('public child sign-in boundary', () => {
@@ -11,6 +12,6 @@ describe('public child sign-in boundary', () => {
     expect(source).toContain("const payload = (input && typeof input === 'object' ? input : {})");
     expect(source).toContain('error: throttleReadError');
     expect(source).toContain('error: loginLookupError');
-    expect(source).toContain('Kid sign-in is temporarily unavailable. Try again shortly.');
+    expectTranslates(source, 'actions.kidSignInIsTemporarily', "Kid sign-in is temporarily unavailable. Try again shortly.");
   });
 });

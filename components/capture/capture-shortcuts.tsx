@@ -230,7 +230,7 @@ export function CaptureShortcuts({
                 >
                   <Icon className="h-5 w-5 text-brand-text" />
                   <span className="w-full truncate text-xs font-semibold">{s.label}</span>
-                  <span className="text-[10px] text-brand-text">Tap to change</span>
+                  <span className="text-[10px] text-brand-text">{t('captureShortcuts.tapToChange')}</span>
                 </button>
                 <button
                   type="button"

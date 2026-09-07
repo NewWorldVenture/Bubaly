@@ -41,18 +41,18 @@ export function FavoritesView() {
   }, [favorites]);
 
   async function remove(id: string) {
-    if (!confirm('Remove this favorite?')) return;
+    if (!confirm(t('favoritesView.removeThisFavorite'))) return;
     const { error } = await createClient().from('family_favorites').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(error.message); else success(t('favoritesView.removed'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
   // empty favorites list. (Missing-table/offline are already degraded by the hook.)
-  if (error) return <ErrorState message="Could not load favorites. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('favoritesView.couldNotLoadFavoritesRefresh')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
-      <PageHeader title={t('favorites.familyFavorites')} description="The meals, recipes, and spots your family loves most."
+      <PageHeader title={t('favorites.familyFavorites')} description={t('favoritesView.theMealsRecipesAndSpots')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('favorites.addFavorite')}</Button>} />
 
       {/* Filter chips */}
@@ -64,7 +64,7 @@ export function FavoritesView() {
       </div>
 
       {loading ? <SkeletonList /> : favorites.length === 0 ? (
-        <EmptyState icon={Heart} title={t('favorites.noFavoritesYet')} description="Save the recipes, restaurants, and meals your family loves."
+        <EmptyState icon={Heart} title={t('favorites.noFavoritesYet')} description={t('favoritesView.saveTheRecipesRestaurantsAnd')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('favorites.addFavorite')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -80,7 +80,7 @@ export function FavoritesView() {
                       <p className="text-xs text-muted">{meta.label}</p>
                     </div>
                   </div>
-                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('favoritesView.remove')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 {f.rating != null && (
                   <div className="mt-2 flex gap-0.5">
@@ -88,7 +88,7 @@ export function FavoritesView() {
                   </div>
                 )}
                 {f.notes && <p className="mt-2 text-sm text-muted">{f.notes}</p>}
-                {f.ref_url && <a href={f.ref_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><ExternalLink className="h-3.5 w-3.5" /> Open</a>}
+                {f.ref_url && <a href={f.ref_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><ExternalLink className="h-3.5 w-3.5" />{' '}{t('favoritesView.open')}</a>}
               </div>
             );
           })}
@@ -114,7 +114,7 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim()) return toastError('Add a name');
+    if (!v.name.trim()) return toastError(t('favoritesView.addAName'));
     setSaving(true);
     const { error } = await createClient().from('family_favorites').insert({
       family_id: familyId, member_id: memberId, kind: v.kind, name: v.name.trim(),
@@ -123,20 +123,20 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Favorite added');
+    success(t('favoritesView.favoriteAdded'));
     onClose();
   }
 
   return (
     <Modal open onClose={onClose} title={t('favorites.addFavorite')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('favorites.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Grandma's lasagna" required autoFocus />}</Field>
+        <Field label={t('favorites.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('favoritesView.grandmaSLasagna')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('favorites.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{KINDS.map((k) => <option key={k} value={k}>{FAVORITE_KIND_META[k].label}</option>)}</Select>}</Field>
-          <Field label={t('favorites.rating')} hint="Optional">{(id) => <Select id={id} value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })}><option value="">—</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)}</option>)}</Select>}</Field>
+          <Field label={t('favorites.rating')} hint={t('favoritesView.optional')}>{(id) => <Select id={id} value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })}><option value="">—</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)}</option>)}</Select>}</Field>
         </div>
-        <Field label={t('favorites.link')} hint="Optional">{(id) => <Input id={id} value={v.ref_url} onChange={(e) => setV({ ...v, ref_url: e.target.value })} placeholder="https://…" />}</Field>
-        <Field label={t('favorites.notes')} hint="Optional">{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder="Why the family loves it…" />}</Field>
+        <Field label={t('favorites.link')} hint={t('favoritesView.optional')}>{(id) => <Input id={id} value={v.ref_url} onChange={(e) => setV({ ...v, ref_url: e.target.value })} placeholder="https://…" />}</Field>
+        <Field label={t('favorites.notes')} hint={t('favoritesView.optional')}>{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder={t('favoritesView.whyTheFamilyLovesIt')} />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('favorites.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.name.trim()}>Add</Button>

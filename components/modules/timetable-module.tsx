@@ -87,8 +87,8 @@ export function TimetableModule() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.member_id) { toastError('Pick a family member'); return; }
-    if (!form.subject.trim()) { toastError('Subject is required'); return; }
+    if (!form.member_id) { toastError(t('timetableModule.pickAFamilyMember')); return; }
+    if (!form.subject.trim()) { toastError(t('timetableModule.subjectIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -112,8 +112,8 @@ export function TimetableModule() {
     if (!confirm(`Remove ${c.subject} from the timetable?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('school_classes').delete().eq('id', c.id);
-    if (err) { toastError('Failed to remove class'); return; }
-    success('Class removed');
+    if (err) { toastError(t('timetableModule.failedToRemoveClass')); return; }
+    success(t('timetableModule.classRemoved'));
     refresh();
   }
 
@@ -126,7 +126,7 @@ export function TimetableModule() {
     <div>
       <PageHeader
         title={t('timetable.timetable')}
-        description="A visual Mon–Fri class schedule for every student — with alternating A/B week support for rotating timetables."
+        description={t('timetableModule.aVisualMonFriClass')}
         action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button></div>}
       />
 
@@ -155,7 +155,7 @@ export function TimetableModule() {
 
       {totalShown === 0 ? (
         <EmptyState icon={CalendarRange} title={t('timetable.noClassesScheduled')}
-          description="Add classes with a day and time to build a visual weekly timetable. Use A/B week patterns for rotating schedules."
+          description={t('timetableModule.addClassesWithADay')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('timetable.addClass')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">

@@ -37,7 +37,7 @@ export function SurveyControls({ id, status, publicUrl }: { id: string; status: 
         {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy share link'}
       </button>
       <button
-        onClick={() => { if (confirm('Delete this survey and its responses?')) start(async () => { await deleteSurveyAction(id); }); }}
+        onClick={() => { if (confirm(t('surveyControls.deleteThisSurveyAndIts'))) start(async () => { await deleteSurveyAction(id); }); }}
         disabled={pending}
         className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-muted hover:text-danger"
       >

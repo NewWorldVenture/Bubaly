@@ -117,15 +117,16 @@ export default async function AnalyticsPage() {
   );
 }
 
-function MarketingAnalyticsReadError() {
+async function MarketingAnalyticsReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Analytics</h1>
-        <p className="mt-1 text-sm text-muted">Live customer, campaign, and email performance metrics.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('analytics.marketingAnalytics')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('analytics.liveCustomerCampaignAndEmail')}</p>
       </div>
-      <ErrorState message="Could not load marketing analytics from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/analytics" className="text-sm font-medium text-brand-text underline">Refresh analytics</a>
+      <ErrorState message={tr('analytics.couldNotLoadMarketingAnalytics')} />
+      <a href="/admin/marketing/analytics" className="text-sm font-medium text-brand-text underline">{tr('analytics.refreshAnalytics')}</a>
     </div>
   );
 }

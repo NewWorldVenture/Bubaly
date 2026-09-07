@@ -40,8 +40,8 @@ export function PhotoUpload({
   const [showPaste, setShowPaste] = useState(false);
 
   async function handleFile(file: File) {
-    if (!OK_TYPES.includes(file.type)) { toastError('Please choose a JPEG, PNG, WebP, GIF or AVIF image.'); return; }
-    if (file.size > MAX_BYTES) { toastError('That image is over 10 MB — pick a smaller one.'); return; }
+    if (!OK_TYPES.includes(file.type)) { toastError(t('photoUpload.pleaseChooseAJpegPng')); return; }
+    if (file.size > MAX_BYTES) { toastError(t('photoUpload.thatImageIsOver10')); return; }
     setUploading(true);
     try {
       const sb = createClient();
@@ -51,19 +51,19 @@ export function PhotoUpload({
         : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const path = `${userId}/${unique}.${ext}`;
       const { data, error } = await sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (error) { toastError('Upload failed. Please try again.'); return; }
+      if (error) { toastError(t('photoUpload.uploadFailedPleaseTryAgain')); return; }
       // Delete a previously-uploaded object we're replacing.
       const previousPath = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) {
         const { error: removeError } = await removeMarketplacePhotoPath(sb, previousPath);
-        if (removeError) toastError('The previous photo could not be cleaned up.');
+        if (removeError) toastError(t('photoUpload.thePreviousPhotoCouldNot'));
       }
       const { data: pub } = sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).getPublicUrl(data.path);
       setOwnedPath(data.path);
       onOwnedPathChange?.(data.path);
       onChange(pub.publicUrl);
     } catch {
-      toastError('Upload failed. Please try again.');
+      toastError(t('photoUpload.uploadFailedPleaseTryAgain'));
     } finally {
       setUploading(false);
     }
@@ -73,7 +73,7 @@ export function PhotoUpload({
     const path = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (path) {
       const { error } = await removeMarketplacePhotoPath(createClient(), path);
-      if (error) { toastError('The photo could not be removed.'); return; }
+      if (error) { toastError(t('photoUpload.thePhotoCouldNotBe')); return; }
     }
     setOwnedPath(null);
     onOwnedPathChange?.(null);

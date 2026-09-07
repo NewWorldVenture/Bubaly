@@ -116,7 +116,7 @@ export function QuickAdd({
                 </select>
               ) : f.type === 'member' ? (
                 <select id={id} name={f.name} required={f.required} defaultValue="" className={base}>
-                  <option value="">Whole family</option>
+                  <option value="">{t('quickAdd.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </select>
               ) : f.type === 'checkbox' ? (

@@ -56,9 +56,9 @@ export default async function OnboardingFunnelPage() {
 
       <SectionCard title={t('dashboardOnboardingFunnel.stepByStepFunnel')}>
         {funnelError ? (
-          <MiniError text="Couldn’t load onboarding telemetry. Refresh to try again." />
+          <MiniError text={t('onboardingFunnel.couldnTLoadOnboardingTelemetry')} />
         ) : funnel.startedSessions === 0 ? (
-          <MiniEmpty icon={Activity} text="No onboarding activity yet." />
+          <MiniEmpty icon={Activity} text={t('onboardingFunnel.noOnboardingActivityYet')} />
         ) : (
           <ul className="space-y-3">
             {funnel.steps.map((s) => (
@@ -68,8 +68,7 @@ export default async function OnboardingFunnelPage() {
                     {s.label}
                     {s.key === funnel.biggestDropStep && (
                       <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300">
-                        <TrendingDown className="size-3" /> biggest drop
-                      </span>
+                        <TrendingDown className="size-3" />{' '}{t('onboardingFunnel.biggestDrop')}</span>
                     )}
                   </span>
                   <span className="text-muted">
@@ -102,9 +101,9 @@ export default async function OnboardingFunnelPage() {
 
       <SectionCard title={t('dashboardOnboardingFunnel.timeToFirstValue')}>
         {actError ? (
-          <MiniError text="Couldn’t load activation telemetry. Refresh to try again." />
+          <MiniError text={t('onboardingFunnel.couldnTLoadActivationTelemetry')} />
         ) : activation.cohorts === 0 ? (
-          <MiniEmpty icon={Rocket} text="No activation events yet — value milestones fire once a family views an outcome, briefing, or imports a calendar." />
+          <MiniEmpty icon={Rocket} text={t('onboardingFunnel.noActivationEventsYetValue')} />
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

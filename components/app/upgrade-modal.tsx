@@ -14,8 +14,14 @@ import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-/** Stripe checkout — same endpoint the billing module uses. */
-async function startCheckout(plan: StripePlan): Promise<string | null> {
+/**
+ * Stripe checkout — same endpoint the billing module uses.
+ *
+ * Takes the translator as an ARGUMENT rather than calling `useTranslations()`.
+ * This is module scope, not a component, so a hook here is a rules-of-hooks
+ * violation — and it is one that only lint and `next build` report, never tsc.
+ */
+async function startCheckout(plan: StripePlan, t: (key: string) => string): Promise<string | null> {
   const res = await fetch('/api/billing/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,7 +29,7 @@ async function startCheckout(plan: StripePlan): Promise<string | null> {
   });
   const json = (await res.json()) as { url?: string; error?: string };
   if (json.url) return json.url;
-  throw new Error(json.error ?? 'Could not start checkout');
+  throw new Error(json.error ?? t('upgradeModal.couldNotStartCheckout'));
 }
 
 const dollars = (cents: number) =>
@@ -75,11 +81,11 @@ export function UpgradeModal({
   async function checkout(stripePlan: StripePlan) {
     setPending(stripePlan);
     try {
-      const url = await startCheckout(stripePlan);
+      const url = await startCheckout(stripePlan, t);
       if (url) window.location.href = url;
     } catch (err) {
       setPending(null);
-      toastError(describeDbError(err, 'Could not start checkout'));
+      toastError(describeDbError(err, t('upgradeModal.couldNotStartCheckout')));
     }
   }
 

@@ -227,8 +227,8 @@ export function CalendarModule() {
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
     const params = new URLSearchParams(window.location.search);
-    if (params.get('gcal') === 'connected') { success('Google Calendar connected!'); window.history.replaceState({}, '', window.location.pathname); }
-    else if (params.get('gcal') === 'error') { toastError('Google Calendar connection failed.'); window.history.replaceState({}, '', window.location.pathname); }
+    if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
+    else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount
@@ -330,7 +330,7 @@ export function CalendarModule() {
       const json = await res.json() as { synced?: number; error?: string };
       if (json.error) throw new Error(json.error);
       success(`Synced ${json.synced} events`); void refresh();
-    } catch (err) { toastError(describeDbError(err, 'Sync failed')); }
+    } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }
 
@@ -427,7 +427,7 @@ export function CalendarModule() {
         <div className="module-page flex-shrink-0 border-b border-border">
           <PageHeader
             title={tr('calendar.calendar')}
-            description="Stay on top of your family's schedule."
+            description={tr('calendarModule.stayOnTopOfYour')}
             action={
               <div className="flex items-center gap-2">
                 {gcalConnected === false && (

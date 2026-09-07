@@ -59,8 +59,8 @@ export function CommunityModule({
     });
 
   const copyCode = async (c: string) => {
-    try { await navigator.clipboard.writeText(formatJoinCode(c)); success('Invite code copied'); }
-    catch { toastError('Could not copy'); }
+    try { await navigator.clipboard.writeText(formatJoinCode(c)); success(t('communityModule.inviteCodeCopied')); }
+    catch { toastError(t('communityModule.couldNotCopy')); }
   };
 
   return (
@@ -69,10 +69,7 @@ export function CommunityModule({
         <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
           <Users className="h-6 w-6 text-brand-text" /> {t('community.communityCircles')}
         </h1>
-        <p className="mt-1 max-w-xl text-sm text-muted">
-          Share listings beyond your household — the class, the team, the street.
-          Only what a family chooses to share is visible, and only inside that circle.
-        </p>
+        <p className="mt-1 max-w-xl text-sm text-muted">{t('communityModule.shareListingsBeyondYourHousehold')}</p>
       </header>
 
       {readWarnings.length > 0 && (
@@ -235,14 +232,14 @@ export function CommunityModule({
                   </p>
                   <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                      {f.isMine ? 'Shared by your family' : <>From <span className="font-semibold text-fg">{f.fromFamily}</span> — message them to arrange it</>}
+                      {f.isMine ? t('communityModule.sharedByYourFamily') : <>{t('communityModule.from')}{' '}<span className="font-semibold text-fg">{f.fromFamily}</span>{' '}{t('communityModule.messageThemToArrangeIt')}</>}
                     </p>
                     {f.isMine && (
                       <button
                         type="button"
                         onClick={() => run(() => unshareListingAction(f.listing.id, f.circleId), 'Removed from the circle')}
                         disabled={pending}
-                        title="Stop sharing"
+                        title={t('communityModule.stopSharing')}
                         className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted transition hover:text-rose-400 disabled:opacity-50"
                       >
                         <X className="h-3.5 w-3.5" />

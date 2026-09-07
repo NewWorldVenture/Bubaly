@@ -1,3 +1,4 @@
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -11,8 +12,8 @@ const migration = readFileSync(resolve(root, 'supabase/migrations/0182_stripe_we
 describe('Stripe webhook replay contract', () => {
   it('bounds payloads and fails closed when the billing webhook is not configured', () => {
     expect(stripeRoute).toContain('MAX_WEBHOOK_BODY_BYTES = 256_000');
-    expect(stripeRoute).toContain("Webhook not configured");
-    expect(stripeRoute).toContain("Webhook storage unavailable");
+    expectTranslates(stripeRoute, 'stripe.webhookNotConfigured', "Webhook not configured");
+    expectTranslates(stripeRoute, 'stripe.webhookStorageUnavailable', "Webhook storage unavailable");
     expect(moneyRoute).toContain('MAX_WEBHOOK_BODY_BYTES = 256_000');
   });
 

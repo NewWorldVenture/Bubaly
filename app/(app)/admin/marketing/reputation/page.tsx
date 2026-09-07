@@ -116,7 +116,7 @@ export default async function ReputationPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteCaseStudyAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{tr('reputation.delete')}</button>
                       </form>
                     </td>
                   </tr>
@@ -130,15 +130,16 @@ export default async function ReputationPage() {
   );
 }
 
-function AdminReputationReadError() {
+async function AdminReputationReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reputation &amp; Trust</h1>
-        <p className="mt-1 text-sm text-muted">Manage testimonials and case studies used across the site.</p>
+        <p className="mt-1 text-sm text-muted">{tr('reputation.manageTestimonialsAndCaseStudies')}</p>
       </div>
-      <ErrorState message="Could not load reputation content from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/reputation" className="text-sm font-medium text-brand-text underline">Refresh reputation</Link>
+      <ErrorState message={tr('reputation.couldNotLoadReputationContent')} />
+      <Link href="/admin/marketing/reputation" className="text-sm font-medium text-brand-text underline">{tr('reputation.refreshReputation')}</Link>
     </div>
   );
 }

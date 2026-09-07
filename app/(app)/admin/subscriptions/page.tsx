@@ -11,7 +11,7 @@ import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Subscriptions', robots: { index: false } };
+export const metadata: Metadata = { title: 'subscriptions.subscriptions', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const TABS = [
@@ -23,7 +23,8 @@ type TabKey = (typeof TABS)[number]['key'];
 
 type Params = { searchParams: Promise<{ tab?: string }> };
 
-function PlanDonut({ counts, total }: { counts: Map<string, number>; total: number }) {
+async function PlanDonut({ counts, total }: { counts: Map<string, number>; total: number }) {
+  const tr = await getTranslations();
   const colors = ['#94a3b8', '#a78bfa', '#fbbf24'];
   const circ = 2 * Math.PI * 40;
   let offset = 0;
@@ -47,7 +48,7 @@ function PlanDonut({ counts, total }: { counts: Map<string, number>; total: numb
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-lg font-black">{total.toLocaleString()}</span>
-          <span className="text-[9px] text-muted">Total</span>
+          <span className="text-[9px] text-muted">{tr('subscriptions.total')}</span>
         </div>
       </div>
       <ul className="flex-1 space-y-1.5 text-sm">
@@ -123,7 +124,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
         };
       });
     } catch (err) {
-      stripeError = describeDbError(err, 'Stripe is not configured');
+      stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
   }
 
@@ -149,14 +150,14 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
               <Card key={p.id} className={p.featured ? 'ring-2 ring-brand' : undefined}>
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold">{p.name}</h3>
-                  {p.featured && <Badge tone="brand">Popular</Badge>}
+                  {p.featured && <Badge tone="brand">{tr('subscriptions.popular')}</Badge>}
                 </div>
                 <p className="mt-1 text-xs text-muted">{p.tagline}</p>
                 <p className="mt-3 text-2xl font-bold">{p.priceMonthly === 0 ? 'Free' : fmtMoney(p.priceMonthly)}<span className="text-sm font-normal text-muted">{p.priceMonthly > 0 && '/mo'}</span></p>
                 <p className="mt-1 text-xs text-muted">{p.seats === 'Unlimited' ? 'Unlimited members' : `Up to ${p.seats} members`}</p>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
                   <span className="text-sm font-medium">{(countsByPlan.get(p.id) ?? 0).toLocaleString()} active</span>
-                  <a href={`/admin/users?tab=all&plan=${p.id}`} className="text-xs font-medium text-brand-text hover:underline">View subscribers →</a>
+                  <a href={`/admin/users?tab=all&plan=${p.id}`} className="text-xs font-medium text-brand-text hover:underline">{tr('subscriptions.viewSubscribers')}</a>
                 </div>
               </Card>
             ))}
@@ -256,8 +257,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                   <span className="font-medium">{fmtMoney(inv.amountPaid)}</span>
                   <span className="text-xs text-muted">{fmtDate(new Date(inv.created * 1000).toISOString(), 'MMM d, yyyy')}</span>
                   {inv.hostedUrl && (
-                    <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
-                      View <ExternalLink className="h-3.5 w-3.5" />
+                    <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">{tr('subscriptions.view')}{' '}<ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
                 </li>
@@ -270,15 +270,16 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
   );
 }
 
-function AdminSubscriptionsReadError({ tab }: { tab: TabKey }) {
+async function AdminSubscriptionsReadError({ tab }: { tab: TabKey }) {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Subscriptions</h1>
-        <p className="mt-1 text-sm text-muted">Manage subscription plans, pricing, and customer subscriptions.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('subscriptions.subscriptions')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('subscriptions.manageSubscriptionPlansPricingAnd')}</p>
       </div>
-      <ErrorState message="Could not load subscription data from Supabase. Refresh and try again." />
-      <a href={`/admin/subscriptions?tab=${tab}`} className="text-sm font-medium text-brand-text underline">Refresh subscriptions</a>
+      <ErrorState message={tr('subscriptions.couldNotLoadSubscriptionData')} />
+      <a href={`/admin/subscriptions?tab=${tab}`} className="text-sm font-medium text-brand-text underline">{tr('subscriptions.refreshSubscriptions')}</a>
     </div>
   );
 }

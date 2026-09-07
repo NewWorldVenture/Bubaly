@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/playbook/page.tsx', 'utf8');
@@ -9,7 +10,7 @@ describe('playbook reasoning read boundary', () => {
     expect(page).toContain("console.error('[dashboard/playbook] reasoning context read failed'");
     expect(page).toContain("import { ErrorState } from '@/components/ui/states';");
     expect(page).toContain('{reasoningError && (');
-    expect(page).toContain('Relationship insights are temporarily unavailable from Supabase. Refresh and try again.');
+    expectSays(page, 'playbook.relationshipInsightsAreTemporarilyUnavailable', 'Relationship insights are temporarily unavailable from Supabase. Refresh and try again.');
     expect(page).toContain('<PlaybookModule />');
     expect(page).not.toContain('loadFamilyContext(supabase, ctx.active.familyId).catch(() => null)');
   });

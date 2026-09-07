@@ -28,9 +28,7 @@ export default async function AdsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
-        Plan paid campaigns and track budget/spend. Performance (spend, impressions, conversions) is entered manually or imported from the ad platform — never fabricated.
-      </div>
+      <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">{t('ads.planPaidCampaignsAndTrack')}</div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card><p className="text-xs text-muted">{t('adminMarketingAds.campaigns')}</p><p className="text-2xl font-bold">{(ads ?? []).length}</p></Card>
@@ -41,7 +39,7 @@ export default async function AdsPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
           {(ads ?? []).length === 0 ? (
-            <EmptyState icon={Target} title={t('adminMarketingAds.noAdCampaignsYet')} description="Plan your first ad campaign on the right." />
+            <EmptyState icon={Target} title={t('adminMarketingAds.noAdCampaignsYet')} description={t('ads.planYourFirstAdCampaign')} />
           ) : (
             (ads ?? []).map((a) => (
               <Card key={a.id} className="flex items-center justify-between gap-3">
@@ -75,15 +73,16 @@ export default async function AdsPage() {
   );
 }
 
-function AdminAdsReadError() {
+async function AdminAdsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Advertising</h1>
-        <p className="mt-1 text-sm text-muted">Plan paid campaigns and track budget and spend.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('ads.advertising')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('ads.planPaidCampaignsAndTrack2')}</p>
       </div>
-      <ErrorState message="Could not load advertising campaigns from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/ads" className="text-sm font-medium text-brand-text underline">Refresh advertising</a>
+      <ErrorState message={t('ads.couldNotLoadAdvertisingCampaigns')} />
+      <a href="/admin/marketing/ads" className="text-sm font-medium text-brand-text underline">{t('ads.refreshAdvertising')}</a>
     </div>
   );
 }

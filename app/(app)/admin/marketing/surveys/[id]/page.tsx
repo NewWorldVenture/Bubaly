@@ -107,7 +107,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       <Card>
         <h3 className="mb-3 text-sm font-semibold">{t('adminMarketingSurveys.responses')}</h3>
         {rows.length === 0 ? (
-          <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description="Share the link above to start collecting feedback." />
+          <EmptyState icon={MessagesSquare} title={t('adminMarketingSurveys.noResponsesYet')} description={t('surveys.shareTheLinkAboveTo')} />
         ) : (
           <div className="space-y-2">
             {rows.slice(0, 100).map((r) => (
@@ -126,15 +126,16 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
   );
 }
 
-function SurveyDetailReadError() {
+async function SurveyDetailReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Survey</h1>
-        <p className="mt-1 text-sm text-muted">Review survey configuration and responses.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('surveys.survey')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('surveys.reviewSurveyConfigurationAndResponses')}</p>
       </div>
-      <ErrorState message="Could not load this survey from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">Back to surveys</Link>
+      <ErrorState message={t('surveys.couldNotLoadThisSurvey')} />
+      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">{t('surveys.backToSurveys')}</Link>
     </div>
   );
 }

@@ -99,7 +99,7 @@ export function ContactsModule() {
     return run(`delete:${id}`, async () => {
       const { error: err } = await createClient().from('family_contacts').delete().eq('id', id);
       if (err) throw err;
-      success('Contact deleted');
+      success(t('contactsModule.contactDeleted'));
       void refresh();
       if (selected?.id === id) setSelected(null);
     });
@@ -120,7 +120,7 @@ export function ContactsModule() {
     <div className="module-page">
       <PageHeader
         title={t('contacts.familyContacts')}
-        description="Your family's people — doctors, teachers, coaches, and everyone else who matters."
+        description={t('contactsModule.yourFamilySPeopleDoctors')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="contacts" iconOnly />
@@ -365,7 +365,7 @@ export function ContactsModule() {
                 <Button variant="ghost" size="sm" onClick={() => setEditing(selected)}>
                   <Edit2 className="h-4 w-4" /> {t('contacts.edit')}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm('Delete this contact?')) deleteContact(selected.id); }}>
+                <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm(t('contactsModule.deleteThisContact'))) deleteContact(selected.id); }}>
                   <Trash2 className="h-4 w-4 text-danger" />
                   <span className="text-danger">{isPending(`delete:${selected.id}`) ? 'Deleting…' : 'Delete'}</span>
                 </Button>
@@ -416,12 +416,12 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
       birthday_day: form.get('birthday_day') ? Number(form.get('birthday_day')) : null,
     };
     // ── Validation ──
-    if (!payload.name) return toastError('Name is required');
+    if (!payload.name) return toastError(t('contactsModule.nameIsRequired'));
     if (payload.name.length > 120) return toastError('Name is too long (max 120 characters)');
     if (payload.email && !isValidEmail(payload.email)) return toastError('Enter a valid email address (e.g. name@example.com)');
-    if (payload.phone && !isValidPhone(payload.phone)) return toastError('Enter a valid phone number');
-    if (payload.phone_alt && !isValidPhone(payload.phone_alt)) return toastError('The alternate phone number looks invalid');
-    if (payload.birthday_day != null && (payload.birthday_day < 1 || payload.birthday_day > 31)) return toastError('Birthday day must be between 1 and 31');
+    if (payload.phone && !isValidPhone(payload.phone)) return toastError(t('contactsModule.enterAValidPhoneNumber'));
+    if (payload.phone_alt && !isValidPhone(payload.phone_alt)) return toastError(t('contactsModule.theAlternatePhoneNumberLooks'));
+    if (payload.birthday_day != null && (payload.birthday_day < 1 || payload.birthday_day > 31)) return toastError(t('contactsModule.birthdayDayMustBeBetween'));
 
     setLoading(true);
     try {
@@ -447,7 +447,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="name" defaultValue={contact?.name ?? ''} placeholder={t('contacts.janeSmith')} autoFocus />}
           </Field>
           <Field label={t('contacts.relationship')}>
-            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder="Mom's doctor, Emma's teacher…" />}
+            {(id) => <Input id={id} name="relationship" defaultValue={contact?.relationship ?? ''} placeholder={t('contactsModule.momSDoctorEmmaS')} />}
           </Field>
         </div>
 

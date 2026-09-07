@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
@@ -14,12 +15,13 @@ export async function createMealVote(input: {
   title: string; mealDate?: string | null; mealType?: string | null; allowMaybe?: boolean;
   options: { recipeId?: string | null; label: string; photoUrl?: string | null }[];
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const title = input.title.trim();
-  if (!title) return { ok: false, error: 'Give the vote a title.' };
+  if (!title) return { ok: false, error: t('actions.giveTheVoteATitle') };
   const options = input.options.filter((o) => o.label.trim()).slice(0, 12);
-  if (options.length < 2) return { ok: false, error: 'Add at least two options.' };
+  if (options.length < 2) return { ok: false, error: t('actions.addAtLeastTwoOptions') };
 
   const supabase = await createServer();
   const { data: vote, error } = await supabase.from('meal_votes').insert({
@@ -42,9 +44,10 @@ export async function createMealVote(input: {
 
 /** Cast (or change) the current member's vote on an option. */
 export async function castBallot(input: { voteId: string; optionId: string; choice: 'yes' | 'no' | 'maybe' }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const memberId = ctx.active.member?.id;
-  if (!memberId) return { ok: false, error: 'No family member profile found.' };
+  if (!memberId) return { ok: false, error: t('actions.noFamilyMemberProfileFound') };
   const supabase = await createServer();
   const { error } = await supabase.from('meal_vote_ballots').upsert({
     vote_id: input.voteId, option_id: input.optionId, family_id: ctx.active.familyId,
@@ -85,17 +88,18 @@ export async function reopenMealVote(voteId: string): Promise<Result> {
 
 /** Add the winning recipe's ingredients to a grocery list (create one if needed). */
 export async function addWinnerToGrocery(voteId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
   const { data: vote } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
-  if (!vote?.winner_option_id) return { ok: false, error: 'No winner yet — close the vote first.' };
+  if (!vote?.winner_option_id) return { ok: false, error: t('actions.noWinnerYetCloseThe') };
   const { data: option } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
-  if (!option?.recipe_id) return { ok: false, error: 'The winning option is not a saved recipe.' };
+  if (!option?.recipe_id) return { ok: false, error: t('actions.theWinningOptionIsNot') };
   const { data: recipe } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
   const ingredients = (recipe?.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [];
-  if (ingredients.length === 0) return { ok: false, error: 'That recipe has no ingredients.' };
+  if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
   // Get or create a default grocery list.
   const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false).order('created_at').limit(1).maybeSingle();

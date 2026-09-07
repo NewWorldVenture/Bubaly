@@ -45,7 +45,7 @@ export function GoalsModule() {
     return run(`delete:${id}`, async () => {
       const res = await deleteGoalAction(id);
       if (!res.ok) throw new Error(res.error);
-      success('Goal removed');
+      success(t('goalsModule.goalRemoved'));
       void refresh();
     });
   }
@@ -60,7 +60,7 @@ export function GoalsModule() {
       // that sent the two out of step desynchronised all three.
       const res = await setGoalProgressAction(goal.id, clamped);
       if (!res.ok) throw new Error(res.error);
-      if (isComplete) success('Goal completed! 🎉');
+      if (isComplete) success(t('goalsModule.goalCompleted'));
       void refresh();
     });
   }
@@ -77,12 +77,12 @@ export function GoalsModule() {
     <div className="module-page">
       <PageHeader
         title={t('goals.familyGoals')}
-        description="Set goals, track progress, and celebrate achievements together."
+        description={t('goalsModule.setGoalsTrackProgressAnd')}
         action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button></div>}
       />
 
       {data.length === 0 ? (
-        <EmptyState icon={Target} title={t('goals.noGoalsYet')} description="Set a family goal — save for a trip, read more books, exercise together."
+        <EmptyState icon={Target} title={t('goals.noGoalsYet')} description={t('goalsModule.setAFamilyGoalSave')}
           action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button>} />
       ) : (
         <>
@@ -195,11 +195,11 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
     if (loading) return;
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
-    if (!title) return toastError('Title is required');
+    if (!title) return toastError(t('goalsModule.titleIsRequired'));
     if (title.length > 120) return toastError('Title is too long (max 120 characters)');
     const targetDate = String(form.get('target_date') ?? '') || null;
     if (!goal && targetDate && new Date(targetDate) < new Date(new Date().toDateString())) {
-      return toastError('Pick a target date in the future.');
+      return toastError(t('goalsModule.pickATargetDateIn'));
     }
     setLoading(true);
     try {

@@ -48,8 +48,8 @@ export function RentalsClient({ rentals }: { rentals: Rental[] }) {
                 {r.total_cost != null && <p>Total ${Number(r.total_cost).toLocaleString()}</p>}
               </div>
               <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                <button onClick={() => { setEditing(r); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                <button onClick={() => start(async () => { await deleteRentalAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                <button onClick={() => { setEditing(r); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('rentalsClient.edit')}</button>
+                <button onClick={() => start(async () => { await deleteRentalAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('rentalsClient.delete')}</button>
               </div>
             </Card>
           ))}

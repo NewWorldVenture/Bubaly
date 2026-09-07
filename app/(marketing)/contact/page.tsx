@@ -23,7 +23,7 @@ export default async function ContactPage() {
   return (
     <>
     <Section className="pt-20">
-      <SectionHeading eyebrow="Contact" title={t('contact.wedLoveToHearFromYou')} description="Questions, feedback, or just saying hi — send us a note." />
+      <SectionHeading eyebrow="Contact" title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[
@@ -54,10 +54,7 @@ export default async function ContactPage() {
 
             {loggedIn ? (
               <>
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  You’re in — so unwrapping the good stuff is easy. Found a bug? Dreaming up a feature your
-                  family can’t live without? Send it our way. The best parts of Bubaly started as a note from a
-                  family just like yours, and we read <span className="font-semibold text-fg">{t('contact.everySingleOne')}</span>.
+                <p className="mt-3 text-sm leading-6 text-muted">{t('contact.youReInSoUnwrapping')}{' '}<span className="font-semibold text-fg">{t('contact.everySingleOne')}</span>.
                 </p>
                 <Link
                   href="/feedback"
@@ -68,11 +65,7 @@ export default async function ContactPage() {
               </>
             ) : (
               <>
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  Big idea, tiny nitpick, or a feature you’re quietly wishing for? We treasure them all. Log in to
-                  drop your enhancement requests straight into our roadmap — every gift gets unwrapped, and the best
-                  ones shape what we build next.
-                </p>
+                <p className="mt-3 text-sm leading-6 text-muted">{t('contact.bigIdeaTinyNitpickOr')}</p>
                 {/* Same primary CTA as the logged-in state, but gated: logged-out
                     visitors are sent to log in first and returned to /feedback
                     afterwards (login-form honours ?redirect=). */}
@@ -90,7 +83,7 @@ export default async function ContactPage() {
         <ContactForm />
       </div>
     </Section>
-    <MarketingAeoSection path="/contact" name="Contact Bubaly" description="Get in touch with the Bubaly team for questions, feedback, or support." />
+    <MarketingAeoSection path="/contact" name="Contact Bubaly" description={t('contact.getInTouchWithThe')} />
     </>
   );
 }

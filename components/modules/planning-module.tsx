@@ -67,7 +67,7 @@ export function PlanningModule() {
     const res = await generatePrepPlansAction();
     setGenerating(false);
     if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
-    if (res.plans === 0) { toastError('Nothing on the horizon yet — add a trip, birthday, or document date.'); return; }
+    if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
     success(`${res.plans} prep ${res.plans === 1 ? 'plan' : 'plans'} ready`);
   }
 
@@ -80,29 +80,26 @@ export function PlanningModule() {
     const sb = createClient();
     const { error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Plan dismissed');
+    success(t('planningModule.planDismissed'));
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('planning.prepPlans')}
-        description="The AI looks ahead and prepares — coordinated, timed plans for what's coming, so nothing is a last-minute scramble."
+        description={t('planningModule.theAiLooksAheadAnd')}
         action={<Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>}
       />
 
       {loading ? (
         <SkeletonList count={4} />
       ) : error ? (
-        <ErrorState message="Could not load prep plans. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('planningModule.couldNotLoadPrepPlans')} onRetry={refresh} />
       ) : (plans ?? []).length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <CalendarClock className="mx-auto mb-3 size-8 text-muted" />
           <h3 className="mb-1 text-base font-semibold">{t('planning.nothingToPrepYet')}</h3>
-          <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-            Add a trip, a birthday, or a document with an expiry date, then generate plans. The
-            assistant works backward from each date into timed, ordered steps.
-          </p>
+          <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('planningModule.addATripABirthday')}</p>
           <Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>
         </div>
       ) : (

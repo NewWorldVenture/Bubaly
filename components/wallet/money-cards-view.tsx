@@ -45,6 +45,7 @@ export function MoneyCardsView({
   justCompletedSetup?: boolean;
   childWallets: CardChild[]; cards: IssuedCard[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -84,7 +85,7 @@ export function MoneyCardsView({
     const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Virtual card created!');
+    success(t('moneyCardsView.virtualCardCreated'));
     router.refresh();
   }
 
@@ -112,7 +113,7 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title={tr('moneyCards.cards')} description="Spending cards are not enabled for this family yet." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.spendingCardsAreNotEnabled')} />
         <div className="mt-4 rounded-2xl border border-border bg-surface/40 p-6">
           <EmptyState
             icon={CreditCard}
@@ -129,7 +130,7 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title={tr('moneyCards.cards')} description="Set up safe spending cards for your kids in 3 quick steps." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.setUpSafeSpendingCards')} />
 
         {/* Progress steps */}
         <div className="mt-4 mb-6">
@@ -185,7 +186,7 @@ export function MoneyCardsView({
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title={tr('moneyCards.cards')} description="Kid-safe spending cards — each purchase checks the Spend balance in real time." />
+      <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.kidSafeSpendingCardsEach')} />
 
       {/* Setup success banner */}
       {showSetupSuccess && (
@@ -214,7 +215,7 @@ export function MoneyCardsView({
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={CreditCard} title={tr('moneyCards.noChildWallets')} description="Add child members to issue cards." />
+        <EmptyState icon={CreditCard} title={tr('moneyCards.noChildWallets')} description={t('moneyCardsView.addChildMembersToIssue')} />
       ) : (
         <div className="space-y-4">
           {childWallets.map((child) => {
@@ -245,8 +246,7 @@ export function MoneyCardsView({
                           type="button" onClick={() => { setOrderingCard(child); setIssueType('physical'); }}
                           className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition"
                         >
-                          <Package className="h-3.5 w-3.5" /> Physical
-                        </button>
+                          <Package className="h-3.5 w-3.5" />{' '}{t('moneyCardsView.physical')}</button>
                       )}
                     </div>
                   )}
@@ -254,7 +254,7 @@ export function MoneyCardsView({
 
                 {/* Cards list */}
                 {childCards.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-muted">No card yet — use the buttons above to issue one.</div>
+                  <div className="px-4 py-3 text-sm text-muted">{t('moneyCardsView.noCardYetUseThe')}</div>
                 ) : (
                   <div className="divide-y divide-border/30">
                     {childCards.map((card) => (
@@ -330,6 +330,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   return (
     <div className="px-4 py-3">
@@ -344,7 +345,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
-            {card.brand ?? (card.type === 'physical' ? 'Physical' : 'Virtual')} card
+            {card.brand ?? (card.type === 'physical' ? t('moneyCardsView.physical') : 'Virtual')} card
             {card.last4 && <span className="font-normal text-muted"> ···· {card.last4}</span>}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted">
@@ -387,6 +388,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 function PhysicalCardModal({ child, onClose, onIssued }: {
   child: CardChild; onClose: () => void; onIssued: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -433,7 +435,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
             <div className="flex items-center gap-1.5">
               <span className="text-muted">$</span>
               <Input id={id} type="number" min="1" step="1" value={limitDollars}
-                onChange={(e) => setLimitDollars(e.target.value)} placeholder="No limit" />
+                onChange={(e) => setLimitDollars(e.target.value)} placeholder={t('moneyCardsView.noLimit')} />
             </div>
           )}
         </Field>
@@ -456,6 +458,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 // ─── Card Controls Editor ─────────────────────────────────────────────────────
 
 function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [limitDollars, setLimitDollars] = useState(card.spendLimitCents != null ? String(card.spendLimitCents / 100) : '');
@@ -473,12 +476,12 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
     const spendLimitCents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
     if (spendLimitCents != null && (!Number.isFinite(spendLimitCents) || spendLimitCents <= 0)) {
       setSaving(false);
-      return toastError('Enter a valid limit, or leave it blank for no limit.');
+      return toastError(t('moneyCardsView.enterAValidLimitOr'));
     }
     const res = await updateCardControlsAction({ cardId: card.id, spendLimitCents, spendWindow: windowVal, blockedCategories: blocked });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save controls.');
-    success('Controls saved');
+    success(t('moneyCardsView.controlsSaved'));
     onSaved();
   }
 

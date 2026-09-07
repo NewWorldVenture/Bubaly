@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -14,12 +15,13 @@ const MAX_AB_REQUEST_BYTES = 4_096;
  * policies). Deduped per visitor by a unique index, so double-fires are no-ops.
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `ab:${ip}`, { limit: 60 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('track.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -39,9 +41,9 @@ export async function POST(req: NextRequest) {
   const variant = (body.variant ?? '').trim();
   const kind = body.kind === 'conversion' ? 'conversion' : 'exposure';
   const visitorId = (body.visitorId ?? '').trim() || null;
-  if (!experiment || !variant) return NextResponse.json({ error: 'experiment and variant are required' }, { status: 422 });
+  if (!experiment || !variant) return NextResponse.json({ error: t('track.experimentAndVariantAreRequired') }, { status: 422 });
   if (experiment.length > 100 || variant.length > 100 || (visitorId && visitorId.length > 200)) {
-    return NextResponse.json({ error: 'Identifier is too long' }, { status: 422 });
+    return NextResponse.json({ error: t('track.identifierIsTooLong') }, { status: 422 });
   }
 
   // Only record for experiments that are actually running.
@@ -53,14 +55,14 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!exp || exp.status !== 'running') return NextResponse.json({ ok: true, recorded: false });
   if (!hasConfiguredVariant(exp.variants, variant)) {
-    return NextResponse.json({ error: 'Unknown experiment variant' }, { status: 422 });
+    return NextResponse.json({ error: t('track.unknownExperimentVariant') }, { status: 422 });
   }
 
   // Insert; ignore unique-violation dupes (one exposure/conversion per visitor).
   const { error } = await supabase.from('ab_events').insert({ experiment_key: experiment, variant_key: variant, kind, visitor_id: visitorId });
   if (error && error.code !== '23505') {
     console.error('A/B event recording failed:', error);
-    return NextResponse.json({ error: 'Could not record the experiment event.' }, { status: 500 });
+    return NextResponse.json({ error: t('track.couldNotRecordTheExperiment') }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, recorded: true });

@@ -49,7 +49,7 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
     <div className="mx-auto w-full max-w-2xl">
       <PageHeader
         title={t('calm.calm')}
-        description="One quiet inbox. Only what needs you — everything else is handled in the background."
+        description={t('calmModule.oneQuietInboxOnlyWhat')}
       />
 
       {/* Daily digest */}

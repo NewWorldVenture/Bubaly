@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { LADDER } from '@/lib/independence/progression';
@@ -9,11 +10,12 @@ type Result = { ok: true } | { ok: false; error: string };
 
 /** Add a ladder milestone to a child's track (status 'in_progress'). */
 export async function startMilestoneAction(memberId: string, title: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const m = LADDER.find(l => l.title === title);
-  if (!m) return { ok: false, error: 'Unknown milestone.' };
+  if (!m) return { ok: false, error: t('actions.unknownMilestone') };
 
   const { error } = await supabase.from('independence_milestones').upsert({
     family_id: ctx.active.familyId,

@@ -68,11 +68,11 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
                   <div className="flex gap-1.5">
                     {closed ? (
                       <>
-                        <button onClick={() => act(() => addWinnerToGrocery(v.id), 'Added to grocery list')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" /> Grocery</button>
-                        <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" /> Reopen</button>
+                        <button onClick={() => act(() => addWinnerToGrocery(v.id), 'Added to grocery list')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" />{' '}{tr('voteClient.grocery')}</button>
+                        <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" />{' '}{tr('voteClient.reopen')}</button>
                       </>
                     ) : (
-                      <button onClick={() => act(() => closeMealVote(v.id), 'Vote closed')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white"><Lock className="h-3.5 w-3.5" /> Close & pick winner</button>
+                      <button onClick={() => act(() => closeMealVote(v.id), 'Vote closed')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white"><Lock className="h-3.5 w-3.5" />{' '}{tr('voteClient.closePickWinner')}</button>
                     )}
                   </div>
                 </div>
@@ -132,12 +132,12 @@ function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose:
     const options: { recipeId: string | null; label: string; photoUrl: string | null }[] =
       recipes.filter((r) => picked[r.id]).map((r) => ({ recipeId: r.id, label: r.name, photoUrl: r.photoUrl }));
     for (const line of extra.split('\n').map((s) => s.trim()).filter(Boolean)) options.push({ recipeId: null, label: line, photoUrl: null });
-    if (!title.trim()) return toastError('Add a title.');
-    if (options.length < 2) return toastError('Pick at least two options.');
+    if (!title.trim()) return toastError(tr('voteClient.addATitle'));
+    if (options.length < 2) return toastError(tr('voteClient.pickAtLeastTwoOptions'));
     setSaving(true);
     const res = await createMealVote({ title, mealDate: mealDate || null, options });
     setSaving(false);
-    if (res.ok) { success('Vote created'); onClose(); } else toastError(res.error);
+    if (res.ok) { success(tr('voteClient.voteCreated')); onClose(); } else toastError(res.error);
   }
 
   return (

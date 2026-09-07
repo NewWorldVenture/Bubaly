@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/admin/marketing/referrals/page.tsx', 'utf8');
@@ -9,7 +10,7 @@ describe('admin referrals read boundary', () => {
     expect(server).toContain('export async function getReferralConfigResult');
     expect(page).toContain('const [configResult, referralsResult] = await Promise.all([');
     expect(page).toContain('if (configResult.error || referralsResult.error) {');
-    expect(page).toContain('Could not load referral settings and activity from Supabase. Refresh and try again.');
+    expectSays(page, 'referrals.couldNotLoadReferralSettings', 'Could not load referral settings and activity from Supabase. Refresh and try again.');
     expect(page).toContain('<ErrorState message=');
   });
 });

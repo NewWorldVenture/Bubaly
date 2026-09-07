@@ -13,8 +13,8 @@ describe('admin document deletion boundary', () => {
   });
 
   it('fails closed for missing rows and confirms the database delete returned a row', () => {
-    expect(action).toContain("if (!doc) return { ok: false, error: 'Document not found.' }");
+    expect(action).toContain("if (!doc) return { ok: false, error: t('actions.documentNotFound') }");
     expect(action).toContain("select('id').maybeSingle()");
-    expect(action).toContain("if (!deleted) return { ok: false, error: 'Document was not deleted.' }");
+    expect(action).toContain("if (!deleted) return { ok: false, error: t('actions.documentWasNotDeleted') }");
   });
 });

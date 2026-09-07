@@ -52,13 +52,13 @@ export function CardRevealModal({ cardId, childName, onClose }: {
         setState('ready');
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Could not reveal the card.');
+        setError(e instanceof Error ? e.message : tr('cardRevealModal.couldNotRevealTheCard'));
         setState('error');
       }
     }
     void run();
     return () => { cancelled = true; };
-  }, [cardId]);
+  }, [cardId, tr]);
 
   return (
     <Modal open title={`${childName}'s card details`} onClose={onClose}>

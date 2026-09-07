@@ -3,6 +3,7 @@
 // to where the result lives. No hooks: the server page renders it from rows it
 // already has, and a partial run is labelled as partial rather than dressed up.
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { CheckCircle2, ChevronRight, AlertTriangle } from 'lucide-react';
 import type { CompletedItem } from '@/lib/home/today';
 import { cn } from '@/lib/utils/cn';
@@ -16,17 +17,16 @@ function whenLabel(iso: string): string {
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function CompletedByBubaly({ items, className }: { items: CompletedItem[]; className?: string }) {
+export async function CompletedByBubaly({ items, className }: { items: CompletedItem[]; className?: string }) {
+  const t = await getTranslations();
   return (
     <section aria-labelledby="completed-by-heading" className={className}>
       <div className="mb-3 flex items-center gap-2">
         <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
-        <h2 id="completed-by-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">Completed by Bubaly</h2>
+        <h2 id="completed-by-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">{t('completedByBubaly.completedByBubaly')}</h2>
       </div>
       {items.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
-          Nothing finished yet. The first thing Bubaly completes for your family lands here.
-        </p>
+        <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">{t('completedByBubaly.nothingFinishedYetTheFirst')}</p>
       ) : (
         <ul className="space-y-1.5">
           {items.map((item) => (
@@ -36,7 +36,7 @@ export function CompletedByBubaly({ items, className }: { items: CompletedItem[]
                 className="flex min-h-[44px] items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5 transition hover:bg-elevated focus-ring"
               >
                 {item.partial
-                  ? <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-label="Partly done" />
+                  ? <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-label={t('completedByBubaly.partlyDone')} />
                   : <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />}
                 <div className="min-w-0 flex-1">
                   <p className={cn('truncate text-sm', item.partial ? 'text-fg' : 'text-fg/90')}>{item.title}</p>

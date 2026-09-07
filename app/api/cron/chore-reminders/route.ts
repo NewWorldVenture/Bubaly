@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
@@ -8,8 +9,9 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('choreReminders.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('Cron chore fetch error:', error);
-    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
 
   // Group by member_id
@@ -68,7 +70,7 @@ export async function GET(req: NextRequest) {
   const { data: families, error: familiesError } = await supabase.from('families').select('id, name').in('id', familyIds);
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
-    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
 
@@ -83,7 +85,7 @@ export async function GET(req: NextRequest) {
   const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
   if (authUsersError) {
     console.error('Cron chore user read error:', authUsersError);
-    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
     (authUsers?.users ?? [])

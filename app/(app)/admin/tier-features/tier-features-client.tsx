@@ -33,7 +33,7 @@ export function TierFeaturesClient({ resolved }: { resolved: Record<string, Feat
       setBusyKey(null);
       if (!res.ok) {
         setState((s) => ({ ...s, [key]: prev }));
-        error('Could not update — admin only');
+        error(t('tierFeaturesClient.couldNotUpdateAdminOnly'));
       } else {
         success(`Saved · pricing updated`);
       }
@@ -41,10 +41,10 @@ export function TierFeaturesClient({ resolved }: { resolved: Record<string, Feat
   }
 
   function resetAll() {
-    if (!confirm('Reset every feature back to the default tier?')) return;
+    if (!confirm(t('tierFeaturesClient.resetEveryFeatureBackTo'))) return;
     startTransition(async () => {
       const res = await resetFeatureTiersAction();
-      if (res.ok) { window.location.reload(); } else { error('Could not reset'); }
+      if (res.ok) { window.location.reload(); } else { error(t('tierFeaturesClient.couldNotReset')); }
     });
   }
 

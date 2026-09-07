@@ -10,12 +10,13 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Admin · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-      <ErrorState message="Could not load administrator settings from Supabase. Refresh and try again." />
-      <Link href="/admin/settings" className="text-sm font-medium text-brand-text underline">Refresh settings</Link>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('settings.settings')}</h1>
+      <ErrorState message={t('settings.couldNotLoadAdministratorSettings')} />
+      <Link href="/admin/settings" className="text-sm font-medium text-brand-text underline">{t('settings.refreshSettings')}</Link>
     </div>
   );
 }
@@ -95,8 +96,8 @@ export default async function AdminSettingsPage() {
                   <p className="truncate text-xs text-muted">{p.detail}</p>
                 </div>
                 {p.ready
-                  ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" /> Connected</span>
-                  : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Not set</span>}
+                  ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
+                  : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" />{' '}{t('settings.notSet')}</span>}
               </li>
             ))}
           </ul>

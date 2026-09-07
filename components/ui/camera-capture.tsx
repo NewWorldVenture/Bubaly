@@ -57,7 +57,7 @@ export function CameraCapture({
     setError(null);
     (async () => {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-        setError('This browser doesn’t support the camera. You can upload a photo instead.');
+        setError(tr('cameraCapture.thisBrowserDoesnTSupport'));
         return;
       }
       try {
@@ -75,7 +75,7 @@ export function CameraCapture({
       }
     })();
     return () => { cancelled = true; stop(); };
-  }, [facing, stop]);
+  }, [facing, stop, tr]);
 
   // Close on Escape.
   useEffect(() => {

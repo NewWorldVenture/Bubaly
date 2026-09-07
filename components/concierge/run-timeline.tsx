@@ -226,7 +226,7 @@ export function RunTimeline({ view, showActivity }: { view: RunView; showActivit
                 <span className="w-16 shrink-0 tabular-nums text-muted">{when(e.at)}</span>
                 <span className={cn('min-w-0 flex-1', e.type === 'model_call' ? 'text-muted' : 'text-fg/85')}>
                   {e.type === 'model_call' ? `Thinking${e.metrics ? ` · ${e.metrics}` : ''}` : e.message}
-                  {e.actor === 'member' && <span className="ml-1 text-muted">· by a family member</span>}
+                  {e.actor === 'member' && <span className="ml-1 text-muted">{t('runTimeline.byAFamilyMember')}</span>}
                 </span>
               </li>
             ))}

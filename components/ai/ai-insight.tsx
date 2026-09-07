@@ -48,10 +48,10 @@ export function AiInsight({ kind, params, label, className, variant = 'secondary
         body: JSON.stringify({ kind, params: params ?? {}, question: question.trim() || undefined }),
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error || 'AI is unavailable right now.'); return; }
+      if (!res.ok) { setError(json.error || t('aiInsight.aiIsUnavailableRightNow')); return; }
       setAnswer(json.text || '');
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('aiInsight.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ export function AiInsight({ kind, params, label, className, variant = 'secondary
                   id={id}
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Anything specific you want the assistant to focus on?"
+                  placeholder={t('aiInsight.anythingSpecificYouWantThe')}
                   className="min-h-[4.5rem]"
                 />
               )}

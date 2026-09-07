@@ -34,7 +34,7 @@ export default async function AdminSyncPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSync.syncPlatform')}</h1>
           <p className="mt-1 text-sm text-muted">{t('adminSync.providerHealthFailedJobsAndConnection')}</p>
         </div>
-        <ErrorState message="Could not load sync platform data from Supabase. Refresh and try again." />
+        <ErrorState message={t('sync.couldNotLoadSyncPlatform')} />
         <a href="/admin/sync" className="text-sm font-medium text-brand-text underline">{t('adminSync.refreshSyncOverview')}</a>
       </div>
     );
@@ -66,10 +66,7 @@ export default async function AdminSyncPage() {
             ? <Badge tone="success">{t('adminSync.syncTokenKeyConfigured')}</Badge>
             : <Badge tone="danger">{t('adminSync.syncTokenKeyMissing')}</Badge>}
         </div>
-        <p className="text-xs text-muted">
-          Provider tokens are AES-256-GCM encrypted before storage. Without a key, no OAuth connection can be persisted —
-          this is intentional fail-closed behaviour, not a silent fallback to plaintext.
-        </p>
+        <p className="text-xs text-muted">{t('sync.providerTokensAreAes256')}</p>
       </Card>
 
       <Card>

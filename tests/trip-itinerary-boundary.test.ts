@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/vacations/trip-itinerary.tsx', 'utf8');
@@ -11,7 +12,7 @@ describe('trip itinerary read boundary', () => {
   });
 
   it('renders a retryable failure state instead of an empty itinerary', () => {
-    expect(source).toContain('Could not load this itinerary. Refresh and try again.');
+    expectSays(source, 'tripItinerary.couldNotLoadThisItinerary', 'Could not load this itinerary. Refresh and try again.');
     expect(source).toContain('onRetry={refreshAll}');
   });
 });

@@ -39,7 +39,7 @@ export default async function MarketplaceAlertsPage() {
 
   if (searchesError) {
     console.error('[marketplace-alerts] Saved searches read failed', searchesError);
-    return <ErrorState message="Could not load your marketplace alerts. Refresh and try again." />;
+    return <ErrorState message={t('alerts.couldNotLoadYourMarketplace')} />;
   }
   if (listingsError) {
     console.error('[marketplace-alerts] Matching listings read failed', listingsError);
@@ -58,7 +58,7 @@ export default async function MarketplaceAlertsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t('marketplaceAlerts.alerts')}
-        description="Tell Bubaly what you’re after — we’ll match new listings the moment they hit the board."
+        description={t('alerts.tellBubalyWhatYouRe')}
       />
 
       {dataWarnings.length > 0 && (
@@ -103,7 +103,7 @@ export default async function MarketplaceAlertsPage() {
                 </div>
 
                 {matches.length === 0 ? (
-                  <p className="text-sm text-muted">Nothing matches yet — we’ll keep watching.</p>
+                  <p className="text-sm text-muted">{t('alerts.nothingMatchesYetWeLl')}</p>
                 ) : (
                   <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                     {matches.slice(0, 12).map((l) => {

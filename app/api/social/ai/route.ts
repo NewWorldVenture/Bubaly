@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -11,25 +12,26 @@ import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/se
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
   try {
     ctx = await requireUserContext();
   } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('ai.unauthorized') }, { status: 401 });
   }
   const familyId = ctx.active.familyId;
 
   const access = await getSocialAccess(familyId);
   if (!access || !access.can('generate_ai')) {
-    return NextResponse.json({ error: 'You do not have permission to generate AI content.' }, { status: 403 });
+    return NextResponse.json({ error: t('ai.youDoNotHavePermission') }, { status: 403 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('ai.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = String(body.kind ?? '') as AiGenerationKind;
   if (!AI_GENERATION_KINDS.includes(kind)) {
-    return NextResponse.json({ error: 'Unknown generation kind' }, { status: 400 });
+    return NextResponse.json({ error: t('ai.unknownGenerationKind') }, { status: 400 });
   }
   const platform = isPlatform(body.platform) ? body.platform : null;
   const topic = String(body.topic ?? '').slice(0, 2000);

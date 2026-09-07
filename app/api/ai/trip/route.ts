@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
@@ -15,12 +16,13 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 // restaurant/activity/tip recommendations. Falls back to deterministic,
 // never-fabricated guidance when AI is unconfigured or returns junk.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext(); // auth gate (family-scoped session)
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-trip:${ctx.user.id}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many trip-research requests. Please try again shortly.' },
+      { error: t('trip.tooManyTripResearchRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     const body = (boundedBody.value ?? {}) as Partial<TripResearchInput>;
     const destination = (body.destination ?? '').toString().trim();
     if (!destination) {
-      return NextResponse.json({ error: 'A destination is required.' }, { status: 400 });
+      return NextResponse.json({ error: t('trip.aDestinationIsRequired') }, { status: 400 });
     }
 
     const input: TripResearchInput = {
@@ -80,6 +82,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ recommendations, source });
   } catch (err) {
     console.error('Trip research error:', err);
-    return NextResponse.json({ error: 'Could not research this trip.' }, { status: 500 });
+    return NextResponse.json({ error: t('trip.couldNotResearchThisTrip') }, { status: 500 });
   }
 }

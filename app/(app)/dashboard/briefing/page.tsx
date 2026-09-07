@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { BriefingModule } from '@/components/modules/briefing-module';
@@ -13,6 +14,7 @@ import { ErrorState } from '@/components/ui/states';
 export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
 
 export default async function BriefingPage() {
+  const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/briefing');
   const supabase = await createServer();
 
@@ -45,11 +47,11 @@ export default async function BriefingPage() {
 
   if (indexResult.status === 'rejected') {
     console.error('[dashboard/briefing] operating index read failed', indexResult.reason);
-    return <ErrorState message="Could not load your daily briefing from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('briefing.couldNotLoadYourDaily')} />;
   }
   if (reasoningResult.status === 'rejected') {
     console.error('[dashboard/briefing] reasoning context read failed', reasoningResult.reason);
-    return <ErrorState message="Could not load relationship guidance for your daily briefing from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('briefing.couldNotLoadRelationshipGuidance')} />;
   }
 
   const { change } = indexResult.value;

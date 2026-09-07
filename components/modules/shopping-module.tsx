@@ -156,7 +156,7 @@ export function ShoppingModule() {
     return run(`archive:${id}`, async () => {
       const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
-      success('List archived');
+      success(t('shoppingModule.listArchived'));
       setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
       void refreshLists();
     });
@@ -171,7 +171,7 @@ export function ShoppingModule() {
   }
 
   if (listsLoading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load shopping lists. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('shoppingModule.couldNotLoadShoppingLists')} onRetry={refresh} />;
 
   return (
     <div className="module-with-sidebar">
@@ -220,7 +220,7 @@ export function ShoppingModule() {
       <div className="module-main">
         {!activeList ? (
           <EmptyState icon={ShoppingBag} title={t('shopping.noListsYet')}
-            description="Create a shopping list for any store."
+            description={t('shoppingModule.createAShoppingListFor')}
             action={<Button onClick={() => setNewListOpen(true)}><Plus className="h-4 w-4" /> {t('shopping.createList')}</Button>} />
         ) : (
           <>
@@ -260,7 +260,7 @@ export function ShoppingModule() {
             {/* Items by category */}
             {itemsLoading ? <SkeletonList /> : byCategory.length === 0 ? (
               <EmptyState icon={ShoppingCart} title={t('shopping.listIsEmpty')}
-                description="Add items below to get started." />
+                description={t('shoppingModule.addItemsBelowToGet')} />
             ) : (
               <div className="space-y-3">
                 {byCategory.map(([cat, catItems]) => {
@@ -367,9 +367,9 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
     if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
-    if (!familyId) { toastError('No active family — reload and try again.'); return; }
+    if (!familyId) { toastError(t('shoppingModule.noActiveFamilyReloadAnd')); return; }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -439,7 +439,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
     if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
     setLoading(true);
     try {

@@ -1,15 +1,17 @@
+import { getTranslations } from '@/lib/i18n/server';
 // Bespoke, self-contained editorial illustration for the /blog hero — layered
 // "story cards" rising out of an insight spark, over an ambient brand glow.
 // No external assets (fully offline/CSP-safe). Theme-aware: card surfaces, strokes
 // and text-line placeholders flip via `dark:` fill/stroke utilities, while the
 // violet→indigo→blue brand gradients read cleanly on both light and dark backdrops.
 
-export function BlogHeroArt({ className }: { className?: string }) {
+export async function BlogHeroArt({ className }: { className?: string }) {
+  const t = await getTranslations();
   return (
     <svg
       viewBox="0 0 420 380"
       role="img"
-      aria-label="Illustration of family stories and insights"
+      aria-label={t('blogHeroArt.illustrationOfFamilyStoriesAnd')}
       className={className}
       xmlns="http://www.w3.org/2000/svg"
     >

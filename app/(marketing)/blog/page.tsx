@@ -142,7 +142,7 @@ export default async function BlogPage({ searchParams }: Props) {
   return (
     <PageWrap>
       <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
-      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description="Practical advice, real stories, and smart tips for modern families." />
+      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description={t('blog.practicalAdviceRealStoriesAnd')} />
 
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (

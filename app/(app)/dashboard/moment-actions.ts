@@ -6,6 +6,7 @@
 // migration, own-row RLS). One-tap steps that set a reminder create a real
 // `reminders` row (family-scoped RLS), linked back to the source event.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 
 const PREF_KEY = 'momentPrep';
@@ -30,9 +31,10 @@ export async function loadMomentPrep(): Promise<Record<string, string[]>> {
 
 /** Persist the checked prep-step ids for one event (merged into notification_prefs). */
 export async function setMomentPrepDoneAction(input: { eventId: string; doneIds: string[] }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const eventId = String(input.eventId || '').trim();
-  if (!eventId) return { ok: false, error: 'Missing event' };
+  if (!eventId) return { ok: false, error: t('momentActions.missingEvent') };
   const doneIds = Array.from(new Set((input.doneIds ?? []).filter((v) => typeof v === 'string' && v.trim()))).slice(0, 32);
   const supabase = await createServer();
 
@@ -56,11 +58,12 @@ export async function setMomentPrepDoneAction(input: { eventId: string; doneIds:
 export async function addMomentGroceryAction(input: {
   familyId: string; items: string[];
 }): Promise<Result & { added?: number; ids?: string[] }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const names = Array.from(new Set((input.items ?? [])
     .map((s) => (typeof s === 'string' ? s.trim() : ''))
     .filter(Boolean))).slice(0, 20);
-  if (names.length === 0) return { ok: false, error: 'Nothing to add' };
+  if (names.length === 0) return { ok: false, error: t('momentActions.nothingToAdd') };
   const supabase = await createServer();
 
   // Resolve the active (non-archived) list, or create "Groceries" — same rule the
@@ -107,11 +110,12 @@ export async function removeMomentGroceryAction(input: { ids: string[] }): Promi
 export async function createMomentReminderAction(input: {
   familyId: string; title: string; remindAtISO: string; eventId: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const title = String(input.title || '').trim();
   const remindAt = new Date(input.remindAtISO);
-  if (!title) return { ok: false, error: 'Missing title' };
-  if (Number.isNaN(remindAt.getTime())) return { ok: false, error: 'Invalid time' };
+  if (!title) return { ok: false, error: t('momentActions.missingTitle') };
+  if (Number.isNaN(remindAt.getTime())) return { ok: false, error: t('momentActions.invalidTime') };
   const supabase = await createServer();
 
   const { error } = await supabase.from('reminders').insert({

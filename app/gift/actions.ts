@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clampGiftAmountCents } from '@/lib/wallet/gift';
 import { clientIp } from '@/lib/server/rate-limit';
@@ -17,30 +18,31 @@ type Result = { ok: boolean; error?: string };
 export async function submitGiftPledgeAction(input: {
   token: string; giverName: string; amountCents: number; message?: string; giverEmail?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const token = typeof payload.token === 'string' ? payload.token.trim().slice(0, 200) : '';
   const giverName = typeof payload.giverName === 'string' ? payload.giverName.trim().slice(0, 80) : '';
   const amount = clampGiftAmountCents(Number(payload.amountCents));
-  if (!token) return { ok: false, error: 'Invalid gift link.' };
-  if (!giverName) return { ok: false, error: 'Please enter your name.' };
-  if (amount === null) return { ok: false, error: 'Enter an amount between $1 and $1,000.' };
+  if (!token) return { ok: false, error: t('actions.invalidGiftLink') };
+  if (!giverName) return { ok: false, error: t('actions.pleaseEnterYourName') };
+  if (amount === null) return { ok: false, error: t('actions.enterAnAmountBetween1') };
 
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `gift:${clientIp(await headers())}`, { limit: 10 });
-  if (!limited.ok) return { ok: false, error: 'Too many gift attempts. Please try again shortly.' };
+  if (!limited.ok) return { ok: false, error: t('actions.tooManyGiftAttemptsPlease') };
 
   const { data: link } = await supabase
     .from('gift_links')
     .select('id, family_id, child_wallet_id, is_active, occasion')
     .eq('token', token)
     .maybeSingle();
-  if (!link || !link.is_active) return { ok: false, error: 'This gift link is no longer active.' };
+  if (!link || !link.is_active) return { ok: false, error: t('actions.thisGiftLinkIsNo') };
 
   // Anti-abuse: cap pending pledges per link.
   const { count } = await supabase
     .from('gift_payments').select('id', { count: 'exact', head: true })
     .eq('gift_link_id', link.id).eq('status', 'pending');
-  if ((count ?? 0) >= 25) return { ok: false, error: 'Too many pending gifts on this link. Please try later.' };
+  if ((count ?? 0) >= 25) return { ok: false, error: t('actions.tooManyPendingGiftsOn') };
 
   const { error } = await supabase.from('gift_payments').insert({
     family_id: link.family_id,
@@ -53,7 +55,7 @@ export async function submitGiftPledgeAction(input: {
     occasion: link.occasion,
     status: 'pending',
   });
-  if (error) return { ok: false, error: 'Could not record your gift. Please try again.' };
+  if (error) return { ok: false, error: t('actions.couldNotRecordYourGift') };
 
   // Let the family know a gift is waiting for approval — through the service,
   // so it lands inside the hours the family agreed to hear from Bubaly and a

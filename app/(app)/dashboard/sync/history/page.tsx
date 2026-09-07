@@ -31,7 +31,7 @@ export default async function SyncHistoryPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncHistory.syncHistory')}</h1>
-        <ErrorState message="Could not load your sync history from Supabase. Refresh and try again." />
+        <ErrorState message={t('history.couldNotLoadYourSync')} />
         <a href="/dashboard/sync/history" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncHistory.refreshSyncHistory')}</a>
       </div>
     );

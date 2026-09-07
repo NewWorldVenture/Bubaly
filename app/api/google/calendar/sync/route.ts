@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -11,6 +12,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 // Fetches the next 3 months of events from Google Calendar primary and
 // upserts them into calendar_events with source='google'.
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
@@ -26,12 +28,12 @@ export async function POST() {
     const stored = np.googleCalendarToken as GoogleToken | undefined;
 
     if (!stored?.accessToken) {
-      return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 });
+      return NextResponse.json({ error: t('sync.googleCalendarNotConnected') }, { status: 400 });
     }
 
     const limited = await enforceRequestRateLimit(supabase, `sync:${ctx.active.familyId}:${ctx.user.id}:google-calendar`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many sync requests. Please try again shortly.' },
+      { error: t('sync.tooManySyncRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -77,14 +79,14 @@ export async function POST() {
 
       if (error && error.code !== '23505') {
         console.error('Calendar upsert error:', error);
-        return NextResponse.json({ error: 'Could not save imported calendar events.' }, { status: 500 });
+        return NextResponse.json({ error: t('sync.couldNotSaveImportedCalendar') }, { status: 500 });
       }
     }
 
     return NextResponse.json({ synced: rows.length });
   } catch (err) {
     console.error('Google Calendar sync error:', err);
-    return NextResponse.json({ error: 'Sync failed' }, { status: 500 });
+    return NextResponse.json({ error: t('sync.syncFailed') }, { status: 500 });
   }
 }
 

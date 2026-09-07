@@ -95,9 +95,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
                   <div className="flex items-center gap-2">
                     <code className="text-xs font-semibold">{flag.key}</code>
                     {isStripe && (
-                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-400">
-                        Stripe — needs approval
-                      </span>
+                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-400">{t('adminWalletClient.stripeNeedsApproval')}</span>
                     )}
                   </div>
                   {flag.description && <div className="mt-0.5 text-[11px] text-muted">{flag.description}</div>}

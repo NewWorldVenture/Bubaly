@@ -92,7 +92,7 @@ export function FamilyTreeModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Added to family tree');
+    success(t('familyTreeModule.addedToFamilyTree'));
     setForm(null);
   }
 
@@ -113,14 +113,14 @@ export function FamilyTreeModule() {
     }).eq('id', editNode.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Updated');
+    success(t('familyTreeModule.updated'));
     setEditNode(null); setForm(null);
   }
 
   async function remove(id: string) {
-    if (!confirm('Remove this person from the tree?')) return;
+    if (!confirm(t('familyTreeModule.removeThisPersonFromThe'))) return;
     const { error } = await createClient().from('family_tree_nodes').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('familyTreeModule.removed'));
   }
 
   function startEdit(n: Node) {
@@ -134,13 +134,13 @@ export function FamilyTreeModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the family tree. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('familyTreeModule.couldNotLoadTheFamily')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('familyTree.familyTree')}
-        description="Map your family history and preserve your heritage."
+        description={t('familyTreeModule.mapYourFamilyHistoryAnd')}
         action={
           <div className="flex items-center gap-2">
             {all.length > 0 && (
@@ -186,7 +186,7 @@ export function FamilyTreeModule() {
         <EmptyState
           icon={GitBranch}
           title={t('familyTree.yourFamilyTreeIsEmpty')}
-          description="Start by adding the oldest generation you know — grandparents, great-grandparents — and build down from there."
+          description={t('familyTreeModule.startByAddingTheOldest')}
           action={<Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('familyTree.addFirstPerson')}</Button>}
         />
       ) : view === 'tree' ? (

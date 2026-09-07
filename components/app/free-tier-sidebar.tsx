@@ -377,8 +377,8 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
     const res = await resetToDefault();
     setBusy(false);
     if (!res.ok) { toastError(res.error ?? 'Could not reset your sidebar.'); return; }
-    success('Sidebar reset to your plan’s default.');
-  }, [isDefaultLayout, resetToDefault, toastError, success]);
+    success(t('freeTierSidebar.sidebarResetToYourPlan'));
+  }, [isDefaultLayout, resetToDefault, toastError, success, t]);
 
   return (
     <>

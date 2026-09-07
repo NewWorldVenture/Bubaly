@@ -52,11 +52,11 @@ export function InvestView(props: {
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title={tr('invest.invest')} description="A safe place to learn investing with pretend money." />
+      <PageHeader title={tr('invest.invest')} description={tr('invest.aSafePlaceToLearn')} />
 
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
-        <p>{tr('invest.thisIsAn')} <strong>{tr('invest.educationalSimulation')}</strong> — kids practice with pretend money from their Invest bucket. It’s not real investing, there are no real companies, and values can go up or down. Nothing here is financial advice.</p>
+        <p>{tr('invest.thisIsAn')} <strong>{tr('invest.educationalSimulation')}</strong>{' '}{tr('invest.kidsPracticeWithPretendMoney')}</p>
       </div>
 
       {/* Manager: pending orders */}
@@ -80,7 +80,7 @@ export function InvestView(props: {
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={TrendingUp} title={tr('invest.noChildWalletsYet')} description="Activate the Family Wallet and add children to start learning to invest." />
+        <EmptyState icon={TrendingUp} title={tr('invest.noChildWalletsYet')} description={tr('investView.activateTheFamilyWalletAnd')} />
       ) : (
         <div className="mt-4 space-y-4">
           {childWallets.map((child) => (
@@ -120,7 +120,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   const estCost = asset ? orderAmountCents(shares, asset.priceCents) : 0;
 
   function trade() {
-    if (shares <= 0) return toastError('Enter how many shares.');
+    if (shares <= 0) return toastError(tr('investView.enterHowManyShares'));
     onTrade(assetId, side, shares);
     setSharesStr('');
   }
@@ -130,9 +130,9 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
     try {
       const res = await fetch('/api/ai/invest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ childWalletId: child.id, assetId }) });
       const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not explain right now.'); return; }
+      if (!res.ok) { toastError(data.error ?? tr('investView.couldNotExplainRightNow')); return; }
       setExplainer(data.coaching);
-    } catch { toastError('Could not explain right now.'); }
+    } catch { toastError(tr('investView.couldNotExplainRightNow')); }
     finally { setExplaining(false); }
   }
 

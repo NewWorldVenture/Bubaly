@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: 'Admin · Social links', robots: { in
 export const dynamic = 'force-dynamic';
 
 export default async function AdminSocialLinksPage() {
+  const t = await getTranslations();
   const links = await getSocialLinks(createServiceClient());
 
   return (
@@ -18,10 +20,9 @@ export default async function AdminSocialLinksPage() {
         href="/admin/settings"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted transition hover:text-fg"
       >
-        <ArrowLeft className="h-4 w-4" /> Settings
-      </Link>
+        <ArrowLeft className="h-4 w-4" />{' '}{t('socialLinks.settings')}</Link>
 
-      <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Social links</h1>
+      <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{t('socialLinks.socialLinks')}</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
         Bubaly&apos;s own accounts. Each one you fill in becomes an icon in the marketing footer and is
         published as a <code className="text-xs">sameAs</code> entry in the site&apos;s Organization
