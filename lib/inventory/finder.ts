@@ -203,22 +203,33 @@ export function isConfirmation(move: Pick<MoveLike, 'from_location_id' | 'to_loc
   return move.reason === CONFIRM_REASON && move.from_location_id === move.to_location_id;
 }
 
+/**
+ * The newest row of a kind for one item. A row whose `moved_at` cannot be
+ * parsed is skipped rather than compared: `NaN` loses every comparison, so an
+ * unreadable timestamp arriving first would otherwise be reported as the
+ * latest and date a check that never happened.
+ */
+function latestFor(moves: MoveLike[], itemId: string, want: (move: MoveLike) => boolean): MoveLike | null {
+  let latest: MoveLike | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const move of moves) {
+    if (move.item_id !== itemId || !want(move)) continue;
+    const ms = Date.parse(move.moved_at);
+    if (!Number.isFinite(ms) || ms <= latestMs) continue;
+    latest = move;
+    latestMs = ms;
+  }
+  return latest;
+}
+
 /** The latest confirmation on file for an item, or null when nobody has confirmed it yet. */
 export function lastConfirmed(moves: MoveLike[], itemId: string): Confirmation | null {
-  let latest: MoveLike | null = null;
-  for (const move of moves) {
-    if (move.item_id !== itemId || !isConfirmation(move)) continue;
-    if (!latest || Date.parse(move.moved_at) > Date.parse(latest.moved_at)) latest = move;
-  }
+  const latest = latestFor(moves, itemId, isConfirmation);
   return latest ? { moveId: latest.id, at: latest.moved_at, locationId: latest.to_location_id } : null;
 }
 
 /** The latest relocation (not a confirmation) for an item, or null. */
 export function lastMoved(moves: MoveLike[], itemId: string): { moveId: string; at: string; fromLocationId: string | null; toLocationId: string | null } | null {
-  let latest: MoveLike | null = null;
-  for (const move of moves) {
-    if (move.item_id !== itemId || isConfirmation(move)) continue;
-    if (!latest || Date.parse(move.moved_at) > Date.parse(latest.moved_at)) latest = move;
-  }
+  const latest = latestFor(moves, itemId, (move) => !isConfirmation(move));
   return latest ? { moveId: latest.id, at: latest.moved_at, fromLocationId: latest.from_location_id, toLocationId: latest.to_location_id } : null;
 }

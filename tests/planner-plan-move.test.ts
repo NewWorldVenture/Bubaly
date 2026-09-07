@@ -86,12 +86,12 @@ describe('plan_move', () => {
 
   it('dates the reminders from the move day on file, or 45 days out when none is', () => {
     const ctx = ctxWith(sources());
-    expect(inputOf(ctx, 'address_reminder')).toMatchObject({ remind_at: '2026-09-19T09:00:00', priority: 'high', kind: 'time' });
+    expect(inputOf(ctx, 'mail_reminder')).toMatchObject({ remind_at: '2026-09-19T09:00:00', priority: 'high', kind: 'time' });
     expect(inputOf(ctx, 'eve_reminder')).toMatchObject({ remind_at: '2026-10-02T18:00:00' });
     expect(instantiateTemplate(template, ctx).followups).toEqual([{ after: '2026-10-01T09:00:00', prompt: expect.stringContaining('Two days before Move to Maple St') }]);
 
     const noMove = ctxWith(sources({ move: null }));
-    expect(inputOf(noMove, 'address_reminder')).toMatchObject({ remind_at: '2026-10-06T09:00:00' });
+    expect(inputOf(noMove, 'mail_reminder')).toMatchObject({ remind_at: '2026-10-06T09:00:00' });
     expect(instantiateTemplate(template, noMove).followups).toEqual([]);
     expect(instantiateTemplate(template, noMove).objective).toMatch(/^Put the move on file/);
     // The sources still multiply out — they address "the current move", which the first step puts on file.

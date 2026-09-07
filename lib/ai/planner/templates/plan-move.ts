@@ -80,7 +80,7 @@ export const planMoveTemplate: WorkflowTemplate = {
       dependsOn: ['move'], input: () => ({ move_id: null }),
     },
     {
-      key: 'address_reminder', stepType: 'act', toolName: 'reminders.create', description: 'Remind the family two weeks out about mail forwarding and address changes',
+      key: 'mail_reminder', stepType: 'act', toolName: 'reminders.create', description: 'Remind the family two weeks out about mail forwarding and address changes',
       dependsOn: ['timeline'],
       input: (ctx) => ({ title: 'Move in two weeks: mail forwarding and address changes', remind_at: localTime(shiftDay(moveDateKey(ctx), -14), 9), kind: 'time', priority: 'high', assignee_id: ownerId(ctx) }),
     },
@@ -91,16 +91,16 @@ export const planMoveTemplate: WorkflowTemplate = {
     },
     {
       key: 'check_reminders', stepType: 'verify', description: 'Check the move reminders are really set',
-      dependsOn: ['address_reminder', 'eve_reminder'],
+      dependsOn: ['mail_reminder', 'eve_reminder'],
       input: () => ({
         checks: [
-          { kind: 'records_exist', table: 'family_reminders', ids: [{ $fromStep: 'address_reminder', path: 'id' }, { $fromStep: 'eve_reminder', path: 'id' }], label: 'The move reminders are set' },
+          { kind: 'records_exist', table: 'family_reminders', ids: [{ $fromStep: 'mail_reminder', path: 'id' }, { $fromStep: 'eve_reminder', path: 'id' }], label: 'The move reminders are set' },
         ],
       }),
     },
     {
       key: 'tell_family', stepType: 'notify', description: 'Tell the parents what is dated and what is still open',
-      dependsOn: ['timeline', 'address_reminder', 'eve_reminder', 'check_reminders'],
+      dependsOn: ['timeline', 'mail_reminder', 'eve_reminder', 'check_reminders'],
       input: () => ({ recipients: 'managers', type: 'system', title: 'Your move plan is ready', body: '' }),
       modelFills: 'body: what is now dated, the address changes added, the records to request, and the first three things due',
     },

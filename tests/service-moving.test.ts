@@ -233,7 +233,7 @@ describe('setMoveDate', () => {
 
   it('surfaces the RPC refusing, in words, and leaves the move alone', async () => {
     const db = createInMemorySupabase({ rpc: { move_recalculate_date: () => { throw new Error('stale_review'); } } });
-    seedMove(db);
+    seedMove(db, { status: 'planning' });
     const res = await setMoveDate(scopeWith(db), { date: '2026-10-10' });
     expect(res).toMatchObject({ ok: false, code: 'db' });
     expect(db.table('moves').find((m) => m.id === MOVE)?.move_date).toBe(MOVE_DATE);
