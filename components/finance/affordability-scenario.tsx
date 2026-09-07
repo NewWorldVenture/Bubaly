@@ -8,13 +8,17 @@
 // saved; the server action reads and computes only.
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Info, Loader2, XCircle } from 'lucide-react';
 import { assessAffordabilityAction } from '@/app/(app)/dashboard/family-cfo/actions';
 import { money, pretty, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
+// A commitment that lands outside the 12-week horizon was never weighed by the
+// forecast, so it gets a neutral chip of its own — never the green "Yes", which
+// would be an affirmative money answer with no evidence behind it.
 const VERDICT: Record<AffordabilityVerdict, { labelKey: string; icon: typeof CheckCircle2; chip: string; ring: string }> = {
+  not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed', icon: Info, chip: 'bg-slate-500/12 text-slate-600 dark:text-slate-300', ring: 'border-border' },
   ok: { labelKey: 'affordabilityScenario.verdictOk', icon: CheckCircle2, chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
   tight: { labelKey: 'affordabilityScenario.verdictTight', icon: AlertTriangle, chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
   breaches: { labelKey: 'affordabilityScenario.verdictBreaches', icon: XCircle, chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
@@ -114,7 +118,7 @@ export function AffordabilityScenario({ buffer }: { buffer: number }) {
               <v.icon className="h-3 w-3" /> {t(v.labelKey)}
             </span>
             <span className="text-xs text-muted">
-              {result.scenario.occurrences === 0
+              {result.verdict === 'not_assessed'
                 ? t('affordabilityScenario.thatLandsBeyondThe12Week')
                 : result.scenario.recurring
                   ? t('affordabilityScenario.nTimesInTheNext12Weeks', { count: result.scenario.occurrences, total: money(result.scenario.total) })
@@ -129,19 +133,19 @@ export function AffordabilityScenario({ buffer }: { buffer: number }) {
             </div>
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">{t('affordabilityScenario.lowestBalanceWithIt')}</dt>
-              <dd className={cn('font-bold tabular-nums', result.verdict === 'breaches' ? 'text-rose-500' : result.verdict === 'tight' ? 'text-amber-500' : 'text-emerald-500')}>
+              <dd className={cn('font-bold tabular-nums', result.verdict === 'breaches' ? 'text-rose-500' : result.verdict === 'tight' ? 'text-amber-500' : result.verdict === 'not_assessed' ? 'text-fg' : 'text-emerald-500')}>
                 {money(result.after.lowestBalance)}{result.after.lowestBalanceWeek && <span className="ml-1 text-xs font-normal text-muted">{t('affordabilityScenario.wkOf', { week: pretty(result.after.lowestBalanceWeek) })}</span>}
               </dd>
             </div>
           </dl>
 
           <p className="mt-2 text-sm">
-            {result.verdict === 'breaches'
-              ? t('affordabilityScenario.thatWouldTakeYouUnderYour', { buffer: money(result.buffer), short: money(-result.headroom) })
-              : result.verdict === 'tight'
-                ? t('affordabilityScenario.itFitsButOnlyLeaves', { headroom: money(result.headroom), buffer: money(result.buffer) })
-                : result.scenario.occurrences === 0
-                  ? t('affordabilityScenario.nothingInTheNext12Weeks')
+            {result.verdict === 'not_assessed'
+              ? t('affordabilityScenario.nothingInTheNext12Weeks')
+              : result.verdict === 'breaches'
+                ? t('affordabilityScenario.thatWouldTakeYouUnderYour', { buffer: money(result.buffer), short: money(-result.headroom) })
+                : result.verdict === 'tight'
+                  ? t('affordabilityScenario.itFitsButOnlyLeaves', { headroom: money(result.headroom), buffer: money(result.buffer) })
                   : t('affordabilityScenario.yesYouStayAboveYour', { headroom: money(result.headroom), buffer: money(result.buffer) })}
           </p>
           {result.maxAffordable !== null && result.verdict !== 'ok' && (
