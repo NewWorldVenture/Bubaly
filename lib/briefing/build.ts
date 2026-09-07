@@ -84,6 +84,11 @@ export const briefSchema = z.object({
   handled: z.array(z.object({
     key: z.string(), kind: z.enum(['run', 'activity']), title: z.string(),
     detail: z.string().nullable(), href: z.string(), at: z.string(), partial: z.boolean(),
+    // M6: the source and reason a ledger row carries. Defaulted, so a brief
+    // stored before they existed still parses — as a row that says nothing
+    // about who acted or why, which is what was true of it.
+    sources: z.array(z.object({ tool: z.string(), domain: z.string() })).default([]),
+    reason: z.string().nullable().default(null),
   })),
   counts: z.object({
     today: z.number(), week: z.number(), conflicts: z.number(),

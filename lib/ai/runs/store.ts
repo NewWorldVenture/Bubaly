@@ -739,6 +739,48 @@ export type RunDetail = {
   events: RunEventRow[];
 };
 
+export type ListRunsOptions = {
+  /** Only these §10 states; omit or null for every state. */
+  states?: readonly RunState[] | null;
+  /** Paging cursor: rows created strictly before this ISO instant. */
+  before?: string | null;
+  limit?: number;
+};
+
+const LIST_RUNS_MAX = 200;
+
+/**
+ * A family's runs, newest first — the one chronological history (M35).
+ *
+ * Uses the CALLER's client like `loadRunDetail`, so a member sees exactly what
+ * RLS lets them see, and still filters `family_id` explicitly so the same
+ * function is right under the service client. Fails closed and never throws:
+ * a list that came back empty because the read failed would look like a
+ * family Bubaly has never worked for.
+ */
+export async function listRuns(
+  scope: ServiceScope,
+  options: ListRunsOptions = {},
+  opts?: { db?: SupabaseClient<Database> },
+): Promise<ServiceResult<RunRow[]>> {
+  const db = opts?.db ?? scope.db;
+  const limit = Math.max(1, Math.min(options.limit ?? 50, LIST_RUNS_MAX));
+  try {
+    let query = db.from('family_automation_runs').select('*').eq('family_id', scope.familyId);
+    if (options.states && options.states.length) query = query.in('state', [...options.states]);
+    if (options.before) query = query.lt('created_at', options.before);
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+    if (error) {
+      console.error('[ai/runs] failed to list the runs', error);
+      return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    return ok((data ?? []) as RunRow[]);
+  } catch (error) {
+    console.error('[ai/runs] failed to list the runs', error);
+    return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+}
+
 /**
  * The run detail read (§17). Uses the CALLER's client on purpose: a member
  * opening a run page should see exactly what RLS lets them see, and a run from
