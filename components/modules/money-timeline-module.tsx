@@ -5,11 +5,12 @@
 // bucketed cash-flow view with a running projected balance. Pure presentation
 // over the CashflowTimeline the server built; writes go through server actions.
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import {
   Sparkles, TrendingDown, CalendarClock, Target, RefreshCw,
-  Check, X, AlertTriangle, Wallet, ChevronDown,
+  Check, X, AlertTriangle, Wallet, ChevronDown, ShieldCheck, ArrowRight,
 } from 'lucide-react';
-import type { CashflowTimeline, TimelineInsight, InsightSeverity } from '@/lib/finance/timeline';
+import type { CashflowTimeline, TimelineInsight, InsightSeverity, MomentKind, PlanSource } from '@/lib/finance/timeline';
 import { money, pretty } from '@/lib/finance/timeline';
 import { setMoneyInsightStatusAction, syncMoneyInsightsAction } from '@/app/(app)/dashboard/money-timeline/actions';
 import { cn } from '@/lib/utils/cn';
@@ -21,6 +22,23 @@ const SEV: Record<InsightSeverity, { ring: string; chip: string; icon: string; l
   urgent: { ring: 'border-rose-400/40 bg-rose-500/[0.07]', chip: 'bg-rose-500/15 text-rose-300', icon: 'text-rose-400', label: 'Urgent' },
   watch:  { ring: 'border-amber-400/40 bg-amber-500/[0.06]', chip: 'bg-amber-500/15 text-amber-300', icon: 'text-amber-400', label: 'Watch' },
   info:   { ring: 'border-border bg-surface', chip: 'bg-brand/15 text-brand-text', icon: 'text-brand-text', label: 'Note' },
+};
+
+/** Dot colour per money-moment kind: bills amber, recurring brand, goals
+ *  emerald, plan-linked commitments sky, a what-if scenario violet. */
+const MOMENT_DOT: Record<MomentKind, string> = {
+  bill: 'bg-amber-400',
+  recurring: 'bg-brand',
+  goal: 'bg-emerald-400',
+  plan: 'bg-sky-400',
+  scenario: 'bg-violet-400',
+};
+
+const PLAN_SOURCE_LABEL: Record<PlanSource, { label: string; labelKey: string }> = {
+  subscription: { label: 'Subscription', labelKey: 'moneyTimelineModule.subscription' },
+  vacation: { label: 'Trip', labelKey: 'moneyTimelineModule.trip' },
+  move: { label: 'Move', labelKey: 'moneyTimelineModule.move' },
+  project: { label: 'Project', labelKey: 'moneyTimelineModule.project' },
 };
 
 const KIND_ICON: Record<string, typeof Sparkles> = {
@@ -86,9 +104,25 @@ export function MoneyTimelineModule({
           sub={timeline.lowestBalanceWeek ? `wk of ${pretty(timeline.lowestBalanceWeek)}` : undefined}
           tone={timeline.lowestBalance < 0 ? 'rose' : timeline.lowestBalance < 200 ? 'amber' : 'emerald'}
         />
-        <Stat label={t('moneyTimeline.dueNext12Wks')} value={money(timeline.totalOutflow)} tone="fg" />
-        <Stat label={t('moneyTimeline.recurringMo')} value={money(timeline.monthlyRecurring)} tone="fg" />
+        <Stat
+          label={t('moneyTimeline.dueNext12Wks')}
+          value={money(timeline.totalOutflow)}
+          sub={timeline.planOutflow > 0 ? t('moneyTimelineModule.amountFromTripsMovesProjects', { amount: money(timeline.planOutflow) }) : undefined}
+          tone="fg"
+        />
+        <Stat
+          label={t('moneyTimeline.recurringMo')}
+          value={money(timeline.monthlyRecurring)}
+          sub={timeline.coverage.coveredCount > 0 ? t('moneyTimelineModule.nBillsCoveredByAutopay', { n: timeline.coverage.coveredCount }) : undefined}
+          tone="fg"
+        />
       </section>
+
+      <p className="mt-3 text-xs text-muted">
+        <Link href="/dashboard/family-cfo" className="inline-flex items-center gap-1 font-medium text-brand-text hover:underline">
+          {t('moneyTimelineModule.askCanWeAffordIt')} <ArrowRight className="h-3 w-3" />
+        </Link>
+      </p>
 
       {/* Insights */}
       <section className="mt-7">
@@ -232,8 +266,18 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
                   {w.moments.map((m, k) => (
                     <div key={k} className="flex items-center justify-between gap-3 text-sm">
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', m.kind === 'goal' ? 'bg-emerald-400' : m.kind === 'recurring' ? 'bg-brand' : 'bg-amber-400')} />
+                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', MOMENT_DOT[m.kind] ?? 'bg-amber-400')} />
                         <span className="truncate text-muted">{m.label}</span>
+                        {m.source && (
+                          <span className="shrink-0 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">
+                            {t(PLAN_SOURCE_LABEL[m.source].labelKey)}
+                          </span>
+                        )}
+                        {m.covered && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                            <ShieldCheck className="h-2.5 w-2.5" /> {t('moneyTimelineModule.covered')}
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 tabular-nums text-fg">{money(m.amount)}</span>
                     </div>
@@ -247,7 +291,7 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
           );
         })}
       </div>
-      <p className="mt-2 text-[11px] text-muted">{t('moneyTimelineModule.projectedBalanceAssumesYourCurrent')}</p>
+      <p className="mt-2 text-[11px] text-muted">{t('moneyTimelineModule.projectedBalanceAssumesYourCurrent')} {t('moneyTimelineModule.planLinkedCommitmentsTripsMoves')}</p>
     </section>
   );
 }
