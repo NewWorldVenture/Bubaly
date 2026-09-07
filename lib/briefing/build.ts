@@ -114,6 +114,7 @@ export type Brief = {
    * word — every item is a row somebody is actually waiting on.
    */
   decisions: NeedItem[];
+  /**
    * The quiet half of the notification queue, folded in so it stops
    * interrupting: said once, here, instead of once per row in the bell.
    */

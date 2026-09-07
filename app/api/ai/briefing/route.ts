@@ -477,9 +477,14 @@ ${UNTRUSTED_CONTENT_RULE}
     // to the envelope's list bound (the page shows a handful and links the
     // rest to Home); the card data and the wallet kinds are what the page's
     // buttons act on.
+    // `alsoToday` rides beside `briefing` rather than inside it, for the same
+    // reason: the briefing object is the MODEL's contract (strict), and this
+    // list is read from the notifications table, not written by a model.
     return NextResponse.json({
       briefing,
       digest,
+      alsoToday: brief.alsoToday,
+      alsoTodayUnavailable,
       generatedAt: new Date().toISOString(),
       ...(brief.decisions.length
         ? {

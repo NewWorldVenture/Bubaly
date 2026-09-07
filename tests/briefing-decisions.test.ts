@@ -306,12 +306,17 @@ describe('the briefing route carries decisions', () => {
     expect(body.briefing.completed).toEqual(['Planned the week']);
   });
 
-  it('omits the slice entirely when nothing is waiting, so the pinned envelope is unchanged', async () => {
+  it('omits the slice entirely when nothing is waiting, so the envelope says exactly that', async () => {
     mocks.from.mockImplementation(() => queryResult([]));
     const response = await requestBriefing();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(Object.keys(body).sort()).toEqual(['briefing', 'digest', 'generatedAt']);
+    // `alsoToday` / `alsoTodayUnavailable` are always present — a quiet
+    // notification list that could not be read has to say so, so it cannot be
+    // conditional. `decisions` is the opposite: absent means nothing is
+    // waiting, because a failed read returns 500 before this line.
+    expect(Object.keys(body).sort()).toEqual(['alsoToday', 'alsoTodayUnavailable', 'briefing', 'digest', 'generatedAt']);
+    expect(body).not.toHaveProperty('decisions');
   });
 
   it('fails the request when the decisions read fails rather than serving a calm brief', async () => {

@@ -275,6 +275,9 @@ function DecisionsSection({ decisions }: { decisions: BriefDecisions }) {
         </Link>
       )}
     </section>
+  );
+}
+
 type AlsoTodayRow = NonNullable<BriefingResponse['alsoToday']>[number];
 
 /**
