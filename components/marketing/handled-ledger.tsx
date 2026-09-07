@@ -1,16 +1,18 @@
 // "Bubaly Handled" — the homepage's proof band (id="handled", the hero's
 // "See a handled week" target).
 //
-// Three visibly different kinds of evidence, never mixed in one sentence:
+// Two visibly different kinds of evidence, never mixed in one sentence:
 //   REAL — cross-family aggregates from public_stats() / public_handled_stats(),
 //          each line rendered only when its formatter says the count is large
 //          enough to print (lib/marketing/format.ts). Zero renders nothing.
 //   ILLUSTRATIVE — a fictional family's Daily Brief and ledger, badged
 //          "Illustrative sample" in every card header. The brief's numbers
 //          are computed by the app's own composer (lib/marketing/handled-sample.ts).
-//   LIVE — the "Try a 5-minute live demo" link into the shared demo account.
+// There is deliberately no third "live" tier: demo mode was removed in #414, so
+// the band links to the Trust Center — a page that exists — instead of offering
+// a shared demo account the product no longer has.
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, Clock, Heart, ListChecks, PlayCircle, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Heart, ListChecks, ShieldCheck, Sparkles } from 'lucide-react';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { Container, Pill, SampleBadge } from '@/components/marketing/visual-mocks';
 import { HANDLED_SAMPLE, sampleBriefNumbers, type HandledSampleRow } from '@/lib/marketing/handled-sample';
@@ -71,12 +73,8 @@ export async function HandledLedger() {
             )}
 
             <div className="mt-7 flex flex-col gap-3 xs:flex-row xs:flex-wrap">
-              <Link href="/pricing#demo" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110">
-                <PlayCircle className="h-4 w-4" aria-hidden />
-                {t('handledProof.tryDemo')}
-              </Link>
-              <Link href="/security#ai-trust" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.025] px-5 text-sm font-semibold text-white transition hover:bg-white/[0.07]">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" aria-hidden />
+              <Link href="/security#ai-trust" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110">
+                <ShieldCheck className="h-4 w-4" aria-hidden />
                 {t('handledProof.readTrustCenter')}
               </Link>
             </div>

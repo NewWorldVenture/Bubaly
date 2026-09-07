@@ -34,8 +34,7 @@ export function familiesNote(
  * Below this the line is HIDDEN, not rounded up and not replaced with a
  * placeholder: hidden is honest, small is honest, invented is not. The number
  * itself comes from `public_handled_stats()` (lib/marketing/stats.ts), which
- * counts runs that reached a finished state across real families and excludes
- * the shared demo account.
+ * counts runs that reached a finished state across real families.
  */
 export const HANDLED_PUBLIC_MIN = 25;
 

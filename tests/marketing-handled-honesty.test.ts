@@ -4,8 +4,8 @@ import { HANDLED_SAMPLE, SAMPLE_NOW, SAMPLE_WEEK, sampleBriefNumbers } from '@/l
 import { HANDLED_PUBLIC_MIN, formatHandled, handledNote, meetsHandledFloor } from '@/lib/marketing/format';
 import { buildFirstBrief } from '@/lib/onboarding/first-brief';
 
-// The "Bubaly Handled" band mixes three kinds of evidence — real aggregates,
-// an illustrative sample, and a live demo — and this file keeps them apart.
+// The "Bubaly Handled" band mixes two kinds of evidence — real aggregates and
+// an illustrative sample — and this file keeps them apart.
 // Source-level, in the style of tests/header-safe-area.test.ts: the rules are
 // about what the shipped files SAY, and a grep is the honest way to pin that.
 const ledger = readFileSync('components/marketing/handled-ledger.tsx', 'utf8');
@@ -138,9 +138,14 @@ describe('real aggregates come from the RPC and hide below the threshold', () =>
     expect(ledger).not.toContain('registered families');
   });
 
-  it('links the live demo and the Trust Center', () => {
-    expect(ledger).toContain('href="/pricing#demo"');
+  it('links the Trust Center, and nothing that no longer ships', () => {
     expect(ledger).toContain('href="/security#ai-trust"');
     expect(ledger).toContain('id="handled"');
+    // Demo mode was removed in #414: there is no /pricing#demo anchor and no
+    // shared demo account, so the band must not advertise either. Keeping this
+    // negative here stops the dead CTA from being reintroduced.
+    expect(ledger).not.toContain('/pricing#demo');
+    expect(ledger).not.toContain('handledProof.tryDemo');
+    expect(en['handledProof.tryDemo']).toBeUndefined();
   });
 });

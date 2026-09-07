@@ -7,7 +7,7 @@ export type PublicStats = {
   families: number;
   members: number;
   tasksCompleted: number;
-  /** Runs that reached `completed` across real families (demo family excluded). */
+  /** Runs that reached `completed` across real families. */
   handledCompleted: number;
   /** The same count, limited to the last 30 days. */
   handled30d: number;
