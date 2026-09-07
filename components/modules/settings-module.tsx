@@ -23,7 +23,7 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
+import { ROLE_LABELS, isAdmin } from '@/lib/constants/roles';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
 } from '@/lib/constants/dashboards';
@@ -35,6 +35,7 @@ import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import { SecurityPanel } from '@/components/settings/security-panel';
 import { PrivacyCenter } from '@/components/settings/privacy-center';
 import { NavigationChoices } from '@/components/settings/navigation-choices';
+import { InviteForm } from '@/components/family/invite-form';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -484,54 +485,9 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
   onClose: () => void; onSent: () => void;
 }) {
   const t = useTranslations();
-  const { error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get('email') ?? '').trim().toLowerCase();
-    const role = String(form.get('role') ?? 'adult') as MemberRole;
-    if (!email) return toastError(t('settingsModule.emailIsRequired'));
-    setLoading(true);
-    const supabase = createClient();
-    const { data: invite, error } = await supabase.from('invites').insert({
-      family_id: familyId,
-      email,
-      role,
-      invited_by: userId,
-    }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, t('settingsModule.failed'))); }
-
-    // Fire invite email (non-blocking — don't fail UI if email fails)
-    void fetch('/api/email/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inviteId: invite.id }),
-    });
-
-    setLoading(false);
-    onSent();
-  }
-
   return (
     <Modal open onClose={onClose} title={t('settings.inviteFamilyMember')} description={t('settingsModule.theyLlReceiveAnEmail')}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Field label={t('settings.emailAddress')} required>
-          {(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}
-        </Field>
-        <Field label={t('settings.role')}>
-          {(id) => (
-            <Select id={id} name="role" defaultValue="adult">
-              {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </Select>
-          )}
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>
-          <Button type="submit" loading={loading}><Mail className="h-4 w-4" /> {t('settings.sendInvite')}</Button>
-        </div>
-      </form>
+      <InviteForm familyId={familyId} userId={userId} onSent={onSent} onCancel={onClose} />
     </Modal>
   );
 }

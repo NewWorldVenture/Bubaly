@@ -29,6 +29,7 @@ import {
 } from '@/app/(app)/dashboard/trust/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
+import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
@@ -155,6 +156,7 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
       {tab === 'activity' && <TrustActivityTab activity={data.activity ?? null} error={data.activityError ?? null} policies={data.policies} />}
       {tab === 'policies' && <PoliciesTab policies={data.policies} members={data.members} canManage={canManage} />}
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
+      {tab === 'delegations' && <TrustSharingSection members={data.members} grants={data.grants} delegations={data.delegations} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
       {tab === 'emergency' && <EmergencyTab active={activeEmergency} canManage={canManage} />}
       {tab === 'audit' && <AuditTab audit={data.audit} members={data.members} policies={data.policies} />}

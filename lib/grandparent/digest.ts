@@ -83,3 +83,33 @@ export function celebrationCountdown(days: number): string {
   if (days < 60) return `in ${Math.round(days / 7)} weeks`;
   return `in ${Math.round(days / 30)} months`;
 }
+
+// ── Cross-household (M28) ───────────────────────────────────────────────────
+// A grandparent invited into two of their children's families is a member of
+// both, with a role in each (lib/supabase/auth builds `ctx.memberships` from
+// every family_members row). The portal used to show the ACTIVE family only, so
+// staying in touch with the other grandchildren meant switching households in
+// the sidebar. These helpers keep the ordering decision pure and testable; the
+// per-family reads stay in the page, where the fail-closed guard lives.
+
+export type HouseholdRef = {
+  familyId: string;
+  familyName: string;
+};
+
+/**
+ * The households to render, active family first and the rest alphabetically.
+ *
+ * Active-first because that is the family the rest of the app is currently
+ * showing — a portal that reorders itself around a switch nobody made is
+ * disorienting. Duplicate memberships (the same family twice) collapse to one.
+ */
+export function orderHouseholds(households: HouseholdRef[], activeFamilyId: string): HouseholdRef[] {
+  const seen = new Set<string>();
+  const unique = households.filter((h) => (seen.has(h.familyId) ? false : (seen.add(h.familyId), true)));
+  return unique.sort((a, b) => {
+    if (a.familyId === activeFamilyId) return -1;
+    if (b.familyId === activeFamilyId) return 1;
+    return a.familyName.localeCompare(b.familyName);
+  });
+}
