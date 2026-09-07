@@ -31,6 +31,7 @@ import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attent
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
 import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
+import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
@@ -199,6 +200,14 @@ export default async function HomePage() {
 
   const memberList = (members ?? []) as Member[];
   const memberById = new Map(memberList.map((m) => [m.id, m]));
+
+  // M8 — the composed schedule model for today's events (leave-by, driver, car,
+  // dinner and care constraints), so the Today strip says WHY an event needs
+  // attention instead of the bare "Today". Started here, awaited before
+  // `buildToday`, so it overlaps the reads below. The loader is fail-closed:
+  // a failed read is logged there and shown as a retryable note under the
+  // strip, never as a strip that looks all clear.
+  const schedulePromise = loadScheduleIntelligence(supabase, { familyId, tz, now, fromMs: dayBounds.start, toMs: dayBounds.end });
   const me = ctx.active.member;
   const myFirstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
   // The shared demo account greets by its account name ("Welcome Bubaly Demo
@@ -330,6 +339,7 @@ export default async function HomePage() {
     if (moreChoresError) console.error('[home] chore titles read failed', moreChoresError);
     for (const c of moreChores ?? []) choreTitleById.set(c.id, c.title);
   }
+  const scheduleRes = await schedulePromise;
   const today = buildToday({
     events: ((todayEvents ?? []) as TodayEventRow[]),
     todos: (todosDueRes.data ?? []) as TodayTodoRow[],
@@ -337,6 +347,7 @@ export default async function HomePage() {
     reminders: (remindersDueRes.data ?? []) as TodayReminderRow[],
     choreTitles: Object.fromEntries(choreTitleById),
     todayKey, tz, now,
+    ...(scheduleRes.ok ? { insights: scheduleRes.data.byEvent } : {}),
   });
 
   // R11 — the category metric: how much family admin the system removed this week.
@@ -435,12 +446,23 @@ export default async function HomePage() {
                     <div className="min-w-0 flex-1 border-l border-border pl-3">
                       <p className="truncate text-sm font-semibold">{item.title}</p>
                       <p className="truncate text-xs text-muted">{item.kind === 'reminder' ? 'Reminder' : 'Event'}{who ? ` · ${firstName(who.display_name)}` : ''}</p>
+                      {item.insight && (
+                        <p className={cn('truncate text-xs font-semibold', item.insight.severity === 'urgent' ? 'text-rose-400' : item.insight.severity === 'warn' ? 'text-amber-500' : 'text-muted')}>
+                          {i18nT(item.insight.reasonKey, item.insight.params)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 </li>
               );
             })}
           </ul>
+        )}
+        {!scheduleRes.ok && (
+          <p role="alert" className="mt-3 text-xs text-rose-400">
+            {tr('home.couldNotCheckTodaysSchedule')}{' '}
+            <Link href="/home" className="font-semibold underline underline-offset-2">{tr('home.tryAgain')}</Link>
+          </p>
         )}
         {today.tasks.length > 0 && (
           <ul className={cn('space-y-2.5', today.schedule.length > 0 && 'mt-4 border-t border-border pt-4')} aria-label={tr('home.dueToday')}>

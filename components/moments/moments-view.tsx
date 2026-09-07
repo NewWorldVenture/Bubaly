@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
   Camera, Bell, ChevronRight, CalendarClock, Check, PartyPopper, Trophy, Plane,
@@ -22,7 +23,7 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
-  buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory, type MomentEvent,
+  buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory, type MomentDeparture, type MomentEvent,
 } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
@@ -50,8 +51,18 @@ const CAT_LABEL: Record<MomentCategory, string> = {
   school: 'School', outdoors: 'Outdoors', general: 'Coming up',
 };
 
-export function MomentsView() {
+export function MomentsView({ departures, departuresFailed = false }: {
+  /**
+   * M8: composed leave-by per event id, from the family's saved departure
+   * plans (lib/schedule/intelligence via the page). Replaces the per-category
+   * buffer for those events; the rest keep the buffer.
+   */
+  departures?: Record<string, MomentDeparture> | null;
+  /** The page could not read the saved plans — say so, with a retry, rather than show buffers as the whole truth. */
+  departuresFailed?: boolean;
+} = {}) {
   const t = useTranslations();
+  const router = useRouter();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -82,9 +93,9 @@ export function MomentsView() {
     }));
     const all = [...evs, ...upcomingBirthdayEvents(members, new Date(), 30)]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    return all.map((e) => ({ event: e, prep: buildMomentPrep(e) }))
+    return all.map((e) => ({ event: e, prep: buildMomentPrep(e, { departure: departures?.[e.id] ?? null }) }))
       .filter((m) => m.prep.items.length > 0);
-  }, [rows, members]);
+  }, [rows, members, departures]);
 
   // Real double-bookings among the upcoming timed events (before they surprise you).
   const clashes = useMemo(() => findOverlaps(rows ?? []), [rows]);
@@ -146,6 +157,14 @@ export function MomentsView() {
         title={t('moments.moments')}
         description={t('momentsView.yourNextEventsAlreadyPrepped')}
       />
+
+      {departuresFailed && (
+        <p role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>{t('momentsView.couldNotCheckSavedDeparturePlans')}</span>
+          <button type="button" onClick={() => router.refresh()} className="font-semibold underline underline-offset-2">{t('momentsView.tryAgain')}</button>
+        </p>
+      )}
 
       {!loading && moments.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
