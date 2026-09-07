@@ -16,9 +16,9 @@ type TicketUpdate = Database['public']['Tables']['support_tickets']['Update'];
 const CATEGORIES = new Set(['technical', 'billing', 'account', 'family', 'general', 'feature_request']);
 const PRIORITIES = new Set(['low', 'medium', 'high', 'urgent']);
 
-function actionFailure(operation: string, error: unknown): ActionResult {
+function actionFailure(operation: string, message: string, error: unknown): ActionResult {
   console.error(`[support-tickets] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 async function guard(): Promise<GuardResult> {
@@ -31,6 +31,7 @@ async function updateTicket(
   ticketId: string,
   patch: TicketUpdate,
   operation: string,
+  message: string,
 ): Promise<ActionResult> {
   const t = await getTranslations();
   const guarded = await guard();
@@ -42,28 +43,31 @@ async function updateTicket(
     .eq('id', ticketId)
     .select('id')
     .maybeSingle();
-  if (error) return actionFailure(operation, error);
+  if (error) return actionFailure(operation, message, error);
   if (!data) return { ok: false, error: t('actions.ticketNotFound') };
   revalidatePath('/admin/support-tickets');
   return { ok: true };
 }
 
 export async function resolveTicketAction(ticketId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   return updateTicket(ticketId, {
     status: 'resolved', resolved_at: new Date().toISOString(),
-  }, 'resolve that ticket');
+  }, 'resolve that ticket', t('supportTickets.couldNotResolveThatTicket'));
 }
 
 export async function closeTicketAction(ticketId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   return updateTicket(ticketId, {
     status: 'closed', closed_at: new Date().toISOString(),
-  }, 'close that ticket');
+  }, 'close that ticket', t('supportTickets.couldNotCloseThatTicket'));
 }
 
 export async function reopenTicketAction(ticketId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   return updateTicket(ticketId, {
     status: 'open', resolved_at: null, closed_at: null,
-  }, 'reopen that ticket');
+  }, 'reopen that ticket', t('supportTickets.couldNotReopenThatTicket'));
 }
 
 export async function createTicketAction(formData: FormData): Promise<ActionResult> {
@@ -92,7 +96,7 @@ export async function createTicketAction(formData: FormData): Promise<ActionResu
     ticket_number, subject, category, priority,
     requester_email: parsedEmail.data, requester_name, description,
   });
-  if (error) return actionFailure('create that ticket', error);
+  if (error) return actionFailure('create that ticket', t('supportTickets.couldNotCreateThatTicket'), error);
   revalidatePath('/admin/support-tickets');
   return { ok: true };
 }

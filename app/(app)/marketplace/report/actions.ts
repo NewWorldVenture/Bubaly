@@ -14,9 +14,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[marketplace-report] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 export async function reportListingAction(
@@ -45,7 +45,7 @@ export async function reportListingAction(
   if (error) {
     // Unique violation → they already have an open report on this listing.
     if (error.code === '23505') return { ok: false, error: t('actions.youVeAlreadyReportedThis') };
-    return actionFailure('submit the report', error);
+    return actionFailure('submit the report', t('report.couldNotSubmitTheReport'), error);
   }
 
   // Alert the super admin's Trust & Safety queue (service role — admin_notifications

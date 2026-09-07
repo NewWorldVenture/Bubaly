@@ -108,7 +108,7 @@ export function VotingModule() {
       closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
       created_by: userId,
     }).select('id').single();
-    if (error || !poll) return toastError(describeDbError(error, 'Could not create'));
+    if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
     const { error: oErr } = await supabase.from('family_poll_options').insert(
       opts.map((o, i) => ({
         family_id: familyId, poll_id: poll.id, label: o.label.trim(), sort: i,

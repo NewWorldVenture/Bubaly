@@ -14,9 +14,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
-function actionFailure<T = undefined>(operation: string, error: unknown): Result<T> {
+function actionFailure<T = undefined>(operation: string, message: string, error: unknown): Result<T> {
   console.error(`[marketplace-handoff] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 const COMPLETE_REASON: Record<string, string> = {
@@ -46,7 +46,7 @@ export async function proposeHandoffAction(input: {
 }): Promise<Result> {
   const t = await getTranslations();
   const { ctx, sb, order, orderError } = await loadOrderRole(input.orderId);
-  if (orderError) return actionFailure('load the order', orderError);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
   if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
@@ -60,7 +60,7 @@ export async function proposeHandoffAction(input: {
     confirm_code: null, confirmed_at: null, completed_at: null, calendar_event_id: null,
     notes: input.notes?.trim() || null,
   }, { onConflict: 'order_id' });
-  if (error) return actionFailure('propose the pickup', error);
+  if (error) return actionFailure('propose the pickup', t('handoff.couldNotProposeThePickup'), error);
 
   revalidatePath('/marketplace/orders');
   return { ok: true };
@@ -70,12 +70,12 @@ export async function proposeHandoffAction(input: {
 export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
   const t = await getTranslations();
   const { ctx, sb, order, orderError } = await loadOrderRole(orderId);
-  if (orderError) return actionFailure('load the order', orderError);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
     .select('id, proposer_role, status, meet_at, location_label').eq('order_id', orderId).maybeSingle();
-  if (handoffError) return actionFailure('load the pickup', handoffError);
+  if (handoffError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), handoffError);
   if (!handoff) return { ok: false, error: t('actions.noPickupToConfirm') };
   if (handoff.status !== 'proposed') return { ok: false, error: t('actions.thisPickupCanTBe') };
   const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
@@ -102,7 +102,7 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
     status: 'confirmed', confirmed_at: new Date().toISOString(), confirm_code: code,
     calendar_event_id: calendarEventId,
   }).eq('order_id', orderId).eq('status', 'proposed');
-  if (error) return actionFailure('confirm the pickup', error);
+  if (error) return actionFailure('confirm the pickup', t('handoff.couldNotConfirmThePickup'), error);
 
   revalidatePath('/marketplace/orders');
   return { ok: true, data: { code } };
@@ -112,11 +112,11 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
 export async function cancelHandoffAction(orderId: string): Promise<Result> {
   const t = await getTranslations();
   const { sb, order, orderError } = await loadOrderRole(orderId);
-  if (orderError) return actionFailure('load the order', orderError);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
     .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
-  if (error) return actionFailure('cancel the pickup', error);
+  if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);
   revalidatePath('/marketplace/orders');
   return { ok: true };
 }
@@ -130,9 +130,9 @@ export async function completeHandoffAction(input: { orderId: string; code: stri
     p_order_id: input.orderId,
     p_code: input.code,
   });
-  if (error) return actionFailure('complete the pickup', error);
+  if (error) return actionFailure('complete the pickup', t('actions.couldNotCompleteThePickup'), error);
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return actionFailure('complete the pickup', new Error('Invalid hand-off completion response'));
+    return actionFailure('complete the pickup', t('actions.couldNotCompleteThePickup'), new Error('Invalid hand-off completion response'));
   }
   const result = data as { ok?: unknown; reason?: unknown };
   if (result.ok !== true) {

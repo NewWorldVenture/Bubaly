@@ -14,15 +14,15 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[economy-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
-async function decisionResult(operation: string, data: unknown): Promise<Result> {
+async function decisionResult(operation: string, message: string, data: unknown): Promise<Result> {
   const t = await getTranslations();
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return actionFailure(operation, new Error('Invalid decision response'));
+    return actionFailure(operation, message, new Error(t('actions.invalidDecisionResponse')));
   }
   const result = data as { ok?: unknown; reason?: unknown };
   if (result.ok === true) return { ok: true };
@@ -49,7 +49,7 @@ export async function createCurrencyAction(input: { name: string; emoji: string;
     family_id: ctx.active.familyId, name, emoji: normalizeEmoji(input.emoji),
     unit_label: input.unitLabel?.trim() || null, created_by: ctx.user.id,
   });
-  if (error) return actionFailure('create the currency', error);
+  if (error) return actionFailure('create the currency', t('economy.couldNotCreateTheCurrency'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -62,7 +62,7 @@ export async function setCurrencyActiveAction(input: { currencyId: string; isAct
   const supabase = await createServer();
   const { error } = await supabase.from('family_currencies')
     .update({ is_active: input.isActive }).eq('id', input.currencyId).eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('update the currency', error);
+  if (error) return actionFailure('update the currency', t('economy.couldNotUpdateTheCurrency'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -82,8 +82,8 @@ export async function awardTokensAction(input: { currencyId: string; memberId: s
     supabase.from('family_currencies').select('id').eq('id', input.currencyId).eq('family_id', familyId).maybeSingle(),
     supabase.from('family_members').select('id').eq('id', input.memberId).eq('family_id', familyId).maybeSingle(),
   ]);
-  if (curError) return actionFailure('verify the currency', curError);
-  if (memError) return actionFailure('verify the family member', memError);
+  if (curError) return actionFailure('verify the currency', t('economy.couldNotVerifyTheCurrency'), curError);
+  if (memError) return actionFailure('verify the family member', t('economy.couldNotVerifyTheFamilyMember'), memError);
   if (!cur) return { ok: false, error: t('actions.currencyNotFound') };
   if (!mem) return { ok: false, error: t('actions.familyMemberNotFound') };
 
@@ -91,7 +91,7 @@ export async function awardTokensAction(input: { currencyId: string; memberId: s
     family_id: familyId, currency_id: input.currencyId, member_id: input.memberId,
     direction: 'credit', amount, reason: input.reason?.trim() || 'Awarded', related_type: 'manual', created_by: ctx.user.id,
   });
-  if (error) return actionFailure('award tokens', error);
+  if (error) return actionFailure('award tokens', t('economy.couldNotAwardTokens'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -107,13 +107,13 @@ export async function createRewardAction(input: { currencyId: string; title: str
   if (!cost) return { ok: false, error: t('actions.setACostGreaterThan') };
   const supabase = await createServer();
   const { data: cur, error: curError } = await supabase.from('family_currencies').select('id').eq('id', input.currencyId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (curError) return actionFailure('verify the currency', curError);
+  if (curError) return actionFailure('verify the currency', t('economy.couldNotVerifyTheCurrency'), curError);
   if (!cur) return { ok: false, error: t('actions.currencyNotFound') };
   const { error } = await supabase.from('economy_rewards').insert({
     family_id: ctx.active.familyId, currency_id: input.currencyId, title, emoji: normalizeEmoji(input.emoji, '🎁'),
     cost, stock: input.stock ?? null, created_by: ctx.user.id,
   });
-  if (error) return actionFailure('create the reward', error);
+  if (error) return actionFailure('create the reward', t('economy.couldNotCreateTheReward'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -126,7 +126,7 @@ export async function setRewardActiveAction(input: { rewardId: string; isActive:
   const supabase = await createServer();
   const { error } = await supabase.from('economy_rewards')
     .update({ is_active: input.isActive }).eq('id', input.rewardId).eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('update the reward', error);
+  if (error) return actionFailure('update the reward', t('economy.couldNotUpdateTheReward'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -142,26 +142,26 @@ export async function requestRedemptionAction(input: { rewardId: string; memberI
     .from('economy_rewards')
     .select('id, currency_id, title, cost, is_active, stock')
     .eq('id', input.rewardId).eq('family_id', familyId).maybeSingle();
-  if (rewardError) return actionFailure('load the reward', rewardError);
+  if (rewardError) return actionFailure('load the reward', t('economy.couldNotLoadTheReward'), rewardError);
   if (!reward || !reward.is_active) return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
   if (reward.stock != null && reward.stock <= 0) return { ok: false, error: t('actions.thatRewardIsOutOf') };
 
   const { data: mem, error: memError } = await supabase.from('family_members').select('id').eq('id', input.memberId).eq('family_id', familyId).maybeSingle();
-  if (memError) return actionFailure('verify the family member', memError);
+  if (memError) return actionFailure('verify the family member', t('economy.couldNotVerifyTheFamilyMember'), memError);
   if (!mem) return { ok: false, error: t('actions.familyMemberNotFound') };
 
   // Soft pre-check affordability (final check is on approval, to avoid races).
   const { data: txns, error: txnError } = await supabase
     .from('currency_transactions').select('direction, amount')
     .eq('family_id', familyId).eq('currency_id', reward.currency_id).eq('member_id', input.memberId);
-  if (txnError) return actionFailure('check the token balance', txnError);
+  if (txnError) return actionFailure('check the token balance', t('economy.couldNotCheckTheTokenBalance'), txnError);
   if (!canAfford(balanceFrom(txns ?? []), reward.cost)) return { ok: false, error: t('actions.notEnoughTokensYet') };
 
   const { error } = await supabase.from('economy_redemptions').insert({
     family_id: familyId, reward_id: reward.id, currency_id: reward.currency_id, member_id: input.memberId,
     title: reward.title, cost: reward.cost, status: 'pending', requested_by: ctx.user.id,
   });
-  if (error) return actionFailure('request the redemption', error);
+  if (error) return actionFailure('request the redemption', t('economy.couldNotRequestTheRedemption'), error);
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -178,8 +178,8 @@ export async function decideRedemptionAction(input: { redemptionId: string; appr
     p_approve: input.approve,
     p_note: input.note?.trim() || null,
   });
-  if (error) return actionFailure('decide the redemption', error);
-  const result = await decisionResult('decide the redemption', data);
+  if (error) return actionFailure('decide the redemption', t('economy.couldNotDecideTheRedemption'), error);
+  const result = await decisionResult(t('actions.decideTheRedemption'), t('economy.couldNotDecideTheRedemption'), data);
   if (!result.ok) return result;
 
   revalidatePath('/economy');

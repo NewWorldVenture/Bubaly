@@ -458,7 +458,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
       role,
       invited_by: userId,
     }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, 'Failed')); }
+    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, t('settingsModule.failed'))); }
 
     // Fire invite email (non-blocking — don't fail UI if email fails)
     void fetch('/api/email/invite', {

@@ -41,9 +41,9 @@ const RESPOND_REASON: Record<string, string> = {
   bad_action: 'That action isn’t valid.',
 };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[marketplace-negotiations] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 function revalidate(listingId?: string) {
@@ -72,7 +72,7 @@ export async function makeOfferAction(
     p_amount: amount,
     p_message: message,
   });
-  if (error) return actionFailure('send the offer', error);
+  if (error) return actionFailure('send the offer', t('marketplace.couldNotSendTheOffer'), error);
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; negotiation_id?: string; countered?: boolean };
   if (!res.ok) return { ok: false, error: t(OFFER_REASON[res.reason ?? ''] ?? 'actions.couldNotSendThatOffer') };
@@ -104,7 +104,7 @@ export async function respondToOfferAction(
     p_amount: amount,
     p_message: message,
   });
-  if (error) return actionFailure('respond to the offer', error);
+  if (error) return actionFailure('respond to the offer', t('negotiations.couldNotRespondToTheOffer'), error);
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; status?: string; order_id?: string };
   if (!res.ok) return { ok: false, error: t(RESPOND_REASON[res.reason ?? ''] ?? 'actions.couldNotCompleteThatAction') };

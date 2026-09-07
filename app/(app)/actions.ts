@@ -8,9 +8,9 @@ import { profileUpdateSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
 import { describeActionError } from '@/lib/supabase/errors';
 
-function actionFailure(operation: string, error: unknown): { ok: false; error: string } {
+function actionFailure(operation: string, message: string, error: unknown): { ok: false; error: string } {
   console.error(`[account-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 /** Updates the signed-in user's account profile (name + contact phone). Keeps
@@ -47,13 +47,13 @@ export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boo
     .eq('family_id', familyId)
     .eq('user_id', auth.user.id)
     .maybeSingle();
-  if (memberError) return actionFailure('verify family membership', memberError);
+  if (memberError) return actionFailure('verify family membership', t('App.couldNotVerifyFamilyMembership'), memberError);
   if (!member) return { ok: false, error: t('actions.notAMemberOfThat') };
 
   const { error } = await supabase
     .from('user_preferences')
     .upsert({ user_id: auth.user.id, active_family_id: familyId }, { onConflict: 'user_id' });
-  if (error) return actionFailure('switch active family', error);
+  if (error) return actionFailure('switch active family', t('App.couldNotSwitchActiveFamily'), error);
 
   revalidatePath('/dashboard', 'layout');
   return { ok: true };
@@ -73,7 +73,7 @@ export async function setDefaultDashboardAction(
   const { error } = await supabase
     .from('user_preferences')
     .upsert({ user_id: auth.user.id, default_dashboard: view }, { onConflict: 'user_id' });
-  if (error) return actionFailure('set the default dashboard', error);
+  if (error) return actionFailure('set the default dashboard', t('App.couldNotSetTheDefaultDashboard'), error);
 
   revalidatePath('/dashboard', 'layout');
   return { ok: true };

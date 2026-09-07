@@ -22,7 +22,7 @@ export function GoogleControls() {
       if (!res.ok || data.error) setError(data.error ?? `Sync failed (${res.status})`);
       setResult(data);
     } catch {
-      setError('Network error — please try again.');
+      setError(t('googleControls.networkErrorPleaseTryAgain'));
     } finally {
       setBusy(false);
     }

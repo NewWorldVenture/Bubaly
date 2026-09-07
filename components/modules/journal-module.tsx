@@ -130,10 +130,10 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
     try {
       const res = await fetch('/api/ai/journal', { method: 'POST' });
       const json = (await res.json()) as { prompt?: string; error?: string };
-      if (!res.ok || !json.prompt) throw new Error(json.error || 'Could not get a prompt');
+      if (!res.ok || !json.prompt) throw new Error(json.error || t('journalModule.couldNotGetAPrompt'));
       setPrompt(json.prompt);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not get a prompt'));
+      toastError(describeDbError(err, t('journalModule.couldNotGetAPrompt')));
     } finally {
       setLoading(false);
     }

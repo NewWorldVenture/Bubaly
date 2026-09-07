@@ -12,9 +12,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[account-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 export async function closeAccountAction(): Promise<Result> {
@@ -26,7 +26,7 @@ export async function closeAccountAction(): Promise<Result> {
     .from('families')
     .update({ closed_at: new Date().toISOString() })
     .eq('id', ctx.active.familyId);
-  if (error) return actionFailure('close the account', error);
+  if (error) return actionFailure('close the account', t('account.couldNotCloseTheAccount'), error);
   revalidatePath('/', 'layout');
   return { ok: true };
 }
@@ -40,7 +40,7 @@ export async function reopenAccountAction(): Promise<Result> {
     .from('families')
     .update({ closed_at: null })
     .eq('id', ctx.active.familyId);
-  if (error) return actionFailure('reopen the account', error);
+  if (error) return actionFailure('reopen the account', t('account.couldNotReopenTheAccount'), error);
   revalidatePath('/', 'layout');
   return { ok: true };
 }

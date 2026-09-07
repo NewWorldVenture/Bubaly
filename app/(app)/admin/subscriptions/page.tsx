@@ -124,7 +124,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
         };
       });
     } catch (err) {
-      stripeError = describeDbError(err, 'Stripe is not configured');
+      stripeError = describeDbError(err, tr('subscriptions.stripeIsNotConfigured'));
     }
   }
 

@@ -9,9 +9,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[feedback-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 /** The display name to attribute a submission to (first name of the member). */
@@ -24,6 +24,7 @@ function authorNameFor(ctx: Awaited<ReturnType<typeof requireUserContext>>): str
 
 /** Post a new idea to the board. Title required; everything else optional. */
 export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const norm = normalizeIdea(draft);
   if (!norm.ok) return { ok: false, error: norm.error };
@@ -43,7 +44,7 @@ export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?
     image_url: norm.value.imageUrl,
   }).select('id, title, kind, category, problem, body, impact, vote_count, author_name').single();
 
-  if (error) return actionFailure('submit the idea', error);
+  if (error) return actionFailure('submit the idea', t('feedback.couldNotSubmitTheIdea'), error);
 
   // Fire-and-forget side effects: notify the super admin + mirror to the GitHub
   // tracker. Best-effort — the submission already succeeded, so a notification
@@ -61,20 +62,21 @@ export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?
 
 /** Toggle the signed-in user's upvote on an idea. Idempotent per direction. */
 export async function toggleVoteAction(ideaId: string): Promise<Result & { voted?: boolean; count?: number }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const { data: existing, error: readErr } = await supabase
     .from('feedback_votes').select('id').eq('idea_id', ideaId).eq('user_id', ctx.user.id).maybeSingle();
-  if (readErr) return actionFailure('check the vote', readErr);
+  if (readErr) return actionFailure('check the vote', t('feedback.couldNotCheckTheVote'), readErr);
 
   if (existing) {
     const { error } = await supabase.from('feedback_votes').delete().eq('id', existing.id);
-    if (error) return actionFailure('remove the vote', error);
+    if (error) return actionFailure('remove the vote', t('feedback.couldNotRemoveTheVote'), error);
   } else {
     const { error } = await supabase.from('feedback_votes').insert({ idea_id: ideaId, user_id: ctx.user.id });
     // A racing double-click can hit the unique index — treat as already-voted.
-    if (error && error.code !== '23505' && !/duplicate key/i.test(error.message)) return actionFailure('save the vote', error);
+    if (error && error.code !== '23505' && !/duplicate key/i.test(error.message)) return actionFailure('save the vote', t('feedback.couldNotSaveTheVote'), error);
   }
 
   const { data: idea } = await supabase.from('feedback_ideas').select('vote_count').eq('id', ideaId).maybeSingle();
@@ -99,7 +101,7 @@ export async function addCommentAction(input: { ideaId: string; body: string }):
     is_team: admin,
     body,
   });
-  if (error) return actionFailure('add the comment', error);
+  if (error) return actionFailure('add the comment', t('feedback.couldNotAddTheComment'), error);
   revalidatePath('/feedback');
   return { ok: true };
 }
@@ -117,7 +119,7 @@ export async function setIdeaStatusAction(input: { ideaId: string; status: strin
   const { error } = await svc.from('feedback_ideas')
     .update({ status: input.status, admin_note: note || null })
     .eq('id', input.ideaId);
-  if (error) return actionFailure('update the idea status', error);
+  if (error) return actionFailure('update the idea status', t('feedback.couldNotUpdateTheIdeaStatus'), error);
   revalidatePath('/feedback');
   return { ok: true };
 }

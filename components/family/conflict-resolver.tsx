@@ -94,7 +94,7 @@ function ConflictCard({
     start(async () => {
       const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso);
       if (r.ok) onResolved();
-      else setError(r.error ?? 'Could not reschedule.');
+      else setError(r.error ?? t('conflictResolver.couldNotReschedule'));
     });
   }
 

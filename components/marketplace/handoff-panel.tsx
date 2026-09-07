@@ -199,7 +199,7 @@ function CompleteForm({ orderId, onDone, onError }: { orderId: string; onDone: (
   const [code, setCode] = useState('');
   const [pending, start] = useTransition();
   function submit() {
-    if (!code.trim()) { onError('Enter the hand-off code.'); return; }
+    if (!code.trim()) { onError(tr('handoffPanel.enterTheHandOffCode')); return; }
     start(async () => {
       const res = await completeHandoffAction({ orderId, code });
       if (!res.ok) { onError(res.error); return; }

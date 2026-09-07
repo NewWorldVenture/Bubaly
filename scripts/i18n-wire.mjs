@@ -300,12 +300,33 @@ for (const [path, byName] of wanted) {
       // Per FUNCTION, not per file: a page can declare `tr` in its default
       // export and still need one in the failure component above it.
       if (src.slice(open, open + 140).includes(`const ${name} =`)) continue;
-      const decl = isClient || text.includes('async') ? text : text.replace('function', 'async function');
+      const wasAsync = isClient || text.includes('async');
+      const decl = wasAsync ? text : text.replace('function', 'async function');
       const stmt = isClient
         ? `\n  const ${name} = useTranslations();`
         : `\n  const ${name} = await getTranslations();`;
-      src = src.slice(0, open + 1) + stmt + src.slice(open + 1);
-      src = src.slice(0, at) + decl + src.slice(at + text.length);
+
+      // Making a function `async` also changes its RETURN TYPE, and leaving the
+      // annotation alone produces `async function f(): ActionResult`, which tsc
+      // rejects — on the NEXT run, after the tool has reported success.
+      //
+      // Three edits land in one signature, so they are applied BACK TO FRONT.
+      // Applying them in source order was the first attempt and it spliced the
+      // declaration into the middle of the return type.
+      let ret = null;
+      if (!wasAsync) {
+        const sig = src.slice(at, open);
+        const m = /\)\s*:\s*([^{]+?)\s*$/.exec(sig);
+        if (m && !/^Promise\s*</.test(m[1])) {
+          ret = { from: at + m.index + m[0].indexOf(':') + 1, to: open, type: m[1] };
+          const fn = /function\s+([A-Za-z0-9_]+)/.exec(text)?.[1];
+          console.error(`  ${path} — ${fn}() is async now; its callers need an await`);
+        }
+      }
+
+      src = src.slice(0, open + 1) + stmt + src.slice(open + 1);              // body
+      if (ret) src = src.slice(0, ret.from) + ` Promise<${ret.type}> ` + src.slice(ret.to);
+      src = src.slice(0, at) + decl + src.slice(at + text.length);            // name
       wired += 1;
     }
   }

@@ -137,8 +137,8 @@ export function WeatherModule() {
     let cancelled = false;
     setLoading(true); setError(null);
     fetchForecast(active.lat, active.lon, 14)
-      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError('Could not load the forecast.'); } })
-      .catch(() => { if (!cancelled) setError('Could not load the forecast.'); })
+      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError(t('weatherModule.couldNotLoadTheForecast')); } })
+      .catch(() => { if (!cancelled) setError(t('weatherModule.couldNotLoadTheForecast')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [active?.key, active?.lat, active?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -157,7 +157,7 @@ export function WeatherModule() {
       name: r.name, admin1: r.admin1, country: r.country, latitude: r.latitude, longitude: r.longitude,
       sort_order: saved.length,
     }).select('id').single();
-    if (err || !data) { toastError(describeDbError(err, 'Could not add city')); return; }
+    if (err || !data) { toastError(describeDbError(err, t('weatherModule.couldNotAddCity'))); return; }
     success(`Added ${r.name}`);
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();

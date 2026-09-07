@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', vacationId).eq('family_id', familyId).maybeSingle();
   if (tripError) {
     logDatabaseFailure('trip context read', tripError);
-    return databaseUnavailable('Trip data is temporarily unavailable.');
+    return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
   }
   if (!trip) return NextResponse.json({ error: t('ai.tripNotFound') }, { status: 404 });
 
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const contextError = contextResults.find((result) => result.error)?.error;
   if (contextError) {
     logDatabaseFailure('trip context read', contextError);
-    return databaseUnavailable('Trip data is temporarily unavailable.');
+    return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
   }
   const [members, lodging, flights, transport, activities, reservations, budgets, expenses, packing, docs, emergency, days, items, weather] = contextResults;
 
@@ -101,13 +101,13 @@ export async function POST(req: NextRequest) {
     const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
     if (deleteError) {
       logDatabaseFailure('recommendation cleanup', deleteError);
-      return databaseUnavailable('Recommendations are temporarily unavailable.');
+      return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
     }
     if (recos.length) {
       const { error: insertError } = await supabase.from('vacation_ai_recommendations').insert(recos.map((x) => ({ family_id: familyId, vacation_id: vacationId, kind: x.kind as never, title: x.title, detail: x.detail, severity: x.severity, source: 'rules', created_by: ctx!.user.id })));
       if (insertError) {
         logDatabaseFailure('recommendation write', insertError);
-        return databaseUnavailable('Recommendations are temporarily unavailable.');
+        return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
       }
     }
     return NextResponse.json({ count: recos.length });
@@ -194,7 +194,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), created_by: ctx!.user.id }));
       const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
       if (data) createdActivityIds.push(...data.map((row) => row.id));
-      if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Activity insert returned an incomplete result.'));
+      if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Activity insert returned an incomplete result.'));
       added.activities = rows.length;
     }
     // itinerary — ensure days exist, map day number -> day_id
@@ -204,13 +204,13 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (toCreate.length) {
         const { data: created, error } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date');
         if (created) createdDayIds.push(...created.map((day) => day.id));
-        if (error || !created || created.length !== toCreate.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary day insert returned an incomplete result.'));
+        if (error || !created || created.length !== toCreate.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary day insert returned an incomplete result.'));
         for (const d of created) {
           existing.set(d.day_date, d.id);
         }
       }
       const dayIds = range.map((d) => existing.get(d)).filter(Boolean) as string[];
-      if (dayIds.length !== range.length) return buildFailure('Could not save the generated trip plan.', new Error('Itinerary days could not be resolved.'));
+      if (dayIds.length !== range.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), new Error('Itinerary days could not be resolved.'));
       const rows = plan.itinerary.map((x) => ({
         family_id: familyId, vacation_id: vacationId,
         day_id: dayIds[x.day - 1],
@@ -221,7 +221,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
         if (data) createdItemIds.push(...data.map((row) => row.id));
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary item insert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary item insert returned an incomplete result.'));
         added.items = rows.length;
       }
     }
@@ -234,7 +234,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
           if (originalBudgets.has(row.category)) changedBudgetCategories.push(row.category);
           else createdBudgetIds.push(row.id);
         }
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Budget upsert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Budget upsert returned an incomplete result.'));
         added.budget = rows.length;
       }
     }
@@ -242,14 +242,14 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     const master = (packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
     const listId = master?.data?.id;
     if (listId) createdPackingListId = listId;
-    if (master?.error) return buildFailure('Could not save the generated trip plan.', master.error);
+    if (master?.error) return buildFailure(t('ai.couldNotSaveTheGenerated'), master.error);
     if (listId) {
       const sugg = suggestPacking({ kind: trip.kind, nights: nights || 5, isInternational: trip.is_international, hasChildren, hasBaby: false, activities: a.map((x) => x.name) });
       const rows = sugg.map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category as never, quantity: s.quantity, ai_suggested: true, created_by: ctx!.user.id }));
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_packing_items').insert(rows).select('id');
         if (data) createdPackingItemIds.push(...data.map((row) => row.id));
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Packing insert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Packing insert returned an incomplete result.'));
         added.packing = rows.length;
       }
     }
@@ -267,27 +267,27 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
       if (error) {
         console.error('Vacation AI conversation write failed:', error);
-        return databaseUnavailable('Could not start the trip conversation.');
+        return databaseUnavailable(t('ai.couldNotStartTheTrip'));
       }
       conversationId = convo.id;
     } else {
       const { data: conversation, error } = await supabase.from('vacation_ai_conversations').select('id').eq('id', conversationId).eq('family_id', familyId).eq('vacation_id', vacationId).maybeSingle();
       if (error) {
         logDatabaseFailure('conversation ownership read', error);
-        return databaseUnavailable('Trip conversation is temporarily unavailable.');
+        return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
       }
       if (!conversation) return NextResponse.json({ error: t('ai.conversationNotFound') }, { status: 404 });
     }
     const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
     if (userMessageError) {
       logDatabaseFailure('user message write', userMessageError);
-      return databaseUnavailable('Could not save your message.');
+      return databaseUnavailable(t('ai.couldNotSaveYourMessage'));
     }
 
     const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(20);
     if (historyError) {
       logDatabaseFailure('conversation history read', historyError);
-      return databaseUnavailable('Trip conversation is temporarily unavailable.');
+      return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
     }
 
     const budgetSummary = summarizeBudget(budgets.data ?? [], expenses.data ?? []);
@@ -329,7 +329,7 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
     const { error: assistantMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id }).select('id').single();
     if (assistantMessageError) {
       logDatabaseFailure('assistant message write', assistantMessageError);
-      return databaseUnavailable('Could not save the concierge reply.');
+      return databaseUnavailable(t('ai.couldNotSaveTheConcierge'));
     }
     return NextResponse.json({ conversationId, reply });
   }

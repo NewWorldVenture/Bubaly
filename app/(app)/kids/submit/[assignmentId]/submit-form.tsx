@@ -30,7 +30,7 @@ export function SubmitProofForm({ assignmentId, proofKind }: { assignmentId: str
     start(async () => {
       const res = await submitProofAction(fd);
       if (res.ok) { setDone(true); setTimeout(() => router.push('/kids'), 2200); }
-      else setError(res.error ?? 'Something went wrong. Try again.');
+      else setError(res.error ?? t('submitForm.somethingWentWrongTryAgain'));
     });
   }
 

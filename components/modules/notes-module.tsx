@@ -391,7 +391,7 @@ function NoteModal({ note, onClose, onSaved }: {
       if (!res.ok || !json.insights) throw new Error(json.error || 'Could not analyze note');
       setInsights(json.insights);
     } catch (err) {
-      toastError(describeDbError(err, 'AI assist failed'));
+      toastError(describeDbError(err, t('notesModule.aiAssistFailed')));
     } finally {
       setAiLoading(false);
     }

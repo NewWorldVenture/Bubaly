@@ -48,12 +48,12 @@ export function PublicForm({ formId, fields, submitLabel, successMessage }: {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.fields) setErrors(data.fields);
-        throw new Error(data.error ?? 'Something went wrong');
+        throw new Error(data.error ?? t('formRenderer.somethingWentWrong'));
       }
       setDone(true);
       void trackConversion();
     } catch (err) {
-      toastError(describeDbError(err, 'Something went wrong'));
+      toastError(describeDbError(err, t('formRenderer.somethingWentWrong')));
     } finally {
       setLoading(false);
     }

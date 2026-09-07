@@ -9,9 +9,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[app-lock-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 /**
@@ -34,7 +34,7 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     .select('notification_prefs')
     .eq('user_id', ctx.user.id)
     .maybeSingle();
-  if (prefsError) return actionFailure('load App Lock settings', prefsError);
+  if (prefsError) return actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), prefsError);
 
   const np = ((prefs?.notification_prefs as Record<string, unknown> | null) ?? {});
   const next = { ...np };
@@ -45,6 +45,6 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     .from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: next as Json }, { onConflict: 'user_id' });
 
-  if (error) return actionFailure('save App Lock settings', error);
+  if (error) return actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), error);
   return { ok: true };
 }

@@ -7,13 +7,13 @@ describe('Vacation AI persistence boundaries', () => {
   it('fails closed when the trip or fan-out context cannot be read', () => {
     expect(source).toContain('tripError');
     expect(source).toContain('const contextError = contextResults.find((result) => result.error)?.error;');
-    expect(source).toContain("return databaseUnavailable('Trip data is temporarily unavailable.')");
+    expect(source).toContain("return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'))");
   });
 
   it('checks recommendation replacement writes', () => {
     expect(source).toContain('const { error: deleteError }');
     expect(source).toContain('const { error: insertError }');
-    expect(source).toContain("return databaseUnavailable('Recommendations are temporarily unavailable.')");
+    expect(source).toContain("return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'))");
   });
 
   it('checks generated row counts and rolls back tracked build writes', () => {

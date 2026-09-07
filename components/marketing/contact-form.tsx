@@ -41,11 +41,11 @@ export function ContactForm() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.fields) setErrors(data.fields);
-        throw new Error(data.error ?? 'Something went wrong');
+        throw new Error(data.error ?? tr('contactForm.somethingWentWrong'));
       }
       setDone(true);
     } catch (err) {
-      toastError(describeDbError(err, 'Something went wrong'));
+      toastError(describeDbError(err, tr('contactForm.somethingWentWrong')));
     } finally {
       setLoading(false);
     }

@@ -14,8 +14,8 @@ describe('wallet and Stripe money action boundaries', () => {
   });
 
   it('checks required reads and keeps audit loss best-effort', () => {
-    expect(moneyActions).toContain("if (acctError) return actionFailure('load the connected account', acctError);");
-    expect(moneyActions).toContain("if (cardError) return actionFailure('load the card', cardError);");
+    expect(moneyActions).toContain("if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);");
+    expect(moneyActions).toContain("if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);");
     expect(moneyActions).toContain('logAuditFailure');
   });
 
@@ -27,16 +27,16 @@ describe('wallet and Stripe money action boundaries', () => {
 
   it('fails wallet activation when a provisioning step fails', () => {
     expect(walletMoneyActions).toContain('const { error: disclosureError } = await supabase.from(\'compliance_disclosures\').insert');
-    expect(walletMoneyActions).toContain('if (childrenError) return actionFailure(childrenError');
-    expect(walletMoneyActions).toContain('if (bucketError) return actionFailure(bucketError');
-    expect(walletMoneyActions).toContain('if (ruleError) return actionFailure(ruleError');
+    expect(walletMoneyActions).toContain('if (childrenError) return actionFailure(childrenError, t(\'actions.couldNotLoadFamilyMembers\'));');
+    expect(walletMoneyActions).toContain('if (bucketError) return actionFailure(bucketError, t(\'actions.couldNotProvisionWalletBuckets\'));');
+    expect(walletMoneyActions).toContain('if (ruleError) return actionFailure(ruleError, t(\'actions.couldNotProvisionWalletRules\'));');
     expect(walletMoneyActions).not.toContain('if (!cw) continue;');
   });
 
   it('rolls back a held spend when its approval row cannot be created', () => {
     expect(walletMoneyActions).toContain('const { error: approvalError } = await supabase.from(\'parent_approvals\').insert');
     expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval');");
-    expect(walletMoneyActions).toContain("return actionFailure(approvalError, 'Could not create the spend approval request.')");
+    expect(walletMoneyActions).toContain("return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'))");
   });
 
   it('does not silently downgrade entitlement when subscription reads fail', () => {

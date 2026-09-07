@@ -67,7 +67,7 @@ export function SignupForm() {
       router.push(next);
       router.refresh();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not create account'));
+      toastError(describeDbError(err, t('signupForm.couldNotCreateAccount')));
     } finally {
       setLoading(false);
     }

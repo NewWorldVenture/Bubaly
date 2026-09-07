@@ -92,7 +92,7 @@ export function QuickCapture() {
       reset();
       setOpen(false);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not save'));
+      toastError(describeDbError(err, tr('quickCapture.couldNotSave')));
     } finally {
       setSaving(false);
     }

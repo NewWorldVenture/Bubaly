@@ -330,7 +330,7 @@ export function CalendarModule() {
       const json = await res.json() as { synced?: number; error?: string };
       if (json.error) throw new Error(json.error);
       success(`Synced ${json.synced} events`); void refresh();
-    } catch (err) { toastError(describeDbError(err, 'Sync failed')); }
+    } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }
 

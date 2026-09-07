@@ -114,7 +114,7 @@ export function CreateMemory() {
           media_type: 'image',
         }).select('id').single();
         if (insErr || !row) {
-          toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
+          toastError(describeDbError(insErr ?? { message: t('createMemory.couldNotSaveMemory') }));
           const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
           if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
         } else {

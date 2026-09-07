@@ -299,7 +299,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const n = name.trim();
-    if (!n) { onError('Name is required'); return; }
+    if (!n) { onError(t('graphModule.nameIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('graph_entities').insert({ family_id: familyId, name: n, kind, created_by: userId });
@@ -337,10 +337,10 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
   const [saving, setSaving] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!sourceId || !targetId) { onError('Pick both ends'); return; }
-    if (sourceId === targetId) { onError('An entity can’t link to itself'); return; }
+    if (!sourceId || !targetId) { onError(t('graphModule.pickBothEnds')); return; }
+    if (sourceId === targetId) { onError(t('graphModule.anEntityCanTLink')); return; }
     const rel = relation.trim();
-    if (!rel) { onError('Describe the relationship'); return; }
+    if (!rel) { onError(t('graphModule.describeTheRelationship')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('graph_edges').insert({

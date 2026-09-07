@@ -147,7 +147,7 @@ export function HabitsModule() {
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not generate coaching');
       setCoaching(json.coaching);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach failed'));
+      toastError(describeDbError(err, t('habitsModule.coachFailed')));
       setCoachOpen(false);
     } finally {
       setCoachLoading(false);

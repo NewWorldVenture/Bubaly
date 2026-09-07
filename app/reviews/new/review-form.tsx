@@ -30,11 +30,11 @@ export function ReviewForm(p: Props) {
   const [error, setError] = useState('');
 
   function submit() {
-    if (rating < 1) { setError('Please choose a star rating.'); return; }
+    if (rating < 1) { setError(t('reviewForm.pleaseChooseAStarRating')); return; }
     setError('');
     start(async () => {
       const r = await submitReviewAction({ rating, title, body, name, email });
-      if (r.ok) setDone(true); else setError(r.error ?? 'Something went wrong.');
+      if (r.ok) setDone(true); else setError(r.error ?? t('reviewForm.somethingWentWrong'));
     });
   }
 

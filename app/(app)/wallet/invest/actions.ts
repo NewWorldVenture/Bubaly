@@ -15,15 +15,15 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[invest-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
-async function decisionResult(operation: string, data: unknown): Promise<Result> {
+async function decisionResult(operation: string, message: string, data: unknown): Promise<Result> {
   const tr = await getTranslations();
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return actionFailure(operation, new Error('Invalid decision response'));
+    return actionFailure(operation, message, new Error(tr('actions.invalidDecisionResponse')));
   }
   const result = data as { ok?: unknown; reason?: unknown };
   if (result.ok === true) return { ok: true };
@@ -56,6 +56,7 @@ async function investBucketBalance(supabase: Awaited<ReturnType<typeof createSer
 
 /** Request a buy/sell order (pending parent approval). */
 export async function placeInvestOrderAction(input: { childWalletId: string; assetId: string; side: 'buy' | 'sell'; shares: number }): Promise<Result> {
+  const t = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -67,8 +68,8 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
     supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('invest_assets').select('id, price_cents, is_active').eq('id', input.assetId).maybeSingle(),
   ]);
-  if (walletError) return actionFailure('load the child wallet', walletError);
-  if (assetError) return actionFailure('load the investment', assetError);
+  if (walletError) return actionFailure('load the child wallet', tr('invest.couldNotLoadTheChildWallet'), walletError);
+  if (assetError) return actionFailure('load the investment', t('invest.couldNotLoadTheInvestment'), assetError);
   if (!cw) return { ok: false, error: tr('actions.childWalletNotFound') };
   if (!asset || !asset.is_active) return { ok: false, error: tr('actions.thatInvestmentIsNotAvailable') };
 
@@ -77,13 +78,13 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
 
   if (input.side === 'buy') {
     const bucket = await investBucketBalance(supabase, familyId, input.childWalletId);
-    if (bucket.error) return actionFailure('load the Invest balance', bucket.error);
+    if (bucket.error) return actionFailure('load the Invest balance', t('invest.couldNotLoadTheInvestBalance'), bucket.error);
     const { balance } = bucket;
     if (amount > balance) return { ok: false, error: tr('actions.notEnoughMoneyInThe') };
   } else {
     const { data: holding, error: holdingError } = await supabase
       .from('invest_holdings').select('shares').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).eq('asset_id', input.assetId).maybeSingle();
-    if (holdingError) return actionFailure('load the investment holding', holdingError);
+    if (holdingError) return actionFailure('load the investment holding', t('invest.couldNotLoadTheInvestmentHolding'), holdingError);
     if (!holding || holding.shares < shares) return { ok: false, error: tr('actions.notEnoughSharesToSell') };
   }
 
@@ -104,13 +105,14 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
     side: input.side, shares, price_cents: asset.price_cents, amount_cents: amount,
     status: 'pending', requested_by: ctx.user.id,
   });
-  if (error) return actionFailure('place the investment order', error);
+  if (error) return actionFailure('place the investment order', t('invest.couldNotPlaceTheInvestmentOrder'), error);
   revalidatePath('/wallet/invest');
   return { ok: true };
 }
 
 /** Parent approves (fills) or rejects an order. Fills move cash + shares. */
 export async function decideInvestOrderAction(input: { orderId: string; approve: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: tr('actions.onlyAParentGuardianCan') };
@@ -121,7 +123,7 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
     .from('invest_orders')
     .select('id, child_wallet_id, asset_id, side, shares, price_cents, amount_cents, status')
     .eq('id', input.orderId).eq('family_id', familyId).maybeSingle();
-  if (orderError) return actionFailure('load the investment order', orderError);
+  if (orderError) return actionFailure('load the investment order', t('invest.couldNotLoadTheInvestmentOrder'), orderError);
   if (!order) return { ok: false, error: tr('actions.orderNotFound') };
   if (order.status !== 'pending') return { ok: false, error: tr('actions.thisOrderWasAlreadyDecided') };
 
@@ -139,8 +141,8 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
     p_order_id: input.orderId,
     p_approve: input.approve,
   });
-  if (error) return actionFailure('decide the investment order', error);
-  const result = await decisionResult('decide the investment order', data);
+  if (error) return actionFailure('decide the investment order', t('invest.couldNotDecideTheInvestmentOrder'), error);
+  const result = await decisionResult(tr('actions.decideTheInvestmentOrder'), tr('invest.couldNotDecideTheInvestment'), data);
   if (!result.ok) return result;
 
   revalidatePath('/wallet/invest');

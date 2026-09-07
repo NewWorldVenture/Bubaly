@@ -536,8 +536,8 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
     const amount = Number(f.get('amount'));
-    if (!name) return onError('Add a description');
-    if (!amount || amount <= 0) return onError('Enter a valid amount');
+    if (!name) return onError(tr('financesModule.addADescription'));
+    if (!amount || amount <= 0) return onError(tr('financesModule.enterAValidAmount'));
     setLoading(true);
     const res = await createTransactionAction({
       name, amount,
@@ -586,7 +586,7 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return onError('Name the account');
+    if (!name) return onError(tr('financesModule.nameTheAccount'));
     setLoading(true);
     const { error } = await createClient().from('financial_accounts').insert({
       family_id: familyId, created_by: userId, name,

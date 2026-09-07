@@ -22,10 +22,10 @@ describe('account and device-security action boundaries', () => {
     const appLock = readFileSync('app/(app)/settings/app-lock-actions.ts', 'utf8');
     const profiles = readFileSync('lib/server/profiles.ts', 'utf8');
 
-    expect(actions).toContain('if (error) return actionFailure(\'switch active family\', error);');
-    expect(actions).toContain('if (error) return actionFailure(\'set the default dashboard\', error);');
-    expect(appLock).toContain('if (prefsError) return actionFailure(\'load App Lock settings\', prefsError);');
-    expect(appLock).toContain('if (error) return actionFailure(\'save App Lock settings\', error);');
+    expect(actions).toContain("if (error) return actionFailure('switch active family', t('App.couldNotSwitchActiveFamily'), error);");
+    expect(actions).toContain("if (error) return actionFailure('set the default dashboard', t('App.couldNotSetTheDefaultDashboard'), error);");
+    expect(appLock).toContain("if (prefsError) return actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), prefsError);");
+    expect(appLock).toContain("if (error) return actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), error);");
     expect(profiles).toContain('if (memberError)');
   });
 });

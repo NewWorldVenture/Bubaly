@@ -25,11 +25,11 @@ describe('Marketplace and Feedback action boundaries', () => {
   it('fails closed on required marketplace reads before mutating', () => {
     const marketplace = readFileSync('app/(app)/marketplace/actions.ts', 'utf8');
     const handoff = readFileSync('app/(app)/marketplace/handoff/actions.ts', 'utf8');
-    expect(marketplace).toContain("if (readError) return actionFailure('check the saved listing', readError);");
-    expect(marketplace).toContain("if (orderError) return actionFailure('load the order', orderError);");
-    expect(marketplace).toContain("if (listingError) return actionFailure('load the listing', listingError);");
-    expect(handoff).toContain("if (orderError) return actionFailure('load the order', orderError);");
-    expect(handoff).toContain("if (handoffError) return actionFailure('load the pickup', handoffError);");
+    expect(marketplace).toContain("if (readError) return actionFailure('check the saved listing', t('marketplace.couldNotCheckTheSavedListing'), readError);");
+    expect(marketplace).toContain("if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);");
+    expect(marketplace).toContain("if (listingError) return actionFailure('load the listing', t('marketplace.couldNotLoadTheListing'), listingError);");
+    expect(handoff).toContain("if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);");
+    expect(handoff).toContain("if (handoffError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), handoffError);");
   });
 
   it('keeps expected duplicate and domain messages explicit', () => {

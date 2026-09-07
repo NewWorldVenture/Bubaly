@@ -39,11 +39,11 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
         body: JSON.stringify({ token, relationship: name.trim() || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Could not get ideas right now.'); return; }
+      if (!res.ok) { setError(data.error ?? t('publicGiftForm.couldNotGetIdeasRight')); return; }
       setIdeas(data.messages ?? []);
       setAiAmounts(data.amountsCents ?? []);
     } catch {
-      setError('Could not get ideas right now.');
+      setError(t('publicGiftForm.couldNotGetIdeasRight'));
     } finally {
       setAssisting(false);
     }
@@ -52,12 +52,12 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim()) return setError('Please enter your name.');
-    if (!effectiveCents || effectiveCents <= 0) return setError('Pick or enter an amount.');
+    if (!name.trim()) return setError(t('publicGiftForm.pleaseEnterYourName'));
+    if (!effectiveCents || effectiveCents <= 0) return setError(t('publicGiftForm.pickOrEnterAnAmount'));
     setLoading(true);
     const res = await submitGiftPledgeAction({ token, giverName: name, amountCents: effectiveCents, message });
     setLoading(false);
-    if (!res.ok) return setError(res.error ?? 'Could not send your gift.');
+    if (!res.ok) return setError(res.error ?? t('publicGiftForm.couldNotSendYourGift'));
     setDone(true);
   }
 

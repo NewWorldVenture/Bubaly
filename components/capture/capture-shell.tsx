@@ -76,7 +76,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
       setMode('type');
       textRef.current?.focus();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not undo'));
+      toastError(describeDbError(err, t('captureShell.couldNotUndo')));
     } finally {
       setUndoing(false);
     }
@@ -102,7 +102,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
         setCreated({ ...res, destination: route.destination });
       } catch (err) {
-        toastError(describeDbError(err, 'Could not save'));
+        toastError(describeDbError(err, t('captureShell.couldNotSave')));
       } finally {
         setRouting(false);
       }

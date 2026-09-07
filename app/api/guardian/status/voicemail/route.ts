@@ -3,6 +3,7 @@
 // Updates the communication record and notifies the family.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -18,6 +19,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   const { searchParams } = new URL(req.url);
   const commId = searchParams.get('commId') ?? '';
 
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!commId) {
-    return new NextResponse(wrapTwiml(twimlSay('Thank you. Goodbye.'), twimlHangup()), {
+    return new NextResponse(wrapTwiml(twimlSay(tr('voicemail.thankYouGoodbye')), twimlHangup()), {
       headers: { 'content-type': 'application/xml' },
     });
   }
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
   const eventClaimed = await claimGuardianCallback(supabase, 'voicemail_recording', recordingSid);
   if (!eventClaimed) {
-    return new NextResponse(wrapTwiml(twimlSay('Thank you. Goodbye.'), twimlHangup()), {
+    return new NextResponse(wrapTwiml(twimlSay(tr('voicemail.thankYouGoodbye')), twimlHangup()), {
       headers: { 'content-type': 'application/xml' },
     });
   }
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   await markGuardianCallbackProcessed(supabase, recordingSid);
   return new NextResponse(
-    wrapTwiml(twimlSay('Thank you for your message. Goodbye.'), twimlHangup()),
+    wrapTwiml(twimlSay(tr('voicemail.thankYouForYourMessage')), twimlHangup()),
     { headers: { 'content-type': 'application/xml' } },
   );
 }

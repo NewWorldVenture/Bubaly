@@ -24,9 +24,9 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
-function actionFailure<T = unknown>(operation: string, error: unknown): Result<T> {
+function actionFailure<T = unknown>(operation: string, message: string, error: unknown): Result<T> {
   console.error(`[money-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 function logAuditFailure(operation: string, error: unknown): void {
@@ -61,7 +61,7 @@ export async function startConnectOnboardingAction(): Promise<Result<{ url: stri
     revalidatePath('/wallet/cards');
     return { ok: true, data: { url } };
   } catch (e) {
-    return actionFailure('start Stripe onboarding', e);
+    return actionFailure('start Stripe onboarding', t('money.couldNotStartStripeOnboarding'), e);
   }
 }
 
@@ -73,14 +73,14 @@ export async function refreshConnectStatusAction(): Promise<Result> {
   const svc = createServiceClient();
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
-  if (acctError) return actionFailure('load the connected account', acctError);
+  if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountToRefreshYet') };
   try {
     await syncConnectedAccount(svc, ctx.active.familyId, acct.stripe_account_id);
     revalidatePath('/wallet/cards');
     return { ok: true };
   } catch (e) {
-    return actionFailure('refresh Stripe onboarding', e);
+    return actionFailure('refresh Stripe onboarding', t('money.couldNotRefreshStripeOnboarding'), e);
   }
 }
 
@@ -94,7 +94,7 @@ export async function activateTreasuryAction(): Promise<Result> {
   if (!caps.treasury) return { ok: false, error: t('actions.thisFeatureIsNotAvailable') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('id, stripe_account_id, treasury_enabled').eq('family_id', ctx.active.familyId).maybeSingle();
-  if (acctError) return actionFailure('load the Treasury account', acctError);
+  if (acctError) return actionFailure('load the Treasury account', t('money.couldNotLoadTheTreasuryAccount'), acctError);
   if (!acct?.treasury_enabled) return { ok: false, error: t('actions.finishAccountSetupFirst') };
   try {
     await ensureFinancialAccount(svc, {
@@ -103,7 +103,7 @@ export async function activateTreasuryAction(): Promise<Result> {
     revalidatePath('/wallet/cards');
     return { ok: true };
   } catch (e) {
-    return actionFailure('open the Treasury account', e);
+    return actionFailure('open the Treasury account', t('money.couldNotOpenTheTreasuryAccount'), e);
   }
 }
 
@@ -123,8 +123,8 @@ export async function issueCardAction(input: {
     svc.from('stripe_connected_accounts').select('stripe_account_id, card_issuing_enabled').eq('family_id', ctx.active.familyId).maybeSingle(),
     svc.from('child_wallets').select('id, member_id').eq('family_id', ctx.active.familyId).eq('id', input.childWalletId).maybeSingle(),
   ]);
-  if (acctError) return actionFailure('load card-issuing capabilities', acctError);
-  if (walletError) return actionFailure('load the child wallet', walletError);
+  if (acctError) return actionFailure('load card-issuing capabilities', t('money.couldNotLoadCardIssuingCapabilities'), acctError);
+  if (walletError) return actionFailure('load the child wallet', t('money.couldNotLoadTheChildWallet'), walletError);
   if (!acct?.card_issuing_enabled) return { ok: false, error: t('actions.finishAccountSetupFirst') };
   if (!wallet) return { ok: false, error: t('actions.childWalletNotFound') };
 
@@ -138,7 +138,7 @@ export async function issueCardAction(input: {
   if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
   const { data: member, error: memberError } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
-  if (memberError) return actionFailure('load the cardholder profile', memberError);
+  if (memberError) return actionFailure('load the cardholder profile', t('money.couldNotLoadTheCardholderProfile'), memberError);
 
   try {
     const { rowId: cardholderRowId, stripeCardholderId } = await ensureCardholder(svc, {
@@ -158,7 +158,7 @@ export async function issueCardAction(input: {
     revalidatePath('/wallet');
     return { ok: true, data: { cardId: rowId } };
   } catch (e) {
-    return actionFailure('issue the card', e);
+    return actionFailure('issue the card', t('money.couldNotIssueTheCard'), e);
   }
 }
 
@@ -170,11 +170,11 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
   const svc = createServiceClient();
   const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
-  if (cardError) return actionFailure('load the card', cardError);
+  if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
-  if (acctError) return actionFailure('load the connected account', acctError);
+  if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
   try {
     await setCardFrozen(svc, {
@@ -189,7 +189,7 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
-    return actionFailure('update the card', e);
+    return actionFailure('update the card', t('money.couldNotUpdateTheCard'), e);
   }
 }
 
@@ -206,11 +206,11 @@ export async function updateCardControlsAction(input: {
 
   const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
-  if (cardError) return actionFailure('load the card', cardError);
+  if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
-  if (acctError) return actionFailure('load the connected account', acctError);
+  if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
 
   // Normalize all inputs server-side so a bad client can't set out-of-range values.
@@ -232,7 +232,7 @@ export async function updateCardControlsAction(input: {
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
-    return actionFailure('update card controls', e);
+    return actionFailure('update card controls', t('money.couldNotUpdateCardControls'), e);
   }
 }
 
@@ -260,8 +260,8 @@ export async function createCardRevealAction(input: {
     svc.from('stripe_connected_accounts').select('stripe_account_id')
       .eq('family_id', ctx.active.familyId).maybeSingle(),
   ]);
-  if (cardError) return actionFailure('load the card', cardError);
-  if (acctError) return actionFailure('load the connected account', acctError);
+  if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
+  if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
 
@@ -288,7 +288,7 @@ export async function createCardRevealAction(input: {
       },
     };
   } catch (e) {
-    return actionFailure('start the card reveal session', e);
+    return actionFailure('start the card reveal session', t('money.couldNotStartTheCardReveal'), e);
   }
 }
 

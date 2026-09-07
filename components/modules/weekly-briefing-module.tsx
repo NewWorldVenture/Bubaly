@@ -366,11 +366,11 @@ export function WeeklyBriefingModule() {
       setGeneratedAt(at);
       try { sessionStorage.setItem(storageKey, JSON.stringify({ briefing, at })); } catch { /* ignore */ }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setError(e instanceof Error ? e.message : t('weeklyBriefingModule.somethingWentWrong'));
     } finally {
       setLoading(false);
     }
-  }, [storageKey]);
+  }, [storageKey, t]);
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 

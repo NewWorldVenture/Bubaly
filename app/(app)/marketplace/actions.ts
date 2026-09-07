@@ -14,9 +14,9 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const MARKETPLACE = '/marketplace';
 
-function actionFailure(operation: string, error: unknown): Result {
+function actionFailure(operation: string, message: string, error: unknown): Result {
   console.error(`[marketplace-action] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 /** Set a match's status: dismissed (hide) or actioned (they connected). */
@@ -30,7 +30,7 @@ export async function setMatchStatusAction(id: string, status: 'dismissed' | 'ac
     .update({ status })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure('update the match', error);
+  if (error) return actionFailure('update the match', t('marketplace.couldNotUpdateTheMatch'), error);
   revalidatePath(MARKETPLACE);
   return { ok: true };
 }
@@ -50,17 +50,17 @@ export async function toggleSaveAction(listingId: string): Promise<Result | { ok
     .eq('member_id', memberId)
     .maybeSingle();
 
-  if (readError) return actionFailure('check the saved listing', readError);
+  if (readError) return actionFailure('check the saved listing', t('marketplace.couldNotCheckTheSavedListing'), readError);
   if (existing) {
     const { error } = await supabase.from('marketplace_saves').delete().eq('id', existing.id);
-    if (error) return actionFailure('remove the saved listing', error);
+    if (error) return actionFailure('remove the saved listing', t('marketplace.couldNotRemoveTheSavedListing'), error);
     revalidatePath(MARKETPLACE);
     return { ok: true, saved: false };
   }
   const { error } = await supabase.from('marketplace_saves').insert({
     family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId,
   });
-  if (error) return actionFailure('save the listing', error);
+  if (error) return actionFailure('save the listing', t('marketplace.couldNotSaveTheListing'), error);
   revalidatePath(MARKETPLACE);
   return { ok: true, saved: true };
 }
@@ -80,17 +80,17 @@ export async function toggleFollowAction(storeId: string): Promise<Result | { ok
     .eq('member_id', memberId)
     .maybeSingle();
 
-  if (readError) return actionFailure('check the followed store', readError);
+  if (readError) return actionFailure('check the followed store', t('marketplace.couldNotCheckTheFollowedStore'), readError);
   if (existing) {
     const { error } = await supabase.from('marketplace_follows').delete().eq('id', existing.id);
-    if (error) return actionFailure('unfollow the store', error);
+    if (error) return actionFailure('unfollow the store', t('marketplace.couldNotUnfollowTheStore'), error);
     revalidatePath(MARKETPLACE);
     return { ok: true, following: false };
   }
   const { error } = await supabase.from('marketplace_follows').insert({
     family_id: ctx.active.familyId, store_id: storeId, member_id: memberId,
   });
-  if (error) return actionFailure('follow the store', error);
+  if (error) return actionFailure('follow the store', t('marketplace.couldNotFollowTheStore'), error);
   revalidatePath(MARKETPLACE);
   return { ok: true, following: true };
 }
@@ -112,7 +112,7 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
     is_active: true,
     created_by: ctx.user.id,
   }, { onConflict: 'family_id,member_id' });
-  if (error) return actionFailure('save the storefront', error);
+  if (error) return actionFailure('save the storefront', t('marketplace.couldNotSaveTheStorefront'), error);
   revalidatePath(`${MARKETPLACE}/store`);
   revalidatePath(MARKETPLACE);
   return { ok: true };
@@ -138,14 +138,14 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     .eq('id', orderId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
-  if (orderError) return actionFailure('load the order', orderError);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
     return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
   }
 
   const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);
-  if (error) return actionFailure('update the order', error);
+  if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }
@@ -165,7 +165,7 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
     .eq('id', input.orderId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
-  if (orderError) return actionFailure('load the order', orderError);
+  if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (order.status !== 'completed') return { ok: false, error: t('actions.reviewsOpenOnceTheExchange') };
   const isBuyer = order.buyer_member === memberId;
@@ -187,7 +187,7 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
     if (error.message.includes('uq_marketplace_reviews_order_side') || error.code === '23505') {
       return { ok: false, error: t('actions.youAlreadyReviewedThisExchange') };
     }
-    return actionFailure('save the review', error);
+    return actionFailure('save the review', t('marketplace.couldNotSaveTheReview'), error);
   }
   revalidatePath(`${MARKETPLACE}/reviews`);
   revalidatePath(`${MARKETPLACE}/orders`);
@@ -213,7 +213,7 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
     .eq('id', listingId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
-  if (listingError) return actionFailure('load the listing', listingError);
+  if (listingError) return actionFailure('load the listing', t('marketplace.couldNotLoadTheListing'), listingError);
   if (!listing) return { ok: false, error: t('actions.listingNotFound') };
   if (listing.member_id === memberId) return { ok: false, error: t('actions.thisIsYourOwnListing') };
   if (listing.status !== 'available' && listing.status !== 'pending') {
@@ -227,7 +227,7 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
     .eq('member_id', memberId)
     .eq('status', 'open')
     .maybeSingle();
-  if (offerError) return actionFailure('check existing offers', offerError);
+  if (offerError) return actionFailure('check existing offers', t('marketplace.couldNotCheckExistingOffers'), offerError);
   if (existing) return { ok: false, error: t('actions.youAlreadyReachedOutAbout') };
 
   // A DB trigger flips an available listing to 'pending' on insert; a partial
@@ -239,7 +239,7 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   });
   if (error) {
     if (error.code === '23505') return { ok: false, error: t('actions.youAlreadyReachedOutAbout') };
-    return actionFailure('send the offer', error);
+    return actionFailure('send the offer', t('marketplace.couldNotSendTheOffer'), error);
   }
 
   revalidatePath(`${MARKETPLACE}/item/${listingId}`);

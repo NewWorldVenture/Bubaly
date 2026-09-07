@@ -140,7 +140,7 @@ function FocusQueue() {
         setIndex((i) => i + 1);
       });
     } catch (err) {
-      if (active.current) toastError(describeDbError(err, 'Could not update'));
+      if (active.current) toastError(describeDbError(err, tr('focusModule.couldNotUpdate')));
     } finally {
       savingRef.current = false;
       if (active.current) setSaving(false);

@@ -300,7 +300,7 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
   const [saving, setSaving] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!label.trim() || !value.trim()) { onError('Add a label and a value'); return; }
+    if (!label.trim() || !value.trim()) { onError(tr('lifeEventsModule.addALabelAndA')); return; }
     setSaving(true);
     const res = await saveFactAction(editing?.id ?? null, {
       label: label.trim(), value: value.trim(), category, notes: notes.trim() || null,

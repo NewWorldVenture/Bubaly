@@ -91,10 +91,10 @@ export function RecipesModule() {
         body: JSON.stringify({ constraint: tonightConstraint }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGetSuggestions'));
       setTonightPicks(json.picks ?? []);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not get suggestions'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGetSuggestions')));
     } finally {
       setTonightBusy(false);
     }
@@ -144,11 +144,11 @@ export function RecipesModule() {
         body: JSON.stringify({ recipeId: recipe.id, actionId }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGenerateVariant'));
       success(tr('recipesModule.aiVariantSavedToYour'));
       setViewing(null);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not generate variant'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGenerateVariant')));
     } finally {
       setAiBusy(null);
     }
@@ -219,7 +219,7 @@ export function RecipesModule() {
       .from('grocery_lists')
       .insert({ family_id: familyId, name, created_by: userId })
       .select('id').single();
-    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, 'Could not create list')); return; }
+    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, tr('recipesModule.couldNotCreateList'))); return; }
     const ok = await addItemsToList(groceryPrompt, created.id);
     setCreatingList(false);
     if (ok) setGroceryPrompt(null);

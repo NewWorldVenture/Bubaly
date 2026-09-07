@@ -30,9 +30,9 @@ export function AccidentClient({ vehicles, claimsPhone }: { vehicles: Vehicle[];
         body: JSON.stringify({ vehicleId: vehicleId || null, vehicleDesc: v ? vehicleLabel(v) : '', situation, injuries, hasInsurance: Boolean(claimsPhone) }),
       });
       const data = await res.json();
-      if (!res.ok) setError(data.error ?? 'Request failed.');
+      if (!res.ok) setError(data.error ?? t('accidentClient.requestFailed'));
       else setText(data.text ?? '');
-    } catch { setError('Network error.'); }
+    } catch { setError(t('accidentClient.networkError')); }
     finally { setBusy(false); }
   }
 

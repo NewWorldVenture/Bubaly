@@ -120,7 +120,7 @@ export function VoiceModule() {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
       }).select('id');
-      toastError(describeDbError(err, 'Could not run that command'));
+      toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       setRunning(false);
     }

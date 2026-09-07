@@ -161,6 +161,36 @@ const PROP_PATTERN =
 const ACTION_ERROR_PATTERN =
   /(?:\berror:\s*|describeActionError\([^,()]+,\s*)'([^'\\\n]{4,})'/g;
 
+/**
+ * A prose argument to a helper that puts it in front of a user.
+ *
+ * Every name here was read before it was listed — `actionFailure` returns the
+ * string as `{ error }` and 149 call sites toast it, `databaseUnavailable`
+ * makes it a 503 body, `twimlSay` has a phone read it aloud, `readWarnings`
+ * collects it into a `role="status"` region. This is a LIST rather than a
+ * shape, because "a string passed to a function" also describes a table name,
+ * a sort key and a log tag.
+ *
+ * Any argument position, because these helpers disagree about where the copy
+ * goes: `actionFailure(err, 'Could not …')` in four files and
+ * `actionFailure('close the account', t('…'), err)` in eighteen.
+ */
+const HELPER_PATTERN = new RegExp(
+  String.raw`\b(?:actionFailure|describeActionError|describeDbError|databaseUnavailable`
+  + String.raw`|buildFailure|twimlSay|setError|onError)\(([^)]{0,200}?)`
+  // The opening quote must NOT be an escaped one, and the body may contain
+  // escapes. Without both, `twimlSay('I\'m sorry, we\'re not able to take…')`
+  // matched the fragment BETWEEN the two escaped apostrophes, and the lift
+  // replaced that span — leaving an unterminated string literal in two route
+  // handlers. tsc caught it, but only after the tool reported success.
+  // A CAPITAL first letter. These helpers take both a user-facing message and a
+  // developer-facing log tag, and the tags are lowercase verb phrases —
+  // `actionFailure('close the account', t('…'), err)`. Without this the lift
+  // translated 105 log tags, which would have printed server logs in whichever
+  // language the visitor happened to be reading.
+  + String.raw`(?<!\\)'([A-Z](?:[^'\\\n]|\\.){5,180})'`,
+  'g');
+
 // Fixed names: a browser dialog says exactly what it is called.
 const DIALOG_PATTERN = /\b(?:window\.confirm|confirm|alert|prompt)\(\s*'([^'\\\n]{3,})'/g;
 
@@ -251,6 +281,7 @@ export function scanFile(file) {
   for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);
   const toasts = toastPattern(source);
   if (toasts) for (const m of source.matchAll(toasts)) push(m[1], m.index ?? 0);
 

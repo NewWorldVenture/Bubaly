@@ -18,7 +18,12 @@ const WALLET_TERMS_VERSION = '2026-06-25';
 
 type Result = { ok: boolean; error?: string };
 
-function actionFailure(error: unknown, fallback = 'Could not update the Family Wallet.'): Result {
+// The fallback is a PARAMETER now, not a default. A default is evaluated in
+// the function's own scope, where the request translator cannot be — the lift
+// put `t(...)` there and tsc said `Cannot find name 't'`. Every call site
+// names its own message, which is also the only way each one can say what
+// actually failed.
+function actionFailure(error: unknown, fallback: string): Result {
   console.error('[wallet-action] failed:', error);
   return { ok: false, error: describeActionError(error, fallback) };
 }
@@ -54,20 +59,20 @@ export async function activateFamilyWalletAction(): Promise<Result> {
     )
     .select('id')
     .single();
-  if (wErr) return actionFailure(wErr, 'Could not activate the Family Wallet.');
+  if (wErr) return actionFailure(wErr, t('actions.couldNotActivateTheFamily'));
 
   // 2) record the disclosure acceptance (immutable audit)
   const { error: disclosureError } = await supabase.from('compliance_disclosures').insert({
     family_id: familyId, kind: 'wallet_terms', version: WALLET_TERMS_VERSION, accepted_by: userId,
   });
-  if (disclosureError) return actionFailure(disclosureError, 'Could not record the wallet disclosure.');
+  if (disclosureError) return actionFailure(disclosureError, t('actions.couldNotRecordTheWallet'));
 
   // 3) a child wallet + buckets + default rule for each child member
   const { data: children, error: childrenError } = await supabase
     .from('family_members')
     .select('id, role')
     .eq('family_id', familyId).eq('is_active', true);
-  if (childrenError) return actionFailure(childrenError, 'Could not load family members for wallet setup.');
+  if (childrenError) return actionFailure(childrenError, t('actions.couldNotLoadFamilyMembers'));
 
   for (const child of (children ?? []).filter((m) => !isManager(m.role))) {
     const { data: cw, error: childWalletError } = await supabase
@@ -76,20 +81,20 @@ export async function activateFamilyWalletAction(): Promise<Result> {
       .select('id')
       .single();
     if (childWalletError || !cw) {
-      return actionFailure(childWalletError ?? new Error('Child wallet setup returned no wallet.'), 'Could not provision a child wallet.');
+      return actionFailure(childWalletError ?? new Error(t('actions.childWalletSetupReturnedNo')), t('wallet.couldNotProvisionAChild'));
     }
 
     const { error: bucketError } = await supabase.from('wallet_buckets').upsert(
       BUCKETS.map((b, i) => ({ family_id: familyId, child_wallet_id: cw.id, kind: b.kind, label: b.label, sort_order: i })),
       { onConflict: 'child_wallet_id,kind' },
     );
-    if (bucketError) return actionFailure(bucketError, 'Could not provision wallet buckets.');
+    if (bucketError) return actionFailure(bucketError, t('actions.couldNotProvisionWalletBuckets'));
 
     const { error: ruleError } = await supabase.from('wallet_rules').upsert(
       { family_id: familyId, child_wallet_id: cw.id, created_by: userId },
       { onConflict: 'family_id,child_wallet_id' },
     );
-    if (ruleError) return actionFailure(ruleError, 'Could not provision wallet rules.');
+    if (ruleError) return actionFailure(ruleError, t('actions.couldNotProvisionWalletRules'));
   }
 
   await supabase.from('wallet_audit_logs').insert({
@@ -123,9 +128,9 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     supabase.from('wallet_rules').select('split').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId),
   ]);
-  if (walletError) return actionFailure(walletError, 'Could not load that wallet.');
-  if (ruleError) return actionFailure(ruleError, 'Could not load the wallet allocation rule.');
-  if (bucketsError) return actionFailure(bucketsError, 'Could not load the wallet buckets.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
+  if (ruleError) return actionFailure(ruleError, t('actions.couldNotLoadTheWallet'));
+  if (bucketsError) return actionFailure(bucketsError, t('actions.couldNotLoadTheWallet2'));
   if (!cw) return { ok: false, error: t('actions.thatWalletWasNotFound') };
 
   // Trust Engine governs the money movement (explainable audit + household policy).
@@ -159,7 +164,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   if (rows.length === 0) return { ok: false, error: t('actions.nothingToAllocate') };
 
   const { error: txErr } = await supabase.from('wallet_transactions').insert(rows);
-  if (txErr) return actionFailure(txErr, 'Could not add those funds.');
+  if (txErr) return actionFailure(txErr, t('actions.couldNotAddThoseFunds'));
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: familyId, actor_user_id: userId, action: 'funds_added', entity_type: 'child_wallets', entity_id: cw.id,
@@ -191,7 +196,7 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     .from('chore_assignments')
     .select('id, member_id, family_id, cash_awarded_cents, chores(title, cash_cents)')
     .eq('id', input.choreAssignmentId).eq('family_id', familyId).maybeSingle();
-  if (assignmentError) return actionFailure(assignmentError, 'Could not load that chore reward.');
+  if (assignmentError) return actionFailure(assignmentError, t('actions.couldNotLoadThatChore'));
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
 
   const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null } | null }).chores;
@@ -202,12 +207,12 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
   const { data: existing, error: existingError } = await supabase
     .from('wallet_transactions').select('id')
     .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
-  if (existingError) return actionFailure(existingError, 'Could not verify whether that chore was already paid.');
+  if (existingError) return actionFailure(existingError, t('actions.couldNotVerifyWhetherThat'));
   if ((existing ?? []).length > 0) return { ok: false, error: t('actions.thisChoreWasAlreadyPaid') };
 
   const { data: cw, error: walletError } = await supabase
     .from('child_wallets').select('id').eq('family_id', familyId).eq('member_id', assignment.member_id).maybeSingle();
-  if (walletError) return actionFailure(walletError, 'Could not load the child wallet.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadTheChild'));
   if (!cw) return { ok: false, error: t('actions.thisChildHasNoWallet') };
 
   const { decision } = await evaluateTrust(supabase, familyId, {
@@ -253,7 +258,7 @@ export async function saveAllowanceRuleAction(input: {
         .eq('id', input.id).eq('family_id', familyId)
     : await supabase.from('allowance_rules')
         .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
-  if (error) return actionFailure(error, 'Could not save that allowance.');
+  if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -267,7 +272,7 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   const supabase = await createServer();
   const { error } = await supabase.from('allowance_rules')
     .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure(error, 'Could not update that allowance.');
+  if (error) return actionFailure(error, t('actions.couldNotUpdateThatAllowance'));
   revalidatePath('/wallet/allowance');
   return { ok: true };
 }
@@ -296,7 +301,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     .from('allowance_rules')
     .select('id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')
     .eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today);
-  if (rulesError) return actionFailure(rulesError, 'Could not load due allowances.');
+  if (rulesError) return actionFailure(rulesError, t('actions.couldNotLoadDueAllowances'));
   if ((rules ?? []).length === 0) return { ok: true, ranCount: 0, paidCents: 0 };
 
   const totalDue = (rules ?? []).reduce((s, r) => s + r.amount_cents, 0);
@@ -315,7 +320,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId).select('id').single();
-    if (advanceError || !advancedRule) return actionFailure(advanceError ?? new Error('Allowance schedule was not updated.'), 'Could not update an allowance schedule.');
+    if (advanceError || !advancedRule) return actionFailure(advanceError ?? new Error(t('actions.allowanceScheduleWasNotUpdated')), t('wallet.couldNotUpdateAnAllowanceSchedule'));
 
     if (runs > 0) {
       const res = await creditChildWallet(supabase, {
@@ -357,7 +362,7 @@ export async function createGoalAction(input: {
     family_id: ctx.active.familyId, child_wallet_id: input.childWalletId ?? null,
     title, kind: input.kind ?? 'custom', target_cents: target, target_date: input.targetDate ?? null, created_by: ctx.user.id,
   });
-  if (error) return actionFailure(error, 'Could not save that wallet goal.');
+  if (error) return actionFailure(error, t('actions.couldNotSaveThatWallet'));
   revalidatePath('/wallet/goals');
   return { ok: true };
 }
@@ -378,7 +383,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
 
   const { data: goal, error: goalError } = await supabase
     .from('wallet_goals').select('title').eq('id', input.goalId).eq('family_id', familyId).maybeSingle();
-  if (goalError) return actionFailure(goalError, 'Could not load that savings goal.');
+  if (goalError) return actionFailure(goalError, t('actions.couldNotLoadThatSavings'));
   if (!goal) return { ok: false, error: t('actions.goalNotFound') };
 
   const { decision } = await evaluateTrust(supabase, familyId, {
@@ -409,7 +414,7 @@ export async function createGiftLinkAction(input: {
   const supabase = await createServer();
 
   const { data: cw, error: walletError } = await supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
-  if (walletError) return actionFailure(walletError, 'Could not load that wallet.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
   if (!cw) return { ok: false, error: t('actions.thatWalletWasNotFound') };
 
   const token = `gift_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -419,7 +424,7 @@ export async function createGiftLinkAction(input: {
     suggested_cents: input.suggestedCents && input.suggestedCents.length > 0 ? input.suggestedCents : undefined,
     created_by: ctx.user.id,
   });
-  if (error) return actionFailure(error, 'Could not create that gift link.');
+  if (error) return actionFailure(error, t('actions.couldNotCreateThatGift'));
   revalidatePath('/wallet/gift');
   return { ok: true, token };
 }
@@ -435,7 +440,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
   const { data: gift, error: giftError } = await supabase
     .from('gift_payments').select('id, child_wallet_id, amount_cents, status, giver_name, applied_txn_id')
     .eq('id', input.giftPaymentId).eq('family_id', familyId).maybeSingle();
-  if (giftError) return actionFailure(giftError, 'Could not load that gift.');
+  if (giftError) return actionFailure(giftError, t('actions.couldNotLoadThatGift'));
   if (!gift) return { ok: false, error: t('actions.giftNotFound') };
   if (gift.status === 'completed' || gift.applied_txn_id) return { ok: false, error: t('actions.thisGiftWasAlreadyApplied') };
   if (!gift.child_wallet_id) return { ok: false, error: t('actions.thisGiftHasNoChild') };
@@ -462,7 +467,7 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const supabase = await createServer();
   const { error } = await supabase.from('gift_payments')
     .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure(error, 'Could not dismiss that gift.');
+  if (error) return actionFailure(error, t('actions.couldNotDismissThatGift'));
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -490,13 +495,13 @@ export async function saveBabysitterAction(input: {
       name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null,
     }).eq('id', input.id).eq('family_id', familyId);
-    if (error) return actionFailure(error, 'Could not update that babysitter.');
+    if (error) return actionFailure(error, t('actions.couldNotUpdateThatBabysitter'));
   } else {
     const { error } = await supabase.from('babysitter_profiles').insert({
       family_id: familyId, name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null, created_by: ctx.user.id,
     });
-    if (error) return actionFailure(error, 'Could not save that babysitter.');
+    if (error) return actionFailure(error, t('actions.couldNotSaveThatBabysitter'));
   }
   revalidatePath('/wallet/babysitters');
   return { ok: true };
@@ -510,7 +515,7 @@ export async function archiveBabysitterAction(input: { id: string }): Promise<Re
   const supabase = await createServer();
   const { error } = await supabase.from('babysitter_profiles')
     .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return actionFailure(error, 'Could not archive that babysitter.');
+  if (error) return actionFailure(error, t('actions.couldNotArchiveThatBabysitter'));
   revalidatePath('/wallet/babysitters');
   return { ok: true };
 }
@@ -545,7 +550,7 @@ export async function recordBabysitterPaymentAction(input: {
     status: 'completed',
     created_by: ctx.user.id,
   });
-  if (error) return actionFailure(error, 'Could not record that babysitter payment.');
+  if (error) return actionFailure(error, t('actions.couldNotRecordThatBabysitter'));
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'babysitter_paid',
@@ -581,7 +586,7 @@ export async function saveWalletRuleAction(input: {
   // Verify the child wallet belongs to this family before writing.
   const { data: cw, error: walletError } = await supabase.from('child_wallets')
     .select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
-  if (walletError) return actionFailure(walletError, 'Could not load that child wallet.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatChild'));
   if (!cw) return { ok: false, error: t('actions.childWalletNotFound') };
 
   const { error } = await supabase.from('wallet_rules').upsert({
@@ -592,7 +597,7 @@ export async function saveWalletRuleAction(input: {
     require_approval_over_cents: input.requireApprovalOverCents,
     created_by: ctx.user.id,
   }, { onConflict: 'family_id,child_wallet_id' });
-  if (error) return actionFailure(error, 'Could not save that wallet rule.');
+  if (error) return actionFailure(error, t('actions.couldNotSaveThatWallet2'));
 
   revalidatePath('/wallet/settings');
   return { ok: true };
@@ -617,14 +622,14 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
   if (input.childWalletId) {
     const { data: cw, error: walletError } = await supabase
       .from('child_wallets').select('id').eq('family_id', familyId).eq('id', input.childWalletId).maybeSingle();
-    if (walletError) return actionFailure(walletError, 'Could not load that child wallet.');
+    if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatChild'));
     if (!cw) return { ok: false, error: t('actions.childWalletNotFound') };
   }
 
   // Globally unique: surface a friendly message if someone else holds it.
   const { data: taken, error: handleLookupError } = await supabase
     .from('pay_handles').select('id, family_id').eq('handle', handle).maybeSingle();
-  if (handleLookupError) return actionFailure(handleLookupError, 'Could not check Pay-ID availability.');
+  if (handleLookupError) return actionFailure(handleLookupError, t('actions.couldNotCheckPayId'));
   if (taken && taken.family_id !== familyId) return { ok: false, error: t('actions.thatPayIdIsAlready') };
   if (taken && input.id && taken.id !== input.id) return { ok: false, error: t('actions.thatPayIdIsAlready') };
 
@@ -637,7 +642,7 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
   if (error) {
     // Unique-violation fallback (race with the check above).
     if (error.code === '23505') return { ok: false, error: t('actions.thatPayIdIsAlready') };
-    return actionFailure(error, 'Could not claim that Pay-ID.');
+    return actionFailure(error, t('actions.couldNotClaimThatPay'));
   }
 
   await supabase.from('wallet_audit_logs').insert({
@@ -656,7 +661,7 @@ export async function releasePayHandleAction(input: { id: string }): Promise<Res
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
-  if (error) return actionFailure(error, 'Could not release that Pay-ID.');
+  if (error) return actionFailure(error, t('actions.couldNotReleaseThatPay'));
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -687,8 +692,8 @@ export async function requestSpendAction(input: {
     supabase.from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('wallet_rules').select('require_approval_over_cents').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).maybeSingle(),
   ]);
-  if (walletError) return actionFailure(walletError, 'Could not load that wallet.');
-  if (ruleError) return actionFailure(ruleError, 'Could not load the wallet approval rule.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
+  if (ruleError) return actionFailure(ruleError, t('actions.couldNotLoadTheWallet3'));
   if (!cw) return { ok: false, error: t('actions.thatWalletWasNotFound') };
 
   // Can't request more than is available in Spend.
@@ -738,7 +743,7 @@ export async function requestSpendAction(input: {
           .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval');
         if (rollbackError) console.error('[wallet spend] approval rollback failed', rollbackError);
       }
-      return actionFailure(approvalError, 'Could not create the spend approval request.');
+      return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'));
     }
     revalidatePath('/wallet');
     return { ok: true, pendingApproval: true };
@@ -763,14 +768,14 @@ export async function decideSpendRequestAction(input: {
 
   const { data: appr, error: approvalError } = await supabase.from('parent_approvals')
     .select('id, status, ref_type, ref_id, amount_cents').eq('id', input.approvalId).eq('family_id', familyId).maybeSingle();
-  if (approvalError) return actionFailure(approvalError, 'Could not load that spend request.');
+  if (approvalError) return actionFailure(approvalError, t('actions.couldNotLoadThatSpend'));
   if (!appr) return { ok: false, error: t('actions.requestNotFound') };
   if (appr.status !== 'pending') return { ok: false, error: t('actions.thisRequestWasAlreadyDecided') };
   if (appr.ref_type !== 'wallet_transactions' || !appr.ref_id) return { ok: false, error: t('actions.requestIsMissingItsTransaction') };
 
   const { data: txn, error: transactionError } = await supabase.from('wallet_transactions')
     .select('id, child_wallet_id, amount_cents, status').eq('id', appr.ref_id).eq('family_id', familyId).maybeSingle();
-  if (transactionError) return actionFailure(transactionError, 'Could not load the spend transaction.');
+  if (transactionError) return actionFailure(transactionError, t('actions.couldNotLoadTheSpend'));
   if (!txn) return { ok: false, error: t('actions.transactionNotFound') };
 
   if (input.decision === 'approved') {
@@ -812,7 +817,7 @@ export async function sendMoneyAction(input: {
 
   const { data: wallets, error: walletsError } = await supabase.from('child_wallets')
     .select('id, member_id').eq('family_id', familyId).in('id', [input.fromChildWalletId, input.toChildWalletId]);
-  if (walletsError) return actionFailure(walletsError, 'Could not load the wallets for this transfer.');
+  if (walletsError) return actionFailure(walletsError, t('actions.couldNotLoadTheWallets'));
   if ((wallets ?? []).length !== 2) return { ok: false, error: t('actions.oneOfThoseWalletsWas') };
 
   const { decision } = await evaluateTrust(supabase, familyId, {
@@ -851,7 +856,7 @@ export async function requestAllowanceAction(input: {
 
   const { data: cw, error: walletError } = await supabase
     .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
-  if (walletError) return actionFailure(walletError, 'Could not load that wallet.');
+  if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
   if (!cw) return { ok: false, error: t('actions.walletNotFound') };
 
   const { error } = await supabase.from('parent_approvals').insert({
@@ -860,7 +865,7 @@ export async function requestAllowanceAction(input: {
     amount_cents: amount, status: 'pending',
     requested_by: ctx.user.id, note: input.reason?.trim() || null,
   });
-  if (error) return actionFailure(error, 'Could not create that allowance request.');
+  if (error) return actionFailure(error, t('actions.couldNotCreateThatAllowance'));
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -881,7 +886,7 @@ export async function decideAllowanceRequestAction(input: {
 
   const { data: appr, error: approvalError } = await supabase.from('parent_approvals')
     .select('id, status, kind, ref_type, ref_id, amount_cents, note').eq('id', input.approvalId).eq('family_id', familyId).maybeSingle();
-  if (approvalError) return actionFailure(approvalError, 'Could not load that allowance request.');
+  if (approvalError) return actionFailure(approvalError, t('actions.couldNotLoadThatAllowance'));
   if (!appr) return { ok: false, error: t('actions.requestNotFound') };
   if (appr.status !== 'pending') return { ok: false, error: t('actions.thisRequestWasAlreadyDecided') };
   if (appr.kind !== 'allowance_request') return { ok: false, error: t('actions.wrongRequestKind') };

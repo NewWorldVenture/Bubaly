@@ -251,7 +251,7 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = question.trim();
-    if (!q) { onError('Ask the question first'); return; }
+    if (!q) { onError(t('decisionsModule.askTheQuestionFirst')); return; }
     setSaving(true);
     const sb = createClient();
     const { data, error } = await sb.from('family_decisions').insert({
@@ -297,7 +297,7 @@ function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onErro
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const l = label.trim();
-    if (!l) { onError('Name the option'); return; }
+    if (!l) { onError(t('decisionsModule.nameTheOption')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('decision_options').insert({

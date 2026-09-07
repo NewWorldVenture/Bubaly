@@ -104,7 +104,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not get coaching');
       setCoach(json.coaching);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach failed'));
+      toastError(describeDbError(err, tr('walletDashboard.coachFailed')));
     } finally {
       setCoachLoading(false);
     }

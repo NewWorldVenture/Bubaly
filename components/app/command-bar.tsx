@@ -112,7 +112,7 @@ export function CommandBar() {
         { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
-      toastError(describeDbError(err, 'Could not save that.'));
+      toastError(describeDbError(err, t('commandBar.couldNotSaveThat')));
     } finally {
       setBusy(false);
     }

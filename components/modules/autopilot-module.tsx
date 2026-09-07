@@ -61,11 +61,11 @@ export function AutopilotModule() {
     try {
       const res = await fetch('/api/autopilot/scan', { method: 'POST' });
       const json = (await res.json()) as { autoExecuted?: number; error?: string };
-      if (!res.ok) throw new Error(json.error || 'Scan failed');
+      if (!res.ok) throw new Error(json.error || t('autopilotModule.scanFailed'));
       if (json.autoExecuted && json.autoExecuted > 0) success(`Autopilot handled ${json.autoExecuted} thing${json.autoExecuted === 1 ? '' : 's'} for you`);
       void refresh();
     } catch (err) {
-      toastError(describeDbError(err, 'Scan failed'));
+      toastError(describeDbError(err, t('autopilotModule.scanFailed')));
     } finally {
       setScanning(false);
     }

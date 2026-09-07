@@ -88,7 +88,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
       if (!response.ok) {
         if ([403, 404, 409].includes(response.status)) setReviewed(null);
         setError(response.status === 409
-          ? 'The move or its tasks changed. Review the current deadlines again before saving.'
+          ? t('moveDateRecalculation.theMoveOrItsTasks')
           : response.status === 403
             ? 'Your current membership cannot change this move. No new review is available.'
             : response.status === 404
@@ -114,7 +114,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
       }
     } catch {
       if (stillCurrent()) setError(apply
-        ? 'The save response was lost. Retry this reviewed change with the same request identifier, or refresh to check the dates.'
+        ? t('moveDateRecalculation.theSaveResponseWasLost')
         : 'The date review could not be loaded. No dates were changed.');
     } finally {
       if (stillCurrent()) {

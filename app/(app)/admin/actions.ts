@@ -18,7 +18,12 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
-function actionFailure(error: unknown, fallback = 'Could not complete that admin action.'): Result {
+// The fallback is a PARAMETER now, not a default. A default is evaluated in
+// the function's own scope, where the request translator cannot be — the lift
+// put `t(...)` there and tsc said `Cannot find name 't'`. Every call site
+// names its own message, which is also the only way each one can say what
+// actually failed.
+function actionFailure(error: unknown, fallback: string): Result {
   console.error('[admin-action] failed:', error);
   return { ok: false, error: describeActionError(error, fallback) };
 }
@@ -68,7 +73,7 @@ export async function adminCreateUserAction(input: {
       role: input.role ?? 'adult',
       display_name: parsedEmail.data.split('@')[0],
     });
-    if (memberError) return actionFailure(memberError, 'User created, but joining the family failed.');
+    if (memberError) return actionFailure(memberError, t('actions.userCreatedButJoiningThe'));
   }
 
   await adminAuditLog({
@@ -97,13 +102,13 @@ export async function adminCreateFamilyAction(input: {
   const supabase = createServiceClient();
   const { data: owner, error: ownerLookupError } = await supabase
     .from('profiles').select('id, full_name, email').eq('email', parsedEmail.data).maybeSingle();
-  if (ownerLookupError) return actionFailure(ownerLookupError, 'Could not look up the family owner.');
+  if (ownerLookupError) return actionFailure(ownerLookupError, t('actions.couldNotLookUpThe'));
   if (!owner) return { ok: false, error: t('actions.noAccountFoundWithThat') };
 
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
   }).select('id').single();
-  if (error) return actionFailure(error, 'Could not create the family.');
+  if (error) return actionFailure(error, t('actions.couldNotCreateTheFamily'));
 
   // Do not rely on `handle_new_family`: production environments can have an
   // incomplete migration ledger, and a family without its owner is invisible
@@ -119,7 +124,7 @@ export async function adminCreateFamilyAction(input: {
   if (memberError) {
     const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
     if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
-    return actionFailure(memberError, 'Could not add the owner to the new family.');
+    return actionFailure(memberError, t('actions.couldNotAddTheOwner'));
   }
 
   const { data: existingSubscription, error: subscriptionLookupError } = await supabase
@@ -127,7 +132,7 @@ export async function adminCreateFamilyAction(input: {
   if (subscriptionLookupError) {
     const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
     if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
-    return actionFailure(subscriptionLookupError, 'Could not verify the new family subscription.');
+    return actionFailure(subscriptionLookupError, t('actions.couldNotVerifyTheNew'));
   }
   if (!existingSubscription || existingSubscription.length === 0) {
     const { error: subscriptionError } = await supabase.from('subscriptions').insert({
@@ -139,7 +144,7 @@ export async function adminCreateFamilyAction(input: {
     if (subscriptionError) {
       const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
       if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
-      return actionFailure(subscriptionError, 'Could not create the new family trial.');
+      return actionFailure(subscriptionError, t('actions.couldNotCreateTheNew'));
     }
   }
 
@@ -150,13 +155,14 @@ export async function adminCreateFamilyAction(input: {
 
 /** Removes a member from a family (reversible — they can be re-added or re-invited). */
 export async function adminRemoveMemberAction(memberId: string): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
     .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
-  if (error) return actionFailure(error, 'Could not remove that member.');
+  if (error) return actionFailure(error, t('actions.couldNotRemoveThatMember'));
 
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
   revalidatePath('/admin/users');
@@ -175,7 +181,7 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
     .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
-  if (error) return actionFailure(error, 'Could not update that member.');
+  if (error) return actionFailure(error, t('actions.couldNotUpdateThatMember'));
 
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
   revalidatePath('/admin/users');
@@ -210,11 +216,11 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
   if (existing) {
     const { error } = await supabase.from('subscriptions')
       .update({ plan, status: 'active' }).eq('id', existing.id);
-    if (error) return actionFailure(error, 'Could not update the family plan.');
+    if (error) return actionFailure(error, t('actions.couldNotUpdateTheFamily'));
   } else {
     const { error } = await supabase.from('subscriptions')
       .insert({ family_id: input.familyId, plan, status: 'active', seats: 1 });
-    if (error) return actionFailure(error, 'Could not create the family plan.');
+    if (error) return actionFailure(error, t('actions.couldNotCreateTheFamily2'));
   }
 
   await adminAuditLog({
@@ -251,10 +257,10 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
   const supabase = createServiceClient();
   if (input.makeAdmin) {
     const { error } = await supabase.from('super_admins').upsert({ email }, { onConflict: 'email' });
-    if (error) return actionFailure(error, 'Could not update super-admin access.');
+    if (error) return actionFailure(error, t('actions.couldNotUpdateSuperAdmin'));
   } else {
     const { error } = await supabase.from('super_admins').delete().eq('email', email);
-    if (error) return actionFailure(error, 'Could not update super-admin access.');
+    if (error) return actionFailure(error, t('actions.couldNotUpdateSuperAdmin'));
   }
 
   await adminAuditLog({
@@ -275,6 +281,7 @@ export async function saveStripeSettingsAction(input: {
   serviceFeeCents: number;
   serviceFeePriceId: string | null;
 }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
@@ -299,7 +306,7 @@ export async function saveStripeSettingsAction(input: {
     service_fee_price_id: clean(input.serviceFeePriceId),
     updated_by: user?.id ?? null,
   }, { onConflict: 'id' });
-  if (error) return actionFailure(error, 'Could not save Stripe settings.');
+  if (error) return actionFailure(error, t('actions.couldNotSaveStripeSettings'));
 
   // Audit without leaking secret values.
   await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
@@ -320,7 +327,7 @@ export async function testStripeConnectionAction(): Promise<Result<{ livemode: b
     const balance = await stripeFromKey(key).balance.retrieve();
     return { ok: true, data: { livemode: balance.livemode, currencies: balance.available.length } };
   } catch (e) {
-    return actionFailure(e, 'Could not connect to Stripe.');
+    return actionFailure(e, t('actions.couldNotConnectToStripe'));
   }
 }
 
@@ -358,13 +365,14 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
 
 /** Revokes a pending invite so the link no longer works. */
 export async function adminRevokeInviteAction(inviteId: string): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data: invite, error } = await supabase.from('invites')
     .update({ status: 'revoked' }).eq('id', inviteId).select('family_id, email').single();
-  if (error) return actionFailure(error, 'Could not revoke that invite.');
+  if (error) return actionFailure(error, t('actions.couldNotRevokeThatInvite'));
 
   await adminAuditLog({ familyId: invite.family_id, action: 'revoke', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');
@@ -399,15 +407,15 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   // the operator can retry rather than silently orphaning the object.
   const { data: doc, error: docError } = await supabase
     .from('documents').select('family_id, title, storage_path').eq('id', documentId).maybeSingle();
-  if (docError) return actionFailure(docError, 'Could not load that document.');
+  if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
   if (!doc) return { ok: false, error: t('actions.documentNotFound') };
 
   const { error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);
-  if (storageError) return actionFailure(storageError, 'Could not remove the document from storage.');
+  if (storageError) return actionFailure(storageError, t('actions.couldNotRemoveTheDocument'));
 
   const { data: deleted, error } = await supabase
     .from('documents').delete().eq('id', documentId).select('id').maybeSingle();
-  if (error) return actionFailure(error, 'Could not delete that document.');
+  if (error) return actionFailure(error, t('actions.couldNotDeleteThatDocument'));
   if (!deleted) return { ok: false, error: t('actions.documentWasNotDeleted') };
 
   await adminAuditLog({ familyId: doc?.family_id ?? null, action: 'delete', resource: 'documents', resourceId: documentId, metadata: { title: doc?.title } });
@@ -427,7 +435,7 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
   const supabase = createServiceClient();
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
   const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
-  if (error) return actionFailure(error, 'Could not update that user.');
+  if (error) return actionFailure(error, t('actions.couldNotUpdateThatUser'));
 
   await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });
   revalidatePath('/admin/security');
@@ -447,7 +455,7 @@ export async function adminSendPasswordResetAction(email: string): Promise<Resul
   const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
     redirectTo: `${APP_URL}/login`,
   });
-  if (error) return actionFailure(error, 'Could not send the password reset.');
+  if (error) return actionFailure(error, t('actions.couldNotSendThePassword'));
 
   await adminAuditLog({ familyId: null, action: 'password_reset', resource: 'users', metadata: { email: parsedEmail.data } });
   return { ok: true };
@@ -465,7 +473,7 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId);
-  if (error) return actionFailure(error, 'Could not update that support ticket.');
+  if (error) return actionFailure(error, t('actions.couldNotUpdateThatSupport'));
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
   revalidatePath('/admin/support');
@@ -482,7 +490,7 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);
-  if (error) return actionFailure(error, 'Could not update that feature flag.');
+  if (error) return actionFailure(error, t('actions.couldNotUpdateThatFeature'));
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
   revalidatePath('/admin/wallet');

@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   const candidateError = candidateResults.find((result) => result.error)?.error;
   if (candidateError) {
     logDatabaseFailure('candidate read', candidateError);
-    return databaseUnavailable('Meal planning data is temporarily unavailable.');
+    return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
   }
   const [{ data: meals }, { data: recipes }] = candidateResults;
 
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       .select('name,expires_at').eq('family_id', familyId).not('expires_at', 'is', null);
     if (pantryError) {
       logDatabaseFailure('pantry read', pantryError);
-      return databaseUnavailable('Meal planning data is temporarily unavailable.');
+      return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
     }
     expiring = expiringSoon(pantry ?? [], 7).map((p) => p.name).slice(0, 12);
   }
@@ -165,7 +165,7 @@ export async function POST(req: Request) {
   if (persistenceError || rows.length !== assignments.length) {
     await cleanupCreatedMeals();
     logDatabaseFailure('meal resolution', persistenceError ?? new Error('Meal plan contains unresolved assignments.'));
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   const { data: existingPlans, error: existingPlansError } = await supabase.from('meal_plans')
@@ -174,7 +174,7 @@ export async function POST(req: Request) {
   if (existingPlansError) {
     await cleanupCreatedMeals();
     logDatabaseFailure('existing plan read', existingPlansError);
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   const restorePreviousPlans = async () => {
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
   if (deleteError) {
     await cleanupCreatedMeals();
     logDatabaseFailure('targeted plan cleanup', deleteError);
-    return databaseUnavailable('Could not save the meal plan.');
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
 
   if (rows.length) {
@@ -202,7 +202,7 @@ export async function POST(req: Request) {
     if (error || !inserted || inserted.length !== rows.length) {
       await restorePreviousPlans();
       logDatabaseFailure('meal plan write', error ?? new Error('Meal plan insert returned an incomplete result.'));
-      return databaseUnavailable('Could not save the meal plan.');
+      return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
     }
   }
 

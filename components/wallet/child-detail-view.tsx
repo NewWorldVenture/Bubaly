@@ -190,11 +190,11 @@ function AICoachCard({ childId }: { childId: string }) {
       setCoaching(json.coaching);
       setDismissed(false);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach unavailable'));
+      toastError(describeDbError(err, t('childDetailView.coachUnavailable')));
     } finally {
       setLoading(false);
     }
-  }, [childId, toastError]);
+  }, [childId, toastError, t]);
 
   if (dismissed) return null;
 
