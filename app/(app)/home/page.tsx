@@ -22,10 +22,11 @@ import { NeedsAttention } from '@/components/concierge/needs-attention';
 import { WorkingOn } from '@/components/concierge/working-on';
 import { CompletedByBubaly } from '@/components/concierge/completed-by-bubaly';
 import {
-  buildToday, mergeCompletedByBubaly, workingRunsFrom, WORKING_RUN_STATES,
-  type AiActivityRow, type CompletedRunRow, type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
+  buildToday, workingRunsFrom, WORKING_RUN_STATES,
+  type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
   type WorkingRunRow, type WorkingStepRow,
 } from '@/lib/home/today';
+import { loadCompletedByBubaly } from '@/lib/home/completed';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
@@ -251,25 +252,18 @@ export default async function HomePage() {
   // the approvals inbox, whose failure is shown, because "nothing needs you"
   // is a claim.
   const dayEndIso = todayEnd.toISOString();
-  const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
   const manager = isManager(me.role);
   const [
-    activeRunsRes, completedRunsRes, agentRes, autoDoneRes, recsRes, aiApprovalsRes,
+    activeRunsRes, completedRes, recsRes, aiApprovalsRes,
     moneyApprovalsRes, choreSignoffRes, todosDueRes, choresDueRes, remindersDueRes,
   ] = await Promise.all([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
-    supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
-      .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
-      .order('completed_at', { ascending: false, nullsFirst: false }).limit(6),
-    // Specialist-agent actions completed recently — the Chief of Staff reports
-    // its whole staff's work, not just the run executor's.
-    supabase.from('agent_activity').select('id, title, detail, href, created_at')
-      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h)
-      .order('created_at', { ascending: false }).limit(5),
-    supabase.from('autopilot_suggestions').select('id, title, created_at')
-      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
-      .order('created_at', { ascending: false }).limit(5),
+    // "Completed by Bubaly" (M6): finished runs, the specialist agents' done
+    // actions and the autopilot's auto-executed suggestions, each with the tool
+    // that acted and the plan's reason — read from the ledger by one loader
+    // that FAILS CLOSED, because this section is a claim.
+    loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
     listPending(scopeFromUserContext(ctx, supabase)),
@@ -289,7 +283,7 @@ export default async function HomePage() {
       .order('remind_at', { ascending: true }).limit(20),
   ]);
   for (const [label, res] of [
-    ['active runs', activeRunsRes], ['completed runs', completedRunsRes], ['agent activity', agentRes], ['autopilot handled', autoDoneRes],
+    ['active runs', activeRunsRes],
     ['recommendations', recsRes], ['money approvals', moneyApprovalsRes], ['chore sign-offs', choreSignoffRes],
     ['todos due', todosDueRes], ['chores due', choresDueRes], ['reminders due', remindersDueRes],
   ] as const) {
@@ -305,14 +299,8 @@ export default async function HomePage() {
   if (activeStepError) console.error('[home] active run steps read failed', activeStepError);
   const workingRuns = workingRunsFrom(activeRuns, (activeStepRows ?? []) as WorkingStepRow[]);
 
-  const completedItems = mergeCompletedByBubaly(
-    (completedRunsRes.data ?? []) as CompletedRunRow[],
-    [
-      ...((agentRes.data ?? []) as AiActivityRow[]),
-      ...((autoDoneRes.data ?? []) as { id: string; title: string; created_at: string }[])
-        .map((s) => ({ id: s.id, title: s.title, detail: null, href: '/dashboard/autopilot', created_at: s.created_at })),
-    ],
-  );
+  const completedItems = completedRes.ok ? completedRes.data : [];
+  const completedError = completedRes.ok ? null : completedRes.error;
 
   const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
   const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
@@ -432,7 +420,7 @@ export default async function HomePage() {
         seeAllHref="/dashboard/needs-you"
       />
 
-      <WorkingOn familyId={familyId} initial={workingRuns} />
+      <WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" />
 
       <Card>
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
@@ -510,7 +498,7 @@ export default async function HomePage() {
         </div>
       </Card>
 
-      <CompletedByBubaly items={completedItems} />
+      <CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" />
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner data={timeSaved} />

@@ -20,6 +20,8 @@ import { AlertTriangle, Check, Circle, Loader2, MinusCircle, PauseCircle, Clock 
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { RunEventView, RunProgressView, RunStepView, RunView } from '@/lib/ai/runs/detail';
 import type { StepState } from '@/lib/ai/runs/states';
+import type { CompletedSource } from '@/lib/home/today';
+import { toolDomainLabel } from '@/lib/ai/tool-domains';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -183,7 +185,29 @@ function when(iso: string): string {
   return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export function RunTimeline({ view, showActivity }: { view: RunView; showActivity: boolean }) {
+/**
+ * M6: the tool each step runs, by step id — `ai_plan_steps.tool_name` mapped
+ * on the server page. Kept OUTSIDE `RunView` so the read boundary
+ * (tests/run-detail-read-boundary.test.ts) stays exactly what it was; a step
+ * with no entry shows no source rather than a guessed one.
+ */
+export type StepSources = Readonly<Record<string, CompletedSource>>;
+
+function SourceChip({ source }: { source: CompletedSource }) {
+  const t = useTranslations();
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center rounded-full border border-border bg-surface px-1.5 py-0.5 align-middle text-[10px] font-medium text-muted"
+      title={source.tool}
+      data-testid="step-source"
+    >
+      <span className="sr-only">{t('runTimeline.tool')} </span>
+      {toolDomainLabel(source.domain, t)}
+    </span>
+  );
+}
+
+export function RunTimeline({ view, showActivity, stepSources }: { view: RunView; showActivity: boolean; stepSources?: StepSources }) {
   const t = useTranslations();
   useLiveRun(view.familyId, view.id, view.planId);
   const rows = timelineRows(view.steps, view.events);
@@ -207,7 +231,10 @@ export function RunTimeline({ view, showActivity }: { view: RunView; showActivit
             <li key={step.id} data-step-status={step.status} className="flex gap-3 rounded-xl px-2 py-2">
               <Glyph glyph={glyph} />
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className={cn('text-sm', glyph === 'done' ? 'text-fg' : glyph === 'skipped' ? 'text-muted line-through' : 'text-fg')}>{step.description}</p>
+                <p className={cn('text-sm', glyph === 'done' ? 'text-fg' : glyph === 'skipped' ? 'text-muted line-through' : 'text-fg')}>
+                  {step.description}
+                  {stepSources?.[step.id] && <SourceChip source={stepSources[step.id]} />}
+                </p>
                 {note && <p className={cn('mt-0.5 text-xs', glyph === 'problem' ? 'text-danger' : 'text-muted')}>{note}</p>}
               </div>
             </li>
