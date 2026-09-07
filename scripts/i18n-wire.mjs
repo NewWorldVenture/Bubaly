@@ -41,6 +41,15 @@ for (const [path, lines] of wanted) {
   let src = readFileSync(path, 'utf8');
   const isClient = /^['"]use client['"]/.test(src.trimStart());
 
+  // If the file already has a translator under another name, adding a second
+  // one called `t` is how you get a duplicate declaration, or a shadow when the
+  // file also binds `t` for something else. The lift reuses that name; there is
+  // nothing here to wire.
+  if (/const\s+(?!t\b)[A-Za-z_$][\w$]*\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/.test(src)) {
+    console.log(`  skip    ${path}  (already has a translator under another name)`);
+    continue;
+  }
+
   // Byte offset of the start of every line, so a tsc line number can be
   // compared against a declaration's position.
   const lineStart = [0];

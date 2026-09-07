@@ -80,7 +80,7 @@ export function FavoritesView() {
                       <p className="text-xs text-muted">{meta.label}</p>
                     </div>
                   </div>
-                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(f.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('favoritesView.remove')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 {f.rating != null && (
                   <div className="mt-2 flex gap-0.5">
@@ -130,13 +130,13 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
   return (
     <Modal open onClose={onClose} title={t('favorites.addFavorite')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('favorites.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Grandma's lasagna" required autoFocus />}</Field>
+        <Field label={t('favorites.name')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('favoritesView.grandmaSLasagna')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('favorites.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{KINDS.map((k) => <option key={k} value={k}>{FAVORITE_KIND_META[k].label}</option>)}</Select>}</Field>
           <Field label={t('favorites.rating')} hint="Optional">{(id) => <Select id={id} value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })}><option value="">—</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{'★'.repeat(n)}</option>)}</Select>}</Field>
         </div>
         <Field label={t('favorites.link')} hint="Optional">{(id) => <Input id={id} value={v.ref_url} onChange={(e) => setV({ ...v, ref_url: e.target.value })} placeholder="https://…" />}</Field>
-        <Field label={t('favorites.notes')} hint="Optional">{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder="Why the family loves it…" />}</Field>
+        <Field label={t('favorites.notes')} hint="Optional">{(id) => <Textarea id={id} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} rows={2} placeholder={t('favoritesView.whyTheFamilyLovesIt')} />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('favorites.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.name.trim()}>Add</Button>

@@ -45,6 +45,7 @@ export function MoneyCardsView({
   justCompletedSetup?: boolean;
   childWallets: CardChild[]; cards: IssuedCard[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -254,7 +255,7 @@ export function MoneyCardsView({
 
                 {/* Cards list */}
                 {childCards.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-muted">No card yet — use the buttons above to issue one.</div>
+                  <div className="px-4 py-3 text-sm text-muted">{t('moneyCardsView.noCardYetUseThe')}</div>
                 ) : (
                   <div className="divide-y divide-border/30">
                     {childCards.map((card) => (
@@ -330,6 +331,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   return (
     <div className="px-4 py-3">
@@ -344,7 +346,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
-            {card.brand ?? (card.type === 'physical' ? 'Physical' : 'Virtual')} card
+            {card.brand ?? (card.type === 'physical' ? t('moneyCardsView.physical') : 'Virtual')} card
             {card.last4 && <span className="font-normal text-muted"> ···· {card.last4}</span>}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted">
@@ -387,6 +389,7 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 function PhysicalCardModal({ child, onClose, onIssued }: {
   child: CardChild; onClose: () => void; onIssued: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -433,7 +436,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
             <div className="flex items-center gap-1.5">
               <span className="text-muted">$</span>
               <Input id={id} type="number" min="1" step="1" value={limitDollars}
-                onChange={(e) => setLimitDollars(e.target.value)} placeholder="No limit" />
+                onChange={(e) => setLimitDollars(e.target.value)} placeholder={t('moneyCardsView.noLimit')} />
             </div>
           )}
         </Field>

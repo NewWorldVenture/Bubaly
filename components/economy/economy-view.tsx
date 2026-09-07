@@ -30,6 +30,7 @@ export function EconomyView(props: {
   currencies: Currency[]; members: Member[]; balances: BalanceCell[];
   rewards: Reward[]; redemptions: Redemption[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { currencies, members, balances, rewards, redemptions, canManage } = props;
   const router = useRouter();
@@ -98,7 +99,7 @@ export function EconomyView(props: {
                   <p className="font-semibold">{m.name}</p>
                 </div>
                 {currencies.length === 0 ? (
-                  <p className="text-sm text-muted">No currencies yet.</p>
+                  <p className="text-sm text-muted">{t('economyView.noCurrenciesYet')}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {currencies.map((c) => (

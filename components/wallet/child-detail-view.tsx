@@ -398,7 +398,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
             : ' A parent will review this request.'}
         </p>
         <Field label={t('childDetail.whatFor')}>
-          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('childDetailView.eGLegoSet')} autoFocus maxLength={120} />}
         </Field>
         <Field label={t('childDetail.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
@@ -465,7 +465,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
         </Field>
         <Field label={t('childDetail.noteOptional')}>
-          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('childDetailView.birthdayGift')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
@@ -572,7 +572,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
           ))}
         </div>
         <Field label={t('childDetail.reasonOptional')}>
-          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra chores…" maxLength={120} />}
+          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('childDetailView.birthdayMoneyExtraChores')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>

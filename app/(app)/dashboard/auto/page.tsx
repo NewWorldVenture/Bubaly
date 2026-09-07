@@ -93,7 +93,7 @@ export default async function AutoOverviewPage() {
           <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> {t('dashboardAuto.upcomingRenewals')}</h2>
         </div>
         {renewals.length === 0 ? (
-          <p className="text-sm text-muted">No renewal dates on file yet. Add expiry dates to your license, registration, inspection, and insurance to get reminders here.</p>
+          <p className="text-sm text-muted">{t('auto.noRenewalDatesOnFile')}</p>
         ) : (
           <div className="space-y-1.5">
             {renewals.slice(0, 12).map((r) => (

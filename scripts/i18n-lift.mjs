@@ -112,6 +112,22 @@ if (!result) {
   process.exit(0);
 }
 
+/**
+ * The name this file already calls its translator, if it has one.
+ *
+ * Not every file uses `t`. `trip-travel.tsx` was translated earlier under `tr`
+ * — and it also binds `t` as the transport row in a `.map()`. Emitting `t(...)`
+ * there produced a second translator that the map parameter then shadowed, and
+ * the error surfaced as "This expression is not callable" some fifty lines
+ * away from the cause. Reusing whatever the file already calls it avoids both
+ * the duplicate and the shadow.
+ */
+function translatorName(text) {
+  const m = /const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+getTranslations\(\)|useTranslations\(\))/.exec(text);
+  return m ? m[1] : 't';
+}
+const T = translatorName(src);
+
 const ns = namespaceFor(file);
 const seen = new Map();
 const plan = [];
@@ -155,10 +171,10 @@ for (const p of plan) {
   const to = p.moduleScope
     ? `'${p.key}'`
     : p.kind === 'attr'
-      ? `{t('${p.key}')}`
+      ? `{${T}('${p.key}')}`
       : p.kind === 'jsxText'
-        ? `>{t('${p.key}')}<`
-        : `t('${p.key}')`;
+        ? `>{${T}('${p.key}')}<`
+        : `${T}('${p.key}')`;
   out = out.split(p.from).join(to);
 }
 

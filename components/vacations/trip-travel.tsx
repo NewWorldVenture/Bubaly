@@ -55,8 +55,8 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">{f.airline || 'Flight'} {f.flight_number}</p>
-              {f.booked ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">Booked</span>
-                : <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">Not booked</span>}
+              {f.booked ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">{tr('tripTravel.booked')}</span>
+                : <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">{tr('tripTravel.notBooked')}</span>}
             </div>
             <p className="mt-0.5 text-sm text-muted">{f.depart_airport || '?'} → {f.arrive_airport || '?'} · {fmtDT(f.depart_at)}{f.arrive_at ? ` – ${fmtDT(f.arrive_at)}` : ''}</p>
             <p className="mt-0.5 text-xs text-muted">
@@ -75,7 +75,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-semibold">{k.emoji} {t.provider || k.label}</p>
-                {t.booked && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">Booked</span>}
+                {t.booked && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">{tr('tripTravel.booked')}</span>}
               </div>
               <p className="mt-0.5 text-sm text-muted">{[t.from_location, t.to_location].filter(Boolean).join(' → ') || k.label} · {fmtDT(t.depart_at)}</p>
               <p className="mt-0.5 text-xs text-muted">

@@ -102,6 +102,7 @@ export function TripCrudSection<T extends Row>({
   addLabel?: string;
   orderBy?: (a: T, b: T) => number;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -188,7 +189,7 @@ export function TripCrudSection<T extends Row>({
                       );
                       if (f.type === 'member') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
-                          <option value="">— Select —</option>
+                          <option value="">{t('shared.select')}</option>
                           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                         </Select>
                       );

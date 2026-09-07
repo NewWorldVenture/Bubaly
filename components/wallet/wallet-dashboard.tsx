@@ -69,7 +69,7 @@ export type PendingApproval = {
 };
 
 const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string }[] = [
-  { kind: 'spend', label: 'Spend', icon: ShoppingBag, color: 'text-blue-400' },
+  { kind: 'spend', label: 'walletDashboard.spend', icon: ShoppingBag, color: 'text-blue-400' },
   { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400' },
   { kind: 'give', label: 'Give', icon: HeartHandshake, color: 'text-rose-400' },
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
@@ -430,6 +430,7 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
 
 /** Request to spend from a child's Spend bucket → completes or queues for approval. */
 function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -457,7 +458,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
       <form onSubmit={submit} className="space-y-4">
         <p className="text-xs text-muted">{formatCents(spendable)} {tr('walletDashboard.availableInSpendLargerAmountsNeed')}</p>
         <Field label={tr('walletDashboard.whatFor')}>
-          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('walletDashboard.eGLegoSet')} autoFocus maxLength={120} />}
         </Field>
         <Field label={tr('walletDashboard.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
@@ -473,6 +474,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
 
 /** Move money between two child wallets (parent-initiated, money-conserving). */
 function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onClose: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -521,7 +523,7 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
         </Field>
         {fromWallet && <p className="text-xs text-muted">{formatCents(fromWallet.buckets.spend ?? 0)} {tr('walletDashboard.availableIn')} {fromWallet.name}{tr('walletDashboard.aposSSpendBucket')}</p>}
         <Field label={tr('walletDashboard.noteOptional')}>
-          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('walletDashboard.birthdayGift')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('walletDashboard.cancel')}</Button>

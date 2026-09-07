@@ -111,8 +111,8 @@ export default async function SocialOverviewPage() {
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
               <PlatformDot platform={p} />
               {isProviderConfigured(p)
-                ? <Badge tone="success">Ready</Badge>
-                : <Badge tone="neutral">Requires setup</Badge>}
+                ? <Badge tone="success">{t('social.ready')}</Badge>
+                : <Badge tone="neutral">{t('social.requiresSetup')}</Badge>}
             </span>
           ))}
         </div>

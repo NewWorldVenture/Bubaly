@@ -558,6 +558,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
 function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
   familyId: string; settings: Settings | null; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -609,7 +610,7 @@ function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
           label={tr('frontDesk.enableAiFrontDesk')} desc="Answer & screen every incoming call" />
         <Field label={tr('frontDesk.aiGreeting')}>
           {id => <Textarea id={id} name="greeting" rows={3} defaultValue={settings?.greeting ?? ''}
-            placeholder="Hi! You've reached the family. I'm their AI assistant — how can I help?" />}
+            placeholder={t('frontDeskModule.hiYouVeReachedThe')} />}
         </Field>
         <Field label={tr('frontDesk.screeningMode')}>
           {id => (
@@ -645,6 +646,7 @@ const VALID_PRIORITY = new Set(['low', 'normal', 'high', 'urgent']);
 function LogCallModal({ familyId, userId, onClose, onSaved }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -723,7 +725,7 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
     <Modal open title={tr('frontDesk.logACall')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('frontDesk.callerName')}>{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder="Dr. Smith's office" />}</Field>
+          <Field label={tr('frontDesk.callerName')}>{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder={t('frontDeskModule.drSmithSOffice')} />}</Field>
           <Field label={tr('frontDesk.number')}>{id => <Input id={id} value={callerNumber} onChange={e => setCallerNumber(e.target.value)} placeholder="+1 555 …" />}</Field>
         </div>
 
@@ -748,7 +750,7 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
           {id => <Select id={id} value={priority} onChange={e => setPriority(e.target.value)}><option value="low">Low</option><option value="normal">{tr('frontDesk.normal')}</option><option value="high">{tr('frontDesk.high')}</option><option value="urgent">{tr('frontDesk.urgent')}</option></Select>}
         </Field>
         <Field label={tr('frontDesk.aiSummary')}>
-          {id => <Input id={id} value={summary} onChange={e => setSummary(e.target.value)} placeholder="Confirming Emma's appointment for Thursday 3pm" />}
+          {id => <Input id={id} value={summary} onChange={e => setSummary(e.target.value)} placeholder={t('frontDeskModule.confirmingEmmaSAppointmentFor')} />}
         </Field>
 
         {actionItems.length > 0 && (

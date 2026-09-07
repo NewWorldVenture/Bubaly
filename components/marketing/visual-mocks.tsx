@@ -219,12 +219,12 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
 
             {/* Bottom nav */}
             <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/55">
-              <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />Home</span>
-              <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />Calendar</span>
+              <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />{t('visualMocks.home')}</span>
+              <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />{t('visualMocks.calendar')}</span>
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg">
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
-              <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />Tasks</span>
+              <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />{t('visualMocks.tasks')}</span>
               <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />{t('visualMocks.more')}</span>
             </div>
           </div>
@@ -286,7 +286,7 @@ export async function ProductMockup() {
                   </div>
                 ))}
               </MiniPanel>
-              <MiniPanel title="Chores">
+              <MiniPanel title={t('visualMocks.chores')}>
                 {chores.map((item) => (
                   <div key={item} className="flex items-center gap-2 py-2 text-xs">
                     <span className="h-6 w-6 rounded-full bg-gradient-to-br from-amber-200 to-rose-300" />
@@ -344,7 +344,7 @@ export async function PhoneMockup({ className }: { className?: string }) {
             </div>
           ))}
         </MiniPanel>
-        <MiniPanel title="Chores" className="mt-3 p-3">
+        <MiniPanel title={t('visualMocks.chores')} className="mt-3 p-3">
           {['Tidy Living Room', 'Take Out Trash'].map((item) => (
             <div key={item} className="flex items-center justify-between py-1.5 text-[10px]">
               <span>{item}</span>
@@ -605,7 +605,7 @@ async function DashboardScreen() {
           ))}
         </div>
         <div className="space-y-0.5">
-          <p className="text-[5px] font-semibold text-white/60">Tasks</p>
+          <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.tasks')}</p>
           {[
             { text: 'Pack lunches', done: true },
             { text: 'Walk dog', done: true },
@@ -712,7 +712,7 @@ async function DeviceArtwork({ device }: { device: DeviceName }) {
               </div>
             </div>
             <div className="mt-1 w-full rounded bg-violet-500/25 px-1 py-0.5 text-center">
-              <span className="text-[4px] font-medium text-violet-300">Dentist 8:00</span>
+              <span className="text-[4px] font-medium text-violet-300">{t('visualMocks.dentist800')}</span>
             </div>
           </div>
         </div>

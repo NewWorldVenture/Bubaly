@@ -20,7 +20,7 @@ const activityFields: FieldDef[] = [
   { name: 'cost_cents', label: 'Cost ($)', type: 'money', half: true },
   { name: 'url', label: 'Link', type: 'text', half: true },
   { name: 'family_friendly', label: 'Family-friendly', type: 'checkbox' },
-  { name: 'booked', label: 'Booked', type: 'checkbox' },
+  { name: 'booked', label: 'tripActivities.booked', type: 'checkbox' },
   { name: 'notes', label: 'Notes', type: 'textarea' },
 ];
 
@@ -32,7 +32,7 @@ const reservationFields: FieldDef[] = [
   { name: 'party_size', label: 'Party size', type: 'number', half: true },
   { name: 'confirmation_code', label: 'Confirmation', type: 'text', half: true },
   { name: 'cost_cents', label: 'Cost ($)', type: 'money', half: true },
-  { name: 'booked', label: 'Booked', type: 'checkbox' },
+  { name: 'booked', label: 'tripActivities.booked', type: 'checkbox' },
   { name: 'notes', label: 'Notes', type: 'textarea' },
 ];
 
@@ -48,7 +48,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">{a.name}</p>
-              {a.family_friendly && <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-300">Family</span>}
+              {a.family_friendly && <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-300">{t('tripActivities.family')}</span>}
               {a.booked && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">Booked</span>}
             </div>
             <p className="mt-0.5 text-sm text-muted">{[a.category, a.location].filter(Boolean).join(' · ') || 'Activity'}</p>

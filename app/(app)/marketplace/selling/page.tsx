@@ -24,12 +24,13 @@ const CHIP_TONE: Record<AttentionTone, string> = {
   muted: 'bg-border/60 text-muted',
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title="Selling" description="Your seller cockpit is temporarily unavailable." />
+      <PageHeader title={t('selling.selling')} description="Your seller cockpit is temporarily unavailable." />
       <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
-      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">Refresh selling</Link>
+      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">{t('selling.refreshSelling')}</Link>
     </div>
   );
 }
@@ -38,6 +39,7 @@ function ReadFailure() {
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
 export default async function SellingPage() {
+  const t = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -177,7 +179,7 @@ export default async function SellingPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-1 text-xs text-muted">No activity yet</p>
+                      <p className="mt-1 text-xs text-muted">{t('selling.noActivityYet')}</p>
                     )}
                   </div>
                   <ArrowRight className="h-4 w-4 shrink-0 text-muted" />
