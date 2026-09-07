@@ -188,15 +188,15 @@ type T<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relati
 export interface Database {
   public: {
     Tables: {
+      finance_transaction_operation_receipts: T<
+        { family_id: string; operation_key: string; original_tool_call_id: string; actor_user_id: string | null; actor_member_id: string | null; actor_kind: AiActorKind; intent_version: 1; intent: Json; transaction_id: string; transaction_snapshot: Json; created_at: string },
+        never,
+        never
+      >;
       child_logins: T<
         { id: string; family_id: string; member_id: string; user_id: string; username: string; created_by: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; member_id: string; user_id: string; username: string; created_by?: string | null },
         Partial<{ username: string; user_id: string; member_id: string }>
-      >;
-      demo_sessions: T<
-        { id: string; user_id: string; family_id: string; created_at: string; expires_at: string | null; email: string | null },
-        { id?: string; user_id: string; family_id: string; expires_at?: string | null; email?: string | null },
-        Partial<{ expires_at: string | null; email: string | null }>
       >;
       child_login_throttle: T<
         { username: string; fails: number; window_start: string; locked_until: string | null; updated_at: string },
@@ -2268,11 +2268,6 @@ export interface Database {
         { id?: string; user_id: string; family_id?: string | null; status?: string; source?: string; steps_completed?: string[]; value_engaged?: boolean; import_source?: string | null; events_imported?: number; time_saved_minutes?: number; goals?: string[]; referral_source?: string | null; household_adults?: number | null; household_children?: number | null; members_added?: number; members_invited?: number; has_pin?: boolean; marketing_opt_in?: boolean; completeness?: number; completed_at?: string | null; reset_at?: string | null },
         Partial<{ family_id: string | null; status: string; source: string; steps_completed: string[]; value_engaged: boolean; import_source: string | null; events_imported: number; time_saved_minutes: number; goals: string[]; referral_source: string | null; household_adults: number | null; household_children: number | null; members_added: number; members_invited: number; has_pin: boolean; marketing_opt_in: boolean; completeness: number; completed_at: string | null; reset_at: string | null }>
       >;
-      demo_email_uses: T<
-        { email: string; first_used_at: string; last_used_at: string; expires_at: string; uses: number; created_at: string },
-        { email: string; first_used_at?: string; last_used_at?: string; expires_at: string; uses?: number; created_at?: string },
-        Partial<{ last_used_at: string; expires_at: string; uses: number }>
-      >;
       concierge_calls: T<
         { id: string; family_id: string; requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; requested_by?: string | null; task_kind?: string; callee_name: string; callee_phone?: string | null; callee_category?: string; goal: string; details?: Json; brief?: Json; status?: string; priority?: string; scheduled_for?: string | null; outcome?: string | null; transcript_summary?: string | null; duration_seconds?: number | null; attempts?: number; provider_ref?: string | null; completed_at?: string | null; created_by?: string | null },
@@ -2395,6 +2390,11 @@ export interface Database {
         { id: string; family_id: string; vacation_id: string; activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; vacation_id: string; activity_id?: string | null; holder_member_id?: string | null; holder_name?: string | null; ticket_type?: string | null; confirmation_code?: string | null; price_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null }>
+      >;
+      vacation_confirmation_imports: T<
+        { id: string; family_id: string; vacation_id: string; actor_user_id: string; actor_member_id: string; source_title: string; source_text: string; source_sha256: string; reviewed: Json; receipt: Json; reservation_id: string; itinerary_item_id: string; created_at: string },
+        never,
+        never
       >;
       vacation_reservations: T<
         { id: string; family_id: string; vacation_id: string; kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
@@ -2647,6 +2647,14 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      finance_record_transaction_operation: {
+        Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
+        Returns: Json;
+      };
+      vacation_import_confirmation: {
+        Args: { p_family_id: string; p_vacation_id: string; p_member_id: string; p_source: Json; p_fields: Json; p_expected?: Json | null; p_request_id?: string | null };
+        Returns: Json;
+      };
       move_recalculate_date: {
         Args: { p_family_id: string; p_move_id: string; p_member_id: string; p_new_date: string; p_expected?: Json | null; p_request_id?: string | null };
         Returns: Json;

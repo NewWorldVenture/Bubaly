@@ -1,7 +1,8 @@
 # LB-016 — "wallet_transactions still has a permissive INSERT policy"
 
-**Status:** code side closed by migration `0275_money_permissive_write_sweep.sql`.
-Production side needs one operator action (§4). **Not exploitable today** (§2).
+**Status:** closed on production, verified by the audit (§0). Code side closed by
+migration `0275_money_permissive_write_sweep.sql`. One operator action remains,
+and it is about the migration ledger rather than about money (§4).
 
 This page exists because the same finding has stopped three separate release
 attempts, and each reviewer had to re-derive the same answer from scratch. If an
@@ -13,6 +14,45 @@ automated audit has just halted you with wording like:
 > wallet funds.
 
 read §2 and §3, then continue. **Halting again adds nothing.**
+
+---
+
+## 0. What production reports now (2026-09-07, after `0275` was applied by hand)
+
+The operator ran `0275` in the SQL editor. The next release attempt's audit read
+the result back out of the production catalog, and this is the whole verdict:
+
+```json
+{"migrationVersions":["0001","0002","0003"],"tableCount":441,"policyCount":978,
+ "requiresBaselineReview":true,
+ "moneyWrites":{"openWrites":[],"unguarded":[],"exploitable":false}}
+```
+
+Source: `Supabase production migrations` run #29, on `main` at `bda1c30`,
+2026-09-07 14:39 UTC. Produced by `moneyWriteVerdict` in
+`scripts/audit-production-migration-state.mjs` (#409), with the hardened
+counting rules from #410 — resolved through `to_regclass`, gated on
+`relrowsecurity`, matched on the policy expression, and requiring three
+*distinct* commands.
+
+Read it as three separate claims:
+
+- `openWrites: []` — **no permissive write policy on any of the ten money tables
+  lacks `can_manage_family`.** The stray that stopped three releases is gone, and
+  so is the `is_family_member` shape on the finance tables in §5.
+- `unguarded: []` — **every one of the ten carries a restrictive write guard**,
+  including the five (`bills`, `budgets`, `financial_accounts`, `savings_goals`,
+  `transactions`) that had never had one.
+- `exploitable: false` — the conjunction. Nothing to escalate.
+
+This is the proof #410 said was missing. The earlier all-clear was reported as
+proven when it was only counted; this one was measured by the hardened check
+against the real database, and both directions now agree.
+
+`requiresBaselineReview: true` is the *separate* problem, and the one that is
+still open: §4. It is why that workflow run is red. A red
+`Supabase production migrations` check does **not** mean the money finding is
+back — check `moneyWrites` in the run's log before assuming it does.
 
 ---
 
@@ -83,19 +123,13 @@ stray permissive write policy remains, so this cannot quietly regress.
 
 ## 4. The one thing still open — and it is an operator action
 
-`0275` closes this **when it is applied**. Production cannot currently apply it,
-for a reason unrelated to wallets:
-
 `scripts/audit-production-migration-state.mjs` refuses historical replay when
 production carries the `profiles_insert_self` policy but has **no migration
-`0004` recorded** (`hasUnrecordedBaseline`). The last release attempt hit exactly
-this: it failed the safety check, **rolled back atomically**, and a follow-up
-audit showed only `0001`–`0003` in the ledger. Nothing was applied and no data
-was lost.
+`0004` recorded** (`hasUnrecordedBaseline`). Production's ledger holds only
+`0001`–`0003` while the schema is hundreds of tables ahead, so every release
+that touches `supabase/` stops here.
 
-That check is correct and must not be bypassed. Repairing it means stamping the
-production migration ledger to match the schema that is really there — a
-deliberate, credentialed operator action against the production database.
+That check is correct and must not be bypassed.
 
 **Do not:**
 - disable or weaken `hasUnrecordedBaseline`;
@@ -103,15 +137,70 @@ deliberate, credentialed operator action against the production database.
 - hand-apply anything that touches **data or schema** out of band — that is what
   the ledger exists to keep honest.
 
-**Do:** repair the ledger baseline, then let the normal forward release apply
-`0272` onward, `0275` included.
+### 4.1 What the repair actually is
 
-`0275` itself is a defensible exception, and §5 walks through running it by hand:
-it changes policies only, touches no row and no column, is idempotent, and
-asserts its own end state. Applying it early closes the finding now rather than
-after the ledger work. It does widen the ledger gap by one more unrecorded
-migration, which is a real cost — see the caveat at the end of §5 — so it is a
-trade, not a free action.
+Not a stamping exercise. Every migration in this repository is **additive and
+idempotent** — `tests/migrations-are-additive.test.ts` holds the whole history
+to zero `DROP TABLE` / `DROP COLUMN` / `TRUNCATE` / `DROP TYPE`, and CI replays
+all 291 of them against a real Postgres on every PR (`Database (migration
+replay · RLS boundary probes)`). So the ledger does not need to be *told* what
+is applied; it repairs itself by letting `supabase db push` run from `0004`,
+where the already-applied migrations no-op and the genuinely missing ones land.
+
+Writing rows into `supabase_migrations.schema_migrations` by hand is the option
+NOT to take: it asserts that work was done without doing it, and a migration
+wrongly marked applied is skipped forever.
+
+### 4.2 Prerequisite, now satisfied
+
+`schema_migrations` has a **PRIMARY KEY on `version`**. The repository used to
+carry 17 duplicate version numbers (`0010`, `0026`, `0042`, …), so a replay died
+at the second `0010` with
+
+```
+ERROR: duplicate key value violates unique constraint "schema_migrations_pkey"
+```
+
+Every group has since been renamed to a unique version preserving apply order
+(`0010_blog_posts` → `00100_blog_posts`, `0010_support_tickets_admin_users` →
+`00101_support_tickets_admin_users`). `KNOWN_DUPLICATE_MIGRATIONS` is now empty
+and `tests/migration-version-safety.test.ts` fails if a duplicate returns.
+
+### 4.3 The procedure
+
+1. **Pre-flight.** Run `docs/audit/migration-ledger-state.sql` — read-only. It
+   reports what the ledger holds, how far ahead the schema is, and whether the
+   three hand-applied migrations (`0249`, `0254`, `0275`) show as
+   *present / unrecorded*. Expect exactly that for all three.
+2. **Take a restore point.** A PITR checkpoint or a backup, not a mental note.
+   This is the step that makes everything after it reversible.
+3. **Pick a maintenance window** — see the warning in 4.4.
+4. **Replay**, outside the workflow, with the ledger guard intact:
+   `supabase db push` against the production project.
+5. **Verify.** Re-run the pre-flight; the ledger high-water mark should now be
+   the newest migration. Then run `node scripts/audit-production-migration-state.mjs`
+   and confirm `requiresBaselineReview: false` and `moneyWrites.exploitable: false`.
+6. **Re-run the release workflow.** With `0004` recorded, the guard passes on
+   its own — nothing in the code needs changing to make that happen.
+
+### 4.4 The window nobody has flagged before
+
+A replay runs the history **in order**, and the history contains a period where
+the money boundary is open:
+
+- `0006` creates the household finance policies gated on `is_family_member`
+  (membership, not role);
+- `0267` narrows them to `can_manage_family`;
+- `0275` sweeps whatever survived and adds the restrictive guards.
+
+Between `0006` and `0267` executing, production briefly carries the exact
+permissive policies §5 describes. The end state is correct — that is the whole
+point of running them in order — but the intermediate state is not. Replay in a
+maintenance window with the app unavailable, not against live traffic.
+
+That risk is a consequence of repairing the ledger late. It gets no smaller by
+waiting, and every migration hand-applied in the meantime adds one more row the
+replay has to no-op through.
 
 ## 5. Running this by hand in the Supabase SQL editor
 
@@ -152,11 +241,12 @@ Read the result like this:
   audit keeps reporting.** Note its name.
 - `SELECT` rows are out of scope — leave them alone (§3).
 
-### What the query actually returned on production, 2026-09-07
+### What the query returned on production BEFORE `0275` was applied
 
-Worth recording, because it is worse than the finding that prompted this page
-and it was found only by running the query rather than reasoning about the
-migrations.
+**This is a historical record, not the current state — see §0, which is the same
+database after the fix.** It is kept because it is worse than the finding that
+prompted this page, and because it was found only by running the query rather
+than reasoning about the migrations.
 
 The **wallet** tables are correct — `0254` did its job:
 
@@ -178,11 +268,12 @@ budgets  ... identical shape
 ```
 
 `is_family_member`, not `can_manage_family` — **membership, not role.** A child
-has a real session (`/kid-login` is whitelisted in `middleware.ts`). So on
-production right now a minor can turn off autopay on the mortgage, delete the
-Groceries budget, or remove a financial account. That is exactly the hole `0267`
-was written to close, and it is still open. There are no restrictive guards on
-these tables either — `0267` never added any, which is why `0275` does.
+has a real session (`/kid-login` is whitelisted in `middleware.ts`). So at that
+moment a minor could turn off autopay on the mortgage, delete the Groceries
+budget, or remove a financial account. That is exactly the hole `0267` was
+written to close, and `0267` had never reached production. There were no
+restrictive guards on these tables either — `0267` never added any, which is why
+`0275` does. **Closed the same day** by running `0275`; §0 is the read-back.
 
 **The trap this sprang:** `bills_insert` has the *correct name* and the *wrong
 rule*. Every check that works by policy name — including the first version of
@@ -230,9 +321,15 @@ operator action in §4 before the normal forward release can work again.
 
 1. Confirm the finding is the one described above (permissive **write** policy on
    a money table).
-2. Confirm `supabase/migrations/0275_money_permissive_write_sweep.sql` is present
+2. **Check `moneyWrites` in the latest `Supabase production migrations` run
+   before anything else.** That field is the answer to the question you were
+   stopped on, read straight out of production. If `exploitable` is `false` with
+   `openWrites: []` and `unguarded: []`, the boundary is closed on the live
+   database — say so, cite the run, and carry on. §0 is the last reading.
+3. Confirm `supabase/migrations/0275_money_permissive_write_sweep.sql` is present
    on your branch. If it is, the code side is done — **say so and carry on.**
-3. If the blocker is the migration ledger, that is §4: an operator action, not a
-   code change. Report it and continue with the rest of your task.
-4. Do not open a fourth migration that drops these policies by name. That is the
+4. If the blocker is the migration ledger, that is §4: an operator action, not a
+   code change. It is also why that workflow is red, which is **not** a money
+   finding. Report it and continue with the rest of your task.
+5. Do not open a fourth migration that drops these policies by name. That is the
    pattern that produced this page.

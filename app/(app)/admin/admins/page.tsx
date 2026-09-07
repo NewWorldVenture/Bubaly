@@ -30,12 +30,14 @@ async function ReadFailure() {
   );
 }
 
+// `labelKey`, not `label`: two of these were catalogue keys sitting in a field
+// rendered verbatim, so the tab bar read "admins.rolesPermissions".
 const TABS = [
-  { key: 'users',    label: 'Admin Users' },
-  { key: 'roles',    label: 'admins.rolesPermissions' },
-  { key: 'requests', label: 'admins.accessRequests' },
-  { key: 'activity', label: 'Admin Activity' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'users',    labelKey: 'admins.tab.users' },
+  { key: 'roles',    labelKey: 'admins.rolesPermissions' },
+  { key: 'requests', labelKey: 'admins.accessRequests' },
+  { key: 'activity', labelKey: 'admins.tab.activity' },
+  { key: 'settings', labelKey: 'admins.tab.settings' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -156,7 +158,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
         {TABS.map((t) => (
           <a key={t.key} href={`/admin/admins?tab=${t.key}`}
             className={`tab-item ${tab === t.key ? 'tab-item-active' : 'tab-item-inactive'}`}>
-            {t.label}
+            {tr(t.labelKey)}
           </a>
         ))}
       </div>

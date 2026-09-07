@@ -17,7 +17,7 @@ const mig = (n: string) => readFileSync(`supabase/migrations/${n}`, 'utf8');
 const rls0004 = mig('0004_rls.sql');
 const grocery0025 = mig('0025_fix_grocery_lists_rls.sql');
 const recipes0014 = mig('0014_core_platform.sql');
-const pantry0080 = mig('0080_food_household.sql');
+const pantry0080 = mig('00800_food_household.sql');
 const dining0104 = mig('0104_dining_out.sql');
 const hub0115 = mig('0115_meals_hub.sql');
 

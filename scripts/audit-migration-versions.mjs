@@ -8,29 +8,18 @@ const DEFAULT_MIGRATIONS_DIR = resolve(ROOT, 'supabase', 'migrations');
 // These collisions are already part of the repository's historical migration
 // lineage. Renaming them without checking applied remote history could create
 // drift in a production database.
-export const KNOWN_DUPLICATE_MIGRATIONS = Object.freeze({
-  '0010': ['0010_blog_posts.sql', '0010_support_tickets_admin_users.sql'],
-  '0026': ['0026_display_layouts.sql', '0026_medication_doses.sql'],
-  '0042': ['0042_family_location.sql', '0042_loyalty.sql'],
-  '0043': ['0043_chore_missions.sql', '0043_wishlists.sql'],
-  '0073': ['0073_behavior_tracking.sql', '0073_habits.sql'],
-  '0080': ['0080_food_household.sql', '0080_health_wellness.sql'],
-  '0089': ['0089_avatars_bucket.sql', '0089_dashboard_layouts.sql'],
-  '0090': ['0090_communications_hub.sql', '0090_stripe_money.sql'],
-  '0095': ['0095_pay_handles.sql', '0095_wallet_transfers.sql'],
-  '0098': ['0098_relationship_helper.sql', '0098_trip_intelligence.sql'],
-  '0105': ['0105_calendar_events_rls_repair.sql', '0105_child_logins.sql'],
-  '0108': ['0108_album_highlight_kind.sql', '0108_messages_enhance.sql'],
-  '0109': [
-    '0109_documents_favorite.sql',
-    '0109_finance_rls_repair.sql',
-    '0109_user_preferences_rls_repair.sql',
-  ],
-  '0110': ['0110_family_profile.sql', '0110_transactions_member.sql'],
-  '0137': ['0137_ai_call_guardian.sql', '0137_child_login_throttle.sql'],
-  '0138': ['0138_demo_sessions.sql', '0138_onboarding_imports.sql'],
-  '0142': ['0142_family_signals.sql', '0142_poll_facilitation.sql'],
-});
+// Historically this repository carried 17 version collisions — two or three
+// files sharing one numeric prefix. They are gone: every colliding group was
+// renamed to a unique version that keeps the same apply order (0010_blog_posts
+// -> 00100_blog_posts, 0010_support_tickets_admin_users -> 00101_…), because
+// supabase_migrations.schema_migrations keys on version and physically cannot
+// record two rows for 0010. That blocked Supabase branching outright and would
+// have blocked the production ledger repair at the same point.
+//
+// This map stays, deliberately empty: the collision check below still runs, so
+// a NEW duplicate fails the audit instead of being quietly absorbed. Do not add
+// entries to make a red audit go green — give the new migration a free number.
+export const KNOWN_DUPLICATE_MIGRATIONS = Object.freeze({})
 
 export function readMigrationInventory(directory = DEFAULT_MIGRATIONS_DIR) {
   return readdirSync(directory)
@@ -63,7 +52,13 @@ export function auditMigrationVersions(directory = DEFAULT_MIGRATIONS_DIR) {
     return !known || known.join('|') !== names.join('|');
   });
 
-  const versions = entries.map(({ version }) => Number(version)).filter(Number.isFinite);
+  // Versions are 4-digit generations. The de-duplicated ones carry a 5th digit
+  // that orders them WITHIN a generation (00100/00101 both sit in 0010), so the
+  // next free number comes from the first four digits — Number('01421') is 1421
+  // and would otherwise push the next migration to 1422.
+  const versions = entries
+    .map(({ version }) => Number(version.slice(0, 4)))
+    .filter(Number.isFinite);
   const nextVersion = String(Math.max(0, ...versions) + 1).padStart(4, '0');
 
   return { entries, duplicates, unexpectedDuplicates, nextVersion };

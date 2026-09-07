@@ -20,7 +20,7 @@ const activityFields: FieldDef[] = [
   { name: 'cost_cents', label: 'Cost ($)', type: 'money', half: true },
   { name: 'url', label: 'Link', type: 'text', half: true },
   { name: 'family_friendly', label: 'Family-friendly', type: 'checkbox' },
-  { name: 'booked', label: 'tripActivities.booked', type: 'checkbox' },
+  { name: 'booked', label: 'Booked', type: 'checkbox' },
   { name: 'notes', label: 'Notes', type: 'textarea' },
 ];
 
@@ -32,7 +32,7 @@ const reservationFields: FieldDef[] = [
   { name: 'party_size', label: 'Party size', type: 'number', half: true },
   { name: 'confirmation_code', label: 'Confirmation', type: 'text', half: true },
   { name: 'cost_cents', label: 'Cost ($)', type: 'money', half: true },
-  { name: 'booked', label: 'tripActivities.booked', type: 'checkbox' },
+  { name: 'booked', label: 'Booked', type: 'checkbox' },
   { name: 'notes', label: 'Notes', type: 'textarea' },
 ];
 

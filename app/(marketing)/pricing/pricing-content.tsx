@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive, PlayCircle, Loader2 } from 'lucide-react';
-import { startDemoAction } from '@/app/(marketing)/demo/actions';
+import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive } from 'lucide-react';
 // From `primitives`, not `visual-mocks`: this is a client component, and
 // `visual-mocks` imports `lib/i18n/server` → `next/headers`, which cannot be
 // bundled for the browser.
@@ -152,66 +150,6 @@ function HowTrialWorks() {
 }
 
 // ── Plan card ──────────────────────────────────────────────────────────────
-/** The one-click, no-signup demo submit button (server action). */
-function TryDemoButton() {
-  const tr = useTranslations();
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-brand-fg shadow-glow transition hover:opacity-90 disabled:opacity-70"
-    >
-      {pending
-        ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('pricingPricingContent.startingYourDemo')}</>
-        : <><PlayCircle className="h-5 w-5" /> {tr('pricingPricingContent.clickToDemoNow')}</>}
-    </button>
-  );
-}
-
-/** The compact "Demo Account" card that floats to the left of the hero title:
- *  one click → a fully-seeded Family+ demo for 5 minutes. Surfaces the
- *  ?demo=error|ended round-trip params so a failed/finished demo isn't silent. */
-function TestAccountCard() {
-  const tr = useTranslations();
-  const demoStatus = useSearchParams().get('demo');
-  return (
-    <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
-      <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-400/30">
-          <Zap className="h-6 w-6 text-emerald-400" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-black">{tr('pricingPricingContent.demoAccount')}</h2>
-            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-950">
-              {tr('pricingPricingContent.free5MinDemo')}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-white/60">
-            {tr('pricingPricingContent.noCardNeededLogsYouStraight')}
-          </p>
-        </div>
-      </div>
-
-      {demoStatus === 'error' && (
-        <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-medium text-danger">
-          {tr('pricingPricingContent.weCouldntStartTheDemoJust')}
-        </p>
-      )}
-      {demoStatus === 'ended' && (
-        <p role="status" className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
-          {tr('pricingPricingContent.thanksForTryingBubalyReadyTo')}
-        </p>
-      )}
-
-      <form action={startDemoAction}>
-        <TryDemoButton />
-      </form>
-    </article>
-  );
-}
-
 function PlanCard({
   name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
 }: {
@@ -379,14 +317,34 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   const yearly = period === 'yearly';
   const router = useRouter();
 
-  // Keep the tier/feature grid live: an admin change to /admin/tier-features
-  // revalidates this page, and re-fetching on an interval + on tab focus means
-  // an already-open pricing page reflects the change automatically.
+  // Keep the tier/feature grid live after an admin edits /admin/tier-features.
+  //
+  // This used to also poll every 20 seconds, unconditionally and forever. On a
+  // PUBLIC page that is expensive in a way that is easy to miss: each refresh
+  // re-renders the server tree, and this route's render awaits getPublicStats()
+  // and getResolvedFeatureTiers() — so one open tab was ~8,600 Supabase queries
+  // a day, whether or not anyone was looking at it, and crawlers and abandoned
+  // tabs all counted. Tier pricing changes maybe monthly; polling it three times
+  // a minute buys nothing that returning to the tab does not.
+  //
+  // Refreshing when the tab becomes visible covers the real case (admin edits,
+  // then someone looks at the page), and the throttle stops an alt-tab habit
+  // from turning into its own poll.
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), 20_000);
-    const onFocus = () => router.refresh();
-    window.addEventListener('focus', onFocus);
-    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+    let lastRefresh = 0;
+    const refreshIfStale = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefresh < 60_000) return;
+      lastRefresh = now;
+      router.refresh();
+    };
+    window.addEventListener('focus', refreshIfStale);
+    document.addEventListener('visibilitychange', refreshIfStale);
+    return () => {
+      window.removeEventListener('focus', refreshIfStale);
+      document.removeEventListener('visibilitychange', refreshIfStale);
+    };
   }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
@@ -397,52 +355,44 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   return (
     <PageWrap>
       <Container className="pb-12 pt-8 sm:pb-16 sm:pt-10">
-        {/* Hero sits on the SAME 3-column grid (and identical gaps) as the plan
-            cards below, so the Demo Account card lines up EXACTLY above the first
-            plan card and the title spans the other two columns — everything on one
-            grid. Below lg it stacks into one centered column: title first, then
-            the card. Fully fluid (clamp type, no fixed widths). */}
-        <div className="grid items-center gap-4 sm:gap-5 lg:grid-cols-3">
-          {/* Demo Account card — column 1 (aligns above the first plan card). */}
-          <div className="order-2 mx-auto w-full max-w-sm lg:order-1 lg:mx-0 lg:max-w-none">
-            <TestAccountCard />
-          </div>
+        {/* The hero used to share a 3-column grid with the demo card, which took
+            column 1 and pushed the title into columns 2-3. With the card gone the
+            grid has nothing left to align, so the hero is a plain centered block —
+            no empty column, no off-centre title. Fully fluid (clamp type, no fixed
+            widths). */}
+        <section className="mx-auto max-w-3xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80 sm:text-sm">
+            {tr('pricingPricingContent.lessManagingLifeMoreLivingIt')}
+          </p>
+          <h1 className="mt-3 font-black leading-[1.05] text-[clamp(2.25rem,6vw,3.75rem)]">
+            {tr('pricingPricingContent.bubalyPricing')}
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:mt-5 sm:text-lg">
+            {tr('pricingPricingContent.getFullFamilyBasicAccessFree')}
+          </p>
 
-          {/* Hero + billing toggle — spans columns 2-3, left-aligned on desktop. */}
-          <section className="order-1 mx-auto max-w-2xl text-center lg:order-2 lg:col-span-2 lg:mx-0 lg:max-w-none lg:text-left">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80 sm:text-sm">
-              {tr('pricingPricingContent.lessManagingLifeMoreLivingIt')}
-            </p>
-            <h1 className="mt-3 font-black leading-[1.05] text-[clamp(2.25rem,6vw,3.75rem)]">
-              {tr('pricingPricingContent.bubalyPricing')}
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:mt-5 sm:text-lg lg:mx-0">
-              {tr('pricingPricingContent.getFullFamilyBasicAccessFree')}
-            </p>
-
-            <div className="mt-6 flex justify-center sm:mt-7 lg:justify-start">
-              <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
-                <button
-                  onClick={() => setPeriod('monthly')}
-                  className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-                >
-                  {tr('pricingPricingContent.monthly')}
-                </button>
-                <button
-                  onClick={() => setPeriod('yearly')}
-                  className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-                >
-                  {tr('pricingPricingContent.yearly')}
-                </button>
-                {yearly && (
-                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    {tr('pricingPricingContent.saveUpTo')} {basicSavings}%
-                  </span>
-                )}
-              </div>
+          <div className="mt-6 flex justify-center sm:mt-7">
+            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+              <button
+                onClick={() => setPeriod('monthly')}
+                className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+              >
+                {tr('pricingPricingContent.monthly')}
+              </button>
+              <button
+                onClick={() => setPeriod('yearly')}
+                className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+              >
+                {tr('pricingPricingContent.yearly')}
+              </button>
+              {yearly && (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  {tr('pricingPricingContent.saveUpTo')} {basicSavings}%
+                </span>
+              )}
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
 
         {/* Plan cards — responsive 1 / 2 / 3 columns */}
         <section className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">

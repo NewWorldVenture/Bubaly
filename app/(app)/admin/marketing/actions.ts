@@ -1,6 +1,7 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { AEO_TAG } from '@/lib/marketing/aeo';
 import { redirect } from 'next/navigation';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { archiveLegacyLandingOnPlatform, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
@@ -22,6 +23,10 @@ const AUTOMATION_STATUSES = ['draft', 'active', 'paused', 'archived'] as const;
 
 function revalidatePublicMarketingPath(path: string | null | undefined) {
   if (path?.startsWith('/')) revalidatePath(path);
+  // The public AEO read is cached per path (it renders on most marketing
+  // pages, so it must not query per view). Dropping the tag is what keeps the
+  // console's promise that one edit reaches every matching route immediately.
+  revalidateTag(AEO_TAG);
 }
 
 function requireChoice<T extends string>(value: string, choices: readonly T[], label: string): T {

@@ -1,16 +1,21 @@
 // scripts/ci-dedupe-migration-versions.mjs — CI-only helper for `supabase start`.
 //
-// The repository's migration lineage contains a handful of files that share a
-// version prefix (see KNOWN_DUPLICATE_MIGRATIONS in audit-migration-versions.mjs).
-// They are historical and must NOT be renamed in the repo (a production database
-// records applied versions by that prefix). The Supabase CLI, however, records
-// each applied migration in supabase_migrations.schema_migrations keyed by
-// version, so an isolated `supabase start` fails on the second file of a pair:
-//   ERROR: duplicate key value violates unique constraint "schema_migrations_pkey"
+// The repository USED to carry 17 duplicated version prefixes. They have since
+// been renamed in the repo itself, using exactly the scheme below, so this
+// script now finds nothing to do. It is kept as a safety net for a duplicate
+// reintroduced by a future branch.
 //
-// This script runs ONLY in the disposable CI checkout, right before
-// `supabase start`, and renames every duplicated group to unique versions that
-// keep the exact same apply order (string order, as the CLI sorts filenames):
+// Why they could not stay: the Supabase CLI records each applied migration in
+// supabase_migrations.schema_migrations keyed by version, and that table has a
+// PRIMARY KEY on version, so the second file of a pair fails outright:
+//   ERROR: duplicate key value violates unique constraint "schema_migrations_pkey"
+// That blocked Supabase branching, and would have blocked the production ledger
+// repair at the same statement.
+//
+// When it does have work to do, it runs ONLY in the disposable CI checkout,
+// right before `supabase start`, and renames every duplicated group to unique
+// versions that keep the exact same apply order (string order, as the CLI sorts
+// filenames):
 //   0010_blog_posts.sql                 -> 00100_blog_posts.sql
 //   0010_support_tickets_admin_users.sql -> 00101_support_tickets_admin_users.sql
 // "00100_…" < "00101_…" < "0011_…" and > "0009_…", so nothing moves relative to

@@ -154,6 +154,22 @@ export function moneyWriteVerdict(snapshot) {
   };
 }
 
+/**
+ * The gate below is unchanged and must stay that way — it still throws, and
+ * historical replay stays blocked. What it did not do is say where the answer
+ * lives, so every responder re-derived it: three releases stopped here and each
+ * one read the money verdict as the cause. It is not. This is the ledger, and
+ * repairing it is a credentialed operator action rather than a code change.
+ */
+export function baselineBlockedMessage(runbook) {
+  return [
+    'Existing production policies have no recorded baseline migration 0004.',
+    'Historical replay is blocked; review the schema audit before repairing migration history.',
+    `This is the migration ledger, NOT the money boundary — read moneyWrites above for that (${runbook} §0).`,
+    `Repairing it is a credentialed operator action: ${runbook} §4.`,
+  ].join(' ');
+}
+
 export function hasUnrecordedBaseline(snapshot) {
   return snapshot.policies.some((policy) => policy.table === 'profiles' && policy.name === 'profiles_insert_self')
     && !snapshot.migrations.some((migration) => migration.version === '0004');
@@ -176,7 +192,7 @@ export async function runProductionMigrationAudit() {
     moneyWrites,
   }));
   if (process.argv.includes('--enforce-history') && requiresBaselineReview) {
-    throw new Error('Existing production policies have no recorded baseline migration 0004. Historical replay is blocked; review the schema audit before repairing migration history.');
+    throw new Error(baselineBlockedMessage(moneyWrites.runbook));
   }
 }
 

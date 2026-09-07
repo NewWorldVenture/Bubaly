@@ -33,10 +33,6 @@
       "schedule": "0 10 * * *"
     },
     {
-      "path": "/api/cron/demo-cleanup",
-      "schedule": "0 5 * * *"
-    },
-    {
       "path": "/api/cron/family-routines",
       "schedule": "10 9 * * *"
     },

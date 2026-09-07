@@ -68,11 +68,13 @@ export type PendingApproval = {
   created_at: string;
 };
 
-const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string }[] = [
-  { kind: 'spend', label: 'walletDashboard.spend', icon: ShoppingBag, color: 'text-blue-400' },
-  { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400' },
-  { kind: 'give', label: 'Give', icon: HeartHandshake, color: 'text-rose-400' },
-  { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
+// `labelKey`, not `label`: 'walletDashboard.spend' was a catalogue key in a
+// field rendered verbatim, so the Spend bucket was labelled with its own key.
+const BUCKET_META: { kind: BucketKind; labelKey: string; icon: typeof PiggyBank; color: string }[] = [
+  { kind: 'spend', labelKey: 'walletDashboard.spend', icon: ShoppingBag, color: 'text-blue-400' },
+  { kind: 'save', labelKey: 'walletDashboard.bucket.save', icon: PiggyBank, color: 'text-emerald-400' },
+  { kind: 'give', labelKey: 'walletDashboard.bucket.give', icon: HeartHandshake, color: 'text-rose-400' },
+  { kind: 'invest', labelKey: 'walletDashboard.bucket.invest', icon: TrendingUp, color: 'text-violet-400' },
 ];
 
 export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, pendingApprovals, analytics }: {
@@ -233,7 +235,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                   <div key={b.kind} className="rounded-xl bg-bg/40 p-2 text-center">
                     <b.icon className={cn('mx-auto mb-1 h-3.5 w-3.5', b.color)} />
                     <p className="text-[11px] font-semibold">{formatCents(c.buckets[b.kind] ?? 0)}</p>
-                    <p className="text-[9px] uppercase tracking-wide text-muted">{b.label}</p>
+                    <p className="text-[9px] uppercase tracking-wide text-muted">{tr(b.labelKey)}</p>
                   </div>
                 ))}
               </div>

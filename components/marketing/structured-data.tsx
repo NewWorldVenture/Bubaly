@@ -4,8 +4,7 @@
 // ratings or reviews — so we never risk a structured-data spam penalty.
 
 import { Fragment } from 'react';
-import { createServiceClient } from '@/lib/supabase/server';
-import { getSocialLinks } from '@/lib/server/social-links';
+import { getCachedSocialLinks } from '@/lib/server/social-links';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -27,10 +26,15 @@ function JsonLd({ data }: { data: Record<string, unknown> }) {
 
 /** Organization + WebSite + SoftwareApplication — render once, on the homepage. */
 export async function SiteStructuredData() {
-  // The same admin-entered profiles the footer shows. `sameAs` is how a search
-  // engine ties those accounts to the brand, so it reads from one source rather
-  // than a second hand-kept list that would drift from the footer.
-  const social = await getSocialLinks(createServiceClient());
+  // The admin-entered profiles ONLY — deliberately not the footer's defaults.
+  //
+  // The footer falls back to the brand's canonical handles so its icon row
+  // always draws; a link there that 404s is a small cosmetic miss. `sameAs` is
+  // a different kind of statement: it tells search engines "these accounts are
+  // this organisation", and asserting that about a profile nobody has confirmed
+  // exists is a claim, not a placeholder. So this stays with what an admin
+  // actually saved, and is empty until they do.
+  const social = await getCachedSocialLinks();
 
   const organization = {
     '@context': 'https://schema.org',

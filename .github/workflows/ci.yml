@@ -196,11 +196,12 @@ jobs:
         with:
           version: 2.109.1
 
-      # The repo keeps a few historically duplicated migration versions (see
-      # KNOWN_DUPLICATE_MIGRATIONS); the CLI's schema_migrations table rejects
-      # the second file of each pair. Give them unique versions in THIS
-      # disposable checkout only, preserving apply order (verified by the script
-      # + tests/ci-dedupe-migration-versions.test.ts). Never committed.
+      # The 17 historical duplicate versions were renamed in the repo itself, so
+      # this is now a NO-OP that renames nothing. It is kept as a safety net: if
+      # a duplicate is ever reintroduced, this gives the pair unique versions in
+      # THIS disposable checkout, preserving apply order, rather than letting
+      # `supabase start` die on schema_migrations_pkey with no explanation.
+      # (db:audit:migrations above is the real gate and fails first.)
       - name: De-duplicate migration versions for the isolated apply
         run: node scripts/ci-dedupe-migration-versions.mjs
         env:
