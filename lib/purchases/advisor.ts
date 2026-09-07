@@ -300,7 +300,7 @@ function adaptWardrobe(rows: WardrobeRow[]): Adapted[] {
     }));
 }
 
-type Tally = { adapted: Adapted; fields: Set<string>; tokens: Set<string> };
+type Tally = { adapted: Adapted; fields: Set<string>; tokens: Set<string>; identityTokens: Set<string> };
 
 /**
  * Every owned row that answers any of the candidate's words, tallied by how
@@ -315,8 +315,11 @@ function tallyMatches(all: Adapted[], locations: LocationLike[], tokens: string[
     const key = `${source}:${hit.item.id}`;
     const adapted = index.get(key);
     if (!adapted) return;
-    const entry = byRow.get(key) ?? { adapted, fields: new Set<string>(), tokens: new Set<string>() };
-    for (const field of hit.matched) entry.fields.add(field);
+    const entry = byRow.get(key) ?? { adapted, fields: new Set<string>(), tokens: new Set<string>(), identityTokens: new Set<string>() };
+    for (const field of hit.matched) {
+      entry.fields.add(field);
+      if (IDENTITY_FIELDS.has(field)) entry.identityTokens.add(token);
+    }
     entry.tokens.add(token);
     byRow.set(key, entry);
   };
@@ -445,11 +448,17 @@ export function adviseOnPurchase(input: AdviceInput): PurchaseAdvice {
   if (tokens.length) {
     const tally = tallyMatches(all, locations, tokens);
     const best = Math.max(0, ...[...tally.values()].map((entry) => entry.tokens.size));
+    // The head word is what the candidate IS — "18V battery" is a battery, not
+    // an 18V anything — so a row that matches everything except the head noun
+    // is related kit, not the same thing. Without this, owning a Bosch 18V
+    // drill would read as "you already own an 18V battery".
+    const head = tokens[tokens.length - 1];
     for (const entry of tally.values()) {
       const match = toOwnedMatch(entry);
       if (!match.matchedOn.some((field) => STRONG_FIELDS.has(field))) continue;
       const identifies = match.matchedOn.some((field) => IDENTITY_FIELDS.has(field));
-      if (entry.tokens.size === best && identifies) duplicates.push(match);
+      const answersTheWholeThing = entry.tokens.size === tokens.length || entry.identityTokens.has(head);
+      if (entry.tokens.size === best && identifies && answersTheWholeThing) duplicates.push(match);
       else if (match.brand || match.model) compatibility.push(match);
     }
   }
