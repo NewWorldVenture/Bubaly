@@ -626,12 +626,22 @@ function BoughtModal({ listId, items, onClose, onDone }: {
         merchant: merchant.trim() || null,
       });
       if (!result.ok) { toastError(result.error); return; }
-      if (result.pantryFailed.length > 0) {
-        // The list is deliberately left alone when a pantry write fails, so
-        // the retry does the same thing rather than something new.
-        toastError(t('shoppingModule.couldNotPutTheseIn', {
-          names: result.pantryFailed.map((f) => f.name).join(', '),
-        }));
+      // A line is put away and taken off the list together, so what is left
+      // checked is exactly what did not land: tapping again retries those and
+      // cannot add the ones that did a second time. The modal stays open.
+      if (result.pantryFailed.length > 0 || result.clearFailed.length > 0) {
+        if (result.pantryFailed.length > 0) {
+          toastError(t('shoppingModule.couldNotPutTheseIn', {
+            names: result.pantryFailed.map((f) => f.name).join(', '),
+          }));
+        }
+        // Put away but still ticked — the one case where a second tap WOULD
+        // double it, so the family is told rather than left to find out.
+        if (result.clearFailed.length > 0) {
+          toastError(t('shoppingModule.theseAreInYourPantry', {
+            names: result.clearFailed.map((f) => f.name).join(', '),
+          }));
+        }
         return;
       }
       const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });

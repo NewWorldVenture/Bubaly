@@ -10,8 +10,8 @@
 //     pantry that never hears about the shop buys the milk again next week;
 //   * a purchase is recorded ONLY when someone typed an amount, and
 //     `purchaseRecorded` is read from the row that exists, never assumed;
-//   * a pantry failure leaves the list UNTOUCHED, so the retry does the same
-//     thing again rather than something new.
+//   * a pantry failure leaves ITS OWN line on the list and nothing else, so a
+//     retry adds what never landed and cannot add what did a second time.
 //
 // The retailer hand-off is asserted at the same boundary it is built from: the
 // links come from what is still to buy, and a ticked-off item is not in them.
@@ -159,7 +159,7 @@ describe('Bought → pantry', () => {
   });
 });
 
-describe('a failed pantry write leaves the list alone', () => {
+describe('a failed pantry write leaves its own line on the list', () => {
   it('reports the names that failed, clears nothing and records no purchase', async () => {
     db.seed('grocery_items', [
       { id: 'i-1', family_id: FAMILY, list_id: LIST, name: 'Milk', quantity: '1', is_checked: true },
@@ -190,6 +190,110 @@ describe('a failed pantry write leaves the list alone', () => {
     expect(db.table('transactions')).toHaveLength(0);
     // And the list is exactly as the family left it, so the retry is the same act.
     expect(itemsOn().map((r) => r.name)).toEqual(['Milk']);
+    expect(errorLog).toHaveBeenCalled();
+  });
+
+  it('a PARTIAL failure clears only what landed, so the retry cannot count it twice', async () => {
+    // The bug this pins: `pantryAdjust` is an additive read-modify-write and
+    // the trip used to clear nothing unless every line succeeded. Milk went
+    // into the pantry, eggs did not, nothing was cleared, the modal stayed
+    // open naming the eggs — and the second tap put the milk in AGAIN, so a
+    // family that bought one milk owned two.
+    db.seed('grocery_items', [
+      { id: 'i-1', family_id: FAMILY, list_id: LIST, name: 'Milk', quantity: '1', is_checked: true },
+      { id: 'i-2', family_id: FAMILY, list_id: LIST, name: 'Eggs', quantity: '12', is_checked: true },
+    ]);
+    // Milk has a pantry row and takes the update path; eggs are new and take
+    // the insert path, which fails the way a constraint violation does.
+    db.seed('pantry_items', [{ id: 'p-1', family_id: FAMILY, name: 'Milk', quantity: 1 }]);
+    const realFrom = db.from.bind(db);
+    const fromSpy = vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table);
+      if (table !== 'pantry_items') return builder;
+      const failing = builder as unknown as Record<string, unknown>;
+      failing.insert = () => ({
+        select: () => ({
+          single: async () => ({ data: null, error: { code: '23505', message: 'pantry is full', details: null, hint: null } }),
+          maybeSingle: async () => ({ data: null, error: { code: '23505', message: 'pantry is full', details: null, hint: null } }),
+        }),
+      });
+      return builder;
+    }) as typeof db.from);
+
+    const first = await recordShoppingTripAction({ listId: LIST, amount: 30 });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error);
+    expect(first.pantryUpdated).toEqual(['Milk']);
+    expect(first.pantryFailed.map((f) => f.name)).toEqual(['Eggs']);
+    expect(first.cleared).toBe(1);
+    // The milk is put away AND off the list; only the line that never landed
+    // is still there for the family to try again.
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 2 });
+    expect(itemsOn().map((r) => r.name)).toEqual(['Eggs']);
+
+    // The family taps "Put it in the pantry" again, exactly as the modal invites.
+    const second = await recordShoppingTripAction({ listId: LIST, amount: 30 });
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error(second.error);
+    expect(second.pantryUpdated).toEqual([]);
+    expect(second.pantryFailed.map((f) => f.name)).toEqual(['Eggs']);
+    expect(second.cleared).toBe(0);
+    // ONE purchase of milk, not two.
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 2 });
+    expect(pantry()).toHaveLength(1);
+    // Nothing completed, so nothing was charged either — once or twice.
+    expect(db.table('transactions')).toHaveLength(0);
+
+    // And when the pantry recovers, the retry finishes the trip: the eggs land,
+    // the list empties, and the charge is recorded exactly once.
+    fromSpy.mockRestore();
+    const third = await recordShoppingTripAction({ listId: LIST, amount: 30 });
+    expect(third.ok).toBe(true);
+    if (!third.ok) throw new Error(third.error);
+    expect(third.pantryUpdated).toEqual(['Eggs']);
+    expect(third.pantryFailed).toEqual([]);
+    expect(third.cleared).toBe(1);
+    expect(third.purchaseRecorded).toBe(true);
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 2 });
+    expect(pantryFor('Eggs')).toMatchObject({ quantity: 12 });
+    expect(itemsOn()).toEqual([]);
+    expect(db.table('transactions')).toHaveLength(1);
+  });
+
+  it('a line put away that will not clear is named, and blocks the charge', async () => {
+    // The one window a per-line clear cannot close: the pantry took it and the
+    // delete did not. Tapping again WOULD double it, so the family is told
+    // rather than shown a clean success.
+    db.seed('grocery_items', [
+      { id: 'i-1', family_id: FAMILY, list_id: LIST, name: 'Milk', quantity: '1', is_checked: true },
+    ]);
+    db.seed('pantry_items', [{ id: 'p-1', family_id: FAMILY, name: 'Milk', quantity: 1 }]);
+    const realFrom = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table);
+      if (table !== 'grocery_items') return builder;
+      const failing = builder as unknown as Record<string, unknown>;
+      failing.delete = () => {
+        const chain: Record<string, unknown> = {
+          eq: () => chain,
+          then: (resolve: (r: unknown) => unknown) =>
+            Promise.resolve({ data: null, error: { code: '42501', message: 'denied', details: null, hint: null } }).then(resolve),
+        };
+        return chain;
+      };
+      return builder;
+    }) as typeof db.from);
+
+    const result = await recordShoppingTripAction({ listId: LIST, amount: 30 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.pantryUpdated).toEqual(['Milk']);
+    expect(result.pantryFailed).toEqual([]);
+    expect(result.clearFailed.map((f) => f.name)).toEqual(['Milk']);
+    expect(result.cleared).toBe(0);
+    // The shop is not finished, so no charge is written.
+    expect(result.purchaseRecorded).toBe(false);
+    expect(db.table('transactions')).toHaveLength(0);
     expect(errorLog).toHaveBeenCalled();
   });
 });
