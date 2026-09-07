@@ -141,4 +141,81 @@ begin
   perform set_config('role','postgres', true);
 end $$;
 
-select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only): ALL INVARIANTS PASSED' as result;
+-- ── Invariant 5: the mint-lock survives a PERMISSIVE POLICY THAT DRIFTED IN ──
+--
+-- Everything above proves the migrations are right. This proves the lock holds
+-- when the database is NOT what the migrations say — which is the situation a
+-- production metadata audit reported: `wallet_transactions` carrying a
+-- permissive INSERT policy alongside the manager-only one, of the shape that
+-- lets any family member (a child included) submit a completed credit and
+-- create spendable funds.
+--
+-- Permissive policies OR together, so on their own that finding is exactly as
+-- bad as it sounds. What closes it is 0254's RESTRICTIVE guards: a restrictive
+-- policy ANDs with the union of the permissive ones, so no permissive policy —
+-- whatever it is called, whoever it is granted to — can grant past it.
+--
+-- That is a claim about Postgres semantics, and a claim about money deserves a
+-- test rather than a reading. So this injects the drift and asserts the child
+-- still cannot mint. Two shapes, the second deliberately the worst case that
+-- could exist:
+--   a) `to authenticated with check (is_family_member(family_id))` — the shape
+--      the audit describes.
+--   b) `to public with check (true)` — no role limit, no condition at all.
+-- The guards in 0254 are `to authenticated`, so (b) also checks that a policy
+-- reaching roles the guard does not name still cannot be used by a member.
+do $$
+declare blocked boolean; st text; landed int; shape text;
+begin
+  foreach shape in array array[
+    'to authenticated with check (public.is_family_member(family_id))',
+    'to public with check (true)'
+  ] loop
+    execute 'drop policy if exists wallet_transactions_drift_probe on public.wallet_transactions';
+    execute format(
+      'create policy wallet_transactions_drift_probe on public.wallet_transactions for insert %s', shape);
+
+    blocked := false; st := null;
+    perform set_config('role','authenticated', true);
+    perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);  -- the child
+    perform set_config('request.jwt.claim.role','authenticated', true);
+    begin
+      insert into public.wallet_transactions
+        (family_id, type, status, direction, amount_cents, currency, metadata)
+      values ('00000000-0000-4000-8000-0000000000f1','parent_top_up','completed','credit',
+              424242,'usd','{"probe":"drift"}'::jsonb);
+    exception when others then blocked := true; st := SQLSTATE;
+    end;
+    perform set_config('role','postgres', true);
+
+    select count(*) into landed from public.wallet_transactions where amount_cents = 424242;
+    -- Clean up before asserting, so a failure does not leave the drift policy
+    -- or a minted row behind for the next probe in the run.
+    delete from public.wallet_transactions where amount_cents = 424242;
+    execute 'drop policy if exists wallet_transactions_drift_probe on public.wallet_transactions';
+
+    if not blocked or landed <> 0 then
+      raise exception 'A-08 FAIL: a child MINTED money past the restrictive guard with a permissive policy % (blocked=%, rows=%)',
+        shape, blocked, landed;
+    end if;
+    raise notice 'A-08 OK: child mint still blocked (%) with permissive policy %', st, shape;
+  end loop;
+end $$;
+
+-- ── Invariant 6: `anon` cannot reach the money ledger at all ────────────────
+-- The guards above are `to authenticated`, so a permissive policy `to public`
+-- would not be ANDed with them for an anonymous request. The grant layer is
+-- what closes that: anon holds no INSERT privilege, so the question never
+-- reaches RLS. Asserted rather than assumed, because it is the one path the
+-- restrictive guards do not cover.
+do $$
+declare has_priv boolean;
+begin
+  select has_table_privilege('anon','public.wallet_transactions','INSERT') into has_priv;
+  if has_priv then
+    raise exception 'A-08 FAIL: anon holds INSERT on wallet_transactions — the restrictive guards are `to authenticated` and would not apply';
+  end if;
+  raise notice 'A-08 OK: anon holds no INSERT privilege on wallet_transactions';
+end $$;
+
+select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience): ALL INVARIANTS PASSED' as result;
