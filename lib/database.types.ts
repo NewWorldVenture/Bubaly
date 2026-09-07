@@ -198,11 +198,6 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; user_id: string; username: string; created_by?: string | null },
         Partial<{ username: string; user_id: string; member_id: string }>
       >;
-      demo_sessions: T<
-        { id: string; user_id: string; family_id: string; created_at: string; expires_at: string | null; email: string | null },
-        { id?: string; user_id: string; family_id: string; expires_at?: string | null; email?: string | null },
-        Partial<{ expires_at: string | null; email: string | null }>
-      >;
       child_login_throttle: T<
         { username: string; fails: number; window_start: string; locked_until: string | null; updated_at: string },
         { username: string; fails?: number; window_start?: string; locked_until?: string | null },
@@ -2272,11 +2267,6 @@ export interface Database {
         { id: string; user_id: string; family_id: string | null; status: string; source: string; steps_completed: string[]; value_engaged: boolean; import_source: string | null; events_imported: number; time_saved_minutes: number; goals: string[]; referral_source: string | null; household_adults: number | null; household_children: number | null; members_added: number; members_invited: number; has_pin: boolean; marketing_opt_in: boolean; completeness: number; completed_at: string | null; reset_at: string | null } & Stamps,
         { id?: string; user_id: string; family_id?: string | null; status?: string; source?: string; steps_completed?: string[]; value_engaged?: boolean; import_source?: string | null; events_imported?: number; time_saved_minutes?: number; goals?: string[]; referral_source?: string | null; household_adults?: number | null; household_children?: number | null; members_added?: number; members_invited?: number; has_pin?: boolean; marketing_opt_in?: boolean; completeness?: number; completed_at?: string | null; reset_at?: string | null },
         Partial<{ family_id: string | null; status: string; source: string; steps_completed: string[]; value_engaged: boolean; import_source: string | null; events_imported: number; time_saved_minutes: number; goals: string[]; referral_source: string | null; household_adults: number | null; household_children: number | null; members_added: number; members_invited: number; has_pin: boolean; marketing_opt_in: boolean; completeness: number; completed_at: string | null; reset_at: string | null }>
-      >;
-      demo_email_uses: T<
-        { email: string; first_used_at: string; last_used_at: string; expires_at: string; uses: number; created_at: string },
-        { email: string; first_used_at?: string; last_used_at?: string; expires_at: string; uses?: number; created_at?: string },
-        Partial<{ last_used_at: string; expires_at: string; uses: number }>
       >;
       concierge_calls: T<
         { id: string; family_id: string; requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null; created_by: string | null } & Stamps,

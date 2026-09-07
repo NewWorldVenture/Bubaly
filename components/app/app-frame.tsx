@@ -55,20 +55,6 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     : 'personal';
   const featureTiers = await getFeatureTiersByHref(supabase);
 
-  // One-click demo session? Drive the email gate + countdown. Best-effort — if
-  // the demo_sessions table is missing (migrations 0138/0161 not applied to this
-  // database) the read must degrade to "not a demo" and NEVER break the whole app
-  // frame (which would 500 every page for the demo user). Hence the try/catch.
-  let demo: { expires_at: string | null } | null = null;
-  try {
-    const { data, error } = await supabase
-      .from('demo_sessions').select('expires_at').eq('user_id', ctx.user.id).maybeSingle();
-    if (error) console.warn('[demo] demo_sessions read failed — apply migrations 0138/0161?', error.message);
-    demo = data ?? null;
-  } catch (e) {
-    console.warn('[demo] demo_sessions read threw — treating as not-a-demo', e);
-  }
-
   return (
     <AppProvider
       value={{
@@ -83,7 +69,6 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         planLevel,
         featureTiers,
         unreadMessages: unreadMessages ?? 0,
-        demo: demo ? { expiresAt: demo.expires_at } : null,
       }}
       initialMembers={members ?? []}
     >

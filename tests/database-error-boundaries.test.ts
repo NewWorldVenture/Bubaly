@@ -16,7 +16,6 @@ const routes = [
   'app/api/cron/push-scan/route.ts',
   'app/api/cron/notifications/route.ts',
   'app/api/cron/provider-sync/route.ts',
-  'app/api/cron/demo-cleanup/route.ts',
   'app/api/cron/model-refresh/route.ts',
   'app/api/ai/auto/accident/route.ts',
   'app/api/ai/home/diagnose/route.ts',

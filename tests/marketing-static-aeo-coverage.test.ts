@@ -47,7 +47,6 @@ describe('static marketing AEO coverage', () => {
 
   it('does not loosen intentionally noindex utility routes', () => {
     expect(read('app/(marketing)/f/[id]/page.tsx')).toContain('index: false');
-    expect(read('app/(marketing)/demo/upgrade/page.tsx')).toContain('index: false');
     expect(read('app/(auth)/login/page.tsx')).toContain('index: false');
     expect(read('app/(auth)/signup/page.tsx')).toContain('index: false');
     expect(read('app/sitemap.ts')).not.toContain("path: '/login'");

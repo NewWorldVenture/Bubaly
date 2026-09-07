@@ -2,7 +2,7 @@
 // engine (pure, unit-tested). Distinct from lib/marketing/lead-score.ts (which
 // scores inbound support tickets): this ranks marketing CONTACTS by the
 // visitor-intelligence signals we collect (site engagement, recency,
-// conversions, demo, consent, profile depth, lifecycle) into a 0–100 score with
+// conversions, consent, profile depth, lifecycle) into a 0–100 score with
 // an itemized LEDGER — every point is attributable to a named factor, so the
 // score is explainable, never a black box. No browser/DB deps.
 
@@ -12,7 +12,6 @@ export type ContactSignals = {
   sessionCount: number;
   daysSinceLastSeen: number | null;
   conversions: number;            // conversion touchpoints
-  startedDemo: boolean;
   marketingConsent: boolean;      // explicit marketing opt-in (high intent)
   analyticsConsent: boolean;
   profileCompleteness: number;    // 0..1 (progressive profiling)
@@ -59,7 +58,6 @@ export function scoreContact(s: ContactSignals): ContactScore {
   const convPts = clamp(s.conversions, 0, 3) * 10;                     // up to +30
   if (s.conversions > 0) add('conversions', `Converted (${s.conversions})`, convPts);
 
-  if (s.startedDemo) add('demo', 'Tried the demo', 18);
   if (s.marketingConsent) add('marketing_consent', 'Opted into marketing', 10);
   if (s.analyticsConsent) add('analytics_consent', 'Allows analytics', 3);
 
