@@ -9,16 +9,17 @@
 //   3. k-anonymity: an insight is suppressed unless it's backed by at least K
 //      distinct families — so nothing can be traced to any one household.
 //
-// There is intentionally NO cross-family data extraction here or anywhere yet; the
-// aggregation pipeline is deferred until the sharing model is signed off. This
-// module is the gate that pipeline would have to pass through.
+// The aggregation pipeline (aggregate.ts + aggregate-server.ts) feeds this gate
+// with k-anonymized, DP-noised rows; nothing reaches a family — or the public
+// benchmarks page — without passing through it.
 
 export type ConsentScope = 'timing' | 'benchmarks' | 'recommendations';
 
-export const CONSENT_SCOPES: { key: ConsentScope; label: string; description: string }[] = [
-  { key: 'timing', label: 'Timing patterns', description: 'When families typically prepare for common events (renewals, school, travel).' },
-  { key: 'benchmarks', label: 'Gentle benchmarks', description: 'How your load/routines compare to similar families — never individuals.' },
-  { key: 'recommendations', label: 'Crowd-rated suggestions', description: 'Meals, activities and tips other similar families rate highly.' },
+/** Module-level data: English label plus catalogue keys, so the consent surface renders in the reader's language. */
+export const CONSENT_SCOPES: { key: ConsentScope; label: string; labelKey: string; description: string; descriptionKey: string }[] = [
+  { key: 'timing', label: 'Timing patterns', labelKey: 'network.scopeTimingPatterns', description: 'When families typically prepare for common events (renewals, school, travel).', descriptionKey: 'network.scopeTimingPatternsDescription' },
+  { key: 'benchmarks', label: 'Gentle benchmarks', labelKey: 'network.scopeGentleBenchmarks', description: 'How your load/routines compare to similar families — never individuals.', descriptionKey: 'network.scopeGentleBenchmarksDescription' },
+  { key: 'recommendations', label: 'Crowd-rated suggestions', labelKey: 'network.scopeCrowdRatedSuggestions', description: 'Meals, activities and tips other similar families rate highly.', descriptionKey: 'network.scopeCrowdRatedSuggestionsDescription' },
 ];
 
 /** Minimum distinct families behind any shown insight. Below this, suppress. */

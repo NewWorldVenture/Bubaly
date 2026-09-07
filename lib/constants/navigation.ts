@@ -234,6 +234,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/services', label: 'Service Catalog', icon: LayoutGrid },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { href: '/admin/benchmarks', label: 'Household Benchmarks', icon: Radar },
   { href: '/admin/onboarding', label: 'Onboarding Audit', icon: Rocket },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/wallet', label: 'Family Wallet', icon: Wallet },

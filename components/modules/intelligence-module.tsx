@@ -2,11 +2,12 @@
 
 // Family Intelligence Network — the opt-in privacy surface. Ships the CONSENT
 // controls (default off, granular, revocable) + an honest, k-anonymity-gated
-// insight area. No cross-family data is aggregated yet, so the insight list is
-// empty by design until that pipeline is built and signed off; the empty state
-// says so plainly rather than fabricating "insights". 100% Supabase + realtime.
+// insight area fed by the nightly aggregation. Until a family's cohort clears
+// the floor the list is empty, and the empty state says so plainly rather than
+// fabricating "insights". 100% Supabase + realtime.
 import { useMemo, useState } from 'react';
-import { Radar, ShieldCheck, Lock, Users, Info } from 'lucide-react';
+import Link from 'next/link';
+import { Radar, ShieldCheck, Lock, Users, Info, Globe } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -59,7 +60,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
     }, { onConflict: 'family_id' });
     setSaving(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success(next.enabled ? 'Preferences saved' : 'Left the network — nothing is shared');
+    success(next.enabled ? t('intelligence.preferencesSaved') : t('intelligence.leftTheNetwork'));
   }
 
   const toggleMaster = () => persist({ enabled: !consent.enabled, scopes: consent.enabled ? {} : consent.scopes });
@@ -81,7 +82,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
         </div>
         <ul className="grid gap-2 text-sm text-muted sm:grid-cols-2">
           <li className="flex items-start gap-2"><Lock className="mt-0.5 size-4 shrink-0" /> {t('intelligence.offByDefaultNothingIsShared')}</li>
-          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> {t('intelligence.onlyAggregatePatternsFromAtLeast')} {K_ANONYMITY_FLOOR} {t('intelligence.familiesNeverAnIndividual')}</li>
+          <li className="flex items-start gap-2"><Users className="mt-0.5 size-4 shrink-0" /> {t('intelligence.onlyAggregatePatternsFromAtLeastFamilies', { floor: K_ANONYMITY_FLOOR })}</li>
           <li className="flex items-start gap-2"><Info className="mt-0.5 size-4 shrink-0" /> {t('intelligence.granularPickExactlyWhatYouContribute')}</li>
           <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> {t('intelligence.reversibleAnytimeLeavingStopsAllSharing')}</li>
         </ul>
@@ -97,8 +98,8 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
           <p className="mb-3 text-sm text-muted">{t('intelligenceModule.onlyTheseCoarseAnonymizedBands')}</p>
           <div className="flex flex-wrap gap-2">
             {contribution.map((b) => (
-              <span key={b.label} className="rounded-full border border-border px-3 py-1 text-xs">
-                <span className="text-muted">{b.label}:</span> {b.value}
+              <span key={b.labelKey} className="rounded-full border border-border px-3 py-1 text-xs">
+                <span className="text-muted">{t(b.labelKey)}:</span> {b.value}
               </span>
             ))}
           </div>
@@ -109,7 +110,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div>
           <h3 className="font-semibold">{t('intelligence.joinTheIntelligenceNetwork')}</h3>
-          <p className="text-sm text-muted">{contributing ? 'You’re contributing anonymized patterns and can see network insights.' : 'Currently private — you’re not sharing or receiving anything.'}</p>
+          <p className="text-sm text-muted">{contributing ? t('intelligence.contributingStatus') : t('intelligence.privateStatus')}</p>
         </div>
         <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
       </div>
@@ -120,31 +121,28 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
           {CONSENT_SCOPES.map((s) => (
             <div key={s.key} className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
               <div className="pr-4">
-                <h4 className="text-sm font-semibold">{s.label}</h4>
-                <p className="text-xs text-muted">{s.description}</p>
+                <h4 className="text-sm font-semibold">{t(s.labelKey)}</h4>
+                <p className="text-xs text-muted">{t(s.descriptionKey)}</p>
               </div>
-              <Toggle on={consent.scopes[s.key] === true} disabled={saving} onClick={() => toggleScope(s.key)} label={s.label} />
+              <Toggle on={consent.scopes[s.key] === true} disabled={saving} onClick={() => toggleScope(s.key)} label={t(s.labelKey)} />
             </div>
           ))}
         </div>
       )}
 
-      {/* Insights (k-anonymity gated; empty until the aggregation pipeline exists) */}
+      {/* Insights (k-anonymity gated; empty until this family's cohort clears the floor) */}
       {contributing && (
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand-text" /><h3 className="font-semibold">{t('intelligence.networkInsights')}</h3></div>
           {insights.length === 0 ? (
-            <p className="text-sm text-muted">
-              {t('intelligence.noInsightsForFamiliesLikeYours')} {K_ANONYMITY_FLOOR} similar families (and the network as a whole is large
-              enough) — so nothing can ever be traced back to one household. Check back as more families join.
-            </p>
+            <p className="text-sm text-muted">{t('intelligence.noInsightsYet', { floor: K_ANONYMITY_FLOOR })}</p>
           ) : (
             <ul className="space-y-2">
               {insights.map((i) => (
                 <li key={i.id} className="rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{i.title}</span>
-                    <span className="text-[10px] uppercase text-muted">{i.confidence} · {i.cohortSize} families</span>
+                    <span className="text-[10px] uppercase text-muted">{i.confidence} · {t('intelligence.familiesCount', { count: i.cohortSize })}</span>
                   </div>
                   <p className="text-sm text-muted">{i.detail}</p>
                 </li>
@@ -153,6 +151,15 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
           )}
         </div>
       )}
+
+      {/* The same k-anonymized rows, published for everyone — the research half of the network. */}
+      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+        <Globe className="mt-0.5 size-5 shrink-0 text-brand-text" />
+        <div>
+          <Link href="/resources/benchmarks" className="text-sm font-semibold underline">{t('intelligence.seePublicBenchmarks')}</Link>
+          <p className="text-xs text-muted">{t('intelligence.publicBenchmarksHint')}</p>
+        </div>
+      </div>
     </div>
   );
 }

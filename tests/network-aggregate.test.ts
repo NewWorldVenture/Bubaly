@@ -5,8 +5,10 @@ import {
 } from '@/lib/network/aggregate';
 import type { ContributionFeatures } from '@/lib/network/contribution';
 
-const feat = (childBands: string[], sizeBand: string): ContributionFeatures =>
-  ({ childBands, sizeBand, dinnerBand: 'often (4–5)', activityBand: '3–4' });
+const feat = (childBands: string[], sizeBand: string): ContributionFeatures => ({
+  childBands, sizeBand, dinnerBand: 'often (4–5)', activityBand: '3–4',
+  choresPerChildBand: '1–2', bedtimeBand: '8–9pm', weeklySpendBand: '100–250', remindersBand: '1–3',
+});
 
 // Build N families in one cohort, all reporting the same dinner_habit.
 function cohortOf(n: number, prefix: string, value = 'often (4–5)'): Contribution[] {

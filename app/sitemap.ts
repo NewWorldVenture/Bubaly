@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -90,6 +91,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // A failed admin read must not take down the public sitemap.
   let landingEntries: MetadataRoute.Sitemap = [];
   let platformEntries: MetadataRoute.Sitemap = [];
+  const benchmarkEntries: MetadataRoute.Sitemap = [];
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const supabase = createServiceClient();
@@ -116,6 +118,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: 'weekly' as const,
             priority: 0.7,
           }));
+      }
+
+      // The public household benchmarks page exists only while its admin
+      // publication flag is on (it answers 404 otherwise), so it is listed
+      // only then — a sitemap must never point at a 404.
+      const benchmarks = await withBudget(
+        readBenchmarksPublication(supabase),
+        { ok: false } as Awaited<ReturnType<typeof readBenchmarksPublication>>,
+        'benchmarks publication read',
+      );
+      if (benchmarks.ok && benchmarks.published) {
+        benchmarkEntries.push({
+          url: `${SITE_URL}/resources/benchmarks`,
+          lastModified: benchmarks.updatedAt ? new Date(benchmarks.updatedAt) : now,
+          changeFrequency: 'weekly' as const,
+          priority: 0.6,
+        });
       }
 
       const { data: platformPages, error: platformError } = await withBudget(
@@ -147,7 +166,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const byUrl = new Map<string, MetadataRoute.Sitemap[number]>();
-  for (const entry of [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...platformEntries]) {
+  for (const entry of [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...benchmarkEntries, ...platformEntries]) {
     const previous = byUrl.get(entry.url);
     if (!previous) {
       byUrl.set(entry.url, entry);
