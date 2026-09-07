@@ -41,7 +41,11 @@ describe('marketing closed loop — AEO/SEO wired public ↔ admin', () => {
   });
 
   it('every blog article gets an on-topic AEO FAQ block + FAQPage schema linking back', () => {
-    expect(article).toMatch(/readAeoQuestionsForPath\(`\/blog\/\$\{post\.slug\}`/);
+    // `Cached` optional: the public readers are wrapped in unstable_cache so
+    // this table is not queried once per article view. What matters here is
+    // that the article still reads AEO for its OWN path, whichever wrapper it
+    // goes through — same reason line 37 accepts either name.
+    expect(article).toMatch(/readAeoQuestionsForPath(?:Cached)?\(`\/blog\/\$\{post\.slug\}`/);
     expect(article).toMatch(/readAeoQuestionsForCategory/);
     expect(article).toMatch(/FaqStructuredData/);
     expect(article).toMatch(/href="\/faq"/); // links back to the Knowledge Center
