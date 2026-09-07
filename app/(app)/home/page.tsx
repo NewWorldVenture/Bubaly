@@ -364,7 +364,7 @@ export default async function HomePage() {
   // its error: a failed read logs and shows NO card — a promo must never be
   // rendered on a guess, and its absence is not a claim about anything.
   let referralCard: { give: string; get: string } | null = null;
-  if (!isDemoAccount && manager) {
+  if (manager) {
     const [invitesRes, prefsRes, referralConfig] = await Promise.all([
       supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
       supabase.from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle(),
