@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
@@ -204,5 +205,51 @@ describe('MicButton server-rendering', () => {
         expect(renderToStaticMarkup(React.createElement(MicButton, { onTranscript: () => {}, size, disabled }))).toBe('');
       }
     }
+  });
+});
+
+describe('reporting a mic error cannot loop', () => {
+  // The ⌘K bar passes `onError={(m) => { if (m) toastError(m); }}` — a new
+  // closure on every render. Deny microphone permission there and the button
+  // reports 'permission'; the toast that reports it re-renders the command bar,
+  // which hands the button another closure. While the two notification effects
+  // depended on the callbacks, that re-fired them, pushed another toast, and
+  // looped until React's "Maximum update depth exceeded" took the app shell
+  // down to the error boundary. Callbacks now go through refs, exactly as
+  // onTranscript already did, so a surface may pass whatever it likes.
+  const source = readFileSync('components/voice/mic-button.tsx', 'utf8');
+  const effect = (dep: string) => source.split('\n').find((line) => line.includes(dep) && line.includes('useEffect')) ?? '';
+
+  it('holds both notification callbacks in refs', () => {
+    expect(source).toContain('const onErrorRef = useRef(onError);');
+    expect(source).toContain('onErrorRef.current = onError;');
+    expect(source).toContain('const onStatusChangeRef = useRef(onStatusChange);');
+    expect(source).toContain('onStatusChangeRef.current = onStatusChange;');
+  });
+
+  it('notifies through the ref, so an inline closure is never called directly', () => {
+    expect(source).toContain('onErrorRef.current?.(');
+    expect(source).toContain('onStatusChangeRef.current?.(');
+    // The props themselves are only read where the refs are filled.
+    expect(source).not.toMatch(/onError\?\.\(/);
+    expect(source).not.toMatch(/onStatusChange\?\.\(/);
+  });
+
+  it('re-fires only when the error or the status actually changes', () => {
+    const errorEffect = effect('onErrorRef.current');
+    expect(errorEffect).toContain('[state.error, t]');
+    expect(errorEffect).not.toContain('onError,');
+    const statusEffect = effect('onStatusChangeRef.current');
+    expect(statusEffect).toContain('[state.status]');
+    expect(statusEffect).not.toContain('onStatusChange,');
+  });
+
+  it('and the toast provider keeps one context identity across a toast', () => {
+    // Second half of the same loop: <ToastContext.Provider> was handed a fresh
+    // object every render, so pushing a toast changed context identity and
+    // re-rendered every consumer of useToast().
+    const toast = readFileSync('components/ui/toast.tsx', 'utf8');
+    expect(toast).toContain('const api = useMemo<ToastApi>(');
+    expect(toast).toContain('}), [push]);');
   });
 });

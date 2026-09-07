@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -60,11 +60,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 7000 : 4200);
   }, []);
 
-  const api: ToastApi = {
+  // Memoised, so the context value keeps its identity across the re-render that
+  // showing a toast causes. Without this every toast handed all consumers a new
+  // `toast`/`success`/`error`, and any consumer that used one as an effect
+  // dependency re-ran that effect on every toast.
+  const api = useMemo<ToastApi>(() => ({
     toast: push,
     success: (m, action) => push(m, 'success', action),
     error: (m, action) => push(m, 'error', action),
-  };
+  }), [push]);
 
   return (
     <ToastContext.Provider value={api}>

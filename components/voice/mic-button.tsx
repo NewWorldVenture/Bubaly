@@ -61,6 +61,10 @@ export function MicButton({ onTranscript, disabled, size = 'md', className, onEr
   voiceRef.current = voice;
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
   // Effects dispatch back into the machine, so the callback is reached through
   // a ref rather than a dependency cycle.
   const dispatchRef = useRef<(event: MicEvent) => void>(() => {});
@@ -129,8 +133,15 @@ export function MicButton({ onTranscript, disabled, size = 'md', className, onEr
     return () => window.removeEventListener('keydown', onKey);
   }, [capturing, cancel]);
 
-  useEffect(() => { onStatusChange?.(state.status); }, [state.status, onStatusChange]);
-  useEffect(() => { onError?.(state.error ? t(micErrorKey(state.error)) : null); }, [state.error, onError, t]);
+  // Both notifications reach the surface through a ref, never through the
+  // dependency array. A surface is free to pass an inline closure — the ⌘K bar
+  // passes `onError={(m) => { if (m) toastError(m); }}` — which is a NEW
+  // function on every render; showing the toast re-renders that surface, so a
+  // callback dependency would re-fire this effect, push another toast, and loop
+  // until React's "Maximum update depth exceeded" took the shell down. Only a
+  // real change of status or error notifies. Same guard as onTranscriptRef.
+  useEffect(() => { onStatusChangeRef.current?.(state.status); }, [state.status]);
+  useEffect(() => { onErrorRef.current?.(state.error ? t(micErrorKey(state.error)) : null); }, [state.error, t]);
 
   // Nothing to render until the browser has said it can capture audio — which
   // is also what keeps the server-rendered markup mic-free.
