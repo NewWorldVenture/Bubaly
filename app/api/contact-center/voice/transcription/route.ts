@@ -53,11 +53,15 @@ export async function POST(req: NextRequest) {
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
 
-  // M20: a voicemail asking to reschedule is work, not an audio file.
-  await routeInboundToPlanner(admin, {
-    familyId, channel: 'voice', messageId: filed.messageId, body: text,
-    intent: result.intent, providerRef: sid ?? null,
-  }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
+  // M20: a voicemail asking to reschedule is work, not an audio file. Twilio
+  // retries a transcription callback, so only a delivery that was actually new
+  // reaches the planner.
+  if (filed.inserted) {
+    await routeInboundToPlanner(admin, {
+      familyId, channel: 'voice', messageId: filed.messageId, body: text,
+      intent: result.intent, providerRef: filed.providerRef,
+    }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
+  }
 
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
