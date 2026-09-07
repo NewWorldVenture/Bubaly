@@ -4,21 +4,15 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
-  Sparkles, CheckCircle2, PhoneCall, UserCheck, Trash2, Bell, Check, Loader2, CalendarPlus,
-  PhoneOutgoing, ArrowRight, FileText,
+  Sparkles, CheckCircle2, PhoneCall, UserCheck, Bell, Check, Loader2, CalendarPlus,
+  PhoneOutgoing, ArrowRight, FileText, AlertTriangle, Inbox as InboxIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { isManager } from '@/lib/constants/roles';
-import { Modal } from '@/components/ui/modal';
-import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
@@ -27,7 +21,35 @@ import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
-type Settings = Tables<'front_desk_settings'>;
+
+/**
+ * The family's real contact identity (`family_contact_channels`, 0214) — the
+ * number and address inbound calls actually arrive on. It replaces
+ * `front_desk_settings` (0092), which no route ever wrote and no telephony ever
+ * consulted: a screening toggle that governed nothing.
+ */
+export type FrontDeskChannel = {
+  phone_number: string | null;
+  email_local: string | null;
+  provisioning_status: string;
+  ai_concierge_enabled: boolean;
+  forward_to_phone: string | null;
+};
+
+/** A voice row the Contact Center filed (`family_inbox_messages`, 0214). */
+export type FrontDeskVoiceMessage = {
+  id: string;
+  from_addr: string | null;
+  body: string | null;
+  ai_summary: string | null;
+  ai_intent: string | null;
+  ai_handled: boolean;
+  status: string;
+  occurred_at: string;
+};
+
+/** Which server read failed, so the page says so rather than showing an empty list. */
+export type FrontDeskUnavailable = { channel: boolean; voice: boolean };
 
 const STATUS_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
   screened:  { icon: ShieldCheck,     label: 'Screened',  color: 'bg-blue-500/15 text-blue-400' },
@@ -47,7 +69,23 @@ const CLASS_CONFIG: Record<string, { label: string; color: string }> = {
   telemarketer: { label: 'Telemarketer', color: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
 };
 
-type FilterTab = 'all' | 'unread' | 'important' | 'voicemail' | 'screened' | 'blocked';
+type FilterTab = 'all' | 'important' | 'voicemail' | 'screened' | 'blocked';
+
+/** Stat tiles. Each value is a count of persisted rows, resolved at render. */
+const STATS = [
+  { key: 'calls',   label: 'Calls',     labelKey: 'frontDesk.calls',        icon: '📞', color: 'text-brand-text' },
+  { key: 'handled', label: 'Handled',   labelKey: 'frontDesk.handled',      icon: '✅', color: 'text-green-400' },
+  { key: 'urgent',  label: 'Urgent',    labelKey: 'frontDesk.urgent',       icon: '🚨', color: 'text-red-400' },
+  { key: 'legacy',  label: 'Voicemail', labelKey: 'frontDesk.voicemail',    icon: '🎙️', color: 'text-violet-400' },
+] as const;
+
+const HOW_IT_WORKS = [
+  { icon: PhoneIncoming, text: 'Calls to the family number reach the concierge', textKey: 'frontDesk.callsToTheFamilyNumberReach' },
+  { icon: ShieldCheck,   text: 'Each one is classified before anyone is woken',  textKey: 'frontDesk.eachOneIsClassifiedBefore' },
+  { icon: UserCheck,     text: 'Urgent calls are forwarded to your fallback',    textKey: 'frontDesk.urgentCallsAreForwardedTo' },
+  { icon: Voicemail,     text: 'Voicemail is transcribed into the inbox',        textKey: 'frontDesk.voicemailIsTranscribedInto' },
+  { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
+] as const;
 
 function fmtTime(iso: string) {
   const d = new Date(iso);
@@ -66,17 +104,34 @@ function fmtDuration(secs: number | null) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function FrontDeskModule() {
+/**
+ * The AI Front Desk, pointed at the tables that actually carry telephony.
+ *
+ * WHAT CHANGED AND WHY: this surface used to read `call_logs` and
+ * `front_desk_settings` (0092) — a call log a human typed by hand and a
+ * screening toggle nothing consulted. Every real inbound call already lands in
+ * `family_inbox_messages` as a `voice` row (0214, the Contact Center webhooks),
+ * and the family's real number lives on `family_contact_channels`. So the live
+ * half of this page now reads those, and `call_logs` stays as read-only history
+ * of what was typed before. Nothing here writes either legacy table any more:
+ * a hand-entered "call" that looks like telephony is exactly the claim the
+ * honesty rule forbids.
+ *
+ * Both reads happen on the server (`app/(app)/dashboard/front-desk/page.tsx`)
+ * and arrive as props, including which of them failed — `unavailable` renders a
+ * retryable notice rather than an empty list that would read as "no calls".
+ */
+export function FrontDeskModule({ channel, voice, unavailable }: {
+  channel: FrontDeskChannel | null;
+  voice: FrontDeskVoiceMessage[];
+  unavailable?: FrontDeskUnavailable;
+}) {
   const tr = useTranslations();
-  const { familyId, userId, role } = useApp();
-  const { success, error: toastError } = useToast();
-  const manager = isManager(role);
+  const { familyId, userId } = useApp();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Call | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showLog, setShowLog] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: calls, loading, error, refresh } = useRealtimeQuery<Call>({
     table: 'call_logs', familyId, deps: [familyId],
@@ -95,16 +150,10 @@ export function FrontDeskModule() {
     },
   });
 
-  const { data: settingsRows, refresh: refreshSettings } = useRealtimeQuery<Settings>({
-    table: 'front_desk_settings', familyId, deps: [familyId],
-    fetcher: async (supabase) => supabase.from('front_desk_settings').select('*').eq('family_id', familyId),
-  });
-  const settings = settingsRows[0] ?? null;
 
   const filtered = useMemo(() => {
     let list = calls;
     switch (filterTab) {
-      case 'unread':    list = list.filter(c => !c.is_read); break;
       case 'important': list = list.filter(c => c.classification === 'important' || c.priority === 'urgent' || c.priority === 'high'); break;
       case 'voicemail': list = list.filter(c => c.status === 'voicemail'); break;
       case 'screened':  list = list.filter(c => c.status === 'screened'); break;
@@ -123,43 +172,28 @@ export function FrontDeskModule() {
     return list;
   }, [calls, filterTab, search]);
 
-  const unreadCount = useMemo(() => calls.filter(c => !c.is_read).length, [calls]);
   const blockedCount = useMemo(() => calls.filter(c => c.status === 'blocked').length, [calls]);
   const vmCount = useMemo(() => calls.filter(c => c.status === 'voicemail').length, [calls]);
+  // What the family's real number actually did — read from the rows the
+  // webhooks filed, never from a toggle.
+  const voiceHandled = useMemo(() => voice.filter(v => v.ai_handled).length, [voice]);
+  const voiceUrgent = useMemo(() => voice.filter(v => v.ai_intent === 'urgent').length, [voice]);
+  const numberLive = channel?.provisioning_status === 'active' && !!channel.phone_number;
 
-  async function markRead(call: Call) {
-    if (call.is_read) return;
-    const supabase = createClient();
-    await supabase.from('call_logs').update({ is_read: true }).eq('id', call.id);
-    void refresh();
-  }
-
-  async function deleteCall(call: Call) {
-    if (busyId) return;
-    setBusyId(call.id);
-    const supabase = createClient();
-    const { error } = await supabase.from('call_logs').delete().eq('id', call.id);
-    setBusyId(null);
-    if (error) { toastError(describeDbError(error)); return; }
-    if (selected?.id === call.id) setSelected(null);
-    void refresh();
-  }
-
+  // No mark-read, no delete, no hand-entered call: `call_logs` is frozen
+  // history now. Opening a row reads it; nothing about it is written back.
   function openDetail(call: Call) {
     setSelected(call);
-    void markRead(call);
   }
 
-  if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
-
-  const TABS: { key: FilterTab; label: string }[] = [
-    { key: 'all',       label: 'All' },
-    { key: 'unread',    label: `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}` },
-    { key: 'important', label: 'Important' },
-    { key: 'voicemail', label: `Voicemail${vmCount > 0 ? ` (${vmCount})` : ''}` },
-    { key: 'screened',  label: 'Screened' },
-    { key: 'blocked',   label: 'Blocked' },
+  // The legacy log failing must not take the live voice inbox down with it, so
+  // its loading/error states are rendered inside its own section below.
+  const TABS: { key: FilterTab; labelKey: string }[] = [
+    { key: 'all',       labelKey: 'frontDesk.all' },
+    { key: 'important', labelKey: 'frontDesk.important' },
+    { key: 'voicemail', labelKey: 'frontDesk.voicemail' },
+    { key: 'screened',  labelKey: 'frontDesk.screened' },
+    { key: 'blocked',   labelKey: 'frontDesk.blocked' },
   ];
 
   return (
@@ -171,45 +205,107 @@ export function FrontDeskModule() {
             description={tr('frontDeskModule.yourFamilySAiReceptionist')}
             action={
               <div className="flex items-center gap-2">
-                {manager && (
-                  <button onClick={() => setShowSettings(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg hover:bg-elevated transition">
-                    <SettingsIcon className="h-3.5 w-3.5" /> {tr('frontDesk.settings')}
-                  </button>
-                )}
-                <Button onClick={() => setShowLog(true)}>
-                  <Phone className="h-4 w-4" /> {tr('frontDesk.logCall')}
-                </Button>
+                <Link href="/dashboard/contact-center"
+                  className="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg hover:bg-elevated transition">
+                  <SettingsIcon className="h-3.5 w-3.5" /> {tr('frontDesk.manageNumberAndAddress')}
+                </Link>
               </div>
             }
           />
 
-          {/* Guardian status banner */}
-          <div className={cn('mt-1 mb-4 flex items-center gap-3 rounded-2xl border p-4',
-            settings?.enabled
-              ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent'
-              : 'border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-transparent')}>
-            <div className={cn('grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl',
-              settings?.enabled ? 'bg-green-500/15' : 'bg-amber-500/15')}>
-              {settings?.enabled ? <ShieldCheck className="h-5 w-5 text-green-400" /> : <ShieldAlert className="h-5 w-5 text-amber-400" />}
+          {/* The front desk's real identity, read from family_contact_channels.
+              It says what is true: a number that is live, one that is still
+              being provisioned, or none at all. Never "Guardian is active" off
+              a toggle no telephony consulted. */}
+          {unavailable?.channel ? (
+            <div className="mt-1 mb-4 flex items-center gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-400" />
+              <p className="min-w-0 flex-1 text-xs text-muted">{tr('frontDesk.theFrontDeskSettingsCouldNot')}</p>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">
-                {settings?.enabled ? 'Call Guardian is active' : 'Call Guardian is off'}
-              </p>
-              <p className="text-xs text-muted">
-                {settings?.enabled
-                  ? `Screening mode: ${settings.screening_mode} · ${settings.voicemail_enabled ? 'Voicemail on' : 'Voicemail off'}`
-                  : 'Turn on to screen unknown callers and block spam automatically.'}
-              </p>
-            </div>
-            {manager && (
-              <button onClick={() => setShowSettings(true)}
+          ) : (
+            <div className={cn('mt-1 mb-4 flex items-center gap-3 rounded-2xl border p-4',
+              numberLive
+                ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent'
+                : 'border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-transparent')}>
+              <div className={cn('grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl',
+                numberLive ? 'bg-green-500/15' : 'bg-amber-500/15')}>
+                {numberLive ? <ShieldCheck className="h-5 w-5 text-green-400" /> : <ShieldAlert className="h-5 w-5 text-amber-400" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">
+                  {numberLive ? tr('frontDesk.theFamilyNumberIsAnswering') : tr('frontDesk.noFamilyNumberYet')}
+                </p>
+                <p className="truncate text-xs text-muted">
+                  {numberLive
+                    ? `${channel?.phone_number}${channel?.ai_concierge_enabled ? '' : ` · ${tr('frontDesk.conciergeOff')}`}`
+                    : channel?.provisioning_status === 'pending'
+                      ? tr('frontDesk.aNumberHasBeenRequested')
+                      : tr('frontDesk.setOneUpInTheContactCenter')}
+                </p>
+              </div>
+              <Link href="/dashboard/contact-center"
                 className={cn('flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
-                  settings?.enabled ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
-                {settings?.enabled ? 'Manage' : 'Turn on'}
-              </button>
+                  numberLive ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
+                {tr('frontDesk.manage')}
+              </Link>
+            </div>
+          )}
+
+          {/* The live half: voice rows the Contact Center webhooks filed. */}
+          <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-surface/30">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <Voicemail className="h-4 w-4 text-brand-text" />
+              <p className="flex-1 text-sm font-semibold">{tr('frontDesk.callsToTheFamilyNumber')}</p>
+              <span className="text-[11px] text-muted">{voice.length}</span>
+            </div>
+            {unavailable?.voice ? (
+              <div className="flex items-center gap-3 px-4 py-6">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
+                <p className="text-xs text-muted">{tr('frontDesk.theVoiceInboxCouldNotBe')}</p>
+              </div>
+            ) : voice.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-10 text-center">
+                <InboxIcon className="mb-3 h-6 w-6 text-muted opacity-60" />
+                <p className="text-sm font-semibold">{tr('frontDesk.nothingHasCalledYet')}</p>
+                <p className="mt-1 text-xs text-muted">{tr('frontDesk.everyCallToTheFamilyNumber')}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {voice.slice(0, 25).map(v => (
+                  <div key={v.id} className="flex items-start gap-3 px-4 py-3">
+                    <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-violet-500/15 text-violet-400">
+                      <PhoneIncoming className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn('truncate text-sm', v.status === 'new' ? 'font-bold' : 'font-medium')}>
+                          {v.from_addr || tr('frontDesk.unknownCaller')}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-muted">{fmtTime(v.occurred_at)}</span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted">{v.ai_summary || v.body || ''}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {v.ai_intent && (
+                          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted">{v.ai_intent}</span>
+                        )}
+                        {/* Only from the row: `ai_handled` is written after a
+                            request was persisted, never optimistically. */}
+                        {v.ai_handled && (
+                          <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
+                            {tr('frontDesk.handled')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+            <Link href="/dashboard/inbox"
+              className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs font-semibold text-brand-text transition hover:bg-surface/60">
+              {tr('frontDesk.seeTheWholeHouseholdInbox')}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
 
           {/* Outbound counterpart: Bubaly places calls FOR the family. */}
@@ -242,25 +338,43 @@ export function FrontDeskModule() {
             <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
           </Link>
 
-          {/* Stats */}
+          {/* Stats — every number below is a count of persisted rows. */}
           <div className="grid-stats">
-            {[
-              { label: 'Total Calls', value: calls.length,    icon: '📞', color: 'text-brand-text' },
-              { label: 'Unread',      value: unreadCount,      icon: '🔵', color: 'text-blue-400' },
-              { label: 'Voicemails',  value: vmCount,          icon: '🎙️', color: 'text-violet-400' },
-              { label: 'Spam Blocked', value: blockedCount,    icon: '🛡️', color: 'text-red-400' },
-            ].map(s => (
-              <div key={s.label} className="stat-card">
-                <span className="text-2xl">{s.icon}</span>
+            {STATS.map(stat => (
+              <div key={stat.key} className="stat-card">
+                <span className="text-2xl">{stat.icon}</span>
                 <div>
-                  <div className={cn('text-2xl font-bold', s.color)}>{s.value}</div>
-                  <div className="text-[11px] text-muted">{s.label}</div>
+                  <div className={cn('text-2xl font-bold', stat.color)}>
+                    {stat.key === 'calls' ? voice.length : stat.key === 'handled' ? voiceHandled : stat.key === 'urgent' ? voiceUrgent : vmCount}
+                  </div>
+                  <div className="text-[11px] text-muted">{tr(stat.labelKey)}</div>
                 </div>
               </div>
             ))}
           </div>
 
+          {/* The frozen half: what someone typed into the old call log before
+              the family had a number. Readable, never written. */}
+          <button type="button" onClick={() => setShowHistory(v => !v)}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-3 text-left transition hover:bg-surface/60">
+            <Clock className="h-4 w-4 flex-shrink-0 text-muted" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{tr('frontDesk.earlierCallLog')}</span>
+              <span className="block text-[11px] text-muted">{tr('frontDesk.entriesTypedByHandBeforeThe')}</span>
+            </span>
+            <span className="flex-shrink-0 text-xs font-semibold text-brand-text">
+              {showHistory ? tr('frontDesk.hide') : tr('frontDesk.show')}
+            </span>
+          </button>
+
+          {showHistory && loading && <div className="mt-4"><SkeletonList /></div>}
+          {showHistory && !loading && error && (
+            <div className="mt-4"><ErrorState message={error} onRetry={refresh} /></div>
+          )}
+
           {/* Search + tabs */}
+          {showHistory && !loading && !error && (
+          <>
           <div className="mt-4 space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
@@ -277,7 +391,7 @@ export function FrontDeskModule() {
               {TABS.map(t => (
                 <button key={t.key} onClick={() => setFilterTab(t.key)}
                   className={cn('tab-item whitespace-nowrap', filterTab === t.key ? 'tab-item-active' : 'tab-item-inactive')}>
-                  {t.label}
+                  {tr(t.labelKey)}
                 </button>
               ))}
             </div>
@@ -291,11 +405,7 @@ export function FrontDeskModule() {
                   <PhoneIncoming className="h-7 w-7 text-brand-text opacity-60" />
                 </div>
                 <p className="text-sm font-semibold">{tr('frontDesk.noCallsHere')}</p>
-                <p className="mt-1 text-xs text-muted">{tr('frontDesk.whenTheAiFrontDeskHandles')}</p>
-                <button onClick={() => setShowLog(true)}
-                  className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                  <Phone className="h-3.5 w-3.5" /> {tr('frontDesk.logACall')}
-                </button>
+                <p className="mt-1 text-xs text-muted">{tr('frontDesk.nothingWasEverTypedIntoThe')}</p>
               </div>
             ) : (
               <div className="divide-y divide-border/50">
@@ -329,7 +439,6 @@ export function FrontDeskModule() {
                               {(call.action_items as unknown[]).length} action{(call.action_items as unknown[]).length !== 1 ? 's' : ''}
                             </span>
                           )}
-                          {!call.is_read && <span className="h-1.5 w-1.5 rounded-full bg-blue-400 flex-shrink-0" />}
                         </div>
                       </div>
                     </button>
@@ -338,13 +447,15 @@ export function FrontDeskModule() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
 
       {/* Detail panel */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
-          <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} onDelete={() => void deleteCall(selected)} canDelete={manager} />
+          <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} />
         </div>
       )}
 
@@ -354,18 +465,12 @@ export function FrontDeskModule() {
           <div className="sidebar-card">
             <p className="mb-3 text-sm font-semibold">{tr('frontDesk.howItWorks')}</p>
             <div className="space-y-3 text-xs text-muted">
-              {[
-                { icon: PhoneIncoming, text: 'Every call is answered by your AI receptionist' },
-                { icon: ShieldCheck,   text: 'Spam & robocalls are blocked automatically' },
-                { icon: UserCheck,     text: 'Known contacts ring through to you' },
-                { icon: Voicemail,     text: 'Messages are transcribed & summarized' },
-                { icon: Sparkles,      text: 'Action items are extracted for you' },
-              ].map((row, i) => (
+              {HOW_IT_WORKS.map((row, i) => (
                 <div key={i} className="flex items-start gap-2.5">
                   <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-brand/10">
                     <row.icon className="h-3.5 w-3.5 text-brand-text" />
                   </div>
-                  <span className="pt-1">{row.text}</span>
+                  <span className="pt-1">{tr(row.textKey)}</span>
                 </div>
               ))}
             </div>
@@ -390,20 +495,12 @@ export function FrontDeskModule() {
         </div>
       )}
 
-      {showSettings && manager && (
-        <FrontDeskSettingsModal familyId={familyId} settings={settings}
-          onClose={() => setShowSettings(false)} onSaved={() => { setShowSettings(false); void refreshSettings(); }} />
-      )}
-      {showLog && (
-        <LogCallModal familyId={familyId} userId={userId}
-          onClose={() => setShowLog(false)} onSaved={() => { setShowLog(false); void refresh(); }} />
-      )}
     </div>
   );
 }
 
-function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
-  call: Call; familyId: string; userId: string; onClose: () => void; onDelete: () => void; canDelete: boolean;
+function CallDetail({ call, familyId, userId, onClose }: {
+  call: Call; familyId: string; userId: string; onClose: () => void;
 }) {
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
@@ -460,11 +557,6 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
           <div className="truncate text-sm font-bold">{call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'Unknown'}</div>
           <div className="text-[10px] text-muted">{st.label} · {fmtTime(call.received_at)}</div>
         </div>
-        {canDelete && (
-          <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-red-400" title={tr('frontDesk.delete')}>
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -552,229 +644,5 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
         )}
       </div>
     </div>
-  );
-}
-
-function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
-  familyId: string; settings: Settings | null; onClose: () => void; onSaved: () => void;
-}) {
-  const t = useTranslations();
-  const tr = useTranslations();
-  const { error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [enabled, setEnabled] = useState(settings?.enabled ?? false);
-  const [blockSpam, setBlockSpam] = useState(settings?.block_spam ?? true);
-  const [blockUnknown, setBlockUnknown] = useState(settings?.block_unknown ?? false);
-  const [voicemail, setVoicemail] = useState(settings?.voicemail_enabled ?? true);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (loading) return;
-    const form = new FormData(e.currentTarget);
-    const greeting = String(form.get('greeting') ?? '').trim();
-    const screening_mode = String(form.get('screening_mode') ?? 'smart');
-    const forward_number = String(form.get('forward_number') ?? '').trim() || null;
-
-    if (greeting.length > 1000) return toastError('Greeting is too long (max 1000 characters)');
-
-    setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('front_desk_settings').upsert({
-      family_id: familyId,
-      enabled, screening_mode, voicemail_enabled: voicemail,
-      block_spam: blockSpam, block_unknown: blockUnknown,
-      forward_number, greeting: greeting || undefined,
-    }, { onConflict: 'family_id' });
-    setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    onSaved();
-  }
-
-  const Toggle = ({ on, onClick, label, desc }: { on: boolean; onClick: () => void; label: string; desc: string }) => (
-    <button type="button" onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-left transition hover:bg-surface/60">
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-[11px] text-muted">{desc}</div>
-      </div>
-      <div className={cn('relative h-6 w-11 flex-shrink-0 rounded-full transition', on ? 'bg-brand' : 'bg-elevated')}>
-        <div className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', on ? 'left-[22px]' : 'left-0.5')} />
-      </div>
-    </button>
-  );
-
-  return (
-    <Modal open title={tr('frontDesk.frontDeskSettings')} onClose={onClose}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Toggle on={enabled} onClick={() => setEnabled(v => !v)}
-          label={tr('frontDesk.enableAiFrontDesk')} desc="Answer & screen every incoming call" />
-        <Field label={tr('frontDesk.aiGreeting')}>
-          {id => <Textarea id={id} name="greeting" rows={3} defaultValue={settings?.greeting ?? ''}
-            placeholder={t('frontDeskModule.hiYouVeReachedThe')} />}
-        </Field>
-        <Field label={tr('frontDesk.screeningMode')}>
-          {id => (
-            <Select id={id} name="screening_mode" defaultValue={settings?.screening_mode ?? 'smart'}>
-              <option value="off">{tr('frontDesk.offRingEverythingThrough')}</option>
-              <option value="smart">{tr('frontDesk.smartAiDecidesRecommended')}</option>
-              <option value="strict">{tr('frontDesk.strictScreenAllUnknownCallers')}</option>
-              <option value="allowlist">{tr('frontDesk.allowlistOnlyKnownContacts')}</option>
-            </Select>
-          )}
-        </Field>
-        <Toggle on={blockSpam} onClick={() => setBlockSpam(v => !v)}
-          label={tr('frontDesk.blockSpamRobocalls')} desc="Automatically reject flagged numbers" />
-        <Toggle on={blockUnknown} onClick={() => setBlockUnknown(v => !v)}
-          label={tr('frontDesk.blockUnknownCallers')} desc="Send unrecognized numbers to voicemail" />
-        <Toggle on={voicemail} onClick={() => setVoicemail(v => !v)}
-          label={tr('frontDesk.voicemail')} desc="Take & transcribe messages when you can't answer" />
-        <Field label={tr('frontDesk.forwardUrgentCallsToOptional')}>
-          {id => <Input id={id} name="forward_number" defaultValue={settings?.forward_number ?? ''} placeholder="+1 555 123 4567" />}
-        </Field>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('frontDesk.cancel')}</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Save Settings'}</Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-const VALID_CLASS = new Set(Object.keys(CLASS_CONFIG));
-const VALID_PRIORITY = new Set(['low', 'normal', 'high', 'urgent']);
-
-function LogCallModal({ familyId, userId, onClose, onSaved }: {
-  familyId: string; userId: string; onClose: () => void; onSaved: () => void;
-}) {
-  const t = useTranslations();
-  const tr = useTranslations();
-  const { success, error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  // Controlled fields so "Analyze with AI" can populate them.
-  const [callerName, setCallerName] = useState('');
-  const [callerNumber, setCallerNumber] = useState('');
-  const [status, setStatus] = useState('screened');
-  const [classification, setClassification] = useState('unknown');
-  const [priority, setPriority] = useState('normal');
-  const [summary, setSummary] = useState('');
-  const [transcript, setTranscript] = useState('');
-  const [actionItems, setActionItems] = useState<string[]>([]);
-
-  // The AI Call Guardian brain: read the transcript, classify the caller, extract
-  // a summary + action items + priority. Fills the form for one-tap review & save.
-  async function analyze() {
-    if (!transcript.trim() || analyzing) return;
-    setAnalyzing(true);
-    try {
-      const res = await fetch('/api/ai/assist', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemPrompt: `You are an AI call-screening assistant for a family. Read the call transcript or voicemail and respond with ONLY a JSON object (no markdown, no prose) of this exact shape:
-{"summary": string, "classification": one of ["important","known","unknown","spam","robocall","telemarketer"], "priority": one of ["low","normal","high","urgent"], "action_items": string[]}
-Keep the summary to one sentence. action_items are concrete follow-ups for the family (empty array if none).`,
-          messages: [{ role: 'user', content: `${callerName ? `Caller: ${callerName}\n` : ''}${callerNumber ? `Number: ${callerNumber}\n` : ''}Transcript:\n${transcript}` }],
-          maxTokens: 400,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not analyze the call.'); return; }
-      let parsed: { summary?: string; classification?: string; priority?: string; action_items?: unknown };
-      try {
-        const raw = String(data.message ?? '').replace(/```json\s*|\s*```/g, '').trim();
-        parsed = JSON.parse(raw);
-      } catch {
-        // Fall back to using the raw text as the summary if it isn't valid JSON.
-        setSummary(String(data.message ?? '').slice(0, 500));
-        success(tr('frontDeskModule.aiSummaryAdded'));
-        return;
-      }
-      if (parsed.summary) setSummary(String(parsed.summary).slice(0, 500));
-      if (parsed.classification && VALID_CLASS.has(parsed.classification)) setClassification(parsed.classification);
-      if (parsed.priority && VALID_PRIORITY.has(parsed.priority)) setPriority(parsed.priority);
-      if (Array.isArray(parsed.action_items)) setActionItems(parsed.action_items.map(String).filter(Boolean).slice(0, 10));
-      success(tr('frontDeskModule.aiAnalyzedTheCall'));
-    } catch {
-      toastError(tr('frontDeskModule.couldNotReachTheAi'));
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (loading) return;
-    if (!callerName.trim() && !callerNumber.trim()) return toastError(tr('frontDeskModule.addACallerNameOr'));
-
-    setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('call_logs').insert({
-      family_id: familyId, created_by: userId,
-      caller_name: callerName.trim() || null, caller_number: callerNumber.trim() || null,
-      status, classification, priority,
-      ai_summary: summary.trim() || null, transcript: transcript.trim() || null,
-      action_items: actionItems,
-      direction: 'inbound', is_read: false,
-    });
-    setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    onSaved();
-  }
-
-  return (
-    <Modal open title={tr('frontDesk.logACall')} onClose={onClose}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('frontDesk.callerName')}>{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder={t('frontDeskModule.drSmithSOffice')} />}</Field>
-          <Field label={tr('frontDesk.number')}>{id => <Input id={id} value={callerNumber} onChange={e => setCallerNumber(e.target.value)} placeholder="+1 555 …" />}</Field>
-        </div>
-
-        <Field label={tr('frontDesk.transcriptVoicemailNotes')}>
-          {id => <Textarea id={id} value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} placeholder={tr('frontDesk.pasteTheVoicemailOrWhatWas')} />}
-        </Field>
-        <button type="button" onClick={analyze} disabled={!transcript.trim() || analyzing}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-50">
-          {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          {analyzing ? 'Analyzing…' : 'Analyze with AI'}
-        </button>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('frontDesk.status')}>
-            {id => <Select id={id} value={status} onChange={e => setStatus(e.target.value)}>{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
-          </Field>
-          <Field label={tr('frontDesk.classification')}>
-            {id => <Select id={id} value={classification} onChange={e => setClassification(e.target.value)}>{Object.entries(CLASS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
-          </Field>
-        </div>
-        <Field label={tr('frontDesk.priority')}>
-          {id => <Select id={id} value={priority} onChange={e => setPriority(e.target.value)}><option value="low">Low</option><option value="normal">{tr('frontDesk.normal')}</option><option value="high">{tr('frontDesk.high')}</option><option value="urgent">{tr('frontDesk.urgent')}</option></Select>}
-        </Field>
-        <Field label={tr('frontDesk.aiSummary')}>
-          {id => <Input id={id} value={summary} onChange={e => setSummary(e.target.value)} placeholder={t('frontDeskModule.confirmingEmmaSAppointmentFor')} />}
-        </Field>
-
-        {actionItems.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('frontDesk.actionItemsAi')}</p>
-            <div className="space-y-1">
-              {actionItems.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-2.5 py-1.5">
-                  <CheckCircle2 className="h-3 w-3 text-amber-400 flex-shrink-0" />
-                  <span className="flex-1 text-[11px] text-fg/90">{a}</span>
-                  <button type="button" onClick={() => setActionItems(items => items.filter((_, j) => j !== i))} className="text-muted hover:text-red-400">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('frontDesk.cancel')}</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Log Call'}</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
