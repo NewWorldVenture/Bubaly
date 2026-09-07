@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { ErrorState } from '@/components/ui/states';
@@ -8,11 +9,16 @@ import {
   Sun, Moon, CalendarDays, RefreshCw, Sparkles, AlertTriangle,
   CheckCircle2, Clock, X, Loader2, TrendingUp,
   ChevronRight, Star, Tv2, LayoutGrid,
+  Bell, Lightbulb, MessageCircleQuestion, ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ApprovalCard } from '@/components/approvals/approval-card';
+import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
+import { RecommendationActions } from '@/components/family/record-actions';
 import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
 import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
+import type { BriefDecisions } from '@/lib/briefing/response-schema';
 import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
   type BriefingData,
@@ -155,6 +161,120 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
         </ul>
       )}
     </div>
+  );
+}
+
+// ─── Decisions ────────────────────────────────────────────────────────────────
+//
+// What is waiting on a person, rendered FIRST — before the digest, the score
+// and the schedule — because a pending approval is the one line in the brief
+// that unblocks work. Every item is a row read from the tables
+// (`lib/briefing/decisions.ts`), never the model's word, and the decision is
+// made right here where it can be: an AI approval is the shared ApprovalCard
+// (Approve / Edit / Decline resumes the run), a money approval gets the
+// wallet's one-tap buttons, a recommendation gets Accept / Dismiss, and a run
+// waiting on an answer links to its question. Same components, same rows,
+// same ranking as Home's "Needs you" list, so the two never disagree.
+
+type DecisionMeta = {
+  icon: React.ComponentType<{ className?: string }>;
+  iconBg: string;
+  cta: string;
+  ctaKey: string;
+  subtitle: string;
+  subtitleKey: string;
+};
+
+const DECISION_META: Record<string, DecisionMeta> = {
+  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'A family member is waiting on your approval.', subtitleKey: 'briefing.decisionSubtitleMoney' },
+  run_awaiting_approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'Bubaly is ready and waiting for the go-ahead.', subtitleKey: 'briefing.decisionSubtitleOk' },
+  run_awaiting_answer: { icon: MessageCircleQuestion, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Answer', ctaKey: 'briefing.decisionCtaAnswer', subtitle: 'One quick answer and Bubaly can finish this.', subtitleKey: 'briefing.decisionSubtitleAnswer' },
+  recommendation: { icon: Lightbulb, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: 'Bubaly suggests this; accept it and it gets done.', subtitleKey: 'briefing.decisionSubtitleRecommendation' },
+};
+const DEFAULT_DECISION_META: DecisionMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: '', subtitleKey: '' };
+
+/** Cards shown in the brief; the rest are one tap away on Home, which lists them all. */
+const DECISIONS_SHOWN = 6;
+const DECISION_ID_PREFIX = /^[a-z_]+:/;
+
+function DecisionsSection({ decisions }: { decisions: BriefDecisions }) {
+  const tr = useTranslations();
+  const { items, approvals, moneyApprovalKinds, canDecide } = decisions;
+  const shown = items.slice(0, DECISIONS_SHOWN);
+  const more = items.length - shown.length;
+  const heading = items.length === 1
+    ? tr('briefing.oneDecisionNeedsYou')
+    : tr('briefing.decisionsNeedYou', { count: items.length });
+
+  return (
+    <section aria-labelledby="brief-decisions-heading" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <ShieldCheck className="h-4 w-4 text-amber-400" aria-hidden />
+        <h2 id="brief-decisions-heading" className="text-sm font-semibold text-fg uppercase tracking-wider">{heading}</h2>
+      </div>
+      <p className="text-sm text-muted mb-4">{tr('briefing.decisionsIntro')}</p>
+      <ul className="space-y-2.5">
+        {shown.map((item) => {
+          const rawId = item.id.replace(DECISION_ID_PREFIX, '');
+          const meta = DECISION_META[item.kind] ?? DEFAULT_DECISION_META;
+          const Icon = meta.icon;
+
+          if (item.kind === 'ai_approval') {
+            const card = approvals[rawId];
+            if (card) return <li key={item.id}><ApprovalCard approval={card} canDecide={canDecide} compact /></li>;
+          }
+
+          const cardClass = 'flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4 transition';
+          const subtitle = meta.subtitleKey ? tr(meta.subtitleKey) : '';
+          const body = (
+            <>
+              <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', meta.iconBg)}>
+                <Icon className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-fg">{item.title}</p>
+                {subtitle && <p className="mt-0.5 truncate text-xs text-muted">{subtitle}</p>}
+              </div>
+            </>
+          );
+
+          // Buttons cannot nest inside a link, so rows with one-tap actions
+          // are a list item whose title links out.
+          const moneyKind = item.kind === 'approval' ? moneyApprovalKinds[rawId] : undefined;
+          if (moneyKind !== undefined && canDecide) {
+            return (
+              <li key={item.id} className={cardClass}>
+                <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90 focus-ring">{body}</Link>
+                <HomeApprovalActions approvalId={rawId} kind={moneyKind} />
+              </li>
+            );
+          }
+          if (item.kind === 'recommendation' && canDecide) {
+            return (
+              <li key={item.id} className={cn(cardClass, 'flex-col items-stretch gap-3 sm:flex-row sm:items-center')}>
+                <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90 focus-ring">{body}</Link>
+                <div className="flex justify-end"><RecommendationActions id={rawId} /></div>
+              </li>
+            );
+          }
+          return (
+            <li key={item.id}>
+              <Link href={item.href} className={cn(cardClass, 'min-h-[44px] hover:bg-elevated focus-ring')}>
+                {body}
+                <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-text">
+                  {tr(meta.ctaKey)} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {more > 0 && (
+        <Link href="/home" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-text focus-ring">
+          {tr('briefing.moreDecisionsOnHome', { count: more })} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      )}
+    </section>
   );
 }
 
@@ -642,6 +762,7 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const currentBriefing = active?.data?.briefing ?? null;
   const generatedAt = active?.data?.generatedAt;
   const digest = active?.data?.digest;
+  const decisions = active?.data?.decisions;
   const generate = session.generate;
   const today = now.toISOString().slice(0, 10);
 
@@ -767,6 +888,11 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
               <LayoutGrid className="h-8 w-8 text-violet-400/30 flex-shrink-0 mt-1" />
             </div>
           </div>
+
+          {/* What needs a decision comes first: it is the part of the brief
+              that unblocks work, and it is read from the approval and run
+              rows — the route sends it only when there is something. */}
+          {decisions && decisions.items.length > 0 && <div className="mb-6"><DecisionsSection decisions={decisions} /></div>}
 
           {/* Cross-domain concierge: "What does my family need to do today?" */}
           {digest && <div className="mb-6"><NeedsAttention digest={digest} /></div>}

@@ -5,6 +5,9 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { buildBrief } from '@/lib/briefing/build';
+import { readBriefDecisions } from '@/lib/briefing/decisions';
+import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
+import { viewerFor } from '@/lib/ai/context/policy';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -46,6 +49,14 @@ export async function POST(req: NextRequest) {
       raw.type === 'evening' ? 'evening' : raw.type === 'weekly' ? 'weekly' : 'morning';
 
     const now = new Date();
+    const scope = scopeFromUserContext(ctx, supabase, { now });
+    // Who is reading decides what the brief may contain. The same rule
+    // `lib/ai/context/policy.ts` applies to the prompt context (§4: a child
+    // must not inspect household finances or health detail) applies here:
+    // bills, medications and money approvals are read for managers only, and
+    // for anyone else they are not read at all — not read-then-hidden, so
+    // there is nothing to leak through a prompt or an envelope by mistake.
+    const { canManage } = viewerFor(scope);
     // The family's day, not UTC's. `now.toISOString().slice(0, 10)` is the UTC
     // date: for a family in Los Angeles at 5pm it is already tomorrow, so the
     // brief covered the wrong day and `brief.asOfDate` (which IS family-local)
@@ -65,7 +76,10 @@ export async function POST(req: NextRequest) {
     // Which day's doses are due is a question about the family's day: at 8pm in
     // Los Angeles `getUTCDay()` has already rolled over to tomorrow, so a
     // family read the wrong day's medication schedule every evening.
-    const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay(); // 0=Sun, matches medication_schedules.days_of_week
+    const todayDow = weekdayOf(today); // 0=Sun, matches medication_schedules.days_of_week
+
+    /** The manager-only reads, for a viewer who is not one: nothing, and no query. */
+    const withheld = <T,>() => Promise.resolve({ data: [] as T[], error: null });
 
     const [
       { data: members },
@@ -86,6 +100,7 @@ export async function POST(req: NextRequest) {
       { data: pantry },
       { data: completedRuns },
       { data: agentActivity },
+      decisionsRes,
     ] = await Promise.all([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', todayEnd).order('starts_at'),
@@ -98,8 +113,12 @@ export async function POST(req: NextRequest) {
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
       // ── Cross-domain concierge signals (previously invisible to the briefing) ──
-      supabase.from('bills').select('name, amount, due_date, status').eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
-      supabase.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)').eq('family_id', familyId).lte('starts_on', today).limit(40),
+      canManage
+        ? supabase.from('bills').select('name, amount, due_date, status').eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20)
+        : withheld<{ name: string; amount: number; due_date: string; status: string }>(),
+      canManage
+        ? supabase.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)').eq('family_id', familyId).lte('starts_on', today).limit(40)
+        : withheld<MedicationScheduleRow>(),
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).is('completed_at', null).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
       supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
@@ -112,7 +131,20 @@ export async function POST(req: NextRequest) {
       supabase.from('agent_activity').select('id, title, detail, href, created_at')
         .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', todayStart)
         .order('created_at', { ascending: false }).limit(5),
+      // What is waiting on a person — pending approvals, runs parked on an OK
+      // or an answer, recommendations — read the way Home reads them. Never
+      // the model's word: see `lib/briefing/decisions.ts`.
+      readBriefDecisions(scope),
     ]);
+
+    // A brief that cannot say what is waiting on you must not pretend nothing
+    // is. The read failed closed; so does the request, and the page shows a
+    // retryable error instead of a calm morning.
+    if (!decisionsRes.ok) {
+      console.error('[briefing] decisions read failed', decisionsRes.error);
+      return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });
+    }
+    const decisions = decisionsRes.data;
 
     const memberMap = new Map((members ?? []).map(m => [m.id, m]));
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
@@ -123,30 +155,9 @@ export async function POST(req: NextRequest) {
     const fmtDate = (iso: string) => dayKeyInTz(new Date(iso), tz);
 
     // ── Build the deterministic cross-domain concierge digest ─────────────────
-    const fmtTimeOfDay = (t: string | null) => {
-      if (!t) return null;
-      const [h, m] = t.split(':');
-      const hour = Number(h);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const h12 = hour % 12 === 0 ? 12 : hour % 12;
-      return `${h12}:${m ?? '00'} ${ampm}`;
-    };
-    const medsDueToday = (medSchedules ?? [])
-      .map(s => {
-        const sched = s as unknown as {
-          time_of_day: string | null; days_of_week: number[] | null; ends_on: string | null;
-          medications: { name: string; member_id: string | null; is_active: boolean } | null;
-        };
-        return sched;
-      })
-      .filter(s => s.medications?.is_active !== false
-        && (s.days_of_week ?? [0, 1, 2, 3, 4, 5, 6]).includes(todayDow)
-        && (!s.ends_on || s.ends_on >= today))
-      .map(s => ({
-        name: s.medications?.name ?? 'Medication',
-        member: s.medications?.member_id ? memberMap.get(s.medications.member_id)?.display_name ?? null : null,
-        timeOfDay: fmtTimeOfDay(s.time_of_day),
-      }));
+    const medsDueToday = medicationsDueOn((medSchedules ?? []) as unknown as MedicationScheduleRow[], {
+      today, todayDow, memberName: (id) => memberMap.get(id)?.display_name,
+    });
 
     const conciergeSnapshot: ConciergeSnapshot = {
       now,
@@ -302,7 +313,7 @@ ${UNTRUSTED_CONTENT_RULE}
         // The wrapper records the model, tokens, latency and error; the fallback
         // behaviour is unchanged.
         briefing = await withAiRequest(
-          scopeFromUserContext(ctx, supabase),
+          scope,
           { feature: `briefing.${type}`, text: `Generate ${type} briefing` },
           async (obs) => {
             const provider = await resolveProvider();
@@ -384,6 +395,7 @@ ${UNTRUSTED_CONTENT_RULE}
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
+      decisions: decisions.items,
     }, tz);
 
     briefing = {
@@ -401,7 +413,30 @@ ${UNTRUSTED_CONTENT_RULE}
     // `brief.handled` is what makes "Completed Today" evidence rather than the
     // model's word for it, and that is computed, not stored.
     // Return the fresh briefing and completion evidence in the same envelope.
-    return NextResponse.json({ briefing, digest, generatedAt: new Date().toISOString() });
+    //
+    // The decisions slice rides along only when there is something to decide.
+    // An empty section is not information the page can act on, and a read
+    // that failed never reaches this line (it returned 500 above) — so a
+    // response without `decisions` means, exactly, that nothing is waiting.
+    // `brief.decisions` is the ranked list the headline was built from, cut
+    // to the envelope's list bound (the page shows a handful and links the
+    // rest to Home); the card data and the wallet kinds are what the page's
+    // buttons act on.
+    return NextResponse.json({
+      briefing,
+      digest,
+      generatedAt: new Date().toISOString(),
+      ...(brief.decisions.length
+        ? {
+          decisions: {
+            items: brief.decisions.slice(0, BRIEFING_RESPONSE_LIMITS.listItems),
+            approvals: decisions.approvals,
+            moneyApprovalKinds: decisions.moneyApprovalKinds,
+            canDecide: decisions.canDecide,
+          },
+        }
+        : {}),
+    });
   } catch (err) {
     console.error('Briefing error:', err);
     return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });

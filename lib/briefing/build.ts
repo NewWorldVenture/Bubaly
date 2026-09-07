@@ -14,12 +14,23 @@
 // Center renders. A brief may under-report (a run that finished after the
 // window) but it can never over-report, and `tests/briefing-build.test.ts`
 // pins that: handled ⊆ completed runs.
+//
+// THE SAME RULE FOR `decisions`: a decision is a row somebody is waiting on —
+// a pending `approval_requests` row, a run parked in `awaiting_approval` or
+// `awaiting_context`, a pending money approval, a pending recommendation —
+// mapped by `lib/home/needs-build.ts`, the code Home's "Needs you" list runs.
+// The brief does not invent a decision and the model never writes one; the
+// builder only ranks what the reader (`lib/briefing/decisions.ts`) found.
+// When there is at least one, it leads the headline: a parent reading at 7am
+// should see "2 decisions need you" before "3 things today".
 import { z } from 'zod';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';
+import { rankNeedsAttention, type NeedItem } from '@/lib/home/needs-attention';
 import { mergeCompletedByBubaly, type AiActivityRow, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
 import { buildFirstBrief, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
 import type { HomeBriefKind } from '@/lib/database.types';
+import { BriefDecisionSchema } from './response-schema';
 
 export type BriefKind = HomeBriefKind;
 
@@ -33,6 +44,12 @@ export type BriefInput = {
   /** Runs that reached a terminal state, and the AI activity feed. */
   completedRuns: CompletedRunRow[];
   activity: AiActivityRow[];
+  /**
+   * What is waiting on a person, already read from the tables (see
+   * `lib/briefing/decisions.ts`). Optional so the callers that only need the
+   * calendar half keep working; the builder ranks them.
+   */
+  decisions?: NeedItem[];
   dinnerCandidates?: DinnerIdea[];
   /** Counts the home brief already tracks, for the stored row. */
   counts?: { choresPending?: number; openTodos?: number; groceryOpen?: number; memberCount?: number };
@@ -49,12 +66,19 @@ export type Brief = {
   digest: ConciergeDigest;
   /** What Bubaly actually finished — runs that completed, never a claim. */
   handled: CompletedItem[];
+  /**
+   * What needs a person's decision, most urgent first: pending approvals,
+   * runs waiting for an OK or an answer, recommendations. Never the model's
+   * word — every item is a row somebody is actually waiting on.
+   */
+  decisions: NeedItem[];
   counts: {
     today: number;
     week: number;
     conflicts: number;
     overdue: number;
     handled: number;
+    decisions: number;
     timeSavedMinutes: number;
   };
   /** True when there is genuinely nothing to say — the caller leads with getting-started. */
@@ -85,9 +109,10 @@ export const briefSchema = z.object({
     key: z.string(), kind: z.enum(['run', 'activity']), title: z.string(),
     detail: z.string().nullable(), href: z.string(), at: z.string(), partial: z.boolean(),
   })),
+  decisions: z.array(BriefDecisionSchema),
   counts: z.object({
     today: z.number(), week: z.number(), conflicts: z.number(),
-    overdue: z.number(), handled: z.number(), timeSavedMinutes: z.number(),
+    overdue: z.number(), handled: z.number(), decisions: z.number(), timeSavedMinutes: z.number(),
   }),
   isSparse: z.boolean(),
 });
@@ -104,12 +129,22 @@ export function dayKeyInZone(now: Date, tz: string): string {
 /**
  * The headline a person reads first.
  *
- * Morning looks forward ("three things today, one clash"); evening looks back
- * ("Bubaly finished four things"). Both stay honest when there is nothing:
- * "A quiet day" is a real answer, and better than a manufactured one.
+ * Decisions come before everything: a pending approval is the one line in
+ * the brief that unblocks work, so when there is at least one it leads both
+ * the morning and the evening. After that, morning looks forward ("three
+ * things today, one clash") and evening looks back ("Bubaly finished four
+ * things"). Both stay honest when there is nothing: "A quiet day" is a real
+ * answer, and better than a manufactured one.
  */
-function headlineFor(kind: BriefKind, calendar: FirstBrief, digest: ConciergeDigest, handled: CompletedItem[]): string {
+function headlineFor(
+  kind: BriefKind,
+  calendar: FirstBrief,
+  digest: ConciergeDigest,
+  handled: CompletedItem[],
+  decisions: NeedItem[],
+): string {
   const parts: string[] = [];
+  if (decisions.length) parts.push(`${decisions.length} ${decisions.length === 1 ? 'decision needs' : 'decisions need'} you`);
   if (kind === 'evening') {
     if (handled.length) parts.push(`Bubaly finished ${handled.length} ${handled.length === 1 ? 'thing' : 'things'} today`);
     if (digest.counts.overdue) parts.push(`${digest.counts.overdue} still overdue`);
@@ -132,6 +167,9 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
   const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? []);
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? []);
+  // Ranked the way Home ranks them (urgency, then newest) so the brief and the
+  // Command Center never disagree about which decision comes first.
+  const decisions = rankNeedsAttention(input.decisions ?? []);
 
   const counts = {
     today: calendar.todayCount,
@@ -139,20 +177,25 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
     conflicts: calendar.conflicts.length,
     overdue: digest.counts.overdue,
     handled: handled.length,
+    decisions: decisions.length,
     timeSavedMinutes: calendar.timeSavedMinutes,
   };
 
   return {
     kind: input.kind,
     asOfDate: dayKeyInZone(input.now, tz),
-    headline: headlineFor(input.kind, calendar, digest, handled),
+    headline: headlineFor(input.kind, calendar, digest, handled, decisions),
     calendar,
     digest,
     handled,
+    decisions,
     counts,
-    // Nothing on the calendar, nothing due and nothing done is a genuinely
-    // sparse day — the caller leads with getting-started instead of a void.
-    isSparse: counts.today === 0 && counts.week === 0 && digest.counts.total === 0 && handled.length === 0,
+    // Nothing on the calendar, nothing due, nothing done and nothing to decide
+    // is a genuinely sparse day — the caller leads with getting-started
+    // instead of a void. A day with only a decision on it is not sparse: that
+    // decision is the whole brief.
+    isSparse: counts.today === 0 && counts.week === 0 && digest.counts.total === 0
+      && handled.length === 0 && decisions.length === 0,
   };
 }
 

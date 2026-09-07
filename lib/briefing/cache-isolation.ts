@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AppContextValue } from '@/components/app/app-context';
+import { BriefDecisionsSchema } from '@/lib/briefing/response-schema';
 
 export type BriefingType = 'morning' | 'evening' | 'weekly';
 
@@ -50,6 +51,10 @@ const responseSchema = z.object({
     byDomain: z.array(z.object({ domain, count })),
     headline: z.string(),
   }).optional(),
+  // Present only when something is waiting on a person. The route fails the
+  // whole request when the decisions read fails, so an absent slice means
+  // "nothing to decide", never "could not tell".
+  decisions: BriefDecisionsSchema.optional(),
 }).passthrough();
 
 export type BriefingData = z.infer<typeof briefingSchema>;

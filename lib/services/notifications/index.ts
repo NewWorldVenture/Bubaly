@@ -48,6 +48,15 @@ export type NotifyInput = {
   sendAt?: string | null;
   /** Skip the quiet-hours deferral — for things that are urgent by definition. */
   urgent?: boolean;
+  /**
+   * Say this at most ONCE per `relatedId`, read or not. The default guard
+   * only drops a duplicate while the first copy is still unread, which is
+   * right for "the renewal is still expiring" and wrong for a day's morning
+   * brief: a parent who read it at 7:05 must not get it again when the cron
+   * re-runs at 8. Pair it with a `relatedId` that names the occasion
+   * (`brief:2026-09-07`), because without one the title is the identity.
+   */
+  once?: boolean;
 };
 
 export type NotifyResult = {
@@ -143,8 +152,9 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
     .from('notifications')
     .select('user_id')
     .eq('family_id', scope.familyId)
-    .eq('type', input.type)
-    .eq('is_read', false);
+    .eq('type', input.type);
+  // `once` widens the guard to every prior copy; the default is unread only.
+  if (!input.once) dupeQuery = dupeQuery.eq('is_read', false);
   dupeQuery = input.relatedId ? dupeQuery.eq('related_id', input.relatedId) : dupeQuery.eq('title', title);
 
   const { data: existing, error: dupeError } = await dupeQuery;
