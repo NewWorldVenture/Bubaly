@@ -9,7 +9,7 @@
 
 export type FamilyIntent =
   | 'make_decision' | 'check_readiness' | 'plan_trip' | 'prep_for' | 'plan_meals'
-  | 'check_availability' | 'plan_event';
+  | 'check_availability' | 'plan_event' | 'plan_move';
 
 export type IntentMatch = {
   intent: FamilyIntent;
@@ -42,6 +42,13 @@ const RULES: Rule[] = [
   {
     intent: 'check_readiness', href: '/dashboard/readiness', cta: 'Check → Life Readiness',
     test: /\b(are we ready|am i ready|how ready|ready for (tomorrow|the week|this week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week))\b/i,
+  },
+  {
+    // "plan our move", "we're moving in October", "moving house checklist" → the
+    // Move Planner. Before prep_for so "get ready for the move" lands here, and
+    // narrow enough that "move the dentist to Friday" never does.
+    intent: 'plan_move', href: '/dashboard/moving', cta: 'Plan it → Move Planner',
+    test: /\b(plan (our |the |my |a |this )?(house |home )?move\b|(we'?re|we are|i'?m|i am) moving (house|home|to|in|next|this|out|soon|on)\b|moving (house|home|day|checklist|plan|planner)\b|(prepare|prep|get ready|getting ready) for (the |our )?move\b|move (checklist|planner|timeline)\b|(our |the |a )?house move\b)\b/i,
   },
   {
     intent: 'plan_trip', href: '/dashboard/prep-plans', cta: 'Plan it → Prep Plans',

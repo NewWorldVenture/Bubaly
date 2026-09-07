@@ -134,6 +134,7 @@ export const SLICE_ACCESS: Record<SliceName, { managerOnly: boolean; note: strin
   documents: { managerOnly: true, note: 'titles, categories and expiry only — adults only (§4)' },
   memory: { managerOnly: false, note: 'confirmed facts; medical/account categories for managers only' },
   proactive: { managerOnly: false, note: 'reasoning report, signals, pending suggestions and recommendations' },
+  moving: { managerOnly: true, note: 'the move on file and what needs a new address: subscriptions, bills, schools, vets — adults only (§4)' },
 };
 
 /** Who is looking, as the slices see it. */
