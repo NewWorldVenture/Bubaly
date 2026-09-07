@@ -45,7 +45,7 @@ export default async function AdminReportsPage() {
   // because they are platform-wide. Each field fails closed on its own: the
   // tiles say "unavailable" rather than showing a zero this page cannot stand
   // behind, so one broken table does not take the whole report down.
-  const strategyMetrics = await loadStrategyMetrics(supabase);
+  const strategyMetricsPromise = loadStrategyMetrics(supabase);
 
   const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await Promise.all([
     supabase.from('families').select('id', { count: 'exact', head: true }),
@@ -57,6 +57,11 @@ export default async function AdminReportsPage() {
     supabase.from('documents').select('size_bytes'),
     supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo),
   ]);
+
+  // Awaited here, before any early return, so the in-flight read always has an
+  // owner — a page that returns while a promise is outstanding leaves an
+  // unhandled rejection behind if it ever throws.
+  const strategyMetrics = await strategyMetricsPromise;
 
   const familyCount = familyCountResult.count;
   const userCount = userCountResult.count;
