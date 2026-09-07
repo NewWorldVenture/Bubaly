@@ -272,21 +272,34 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   now?: Date;
 }): Promise<InboundRouteOutcome> {
   const empty: InboundRouteOutcome = { routed: false, requestId: null, runId: null, paperworkItemId: null, reason: 'not_actionable' };
-  if (!shouldPlanInbound(input.intent)) return empty;
 
   const text = [(input.subject ?? '').trim(), (input.body ?? '').trim()].filter(Boolean).join('\n\n').slice(0, 4_000);
   if (!text) return { ...empty, reason: 'no_text' };
 
-  const scope = await systemScopeForFamily(admin, input.familyId);
-  if (!scope) return { ...empty, reason: 'no_scope' };
-
-  // Paperwork first: an emailed bill or reservation is a record the family
-  // needs whether or not the planner does anything with the message. It is
-  // filed idempotently: the webhook's caller already skips a redelivery, and
+  // Paperwork first, and BEFORE the planner gate — which is what makes the
+  // sentence below true rather than aspirational. An emailed bill or
+  // reservation is a record the family needs whether or not the planner does
+  // anything with the message, and the intents the planner declines are
+  // precisely where that matters most: "Final notice: invoice #4471, $240.00
+  // due March 9" matches the spam rule in routing.ts on the words "final
+  // notice", so it was classified `spam`, returned here before this line, and
+  // filed NOTHING — while triagePaperwork reads that same text as
+  // bill_or_payment with its amount and due date. The bill the household most
+  // needed on file was the one the router was most confident to drop.
+  //
+  // Filed idempotently: the webhook's caller already skips a redelivery, and
   // the filer itself refuses to make the same record twice.
   const paperworkItemId = input.channel === 'email'
     ? await fileInboundPaperwork(admin, input.familyId, text, input.now, input.providerRef)
     : null;
+
+  // The planner gate applies only to PLANNING. A message that is not worth a
+  // run can still be worth a record, and the outcome now reports the row it
+  // filed rather than a bare `not_actionable`.
+  if (!shouldPlanInbound(input.intent)) return { ...empty, paperworkItemId };
+
+  const scope = await systemScopeForFamily(admin, input.familyId);
+  if (!scope) return { ...empty, paperworkItemId, reason: 'no_scope' };
 
   const submit = input.submit ?? submitRequest;
   const clientRequestId = input.providerRef ? `inbound:${input.channel}:${input.providerRef}` : null;

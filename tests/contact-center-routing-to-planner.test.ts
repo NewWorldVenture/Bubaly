@@ -83,14 +83,17 @@ async function deliver(
     familyId: FAMILY, channel: input.channel, from: input.from, subject: input.subject,
     body: input.body, providerRef: input.providerRef, aiIntent: input.intent,
   });
-  if (filed.inserted) {
-    await routeInboundToPlanner(admin(), {
+  // The route outcome comes back beside the record so a test can assert what
+  // the router actually decided — whether it planned, and which paperwork row
+  // it filed — rather than inferring it from the tables alone.
+  const route = filed.inserted
+    ? await routeInboundToPlanner(admin(), {
       familyId: FAMILY, channel: input.channel, messageId: filed.messageId,
       subject: input.subject ?? null, body: input.body, intent: input.intent,
       providerRef: filed.providerRef, submit: intake.submit as never, now: NOW,
-    });
-  }
-  return filed;
+    })
+    : null;
+  return { ...filed, route };
 }
 
 describe('recordInboundMessage', () => {
@@ -134,6 +137,47 @@ describe('recordInboundMessage', () => {
     expect(one.inserted).toBe(true);
     expect(two.inserted).toBe(false);
     expect(db.table('family_inbox_messages')).toHaveLength(1);
+  });
+});
+
+describe('a bill the router declines to plan is still filed', () => {
+  // The reviewer's finding. `shouldPlanInbound` gates PLANNING, but the
+  // paperwork filer used to sit behind it, so the intents the router is most
+  // confident to drop filed no record at all — and those are exactly the
+  // messages a household cannot afford to lose.
+  const FINAL_NOTICE = 'Final notice: invoice #4471 for water service. Amount due $240.00 by March 9. Pay online.';
+
+  it('files the paperwork for a spam-classified bill, and still opens no run', async () => {
+    const intake = fakeIntake();
+    const out = await deliver(
+      { channel: 'email', subject: 'Water service', body: FINAL_NOTICE, providerRef: 'EM-final', intent: 'spam' },
+      intake,
+    );
+
+    // The record exists...
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(out.route?.paperworkItemId).toBe(db.table('paperwork_items')[0].id);
+    // ...and the planner still declined it, which is the half that must NOT change.
+    expect(intake.submit).not.toHaveBeenCalled();
+    expect(out.route?.routed).toBe(false);
+  });
+
+  it('does the same for urgent, which the escalation path owns', async () => {
+    const intake = fakeIntake();
+    await deliver(
+      { channel: 'email', subject: 'Shut-off warning', body: 'URGENT: shut-off warning. Invoice #77, amount due $120.00 by March 2.', providerRef: 'EM-urgent', intent: 'urgent' },
+      intake,
+    );
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(intake.submit).not.toHaveBeenCalled();
+  });
+
+  it('files nothing for a declined message that is not email', async () => {
+    // Paperwork is an email-channel record; an SMS marked spam files no row.
+    const intake = fakeIntake();
+    await deliver({ channel: 'sms', body: FINAL_NOTICE, providerRef: 'SMS-1', intent: 'spam' }, intake);
+    expect(db.table('paperwork_items')).toHaveLength(0);
+    expect(intake.submit).not.toHaveBeenCalled();
   });
 });
 
