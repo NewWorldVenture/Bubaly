@@ -11,7 +11,17 @@ export function formatFamilies(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-/** A factual public account-count line with an honest pre-launch fallback. */
-export function familiesNote(n: number): string {
-  return n <= 0 ? 'Built for modern family life' : `${formatFamilies(n)} registered families`;
+/** A factual public account-count line with an honest pre-launch fallback.
+ *
+ *  Takes a translator rather than returning English: this line renders on the
+ *  public marketing pages, where a visitor who picked German should not be told
+ *  about "registered families" in English. The number itself is still formatted
+ *  by formatFamilies — it is the sentence around it that changes. */
+export function familiesNote(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  n: number,
+): string {
+  return n <= 0
+    ? t('marketing.builtForModernFamilyLife')
+    : t('marketing.registeredFamilies', { count: formatFamilies(n) });
 }

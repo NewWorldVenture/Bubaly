@@ -11,6 +11,12 @@ import fs from 'node:fs';
 
 const legal = fs.readFileSync('components/marketing/legal.tsx', 'utf8');
 
+// The heading is a catalogue key now, not the English literal — the page is
+// translated, so 'On this page' appears in lib/i18n/messages, not in the JSX.
+// Anchoring the scan on the key keeps this test measuring what it is about
+// (a mobile ToC with real touch targets) rather than the wording of a label.
+const TOC_HEADING = "t('marketing.legal.onThisPage')";
+
 describe('legal pages expose a Table of Contents on mobile (M-039)', () => {
   it('renders a native <details> ToC that is lg:hidden (mobile/tablet only)', () => {
     expect(legal).toMatch(/<details className="group[^"]*lg:hidden">/);
@@ -18,7 +24,7 @@ describe('legal pages expose a Table of Contents on mobile (M-039)', () => {
   });
 
   it('the ToC links jump to the same section anchor ids', () => {
-    const idx = legal.indexOf('On this page');
+    const idx = legal.indexOf(TOC_HEADING);
     expect(idx).toBeGreaterThan(-1);
     const block = legal.slice(idx, idx + 700);
     expect(block).toContain('sections.map');
@@ -26,7 +32,8 @@ describe('legal pages expose a Table of Contents on mobile (M-039)', () => {
   });
 
   it('the ToC summary + jump links meet the 44px touch target on touch', () => {
-    const idx = legal.indexOf('On this page');
+    const idx = legal.indexOf(TOC_HEADING);
+    expect(idx).toBeGreaterThan(-1);
     const block = legal.slice(idx, idx + 700);
     expect(block).toContain('coarse:min-h-11');
   });

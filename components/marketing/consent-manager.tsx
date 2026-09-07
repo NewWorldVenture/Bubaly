@@ -164,7 +164,7 @@ function PreferenceCenter({
 
         {gpc && (
           <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
-            Your browser sends a Global Privacy Control signal — we’ve turned optional categories off by default. You can still turn them on below.
+            {t('consentManager.gpcDetected')}
           </p>
         )}
 

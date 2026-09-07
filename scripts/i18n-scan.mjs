@@ -37,6 +37,17 @@ export const GATED_SURFACES = {
   // straight at this block when the page repaints, so English surviving here is
   // English in the most conspicuous place on the site.
   'marketing-footer': ['components/marketing/site-footer.tsx'],
+  // /features and /how-it-works. These render product screenshots as markup
+  // rather than images, so the calendar, the grocery list and the assistant
+  // chat inside them are real on-screen copy — a visitor reading the page in
+  // German should not be shown an English demo of the product.
+  'marketing-showcases': ['components/marketing/reference-showcases.tsx'],
+  // The legal document shell (privacy, terms, cookies, acceptable use) and the
+  // closing CTA that ends every marketing page.
+  'marketing-legal': ['components/marketing/legal.tsx', 'components/marketing/cta.tsx'],
+  // The contact form and the cookie-consent surface — the two places on the
+  // marketing site where a visitor is asked to give something.
+  'marketing-forms': ['components/marketing/contact-form.tsx', 'components/marketing/consent-manager.tsx'],
 };
 
 const IGNORE_DIRS = new Set([

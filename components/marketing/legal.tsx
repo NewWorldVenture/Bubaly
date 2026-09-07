@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 import { Section } from '@/components/marketing/sections';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
@@ -15,7 +16,7 @@ export type LegalSection = {
  * structured, anchored sections. Theme-aware (uses brand tokens), responsive
  * (TOC collapses above the content on mobile).
  */
-export function LegalPage({
+export async function LegalPage({
   title,
   summary,
   lastUpdated,
@@ -28,28 +29,31 @@ export function LegalPage({
   sections: LegalSection[];
   path: string;
 }) {
+  const t = await getTranslations();
+
   return (
     <>
       {/* Hero */}
       <Section className="pb-0 pt-20 text-center">
         <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
-          Legal
+          {t('marketing.legal.eyebrow')}
         </span>
         <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">{summary}</p>
-        <p className="mt-4 text-sm text-muted">Last updated: {lastUpdated}</p>
+        <p className="mt-4 text-sm text-muted">{t('marketing.legal.lastUpdated', { date: lastUpdated })}</p>
       </Section>
 
       <Section className="pt-12">
         <div className="grid gap-10 lg:grid-cols-[240px_1fr]">
           {/* Mobile/tablet table of contents — the sticky sidebar below is
               `hidden lg:block`, so without this a phone reader gets no jump nav
-              through a long legal doc. Native <details> (no JS/hydration), shown
-              only < lg; the sidebar owns lg+. */}
+              through a long legal doc. Native details/summary,
+              so no JS or hydration; shown below lg only, and the sidebar owns
+              lg and up. */}
           {sections.length > 1 && (
             <details className="group rounded-2xl border border-border bg-surface/40 lg:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">
-                On this page
+                {t('marketing.legal.onThisPage')}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90" aria-hidden />
               </summary>
               <ul className="space-y-1 border-t border-border px-3 py-2">
@@ -70,7 +74,7 @@ export function LegalPage({
           {/* Sticky table of contents */}
           <aside className="hidden lg:block">
             <nav className="sticky top-24">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">On this page</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t('marketing.legal.onThisPage')}</p>
               <ul className="space-y-2 border-l border-border">
                 {sections.map((s) => (
                   <li key={s.id}>
@@ -108,11 +112,14 @@ export function LegalPage({
             ))}
 
             <div className="mt-10 rounded-2xl border border-border bg-surface/40 p-6">
+              {/* Split around the two links rather than interpolating markup
+                  into one string: a translator reorders the sentence freely,
+                  and every language keeps the email and the contact link. */}
               <p className="text-sm text-muted">
-                Questions about this policy? Email{' '}
+                {t('marketing.legal.questionsEmail')}{' '}
                 <a href="mailto:support@bubaly.com" className="font-medium text-brand-text hover:underline">support@bubaly.com</a>{' '}
-                or visit our{' '}
-                <Link href="/contact" className="font-medium text-brand-text hover:underline">contact page</Link>.
+                {t('marketing.legal.orVisitOur')}{' '}
+                <Link href="/contact" className="font-medium text-brand-text hover:underline">{t('marketing.legal.contactPage')}</Link>.
               </p>
             </div>
           </article>

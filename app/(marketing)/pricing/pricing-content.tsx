@@ -506,7 +506,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
 
         <FeatureMatrixTable matrix={featureMatrix} />
 
-        <TrustStrip familiesNote={familiesNote(familiesCount)} />
+        <TrustStrip familiesNote={familiesNote(tr, familiesCount)} />
 
         <p className="border-t border-white/8 pt-7 text-center text-sm text-white/55">
           {tr('pricingPricingContent.questionsVisitOur')}{' '}

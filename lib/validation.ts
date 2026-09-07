@@ -6,15 +6,19 @@ export const emailSchema = z.string().trim().toLowerCase().email('Enter a valid 
 
 // What's this about? — drives the support-ticket category + subject so the team
 // can triage web contacts (bug reports, feature requests, billing, etc.).
+// `label` stays the English source of truth — the admin support-tickets view
+// reads it, and a non-UI caller wants a real string rather than a raw key.
+// `labelKey` is what the public contact form renders through t(), so a visitor
+// picks their topic in their own language. Same pairing as MARKETING_NAV.
 export const CONTACT_TOPICS = [
-  { value: 'general', label: 'General question' },
-  { value: 'bug', label: 'Bug report — something’s broken' },
-  { value: 'feature', label: 'Feature request / enhancement' },
-  { value: 'billing', label: 'Billing & subscriptions' },
-  { value: 'account', label: 'Account & login help' },
-  { value: 'feedback', label: 'Feedback or a suggestion' },
-  { value: 'partnership', label: 'Partnership or press' },
-  { value: 'other', label: 'Something else' },
+  { value: 'general', label: 'General question', labelKey: 'contact.topic.general' },
+  { value: 'bug', label: 'Bug report — something’s broken', labelKey: 'contact.topic.bug' },
+  { value: 'feature', label: 'Feature request / enhancement', labelKey: 'contact.topic.feature' },
+  { value: 'billing', label: 'Billing & subscriptions', labelKey: 'contact.topic.billing' },
+  { value: 'account', label: 'Account & login help', labelKey: 'contact.topic.account' },
+  { value: 'feedback', label: 'Feedback or a suggestion', labelKey: 'contact.topic.feedback' },
+  { value: 'partnership', label: 'Partnership or press', labelKey: 'contact.topic.partnership' },
+  { value: 'other', label: 'Something else', labelKey: 'contact.topic.other' },
 ] as const;
 export const CONTACT_TOPIC_VALUES = CONTACT_TOPICS.map((t) => t.value);
 export function contactTopicLabel(value: string | null | undefined): string {

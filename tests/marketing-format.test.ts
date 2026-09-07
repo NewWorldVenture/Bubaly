@@ -23,11 +23,22 @@ describe('marketing family-count formatters', () => {
     expect(formatFamilies(12_345)).toBe('12,000+');
   });
 
+  // familiesNote now renders through the catalogue, so the test drives it with
+  // a stub translator: what it locks is which key is chosen and what is
+  // interpolated, not the English wording (that lives in en-US.json and is
+  // asserted by the catalogue's own parity checks).
+  const t = (key: string, params?: Record<string, string | number>) =>
+    params ? `${key}:${JSON.stringify(params)}` : key;
+
   it('uses honest fallback copy when count is zero', () => {
-    expect(familiesNote(0)).toBe('Built for modern family life');
+    expect(familiesNote(t, 0)).toBe('marketing.builtForModernFamilyLife');
   });
 
   it('uses the real registered-family count when families exist', () => {
-    expect(familiesNote(42)).toBe('42 registered families');
+    expect(familiesNote(t, 42)).toBe('marketing.registeredFamilies:{"count":"42"}');
+  });
+
+  it('formats the count before handing it to the translator', () => {
+    expect(familiesNote(t, 12_345)).toBe('marketing.registeredFamilies:{"count":"12,000+"}');
   });
 });

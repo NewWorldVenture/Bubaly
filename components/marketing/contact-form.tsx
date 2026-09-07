@@ -64,10 +64,10 @@ export function ContactForm() {
   return (
     <form onSubmit={onSubmit} className="glass-card space-y-5 p-7" noValidate>
       <Field label={tr('contact.yourName')} error={errors.name} required>
-        {(id) => <Input id={id} name="name" autoComplete="name" placeholder="Jordan Rivera" />}
+        {(id) => <Input id={id} name="name" autoComplete="name" placeholder={tr('contact.namePlaceholder')} />}
       </Field>
       <Field label={tr('contact.email')} error={errors.email} required>
-        {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
+        {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder={tr('contact.emailPlaceholder')} />}
       </Field>
       <Field label={tr('contact.whatsThisAbout')} error={errors.topic}>
         {(id) => (
@@ -78,13 +78,13 @@ export function ContactForm() {
             className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm text-fg focus-ring sm:text-base"
           >
             {CONTACT_TOPICS.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+              <option key={t.value} value={t.value}>{tr(t.labelKey)}</option>
             ))}
           </select>
         )}
       </Field>
       <Field label={tr('contact.message')} error={errors.message} required>
-        {(id) => <Textarea id={id} name="message" placeholder="How can we help your family?" />}
+        {(id) => <Textarea id={id} name="message" placeholder={tr('contact.messagePlaceholder')} />}
       </Field>
       <Button type="submit" loading={loading} className="w-full">
         {!loading && <Send className="h-4 w-4" />} {tr('contact.sendMessage')}
