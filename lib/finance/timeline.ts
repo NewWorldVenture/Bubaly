@@ -183,6 +183,25 @@ function expandDates(first: Date, recurrence: string | null | undefined, now: Da
   // Walk from the stored date forward until we pass the horizon, emitting
   // any occurrence that lands inside [today, horizonEnd].
   let cursor = new Date(first.getTime());
+
+  // A long-stale start date (a subscription entered years ago, a bill whose
+  // first due date predates the account) would otherwise be eaten by the walk
+  // guard below before the cursor ever reached today — the commitment would
+  // silently vanish from the forecast. Jump straight to the last occurrence
+  // on or before today, then walk normally.
+  const from = startOfDay(now);
+  if (cursor < from) {
+    if (stepDays) {
+      const steps = Math.floor((from.getTime() - cursor.getTime()) / (stepDays * DAY));
+      if (steps > 0) cursor = new Date(cursor.getTime() + steps * stepDays * DAY);
+    } else if (monthly || quarterly || yearly) {
+      const per = monthly ? 1 : quarterly ? 3 : 12;
+      const months = (from.getUTCFullYear() - cursor.getUTCFullYear()) * 12 + (from.getUTCMonth() - cursor.getUTCMonth());
+      const steps = Math.floor(months / per);
+      if (steps > 0) cursor = addMonthsUTC(cursor, steps * per);
+    }
+  }
+
   let guard = 0;
   while (cursor <= horizonEnd && guard++ < 400) {
     if (cursor >= startOfDay(now)) out.push(ymd(cursor));
@@ -254,7 +273,11 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
   const today = startOfDay(now);
 
   const firstWeek = isoWeekStart(now);
-  const horizonEnd = new Date(startOfDay(new Date(parseDate(firstWeek).getTime() + horizonWeeks * 7 * DAY)));
+  // The LAST day the horizon covers — the final week's Sunday, not the Monday
+  // after it. An exclusive end emits a moment for a day with no bucket to land
+  // in: push() drops it from the weeks and from totalOutflow, while coverage,
+  // planOutflow and scenarioOutflow would still count the money.
+  const horizonEnd = new Date(parseDate(firstWeek).getTime() + (horizonWeeks * 7 - 1) * DAY);
 
   // Seed empty week buckets so the timeline is contiguous.
   const buckets = new Map<string, WeekBucket>();
@@ -265,12 +288,15 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     weekOrder.push(ws);
   }
 
-  const push = (m: MoneyMoment) => {
+  /** Land a moment in its week. False when the week is outside the horizon —
+   *  the caller must not count money the timeline does not carry. */
+  const push = (m: MoneyMoment): boolean => {
     const ws = isoWeekStart(parseDate(m.date));
     const b = buckets.get(ws);
-    if (!b) return;
+    if (!b) return false;
     b.moments.push(m);
     b.outflow = round2(b.outflow + m.amount);
+    return true;
   };
 
   // 1) Bills (recurring expanded across the horizon; paid ones skipped) and
@@ -292,7 +318,8 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     monthlyRecurring += monthlyEquivalent(bill);
     const covered = bill.autopay === true;
     for (const date of expandOccurrences(bill, now, horizonEnd)) {
-      push({ date, label: bill.name, amount, kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
+      const landed = push({ date, label: bill.name, amount, kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
+      if (!landed) continue;
       if (covered) { coverage.coveredCount += 1; coverage.coveredAmount = round2(coverage.coveredAmount + amount); }
       else { coverage.openCount += 1; coverage.openAmount = round2(coverage.openAmount + amount); }
     }
@@ -312,8 +339,9 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     const anchor = !p.recurrence && first < today ? today : first;
     if (p.recurrence) monthlyRecurring += monthlyEquivalentOf(amount, p.recurrence);
     for (const date of expandDates(anchor, p.recurrence, now, horizonEnd)) {
-      push({ date, label: p.label, amount, kind: 'plan', category: p.category ?? p.source, source: p.source });
-      planOutflow = round2(planOutflow + amount);
+      if (push({ date, label: p.label, amount, kind: 'plan', category: p.category ?? p.source, source: p.source })) {
+        planOutflow = round2(planOutflow + amount);
+      }
     }
   }
   monthlyRecurring = round2(monthlyRecurring);
@@ -326,7 +354,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     if (remaining <= 0 || !g.target_date) continue;
     const target = parseDate(g.target_date);
     if (target < today || target > horizonEnd) continue;
-    push({ date: ymd(target), label: `${g.name} goal`, amount: remaining, kind: 'goal', category: 'savings' });
+    if (!push({ date: ymd(target), label: `${g.name} goal`, amount: remaining, kind: 'goal', category: 'savings' })) continue;
     const weeksLeft = Math.max(1, Math.ceil((target.getTime() - today.getTime()) / (7 * DAY)));
     goalRisks.push({ name: g.name, remaining, weeksLeft, perWeek: round2(remaining / weeksLeft), date: ymd(target) });
   }
@@ -341,8 +369,9 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
       const anchor = !scenario.recurrence && first < today ? today : first;
       if (scenario.recurrence) monthlyRecurring = round2(monthlyRecurring + monthlyEquivalentOf(amount, scenario.recurrence));
       for (const date of expandDates(anchor, scenario.recurrence, now, horizonEnd)) {
-        push({ date, label: scenario.label, amount, kind: 'scenario', category: 'scenario' });
-        scenarioOutflow = round2(scenarioOutflow + amount);
+        if (push({ date, label: scenario.label, amount, kind: 'scenario', category: 'scenario' })) {
+          scenarioOutflow = round2(scenarioOutflow + amount);
+        }
       }
     }
   }

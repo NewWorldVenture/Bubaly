@@ -223,3 +223,56 @@ describe('scenario', () => {
     expect(zero.scenarioOutflow).toBe(0);
   });
 });
+
+
+// ── Horizon edges ────────────────────────────────────────────────────────────
+// Two ways money can go missing or be counted twice at the seams of the
+// 12-week window. Both are money the family would act on, so both are pinned.
+describe('horizon edges', () => {
+  it('counts coverage and plan money only for moments that have a week to land in', () => {
+    // NOW is Monday 2026-01-05, so the 12 weeks cover 2026-01-05 … 2026-03-29.
+    // 2026-03-30 is the Monday AFTER the last week: it is outside the forecast
+    // and must not appear in the weeks, the totals or the coverage counters.
+    const t = buildCashflowTimeline({
+      bills: [
+        bill({ name: 'Last day in', amount: 100, due_date: '2026-03-29' }),
+        bill({ name: 'One day out', amount: 500, due_date: '2026-03-30', autopay: true }),
+      ],
+      goals: [{ name: 'Just outside', target_amount: 900, current_amount: 0, target_date: '2026-03-30' }],
+      events: [], startingBalance: 10000, now: NOW,
+      plans: [{ label: 'Trip just outside', amount: 700, date: '2026-03-30', source: 'vacation' }],
+      scenario: { label: 'Sofa just outside', amount: 600, date: '2026-03-30' },
+    });
+    expect(t.weeks[t.weeks.length - 1].weekStart).toBe('2026-03-23');
+    expect(t.weeks.flatMap((w) => w.moments).map((m) => m.label)).toEqual(['Last day in']);
+    expect(t.totalOutflow).toBe(100);
+    expect(t.coverage).toEqual({ coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 1, openAmount: 100 });
+    expect(t.planOutflow).toBe(0);
+    expect(t.scenarioOutflow).toBe(0);
+    expect(t.insights.find((i) => i.kind === 'goal_at_risk')).toBeUndefined();
+  });
+
+  it('still carries a recurring commitment whose stored date is years stale', () => {
+    // A weekly subscription entered in 2015 is ~570 occurrences behind: walking
+    // one week at a time from there runs out of steps before reaching today, so
+    // the money would silently disappear from the forecast.
+    const t = buildCashflowTimeline({
+      bills: [bill({ name: 'Old weekly', amount: 20, due_date: '2015-01-05', is_recurring: true, recurrence: 'weekly' })],
+      goals: [], events: [], startingBalance: 1000, now: NOW,
+    });
+    const dates = t.weeks.flatMap((w) => w.moments).map((m) => m.date);
+    expect(dates.length).toBe(12);
+    expect(dates[0]).toBe('2026-01-05');
+    expect(t.coverage.openCount).toBe(12);
+    expect(t.totalOutflow).toBe(240);
+  });
+
+  it('anchors a stale monthly commitment on its own day of the month', () => {
+    const t = buildCashflowTimeline({
+      bills: [], goals: [], events: [], startingBalance: 1000, now: NOW,
+      plans: [{ label: 'Streaming', amount: 15, date: '2019-03-18', source: 'subscription', recurrence: 'monthly' }],
+    });
+    expect(t.weeks.flatMap((w) => w.moments).map((m) => m.date)).toEqual(['2026-01-18', '2026-02-18', '2026-03-18']);
+    expect(t.planOutflow).toBe(45);
+  });
+});
