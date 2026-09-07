@@ -805,6 +805,19 @@ export function parsePurchasedQuantity(text: string | null | undefined): { delta
   return { delta, unit };
 }
 
+// TODO(migration, owner approval required): an ESTIMATED total against a
+// grocery budget is the one piece of M10 this pass cannot build, because no
+// price column exists on either table. It needs, in one migration:
+//
+//   ALTER TABLE public.grocery_lists ADD COLUMN budget_cents integer;
+//   ALTER TABLE public.grocery_items ADD COLUMN estimated_price_cents integer;
+//
+// Both nullable, RLS unchanged (the existing family-scoped policies cover new
+// columns). Until they exist the shop reports what a person typed and nothing
+// else: an estimate derived from a made-up price would be a number on a
+// family's books that nobody gave us, which is the failure mode this whole
+// item is about.
+
 export type ShoppingTripResult = {
   listId: string;
   /** Items whose quantity landed in the pantry, by name. */

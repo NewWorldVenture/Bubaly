@@ -320,6 +320,12 @@ export const mealTools: ToolDefinition[] = [
       skipped: z.array(z.string()).describe('Already on the list'),
       in_pantry: z.array(z.string()).describe('Already in the pantry'),
       meals: z.array(z.object({ id: z.string(), name: z.string(), date: z.string() })),
+      // A swap is a change Bubaly made to what the family will buy, so the run
+      // has to carry it. `.default([])` so tool calls recorded before
+      // substitutions existed still parse on the run-detail page.
+      substitutions: z.array(z.object({
+        from: z.string(), to: z.string().nullable(), kind: z.string(), trigger: z.string(), reason: z.string(),
+      })).default([]).describe('Allergy, preference or pantry swaps applied, each with its reason'),
     }),
     idempotencyFrom: (input) => {
       const from = input.week_start ?? input.from ?? '';
@@ -333,6 +339,7 @@ export const mealTools: ToolDefinition[] = [
       const notes: string[] = [];
       if (output.skipped.length) notes.push(`${output.skipped.length} already on it`);
       if (output.in_pantry.length) notes.push(`${output.in_pantry.length} in the pantry`);
+      if (output.substitutions.length) notes.push(`${output.substitutions.length} swapped for an allergy, a preference or the pantry`);
       return notes.length ? `${base} (${notes.join(', ')})` : base;
     },
     execute: async (scope, input) => {
@@ -352,6 +359,9 @@ export const mealTools: ToolDefinition[] = [
         skipped: res.data.skipped,
         in_pantry: res.data.inPantry,
         meals: res.data.meals,
+        substitutions: res.data.substitutions.map((s) => ({
+          from: s.from, to: s.to, kind: s.kind, trigger: s.trigger, reason: s.reason,
+        })),
       });
     },
     verify: async (scope, _input, output) => {
