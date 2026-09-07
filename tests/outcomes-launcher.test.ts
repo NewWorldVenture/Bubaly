@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  OUTCOMES, OUTCOMES_BY_ID, buildOutcomePlan, outcomeUrgencyCount,
+  OUTCOMES, OUTCOMES_BY_ID, OUTCOME_INTENT, buildOutcomePlan, buildOutcomeLaunchRequest, outcomeUrgencyCount,
   EMPTY_CONTEXT, type OutcomeContext, type OutcomeId,
 } from '@/lib/outcomes/launcher';
+import { INTENT_KEYS } from '@/lib/ai/context/intents';
 
 const ctx = (over: Partial<OutcomeContext> = {}): OutcomeContext => ({ ...EMPTY_CONTEXT, ...over });
 
@@ -68,5 +69,29 @@ describe('exhaustiveness', () => {
   it('buildOutcomePlan handles every OutcomeId', () => {
     const ids: OutcomeId[] = ['run_today', 'feed_family', 'plan_trip', 'prepare_school', 'manage_money', 'stay_healthy', 'celebrate', 'prepare_unexpected'];
     for (const id of ids) expect(buildOutcomePlan(id)).toBeTruthy();
+  });
+});
+
+// M25: an outcome that cannot be launched is a card with a button that lies.
+describe('launching an outcome', () => {
+  it('maps every outcome to a real intent', () => {
+    for (const outcome of OUTCOMES) {
+      const intent = OUTCOME_INTENT[outcome.id];
+      expect(intent, outcome.id).toBeTruthy();
+      expect(INTENT_KEYS, outcome.id).toContain(intent);
+    }
+    expect(Object.keys(OUTCOME_INTENT).sort()).toEqual(OUTCOMES.map((o) => o.id).sort());
+  });
+
+  it('builds a request with the outcome text, its intent and its page context', () => {
+    const request = buildOutcomeLaunchRequest('manage_money');
+    expect(request).toMatchObject({ outcomeId: 'manage_money', intent: 'spending_review', context: { module: 'outcomes:manage_money' } });
+    expect(request.text.length).toBeGreaterThan(10);
+  });
+
+  it('gives every outcome its own non-empty launch sentence', () => {
+    const texts = OUTCOMES.map((o) => buildOutcomeLaunchRequest(o.id).text);
+    for (const text of texts) expect(text.trim().length).toBeGreaterThan(10);
+    expect(new Set(texts).size).toBe(OUTCOMES.length);
   });
 });
