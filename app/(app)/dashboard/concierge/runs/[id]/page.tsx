@@ -93,6 +93,12 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
    */
   async function editStepAction(stepId: string, edits: Record<string, string | number | boolean>): Promise<RunActionResult<{ requeuedSteps: number }>> {
     'use server';
+    // Resolve the translator INSIDE the action. An inline server action closes
+    // over the enclosing scope, and Next serialises that closure to hand the
+    // action to the client — a function cannot be serialised, so capturing the
+    // page's `t` threw "Functions cannot be passed directly to Client
+    // Components" while rendering and took this route down.
+    const t = await getTranslations();
     const actor = await requireUserContext();
     const db = await createServer();
     if (actor.active.familyId !== familyId) return { ok: false, error: t('runs.thatRunCouldNotBe'), code: 'not_found' };

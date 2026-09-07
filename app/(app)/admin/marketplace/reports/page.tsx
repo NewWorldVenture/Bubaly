@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ShieldAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReportModeration } from '@/components/admin/report-moderation';
@@ -54,9 +55,13 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
   // Enrich with listing titles + reporter family names (service role, all families).
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
   const familyIds = [...new Set(rows.map((r) => r.family_id))];
+  // Batched: 300 reports means up to 300 ids per filter, and one `.in()` that
+  // long builds a query string the gateway rejects with `URI too long`. That
+  // came back as an enrichment failure, so every row lost its listing title and
+  // reporter name — silently, because the page renders on past the error.
   const [{ data: listings, error: listingsError }, { data: families, error: familiesError }] = await Promise.all([
-    listingIds.length ? admin.from('marketplace_listings').select('id, title, status').in('id', listingIds) : Promise.resolve({ data: [], error: null }),
-    familyIds.length ? admin.from('families').select('id, name').in('id', familyIds) : Promise.resolve({ data: [], error: null }),
+    readInChunks(listingIds, (chunk) => admin.from('marketplace_listings').select('id, title, status').in('id', chunk)),
+    readInChunks(familyIds, (chunk) => admin.from('families').select('id, name').in('id', chunk)),
   ]);
   if (listingsError || familiesError) {
     console.error('[admin-marketplace-reports] report enrichment read failed', listingsError ?? familiesError);
