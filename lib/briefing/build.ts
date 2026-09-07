@@ -16,7 +16,7 @@
 // pins that: handled ⊆ completed runs.
 import { z } from 'zod';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';
-import { mergeCompletedByBubaly, type AiActivityRow, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
+import { mergeCompletedByBubaly, type AiActivityRow, type CompletedEvidence, type CompletedItem, type CompletedRunRow } from '@/lib/home/today';
 import { buildFirstBrief, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { DinnerIdea } from '@/lib/onboarding/dinner-ideas';
 import type { HomeBriefKind } from '@/lib/database.types';
@@ -33,6 +33,13 @@ export type BriefInput = {
   /** Runs that reached a terminal state, and the AI activity feed. */
   completedRuns: CompletedRunRow[];
   activity: AiActivityRow[];
+  /**
+   * M6: the persisted steps, tool calls and plans behind `completedRuns`
+   * (`loadRunEvidence`), so a handled row can say which tool acted and why.
+   * Optional — a brief without it lists the runs with no source and no reason,
+   * which is exactly what it then knows.
+   */
+  evidence?: CompletedEvidence;
   dinnerCandidates?: DinnerIdea[];
   /** Counts the home brief already tracks, for the stored row. */
   counts?: { choresPending?: number; openTodos?: number; groceryOpen?: number; memberCount?: number };
@@ -136,7 +143,7 @@ function headlineFor(kind: BriefKind, calendar: FirstBrief, digest: ConciergeDig
 export function buildBrief(input: BriefInput, tz: string): Brief {
   const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? []);
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
-  const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? []);
+  const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? [], { evidence: input.evidence });
 
   const counts = {
     today: calendar.todayCount,

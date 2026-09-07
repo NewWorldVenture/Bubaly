@@ -11,9 +11,11 @@
 // inferred: a run these tables say nothing about gets an empty source and no
 // reason, and the components render exactly that.
 //
-// Uses the CALLER's client on purpose, like `loadRunDetail`: 0250 gives
-// members SELECT on all three tables, so a member sees what RLS lets them see
-// and another family's rows are simply absent. Every statement still filters
+// Uses the CALLER's client on purpose, like `loadRunDetail`: 0250 gives every
+// member SELECT on `ai_plans` and `ai_plan_steps`, and narrows `ai_tool_calls`
+// to the caller's own calls or a manager — so a member sees what RLS lets them
+// see, the step fallback fills in where the ledger is hidden from them, and
+// another family's rows are simply absent. Every statement still filters
 // `family_id`, so the same function is right under the service client.
 //
 // Fails closed. A ledger that silently lost its sources after a failed read

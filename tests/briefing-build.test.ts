@@ -128,3 +128,39 @@ describe('briefRow', () => {
     expect(Array.isArray(row.handled)).toBe(true);
   });
 });
+
+describe('handled carries source and reason (M6)', () => {
+  it('passes run evidence through to the handled rows, and says nothing without it', () => {
+    const bare = buildBrief(input(), TZ);
+    expect(bare.handled[0]).toMatchObject({ key: 'run:run-1', sources: [], reason: null });
+
+    const brief = buildBrief(input({
+      completedRuns: [
+        { id: 'run-1', state: 'completed', summary: 'Planned the week', progress: {}, completed_at: '2026-09-05T11:00:00Z', updated_at: '2026-09-05T11:00:00Z', plan_id: 'plan-1' },
+        { id: 'running', state: 'executing', summary: 'Still going', progress: {}, completed_at: null, updated_at: '2026-09-05T12:00:00Z', plan_id: 'plan-2' },
+      ],
+      evidence: {
+        steps: [{ id: 's1', plan_id: 'plan-1', step_type: 'act', tool_name: 'meals.savePlan', status: 'completed' }],
+        toolCalls: [{ run_id: 'run-1', plan_step_id: 's1', tool_name: 'meals.savePlan', state: 'succeeded', resource_table: 'meal_plans' }],
+        plans: [{ id: 'plan-1', reasoning_summary: 'Four dinners were unplanned.' }, { id: 'plan-2', reasoning_summary: 'Should never surface.' }],
+      },
+    }), TZ);
+    // Still handled ⊆ completed: evidence for a run that is not finished changes nothing.
+    expect(brief.handled.map((h) => h.key)).toEqual(['run:run-1']);
+    expect(brief.handled[0].sources).toEqual([{ tool: 'meals.savePlan', domain: 'meals' }]);
+    expect(brief.handled[0].reason).toBe('Four dinners were unplanned.');
+    expect(briefSchema.safeParse(brief).success).toBe(true);
+  });
+
+  it('parses a brief stored before source and reason existed, as rows that say nothing about either', () => {
+    const brief = buildBrief(input(), TZ);
+    const legacy = {
+      ...brief,
+      handled: brief.handled.map(({ sources: _s, reason: _r, ...rest }) => rest),
+    };
+    const parsed = briefSchema.safeParse(legacy);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.handled[0]).toMatchObject({ sources: [], reason: null });
+  });
+});

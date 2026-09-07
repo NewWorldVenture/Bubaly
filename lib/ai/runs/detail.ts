@@ -113,8 +113,6 @@ export type RunStepView = {
   status: StepState;
   /** The executor's user-facing failure line, when the step failed. */
   error: string | null;
-  /** The canonical tool the step runs (`calendar.createEvent`) — the persisted SOURCE of what it did (M6); null for steps without one. */
-  tool: string | null;
   /** Managers only: the scalar inputs the Edit modal may change. */
   editableFields?: EditableField[];
 };
@@ -210,7 +208,7 @@ export function toRunView(detail: RunDetailView, familyId: string, manager: bool
   const open = state === 'awaiting_context' ? clarifications.find((c) => !c.answer) ?? null : null;
 
   const stepViews: RunStepView[] = steps.map((s) => {
-    const view: RunStepView = { id: s.id, sequence: s.sequence, description: stepDescription(s), status: s.status as StepState, error: s.error, tool: s.tool_name?.trim() || null };
+    const view: RunStepView = { id: s.id, sequence: s.sequence, description: stepDescription(s), status: s.status as StepState, error: s.error };
     if (manager && EDITABLE_STEP_STATES.includes(s.status as StepState) && (s.step_type === 'act' || s.step_type === 'notify')) {
       const input = s.input_json && typeof s.input_json === 'object' && !Array.isArray(s.input_json) ? (s.input_json as Record<string, unknown>) : null;
       const fields = editableFieldsFor(input);
