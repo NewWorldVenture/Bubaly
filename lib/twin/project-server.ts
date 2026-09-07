@@ -16,8 +16,12 @@ type DB = SupabaseClient<Database>;
 
 export type TwinProjectionResult = { ok: boolean; error?: string; entities: number; edges: number };
 
-/** Row caps, so one huge household cannot blow the 4000-entity graph read budget. */
-const ROW_LIMIT = 500;
+/**
+ * Row caps, so one huge household cannot blow the 4000-entity graph read
+ * budget. Exported so the test that proves a capped read never authorises a
+ * prune cannot drift from the number the reads actually use.
+ */
+export const ROW_LIMIT = 500;
 
 /**
  * Whether a capped read saw the whole table. PostgREST returns at most

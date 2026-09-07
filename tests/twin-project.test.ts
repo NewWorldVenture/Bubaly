@@ -324,12 +324,13 @@ describe('stalePrunableEntityIds', () => {
     bills: [{ id: 'b1', name: 'Electric' }],
   }, { now: NOW });
   const projected = { provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: 'bills' } };
+  const covered = ['bills', 'family_facts', 'grocery_items'];
 
   it('prunes a projected node whose source row has disappeared', () => {
     const stale = stalePrunableEntityIds([
       { id: 'g1', ref_table: 'bills', ref_id: 'b1', attributes: projected },   // still live
       { id: 'g2', ref_table: 'bills', ref_id: 'b-gone', attributes: projected }, // paid + deleted
-    ], projection);
+    ], projection, covered);
     expect(stale).toEqual(['g2']);
   });
 
@@ -340,8 +341,27 @@ describe('stalePrunableEntityIds', () => {
       { id: 'g4', ref_table: null, ref_id: null, attributes: manual },            // free-standing node
       { id: 'g5', ref_table: 'bills', ref_id: 'b-old', attributes: {} },          // predates the stamp
       { id: 'g6', ref_table: 'grocery_items', ref_id: 'x', attributes: projected }, // not ours
-    ], projection);
+    ], projection, covered);
     expect(stale).toEqual([]);
+  });
+
+  // The prune's premise is "the projection lists every live row". A capped read
+  // that came back full breaks that premise: the rows past the cap are unknown,
+  // not gone. Absence from a truncated projection must never mean deleted.
+  it('leaves a table alone when the caller could not read it in full', () => {
+    const stale = stalePrunableEntityIds([
+      { id: 'g7', ref_table: 'bills', ref_id: 'b-unseen', attributes: projected },
+    ], projection, []);
+    expect(stale).toEqual([]);
+  });
+
+  it('judges only the tables the caller vouches for, not the ones it could not', () => {
+    const factProjected = { provenance: { source: 'projection', observed_at: NOW.toISOString(), ref_table: 'family_facts' } };
+    const stale = stalePrunableEntityIds([
+      { id: 'g8', ref_table: 'bills', ref_id: 'b-gone', attributes: projected },        // fully read → judged
+      { id: 'g9', ref_table: 'family_facts', ref_id: 'f-unseen', attributes: factProjected }, // truncated → spared
+    ], projection, ['bills']);
+    expect(stale).toEqual(['g8']);
   });
 });
 
