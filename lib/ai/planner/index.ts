@@ -34,7 +34,8 @@ import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/conte
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
 import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, updateRequestWhereStatus, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
-import { legacyStatusFor } from '@/lib/ai/runs/states';
+import type { ExecutorPort } from '@/lib/ai/runs/executor';
+import { legacyStatusFor, TERMINAL_STEP_STATES } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
 import { scopeNow } from '@/lib/services/scope';
@@ -493,18 +494,39 @@ async function recordRecommendation(
 // ── Re-planning (the executor's `replan` port) ─────────────────────────────
 
 type RunLike = Pick<RunRow, 'id' | 'family_id' | 'plan_id' | 'request_id' | 'requested_by_member_id'>;
-type StepLike = Pick<StepRow, 'id' | 'step_type' | 'tool_name' | 'description' | 'input_json' | 'dependency_ids' | 'condition' | 'status' | 'approval_required' | 'approval_id' | 'risk_level' | 'result_json'>;
+type StepLike = Pick<StepRow, 'id' | 'step_type' | 'tool_name' | 'description' | 'input_json' | 'dependency_ids' | 'condition' | 'status' | 'approval_required' | 'approval_id' | 'risk_level' | 'result_json' | 'error'>;
+
+/** A carried step's line in the re-plan prompt: what it was and how it ended. */
+function describeOutcome(step: StepLike): string {
+  const label = step.description ?? step.tool_name ?? step.step_type;
+  const summary = step.result_json && typeof step.result_json === 'object' && !Array.isArray(step.result_json)
+    ? String((step.result_json as Record<string, unknown>).summary ?? '')
+    : '';
+  switch (step.status) {
+    case 'completed': return `- ${label}: ${summary || 'done'}`;
+    case 'skipped': return `- ${label}: skipped${summary ? ` (${summary})` : ''}`;
+    case 'partially_completed': return `- ${label}: done, but could not be confirmed${summary ? ` (${summary})` : ''}`;
+    case 'failed': return `- ${label}: FAILED${step.error ? ` (${step.error})` : ''}`;
+    case 'cancelled': return `- ${label}: DECLINED by a person${step.error ? ` (${step.error})` : ''}; do not plan it again`;
+    default: return `- ${label}: ${step.status}`;
+  }
+}
 
 /**
  * Plan the rest of a run with what it has learned so far — the implementation
- * behind a `replan` step. Matches `ExecutorPort['replan']` exactly so wiring it
- * is `replan: replanRun` in `createExecutorPort`; until that line lands in
- * lib/ai/runs/executor.ts a replan step blocks honestly, which is why
- * `PLAN_STEP_TYPES` does not offer `replan` to the model.
+ * behind a `replan` step. `replanPortFor` binds a ledger client to it so it is
+ * exactly `ExecutorPort['replan']`; lib/ai/runs/continue.ts and the cron hand
+ * that to `runGraph`, and a port built without it blocks a replan step
+ * honestly instead of pretending.
  *
- * Finished steps are carried into version N+1 with their status and results
- * (the same carry-over `editStepInput` performs), so nothing already done is
- * repeated; the new steps replace everything that had not run.
+ * Version N+1 carries every step that already RAN or was DECIDED — the
+ * terminal states (completed, skipped, partially_completed, failed,
+ * cancelled) — with its status, result and error, the way `editStepInput`
+ * carries finished work: nothing done is repeated, and nothing that went
+ * wrong disappears from the record the run reports on. The replan step itself
+ * is carried as completed, which is how the executor counts a run's re-plans
+ * (`MAX_REPLANS_PER_RUN`) without a second query. Steps that never ran —
+ * blocked behind a failure, or still queued — are what the new plan replaces.
  */
 export async function replanRun(
   scope: ServiceScope,
@@ -547,13 +569,7 @@ export async function replanRun(
     role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
-  const finished = steps.filter((s) => s.id !== step.id && (s.status === 'completed' || s.status === 'skipped'));
-  const resultsSoFar = finished.map((s) => {
-    const summary = s.result_json && typeof s.result_json === 'object' && !Array.isArray(s.result_json)
-      ? String((s.result_json as Record<string, unknown>).summary ?? '')
-      : '';
-    return `- ${s.description ?? s.tool_name ?? s.step_type}: ${summary || s.status}`;
-  });
+  const settled = steps.filter((s) => s.id !== step.id && TERMINAL_STEP_STATES.includes(s.status));
   const stepPrompt = typeof (step.input_json as Record<string, unknown> | null)?.prompt === 'string'
     ? String((step.input_json as Record<string, unknown>).prompt)
     : (step.description ?? 'Plan the rest of this request.');
@@ -565,11 +581,11 @@ export async function replanRun(
   const user = [
     buildPlannerUserMessage({ requestText: row.request_text, contextText: context.data.text, skeleton: null, skeletonHints: [] }),
     '',
-    'This request is already under way. Done so far:',
-    ...(resultsSoFar.length ? resultsSoFar : ['- nothing yet']),
+    'This request is already under way. What has happened so far:',
+    ...(settled.length ? settled.map(describeOutcome) : ['- nothing yet']),
     '',
     `Now: ${stepPrompt}`,
-    'Plan ONLY the remaining work; do not repeat anything listed as done.',
+    'Plan ONLY the remaining work: do not repeat anything marked done, and do not plan again anything a person declined.',
   ].join('\n');
 
   let provider: AIProvider;
@@ -586,22 +602,41 @@ export async function replanRun(
     return fail(validation && !validation.ok ? validation.error : 'Bubaly had nothing more to plan for this request.', { code: SERVICE_CODES.invalidInput });
   }
 
-  // Carry finished work forward by its id (keys are planner-local, so an id
-  // is the one handle that cannot collide with the new steps' keys).
-  const carried: PlanStepInput[] = finished.map((s) => ({
+  // Carry settled work forward by its id (keys are planner-local, so an id is
+  // the one handle that cannot collide with the new steps' keys), then the
+  // replan step itself as the completed decision point it is.
+  const carriedIds = new Set(settled.map((s) => s.id));
+  carriedIds.add(step.id);
+  const carried: PlanStepInput[] = settled.map((s) => ({
     key: s.id,
     stepType: s.step_type,
     toolName: s.tool_name,
     description: s.description,
     input: s.input_json,
-    dependsOn: s.dependency_ids.filter((id) => finished.some((f) => f.id === id)),
+    dependsOn: s.dependency_ids.filter((id) => carriedIds.has(id)),
     condition: s.condition,
     approvalRequired: s.approval_required,
     riskLevel: s.risk_level,
     status: s.status,
     resultJson: s.result_json,
     approvalId: s.approval_id,
+    error: s.error,
   }));
+  carried.push({
+    key: step.id,
+    stepType: 'replan',
+    toolName: null,
+    description: step.description,
+    input: step.input_json,
+    dependsOn: step.dependency_ids.filter((id) => carriedIds.has(id)),
+    condition: step.condition,
+    approvalRequired: false,
+    riskLevel: step.risk_level,
+    status: 'completed',
+    resultJson: { summary: 'Re-planned the rest of this run.' },
+    approvalId: null,
+    error: null,
+  });
   const fresh = toStoreSteps(validation.steps);
 
   const saved = await savePlan(scope, row.id, {
@@ -615,4 +650,17 @@ export async function replanRun(
   }, { db: ledger });
   if (!saved.ok) return saved;
   return ok({ planId: saved.data.planId });
+}
+
+/**
+ * The executor's re-planning port over a ledger client — `replan:
+ * replanPortFor(db)` in `runGraph`'s options, which lib/ai/runs/continue.ts
+ * and app/api/cron/ai-runs pass so a replan step plans instead of blocking.
+ * Injected rather than imported by the executor: the validator already
+ * imports the executor (`parseNotifyInput`), and a static import back would
+ * make the two a cycle. `db` is the service client the caller already holds;
+ * without one the store opens its own.
+ */
+export function replanPortFor(db?: SupabaseClient<Database>): NonNullable<ExecutorPort['replan']> {
+  return (scope, run, step, steps) => replanRun(scope, run, step, steps, db ? { db } : {});
 }

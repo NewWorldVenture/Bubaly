@@ -12,7 +12,7 @@ import type { ToolOutcome } from '@/lib/ai/tools/types';
 import type { ServiceScope } from '@/lib/services/types';
 import { ok, fail } from '@/lib/services/types';
 import {
-  BUDGET_RESERVE_MS, MAX_STEP_CONCURRENCY, evaluateCondition, parseNotifyInput, runGraphWith,
+  BUDGET_RESERVE_MS, MAX_REPLANS_PER_RUN, MAX_STEP_CONCURRENCY, evaluateCondition, parseNotifyInput, runGraphWith,
   stepIdempotencyKey, type ExecutorPort, type RunSnapshot, type StepSnapshot,
 } from '@/lib/ai/runs/executor';
 import type { RunEventInput, RunRow } from '@/lib/ai/runs/store';
@@ -771,5 +771,153 @@ describe('condition and notify parsing', () => {
     // An unknown enum value would be rejected by Postgres after the step already
     // reported success, so it degrades to the generic bucket.
     if (parsed.ok) expect(parsed.data.type).toBe('system');
+  });
+});
+
+describe('re-planning through a wired port', () => {
+  const SETTLED = ['completed', 'skipped', 'failed', 'cancelled', 'partially_completed'];
+
+  /**
+   * A replanner shaped like `replanRun`: version N+1 carries every settled
+   * step and the replan step itself (completed), then the fresh work. The
+   * fake's step list IS the plan the executor reloads, so swapping it is the
+   * new version landing.
+   */
+  function replanLike(holder: { fake: Fake | null }, fresh: Array<Partial<StepSnapshot> & { id: string }>, seen?: { steps: StepSnapshot[] }[]): ExecutorPort['replan'] {
+    return async (_scope, _run, step, steps) => {
+      const fake = holder.fake!;
+      seen?.push({ steps: steps.map((s) => ({ ...s })) });
+      const carried = steps.filter((s) => s.id !== step.id && SETTLED.includes(s.status)).map((s) => ({ ...s, plan_id: 'plan-2' }));
+      const decision = { ...fake.step(step.id), plan_id: 'plan-2', status: 'completed' as const, result_json: { summary: 'Re-planned the rest of this run.' } };
+      fake.steps = [...carried, decision, ...fresh.map((s, i) => ({ ...makeStep(s, carried.length + 1 + i), plan_id: 'plan-2' }))];
+      return ok({ planId: 'plan-2' });
+    };
+  }
+
+  it('continues into the new plan version: the fresh steps run in the same pass, ledgered under the new plan', async () => {
+    const holder: { fake: Fake | null } = { fake: null };
+    const fake = makeFake({
+      steps: [
+        { id: 'r1', step_type: 'retrieve', tool_name: 'calendar.searchEvents', description: 'Read the week' },
+        { id: 'p2', step_type: 'replan', tool_name: null, dependency_ids: ['r1'], input_json: { prompt: 'Decide what the week needs' } },
+      ],
+      replan: replanLike(holder, [
+        { id: 'a3', step_type: 'act', tool_name: 'tasks.createTodo', description: 'Add the to-do' },
+        { id: 'n4', step_type: 'notify', tool_name: null, dependency_ids: ['a3'], input_json: { recipients: 'managers', type: 'system', title: 'Done' } },
+      ]),
+    });
+    holder.fake = fake;
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.run.plan_id).toBe('plan-2');
+    expect(fake.calls.map((c) => c.opts.stepId)).toEqual(['r1', 'a3']);
+    expect(fake.step('p2').status).toBe('completed');
+    expect(fake.step('a3').status).toBe('completed');
+    expect(fake.step('n4').status).toBe('completed');
+    expect(result).toMatchObject({ status: 'completed', completed: 4, failed: 0 });
+    const planned = fake.events.find((e) => e.eventType === 'planned');
+    expect(planned?.payload).toMatchObject({ plan_id: 'plan-2', replans: 1, limit: MAX_REPLANS_PER_RUN });
+    expect(fake.eventTypes()).not.toContain('blocked');
+  });
+
+  it('runs the replan step alone and last, so it sees every other step settled', async () => {
+    const holder: { fake: Fake | null } = { fake: null };
+    const seen: { steps: StepSnapshot[] }[] = [];
+    const order: string[] = [];
+    const fake = makeFake({
+      steps: [
+        { id: 'r1', step_type: 'retrieve', tool_name: 'calendar.searchEvents' },
+        { id: 'r2', step_type: 'retrieve', tool_name: 'tasks.searchTodos' },
+        { id: 'a3', step_type: 'act', tool_name: 'tasks.createTodo' },
+        { id: 'p4', step_type: 'replan', tool_name: null, dependency_ids: ['r1'] },
+      ],
+      tool: async (call) => { order.push(call.opts.stepId); return okOutcome(); },
+      replan: async (scope, run, step, steps) => { order.push('replan'); return replanLike(holder, [], seen)!(scope, run, step, steps); },
+    });
+    holder.fake = fake;
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    // r1, r2 and a3 are one batch; the replan waits for the batch even though
+    // its only dependency (r1) was satisfied first.
+    expect(order.slice(0, 3).sort()).toEqual(['a3', 'r1', 'r2']);
+    expect(order[3]).toBe('replan');
+    expect(seen).toHaveLength(1);
+    expect(seen[0].steps.filter((s) => s.id !== 'p4').every((s) => s.status === 'completed')).toBe(true);
+    expect(result.status).toBe('completed');
+  });
+
+  it('parks instead of re-planning while a step is waiting on a person, and re-plans once they decide', async () => {
+    const holder: { fake: Fake | null } = { fake: null };
+    const seen: { steps: StepSnapshot[] }[] = [];
+    const fake = makeFake({
+      steps: [
+        { id: 'r1', step_type: 'retrieve', tool_name: 'calendar.searchEvents' },
+        { id: 'a2', step_type: 'act', tool_name: 'finances.updateBudget', approval_required: true },
+        { id: 'p3', step_type: 'replan', tool_name: null, dependency_ids: ['r1'] },
+      ],
+      replan: replanLike(holder, [{ id: 'a4', step_type: 'act', tool_name: 'tasks.createTodo' }], seen),
+    });
+    holder.fake = fake;
+
+    const parked = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(parked.status).toBe('awaiting_approval');
+    expect(seen).toHaveLength(0);
+    expect(fake.step('p3').status).toBe('queued');
+    expect(fake.step('a2').status).toBe('awaiting_approval');
+    expect(fake.run.state).toBe('awaiting_approval');
+
+    // The person says yes: the approvals service returns the run to the queue,
+    // and the replan step now sees the decision and what it wrote.
+    fake.approvals['appr-a2'].status = 'approved';
+    fake.run.state = 'ready';
+    const resumed = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].steps.find((s) => s.id === 'a2')?.status).toBe('completed');
+    expect(fake.step('a4').status).toBe('completed');
+    expect(resumed.status).toBe('completed');
+  });
+
+  it('blocks the third re-plan of a run and reports what it managed, without calling the planner', async () => {
+    let called = 0;
+    const fake = makeFake({
+      steps: [
+        { id: 'p1', step_type: 'replan', tool_name: null, status: 'completed' },
+        { id: 'p2', step_type: 'replan', tool_name: null, status: 'completed' },
+        { id: 'r3', step_type: 'retrieve', tool_name: 'calendar.searchEvents' },
+        { id: 'p4', step_type: 'replan', tool_name: null, dependency_ids: ['r3'] },
+      ],
+      replan: async () => { called += 1; return ok({ planId: 'plan-4' }); },
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(MAX_REPLANS_PER_RUN).toBe(2);
+    expect(called).toBe(0);
+    expect(fake.step('p4').status).toBe('blocked');
+    expect(fake.step('p4').error).toMatch(/already been re-planned 2 times/);
+    expect(fake.events.find((e) => e.eventType === 'blocked')?.payload).toMatchObject({ replans: 2, limit: 2 });
+    expect(fake.run.plan_id).toBe('plan-1');
+    expect(result.status).toBe('partially_completed');
+  });
+
+  it('fails the replan step honestly when the planner has nothing more to plan', async () => {
+    const fake = makeFake({
+      steps: [
+        { id: 'r1', step_type: 'retrieve', tool_name: 'calendar.searchEvents' },
+        { id: 'p2', step_type: 'replan', tool_name: null, dependency_ids: ['r1'] },
+      ],
+      replan: async () => fail('Bubaly had nothing more to plan for this request.', { code: 'invalid_input' }),
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(fake.step('p2').status).toBe('failed');
+    expect(fake.step('p2').error).toMatch(/nothing more to plan/);
+    expect(fake.run.plan_id).toBe('plan-1');
+    expect(result).toMatchObject({ status: 'partially_completed', completed: 1, failed: 1 });
   });
 });

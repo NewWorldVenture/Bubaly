@@ -428,6 +428,19 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
     }
   }
 
+  // A replan step whose dependencies all turned out not to exist has nothing
+  // to decide from — the executor would run it before any read — so it goes
+  // the way of one with an empty depends_on. Nothing depends on a replan step
+  // (enforced above), so there is no cascade to run.
+  for (let i = drafts.length - 1; i >= 0; i -= 1) {
+    const draft = drafts[i];
+    if (draft.stepType !== 'replan' || draft.dependsOn.length) continue;
+    drafts.splice(i, 1);
+    keys.delete(draft.key);
+    dropped.add(draft.key);
+    issues.push({ code: 'invalid_replan', step: draft.key, message: `Step "${draft.key}" is a replan step whose dependencies do not exist; list the retrieve steps whose results decide what comes next, or plan the actions directly.` });
+  }
+
   const cycle = findDependencyCycle(drafts.map((d) => ({ id: d.key, status: 'queued' as StepState, dependency_ids: d.dependsOn })));
   if (cycle) {
     const message = `Steps depend on each other in a loop: ${cycle.join(' → ')}. Break the loop so every step has a step it can start from.`;

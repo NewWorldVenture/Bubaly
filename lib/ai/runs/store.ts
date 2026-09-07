@@ -225,10 +225,12 @@ export type PlanStepInput = {
   approvalRequired?: boolean;
   riskLevel?: AiRiskLevel;
   maxRetries?: number;
-  /** Carried over by `editStepInput` so already-finished work is not repeated. */
+  /** Carried over by `editStepInput` and `replanRun` so already-finished work is not repeated. */
   status?: StepState;
   resultJson?: unknown;
   approvalId?: string | null;
+  /** Carried over by `replanRun` with a failed step, so the new version keeps what went wrong. */
+  error?: string | null;
 };
 
 export type PlanInput = {
@@ -355,6 +357,7 @@ export async function savePlan(
     risk_level: step.riskLevel ?? 'low',
     max_retries: step.maxRetries ?? 2,
     result_json: (step.resultJson ?? null) as Json | null,
+    error: step.error ?? null,
   }));
 
   const { error: stepsError } = await db.from('ai_plan_steps').insert(rows);
