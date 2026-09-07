@@ -17,6 +17,8 @@
 // household. `HANDLED_RUN_STATES` and `SAVED_KINDS` are now the single
 // vocabulary; everything else reads from here.
 
+import type { AiRunLifecycleState } from '@/lib/database.types';
+
 /** What kind of handled action a count came from. */
 export type SavedKind = 'run' | 'autopilot' | 'assistant' | 'reminder';
 
@@ -31,11 +33,11 @@ export type SavedKind = 'run' | 'autopilot' | 'assistant' | 'reminder';
  * Deliberately the `state` column (the §10 lifecycle) and not the legacy
  * free-text `status`: `state` is the one every writer in the AI runtime sets.
  */
-export const HANDLED_RUN_STATES: readonly string[] = ['completed', 'partially_completed'] as const;
+export const HANDLED_RUN_STATES: readonly AiRunLifecycleState[] = ['completed', 'partially_completed'] as const;
 
 /** True when a run row is one the "handled" count may include. */
 export function isHandledRun(row: { state?: string | null }): boolean {
-  return HANDLED_RUN_STATES.includes(row.state ?? '');
+  return (HANDLED_RUN_STATES as readonly string[]).includes(row.state ?? '');
 }
 
 /** Minutes of family admin saved per handled action of each kind (conservative). */
