@@ -6811,6 +6811,7 @@
   "notificationActions.approve": "Approva",
   "notificationActions.approveAria": "Approva: {title}",
   "notificationActions.choreMarkedDone": "Faccenda segnata come fatta.",
+  "notificationActions.choreSubmittedForApproval": "Inviato per approvazione.",
   "notificationActions.couldNotCompleteThatAction": "Non è stato possibile completare l’azione. Riprova.",
   "notificationActions.decisionSaved": "Decisione salvata.",
   "notificationActions.decline": "Rifiuta",

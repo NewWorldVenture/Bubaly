@@ -6811,6 +6811,7 @@
   "notificationActions.approve": "Genehmigen",
   "notificationActions.approveAria": "Genehmigen: {title}",
   "notificationActions.choreMarkedDone": "Aufgabe als erledigt markiert.",
+  "notificationActions.choreSubmittedForApproval": "Zur Genehmigung eingereicht.",
   "notificationActions.couldNotCompleteThatAction": "Diese Aktion konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
   "notificationActions.decisionSaved": "Entscheidung gespeichert.",
   "notificationActions.decline": "Ablehnen",
