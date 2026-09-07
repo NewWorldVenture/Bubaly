@@ -157,6 +157,17 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 Every section in §7 is available unless a branch `claude/strategy-<ID>` already
 exists on the remote. Twenty sections, sized so that each is one reviewable PR.
 
+### Being worked on the integration branch right now
+
+These are in progress on `claude/roadmap-implementation-ld8bon` itself and will
+land there rather than through a claim branch. **Do not claim one of these** —
+if the list is stale and the section is still open when you look, the branch's
+history will say so.
+
+`S-02` · `S-09` · `S-13` · `S-15` · `S-16` · `S-17` · `S-19` · `S-20`
+
+Everything else in §7 is yours to take.
+
 One caveat before you claim: **S-19 and S-20 build on public-site stage 1**,
 which has landed. Its shared libraries — `lib/marketing/hero-outcomes.ts`,
 `trust-copy.ts`, `handled-sample.ts`, `reputation-server.ts`, and the handled
