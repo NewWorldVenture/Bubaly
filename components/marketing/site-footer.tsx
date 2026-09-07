@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { Logo } from '@/components/brand/logo';
 import { ConsentReopenLink } from '@/components/marketing/consent-manager';
 import { LanguageBar } from '@/components/i18n/language-picker';
@@ -56,13 +57,14 @@ const GROUPS = [
     links: [
       { href: '/privacy', label: 'Privacy Policy' },
       { href: '/terms', label: 'Terms of Service' },
-      { href: '/acceptable-use', label: 'Acceptable Use' },
+      { href: '/acceptable-use', label: 'siteFooter.acceptableUse' },
       { href: '/cookies', label: 'Cookie Policy' },
     ],
   },
 ];
 
 export async function SiteFooter() {
+  const t = await getTranslations();
   const social = await getSocialLinks(createServiceClient());
   const configured = SOCIAL_PLATFORMS.filter((p) => social[p.key]);
 
@@ -105,7 +107,7 @@ export async function SiteFooter() {
           {/* Only the accounts an admin has actually filled in — an empty set
               renders nothing rather than a row of links to nowhere. */}
           {configured.length > 0 && (
-            <nav aria-label="Bubaly on social media" className="flex items-center gap-2">
+            <nav aria-label={t('siteFooter.bubalyOnSocialMedia')} className="flex items-center gap-2">
               {configured.map(({ key, label }) => {
                 const Icon = SOCIAL_ICONS[key];
                 return (
@@ -125,10 +127,10 @@ export async function SiteFooter() {
           )}
 
           <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            <Link href="/privacy" className="transition hover:text-fg">Privacy</Link>
-            <Link href="/terms" className="transition hover:text-fg">Terms</Link>
+            <Link href="/privacy" className="transition hover:text-fg">{t('siteFooter.privacy')}</Link>
+            <Link href="/terms" className="transition hover:text-fg">{t('siteFooter.terms')}</Link>
             <Link href="/acceptable-use" className="transition hover:text-fg">Acceptable Use</Link>
-            <Link href="/cookies" className="transition hover:text-fg">Cookies</Link>
+            <Link href="/cookies" className="transition hover:text-fg">{t('siteFooter.cookies')}</Link>
             <ConsentReopenLink />
           </nav>
         </div>

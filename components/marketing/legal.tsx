@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from '@/lib/i18n/server';
 import { ChevronRight } from 'lucide-react';
 import { Section } from '@/components/marketing/sections';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
@@ -15,7 +16,7 @@ export type LegalSection = {
  * structured, anchored sections. Theme-aware (uses brand tokens), responsive
  * (TOC collapses above the content on mobile).
  */
-export function LegalPage({
+export async function LegalPage({
   title,
   summary,
   lastUpdated,
@@ -28,6 +29,7 @@ export function LegalPage({
   sections: LegalSection[];
   path: string;
 }) {
+  const t = await getTranslations();
   return (
     <>
       {/* Hero */}
@@ -70,7 +72,7 @@ export function LegalPage({
           {/* Sticky table of contents */}
           <aside className="hidden lg:block">
             <nav className="sticky top-24">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">On this page</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t('legal.onThisPage')}</p>
               <ul className="space-y-2 border-l border-border">
                 {sections.map((s) => (
                   <li key={s.id}>
@@ -112,7 +114,7 @@ export function LegalPage({
                 Questions about this policy? Email{' '}
                 <a href="mailto:support@bubaly.com" className="font-medium text-brand-text hover:underline">support@bubaly.com</a>{' '}
                 or visit our{' '}
-                <Link href="/contact" className="font-medium text-brand-text hover:underline">contact page</Link>.
+                <Link href="/contact" className="font-medium text-brand-text hover:underline">{t('legal.contactPage')}</Link>.
               </p>
             </div>
           </article>

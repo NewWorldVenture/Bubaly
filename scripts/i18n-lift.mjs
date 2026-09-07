@@ -24,6 +24,14 @@
 //   * It does not translate. `i18n-apply.mjs` does that, from a reviewed patch.
 //   * It refuses a string it cannot place unambiguously — one that appears both
 //     inside quotes and as JSX text in the same file — rather than picking.
+//
+// KNOWN LIMIT, and `tsc` is the guard for it: the tool knows about module-level
+// data arrays but not about OTHER functions in the file. A string inside
+// `generateMetadata()` gets rewritten to `t(key)` even though the component's
+// `t` is not in that scope. That fails to compile immediately and loudly, which
+// is the acceptable failure mode — but it means you run `tsc` after every lift,
+// and give `generateMetadata` its own `await getTranslations()` when it has copy
+// in it.
 //   * Inside a MODULE-LEVEL data array it writes the bare key, never `t(key)`:
 //     `t` does not exist at module scope, so emitting a call there would not
 //     compile. Those arrays end up holding keys, and the component that renders
@@ -116,10 +124,18 @@ for (const { text } of result.findings) {
   const singlePlain = `'${text}'`;
   const double = `"${text}"`;
   let form = null;
-  if (src.includes(singlePlain)) form = { from: singlePlain, quoted: true };
-  else if (src.includes(single)) form = { from: single, quoted: true };
-  else if (src.includes(double)) form = { from: double, quoted: true };
-  else if (src.includes(`>${text}<`)) form = { from: `>${text}<`, quoted: false };
+  for (const q of [singlePlain, single, double]) {
+    const at = src.indexOf(q);
+    if (at === -1) continue;
+    // A JSX ATTRIBUTE needs braces — `title={t(key)}` — while the same quoted
+    // string inside an object or array literal must not have them. Telling them
+    // apart is the difference between a working page and a syntax error, so it
+    // is decided by what precedes the quote, not guessed: `name=` immediately
+    // before it means an attribute.
+    form = { from: q, kind: /[A-Za-z0-9_$]+=$/.test(src.slice(Math.max(0, at - 40), at)) ? 'attr' : 'expr' };
+    break;
+  }
+  if (!form && src.includes(`>${text}<`)) form = { from: `>${text}<`, kind: 'jsxText' };
   if (!form) continue; // JSX prose split across lines — leave it for a person.
 
   let key = `${ns}.${slugFor(text)}`;
@@ -131,7 +147,13 @@ for (const { text } of result.findings) {
 
 let out = src;
 for (const p of plan) {
-  const to = p.moduleScope ? `'${p.key}'` : p.quoted ? `t('${p.key}')` : `>{t('${p.key}')}<`;
+  const to = p.moduleScope
+    ? `'${p.key}'`
+    : p.kind === 'attr'
+      ? `{t('${p.key}')}`
+      : p.kind === 'jsxText'
+        ? `>{t('${p.key}')}<`
+        : `t('${p.key}')`;
   out = out.split(p.from).join(to);
 }
 

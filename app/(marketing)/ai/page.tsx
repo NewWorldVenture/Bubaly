@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import Link from 'next/link';
 import {
@@ -70,7 +71,8 @@ const DAY = [
   },
 ];
 
-export default function AIPage() {
+export default async function AIPage() {
+  const t = await getTranslations();
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
@@ -87,7 +89,7 @@ export default function AIPage() {
 
           <h1 className="mx-auto mt-5 max-w-4xl text-4xl font-bold tracking-tight sm:text-6xl">
             It doesn’t just answer.{' '}
-            <span className="gradient-text-violet">It does the work.</span>
+            <span className="gradient-text-violet">{t('ai.itDoesTheWork')}</span>
           </h1>
 
           <p className="mx-auto mt-5 max-w-2xl text-lg text-muted sm:text-xl">
@@ -122,7 +124,7 @@ export default function AIPage() {
       <Section id="demo" className="pt-4">
         <SectionHeading
           eyebrow="Ask → Act"
-          title="Say it in plain language. Watch it get done."
+          title={t('ai.sayItInPlainLanguage')}
           description="Pick a prompt — Bubaly replies and creates the real records, the same cards your family sees inside the app."
         />
         <div className="mt-12">
@@ -134,7 +136,7 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="Not a chatbot — a doer"
-          title="The difference is what happens after you ask"
+          title={t('ai.theDifferenceIsWhatHappens')}
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {DIFFERENTIATORS.map((d) => (
@@ -153,7 +155,7 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="One assistant, the whole household"
-          title="Everything it can take off your plate"
+          title={t('ai.everythingItCanTakeOff')}
           description="Bubaly reaches across your family’s calendar, lists, money, documents, and safety — so a single ask can touch every corner of family life."
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -173,7 +175,7 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="A Tuesday, handled"
-          title="What a day feels like with Bubaly in it"
+          title={t('ai.whatADayFeelsLike')}
           description="It doesn’t wait to be asked. Bubaly works in the background and surfaces the right thing at the right moment."
         />
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
@@ -196,10 +198,10 @@ export default function AIPage() {
       </Section>
 
       <CTASection
-        title="Meet the assistant that actually does things"
+        title={t('ai.meetTheAssistantThatActually')}
         subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
       />
-      <MarketingAeoSection path="/ai" name="Bubaly AI" description="An assistant that takes real action inside your family life." />
+      <MarketingAeoSection path="/ai" name={t('ai.bubalyAi')} description="An assistant that takes real action inside your family life." />
     </>
   );
 }
