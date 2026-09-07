@@ -47,8 +47,22 @@ export type MomentPrep = {
   /** ISO time the family should leave to arrive on time (timed events with a place). */
   leaveByISO: string | null;
   travelBufferMins: number;
+  /** Where the leave-by came from: a real drive time, or the per-category door-to-door buffer. */
+  leaveBySource: 'drive_time' | 'category_buffer' | null;
   weatherSensitive: boolean;
   items: PrepItem[];
+};
+
+/**
+ * A composed departure for the event (lib/schedule/intelligence.ts), when the
+ * caller has one: a real drive time beats the static category buffer. Only
+ * honoured for timed events with a place, which is the only case a leave-by
+ * makes sense for.
+ */
+export type MomentDeparture = {
+  leaveByISO: string;
+  /** Whole minutes door to door, for the hint. */
+  travelMinutes: number;
 };
 
 const KEYWORDS: { re: RegExp; cat: MomentCategory }[] = [
@@ -92,14 +106,24 @@ const OUTDOOR = new Set<MomentCategory>(['sports', 'outdoors', 'trip', 'celebrat
  * Only emits steps that make sense for the moment (no packing list for a phone
  * call), so the card stays short and every item is worth a tap.
  */
-export function buildMomentPrep(event: MomentEvent, opts: { now?: Date } = {}): MomentPrep {
+export function buildMomentPrep(event: MomentEvent, opts: { now?: Date; departure?: MomentDeparture | null } = {}): MomentPrep {
   const category = classifyMoment(event);
   const hasLocation = Boolean(event.location && event.location.trim());
-  const buffer = event.all_day ? 0 : travelBuffer(category, hasLocation);
   const start = new Date(event.starts_at);
-  const leaveByISO = !event.all_day && buffer > 0 && !Number.isNaN(start.getTime())
-    ? new Date(start.getTime() - buffer * 60000).toISOString()
-    : null;
+  const validStart = !Number.isNaN(start.getTime());
+  // A composed departure (real drive time) replaces the static buffer when the
+  // event can have a leave-by at all; otherwise the category buffer stands.
+  const composed = !event.all_day && hasLocation && validStart && opts.departure
+    && Number.isFinite(Date.parse(opts.departure.leaveByISO)) ? opts.departure : null;
+  const buffer = composed
+    ? Math.max(0, Math.round(composed.travelMinutes))
+    : event.all_day ? 0 : travelBuffer(category, hasLocation);
+  const leaveByISO = composed
+    ? new Date(Date.parse(composed.leaveByISO)).toISOString()
+    : !event.all_day && buffer > 0 && validStart
+      ? new Date(start.getTime() - buffer * 60000).toISOString()
+      : null;
+  const leaveBySource: MomentPrep['leaveBySource'] = leaveByISO ? (composed ? 'drive_time' : 'category_buffer') : null;
   const weatherSensitive = OUTDOOR.has(category);
 
   const items: PrepItem[] = [];
@@ -110,7 +134,7 @@ export function buildMomentPrep(event: MomentEvent, opts: { now?: Date } = {}): 
     push({
       id: 'leave-by', domain: 'time',
       label: `Leave by ${fmtClock(leaveByISO)}`,
-      hint: `${buffer} min to ${event.location}`,
+      hint: composed ? `${buffer} min drive to ${event.location}` : `${buffer} min to ${event.location}`,
       reminderTitle: `Leave for ${event.title}`,
     });
   }
@@ -143,7 +167,7 @@ export function buildMomentPrep(event: MomentEvent, opts: { now?: Date } = {}): 
     push({ id: 'photo', domain: 'photo', label: 'Capture a few photos', hint: 'Save it to Memories', reminderTitle: `Photos at ${event.title}` });
   }
 
-  return { eventId: event.id, category, startsAt: event.starts_at, leaveByISO, travelBufferMins: buffer, weatherSensitive, items };
+  return { eventId: event.id, category, startsAt: event.starts_at, leaveByISO, travelBufferMins: buffer, leaveBySource, weatherSensitive, items };
 }
 
 function bringList(category: MomentCategory): string | null {
