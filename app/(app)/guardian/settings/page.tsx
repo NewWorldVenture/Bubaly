@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
@@ -26,11 +27,11 @@ export default async function GuardianSettingsPage() {
       .eq('member_id', memberId)
       .maybeSingle(),
 
-    supabase
+    settle(supabase
       .from('family_members')
       .select('id, display_name')
       .eq('id', memberId)
-      .maybeSingle(),
+      .maybeSingle()),
   ]);
 
   const twilioEnabled = isTwilioConfigured();

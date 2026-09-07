@@ -26,6 +26,7 @@ import type { Database } from '@/lib/database.types';
 import { editableFieldsFor, type EditableField } from '@/lib/approvals/card-data';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import { fail, ok, SERVICE_CODES, type ServiceResult } from '@/lib/services/types';
 import { toCardData, type ApprovalCardData } from '@/lib/services/approvals';
 import { scopeForSystem } from '@/lib/services/scope';
@@ -74,7 +75,7 @@ export async function loadRunDetail(
     run.request_id
       ? db.from('ai_requests').select('*').eq('id', run.request_id).eq('family_id', familyId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    db.from('approval_requests').select('*').eq('family_id', familyId).eq('run_id', runId).order('created_at', { ascending: true }),
+    settle(db.from('approval_requests').select('*').eq('family_id', familyId).eq('run_id', runId).order('created_at', { ascending: true })),
   ]);
   const readError = requestError ?? approvalError;
   if (readError) {

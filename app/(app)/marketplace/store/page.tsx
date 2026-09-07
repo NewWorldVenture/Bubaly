@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ListChecks } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { StoreForm } from '@/components/marketplace/store-form';
@@ -31,11 +32,11 @@ export default async function MarketplaceStorePage() {
     store
       ? sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id)
       : Promise.resolve({ count: 0 } as { count: number | null }),
-    sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId).limit(500),
-    sb.from('marketplace_listings')
+    settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId).limit(500)),
+    settle(sb.from('marketplace_listings')
       .select('id, title, kind, status, price_cents, rent_period, created_at')
       .eq('family_id', familyId).eq('member_id', selfId)
-      .order('created_at', { ascending: false }).limit(100),
+      .order('created_at', { ascending: false }).limit(100)),
   ]);
 
   const rating = ratingSummary((reviews ?? []).map((r) => r.rating));

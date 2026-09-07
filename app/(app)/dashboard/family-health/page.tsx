@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Stethoscope, Pill, CalendarHeart, ShieldPlus, AlertTriangle, Syringe } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -25,11 +26,11 @@ export default async function FamilyHealthPage() {
   const manager = isManager(ctx.active.role);
 
   const [membersRes, apptsRes, medsRes, profilesRes, providersRes] = await Promise.all([
-    supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8),
-    supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12),
+    settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8)),
+    settle(supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12)),
     manager ? supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
-    supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8),
+    settle(supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8)),
   ]);
 
   // Health data is safety-critical: a dropped error would render "No allergies

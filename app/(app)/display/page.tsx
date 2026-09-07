@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 // ⚠️ RSC boundary rule (this WAS the kiosk's persistent crash): display-grid.tsx
@@ -56,28 +57,28 @@ async function loadDisplay(
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   const results = await Promise.all([
-    supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at'),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lt('starts_at', in14.toISOString()).order('starts_at').limit(12),
-    supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
+    settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
+    settle(supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
+      .eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at')),
+    settle(supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
+      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lt('starts_at', in14.toISOString()).order('starts_at').limit(12)),
+    settle(supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
-      .lte('due_at', end.toISOString()).order('due_at'),
-    supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate),
-    supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8),
-    supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
-    supabase.from('reminders').select('id, title, remind_at').eq('family_id', familyId).eq('is_done', false)
-      .lte('remind_at', in14.toISOString()).order('remind_at').limit(10),
-    supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6),
-    supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
-      .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6),
-    supabase.from('calendar_events').select('starts_at')
-      .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString()),
-    supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle(),
-    supabase.from('family_photos').select('url, thumbnail_url')
+      .lte('due_at', end.toISOString()).order('due_at')),
+    settle(supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate)),
+    settle(supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8)),
+    settle(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
+    settle(supabase.from('reminders').select('id, title, remind_at').eq('family_id', familyId).eq('is_done', false)
+      .lte('remind_at', in14.toISOString()).order('remind_at').limit(10)),
+    settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
+    settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
+      .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
+    settle(supabase.from('calendar_events').select('starts_at')
+      .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString())),
+    settle(supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle()),
+    settle(supabase.from('family_photos').select('url, thumbnail_url')
       .eq('family_id', familyId).not('url', 'is', null)
-      .order('taken_at', { ascending: false, nullsFirst: false }).limit(24),
+      .order('taken_at', { ascending: false, nullsFirst: false }).limit(24)),
   ]);
 
   // Best-effort: log any per-query error so a partial outage is diagnosable in

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
@@ -22,11 +23,11 @@ export default async function ContactsPage() {
       .eq('family_id', familyId)
       .order('name', { ascending: true }),
 
-    supabase
+    settle(supabase
       .from('family_members')
       .select('id, display_name')
       .eq('family_id', familyId)
-      .eq('is_active', true),
+      .eq('is_active', true)),
   ]);
 
   return (

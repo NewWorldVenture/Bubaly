@@ -28,6 +28,7 @@ import {
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
 import { dayKeyInTz, scopeNow } from '../scope';
@@ -431,7 +432,7 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
     return fail('There are no meals planned for those days yet.', { code: SERVICE_CODES.notFound });
   }
 
-  const [mealsRes, pantryRes] = await Promise.all([
+  const [mealsRes, pantryRes] = await settleAll([
     scope.db.from('meals').select('id, name, ingredients').eq('family_id', scope.familyId).in('id', mealIds),
     scope.db.from('pantry_items').select('name, quantity').eq('family_id', scope.familyId),
   ]);

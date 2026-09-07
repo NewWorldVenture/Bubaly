@@ -1,5 +1,6 @@
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import type { Tables } from '@/lib/database.types';
 
 export type Warranty = Tables<'home_warranties'>;
@@ -69,9 +70,9 @@ export async function getHomeOverview(familyId: string) {
   const [assets, warranties, openTasks] = await Promise.all([
     getAssets(familyId),
     getWarranties(familyId),
-    supabase.from('maintenance_tasks').select('id, title, due_at, status, asset_id')
+    settle(supabase.from('maintenance_tasks').select('id, title, due_at, status, asset_id')
       .eq('family_id', familyId).neq('status', 'done').not('due_at', 'is', null)
-      .order('due_at', { ascending: true }).limit(50),
+      .order('due_at', { ascending: true }).limit(50)),
   ]);
   return { assets, warranties, tasks: orThrow(openTasks, 'maintenance_tasks', familyId) };
 }

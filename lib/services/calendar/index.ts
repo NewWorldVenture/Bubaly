@@ -19,6 +19,7 @@ import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/h
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, makeKey, withIdempotency } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
@@ -455,7 +456,7 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   const toIso = new Date(toMs).toISOString();
   const members = input.memberIds?.filter(Boolean) ?? [];
 
-  const [calendar, school, sports] = await Promise.all([
+  const [calendar, school, sports] = await settleAll([
     scope.db.from('calendar_events').select('starts_at, ends_at, all_day, assignee_id')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
     scope.db.from('school_events').select('starts_at, ends_at, member_id')
@@ -555,7 +556,7 @@ export async function busyEvenings(
 
   const fromIso = new Date(fromMs).toISOString();
   const toIso = new Date(toMs).toISOString();
-  const [calendar, sports] = await Promise.all([
+  const [calendar, sports] = await settleAll([
     scope.db.from('calendar_events').select('starts_at, all_day')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
     scope.db.from('sports_events').select('starts_at')

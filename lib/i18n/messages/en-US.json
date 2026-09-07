@@ -595,6 +595,7 @@
   "admin.revenueOverview": "Revenue Overview",
   "admin.seeAll": "See all",
   "admin.servicesOperational": "services operational",
+  "admin.someDataCouldNotBeLoaded": "Some data could not be loaded from Supabase. The dashboard below is incomplete.",
   "admin.storageUsage": "Storage Usage",
   "admin.subscriptions": "Subscriptions",
   "admin.supportOverview": "Support Overview",

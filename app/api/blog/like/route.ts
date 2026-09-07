@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -28,7 +29,7 @@ async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug
 
 async function likeState(supabase: ReturnType<typeof createServiceClient>, postId: string, visitorId: string | null) {
   const [{ count }, liked] = await Promise.all([
-    supabase.from('blog_post_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId),
+    settle(supabase.from('blog_post_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId)),
     visitorId
       ? supabase.from('blog_post_likes').select('id').eq('post_id', postId).eq('visitor_id', visitorId).maybeSingle()
       : Promise.resolve({ data: null }),

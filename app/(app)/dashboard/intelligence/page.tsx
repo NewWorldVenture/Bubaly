@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
@@ -30,7 +31,16 @@ export default async function IntelligencePage() {
   // The family's OWN data → the coarse buckets they'd contribute (shown only to
   // them; nothing shared or stored). The same sources and the same bands as the
   // nightly aggregation, so the preview IS what would leave the household.
-  const [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders] = await Promise.all([
+  //
+  // settleAll, not Promise.all and not #423's `cnt`. Both concerns are real and
+  // both are met here. #423 was right that a rejected batch must not take the
+  // page down — settleAll answers a rejection with { data, count, error }, so it
+  // cannot. But `cnt` returned 0 for a failed read, which is the private
+  // safeCount pattern lib/metric/count.ts exists to end: on this page a 0 would
+  // tell a family their household is smaller than it is, and then invite them to
+  // share that. The reads settle, and `previewError` below fails the whole
+  // preview closed on the first error rather than previewing a lie.
+  const [members, mealPlans, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
     supabase.from('family_members').select('id, birthday, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
     supabase.from('teams').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),

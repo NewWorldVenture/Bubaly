@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ShieldCheck, Mail, UserX, Clock, Activity, Lock, KeyRound, EyeOff, FileCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
@@ -27,10 +28,10 @@ export default async function AdminSecurityPage() {
   const supabase = createServiceClient();
 
   const [invitesResult, authUsersResult, auditLogsResult, familiesResult] = await Promise.all([
-    supabase.from('invites').select('status'),
+    settle(supabase.from('invites').select('status')),
     supabase.auth.admin.listUsers({ perPage: 1000 }),
-    supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at').order('created_at', { ascending: false }).limit(25),
-    supabase.from('families').select('id, name'),
+    settle(supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at').order('created_at', { ascending: false }).limit(25)),
+    settle(supabase.from('families').select('id, name')),
   ]);
 
   const readError = invitesResult.error ?? authUsersResult.error ?? auditLogsResult.error ?? familiesResult.error;

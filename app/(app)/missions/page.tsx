@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClipboardCheck, Sparkles, AlertTriangle, Trophy, Plus } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -54,7 +55,7 @@ export default async function MissionsPage() {
 
   const [{ data: chores }, { data: members }, { data: validations }, { data: disputes }] = await Promise.all([
     choreIds.length ? supabase.from('chores').select('*').in('id', choreIds) : Promise.resolve({ data: [] }),
-    supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
+    settle(supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId)),
     subIds.length ? supabase.from('chore_ai_validations').select('*').in('submission_id', subIds) : Promise.resolve({ data: [] }),
     subIds.length ? supabase.from('chore_disputes').select('*').in('submission_id', subIds).eq('status', 'open') : Promise.resolve({ data: [] }),
   ]);

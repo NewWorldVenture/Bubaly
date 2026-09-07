@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -82,14 +83,25 @@ export default async function AdminReportsPage() {
   const subscriptions = subscriptionsResult.data;
   const docs = docsResult.data;
   const activity = activityResult.data;
-  const readError = [
-    familyCountResult.error, userCountResult.error, activeSubCountResult.error,
-    familiesResult.error, profilesResult.error, subscriptionsResult.error,
-    docsResult.error, activityResult.error,
-  ].find(Boolean);
+  const readFailures = ([
+    ['family count', familyCountResult],
+    ['user count', userCountResult],
+    ['active sub count', activeSubCountResult],
+    ['families', familiesResult],
+    ['profiles', profilesResult],
+    ['subscriptions', subscriptionsResult],
+    ['docs', docsResult],
+    ['activity', activityResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[admin-reports] report read failed', readError);
-    return <AdminReportsReadError />;
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[admin-reports] report read failed — rendering degraded', readError);
   }
 
   const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
@@ -133,6 +145,7 @@ export default async function AdminReportsPage() {
 
   return (
     <div className="module-page space-y-5">
+      <PartialReadBanner title={"This report is incomplete — some reads failed:"} failures={readFailures} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminReports.growthRevenueAndEngagementAcrossEvery')}</p>

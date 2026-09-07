@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -19,9 +20,9 @@ export default async function WalletAllowancePage() {
   const dataWarnings: string[] = [];
 
   const [{ data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: rules, error: rulesError }, famPlanLevel] = await Promise.all([
-    supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
-    supabase.from('allowance_rules').select('id, child_wallet_id, amount_cents, cadence, is_active, next_run_on').eq('family_id', familyId),
+    settle(supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId)),
+    settle(supabase.from('allowance_rules').select('id, child_wallet_id, amount_cents, cadence, is_active, next_run_on').eq('family_id', familyId)),
     resolveFamilyPlanLevel(supabase, familyId),
   ]);
   if (childWalletsError) {

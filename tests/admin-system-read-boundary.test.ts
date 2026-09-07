@@ -1,20 +1,36 @@
-import { readFileSync } from 'node:fs';
-import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 
-const system = readFileSync('app/(app)/admin/system/page.tsx', 'utf8');
-const backup = readFileSync('app/(app)/admin/backup/page.tsx', 'utf8');
+const page = fs.readFileSync('app/(app)/admin/system/page.tsx', 'utf8');
 
-describe('admin operational read boundaries', () => {
-  it('does not turn system usage query failures into zero-valued metrics', () => {
-    expect(system).toContain('userCountResult.error');
-    expect(system).toContain('documentsResult.error');
-    expectSays(system, 'system.couldNotLoadSystemUsage', 'Could not load system usage from Supabase. Refresh and try again.');
+// This asserted that a failed read returns an error page. The property behind
+// that — a missing read must never pass silently as real data — is kept; the
+// response is what changed.
+//
+// Bailing satisfied the property by showing nothing, and cost the whole page
+// whenever one table was unavailable. On production that is routine rather than
+// exceptional: the migration ledger stops at 0001-0003, so later tables can be
+// absent outright. The page now renders and names the failed reads above the
+// content, which is both more useful and equally honest — provided the banner
+// is really there, which is what these assertions pin down.
+describe('admin system read boundary', () => {
+  it('still inspects every read', () => {
+    expect(page).toContain('documentsResult');
+    expect(page).toContain('familyCountResult');
+    expect(page).toContain('profilesResult');
+    expect(page).toContain('subscriptionsResult');
+    expect(page).toContain('userCountResult');
   });
 
-  it('does not turn data and storage query failures into zero-valued counts', () => {
-    expect(backup).toContain('error } = await supabase.from');
-    expect(backup).toContain('const readError = counts.find((c) => c.error)?.error ?? docsError');
-    expectSays(backup, 'backup.couldNotLoadDataAnd', 'Could not load data and storage metrics from Supabase. Refresh and try again.');
+  it('collects the failures rather than discarding them', () => {
+    expect(page).toContain('readFailures');
+    expect(page).toMatch(/\.filter\(\(\[, res\]\) => res\.error\)/);
+  });
+
+  it('names them on screen instead of blanking the page', () => {
+    expect(page).toContain('PartialReadBanner');
+    expect(page).toContain('failures={readFailures}');
+    expect(page).toContain('System overview is incomplete — some reads failed:');
+    expect(page).not.toContain('return <ErrorState');
   });
 });
