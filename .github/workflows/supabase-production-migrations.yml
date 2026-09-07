@@ -69,6 +69,12 @@ jobs:
       - name: Audit migration ledger
         run: npm run db:audit:migrations
 
+      # Before touching production, check the code against the migrations being
+      # pushed: a query naming a column or table the release does not create
+      # compiles fine and fails only at runtime, as an empty page.
+      - name: Audit application queries against the migrations
+        run: npm run db:audit:queries
+
       - name: Link production project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
