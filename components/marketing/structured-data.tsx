@@ -5,6 +5,7 @@
 
 import { Fragment } from 'react';
 import { getCachedSocialLinks } from '@/lib/server/social-links';
+import { getTranslations } from '@/lib/i18n/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -35,6 +36,7 @@ export async function SiteStructuredData() {
   // exists is a claim, not a placeholder. So this stays with what an admin
   // actually saved, and is empty until they do.
   const social = await getCachedSocialLinks();
+  const t = await getTranslations();
 
   const organization = {
     '@context': 'https://schema.org',
@@ -42,8 +44,8 @@ export async function SiteStructuredData() {
     name: 'Bubaly',
     url: SITE_URL,
     logo: `${SITE_URL}/brand/bubaly-logo.png`,
-    description:
-      'Bubaly is the AI operating system for family life — it handles the logistics so families spend less time managing life and more time living it.',
+    // The same outcome-language description the homepage's metadata uses.
+    description: t('root.metaDescriptionOutcomes'),
     sameAs: Object.values(social),
   };
 
@@ -68,7 +70,9 @@ export async function SiteStructuredData() {
       '@type': 'Offer',
       price: '0',
       priceCurrency: 'USD',
-      description: 'Free Starter plan — no credit card required to begin.',
+      // There is no "Free Starter plan": the offer is a 5-day trial of Family
+      // Basic, then a paid plan (lib/constants/plans.ts). Say exactly that.
+      description: t('structuredData.offerTrial'),
     },
   };
 
