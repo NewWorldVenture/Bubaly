@@ -25,6 +25,7 @@ import {
   convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -77,6 +78,7 @@ async function createConversation(payload: ConvInsert) {
 }
 
 export function MessagesModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { error: toastError } = useToast();
 
@@ -426,7 +428,7 @@ export function MessagesModule() {
   async function startRecording() {
     if (recording || uploadingFile || !activeConv) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof MediaRecorder === 'undefined') {
-      toastError('Voice recording isn’t supported in this browser.');
+      toastError(tr('messagesModule.voiceRecordingIsnTSupported'));
       return;
     }
     try {
@@ -454,7 +456,7 @@ export function MessagesModule() {
       setRecSeconds(0);
       recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
     } catch {
-      toastError('Microphone access was blocked.');
+      toastError(tr('messagesModule.microphoneAccessWasBlocked'));
     }
   }
   function stopRecording(discard = false) {
@@ -545,15 +547,15 @@ export function MessagesModule() {
       {/* ── Page header ─────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Messages</h1>
-          <p className="mt-0.5 text-xs text-muted sm:text-sm">Stay connected with your family.</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{tr('messages.messages')}</h1>
+          <p className="mt-0.5 text-xs text-muted sm:text-sm">{tr('messages.stayConnectedWithYourFamily')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setNewConvOpen(true)}><Plus className="h-4 w-4" /> New Message</Button>
+          <Button onClick={() => setNewConvOpen(true)}><Plus className="h-4 w-4" /> {tr('messages.newMessage')}</Button>
           <div className="relative hidden sm:block">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search messages"
+              placeholder={tr('messages.searchMessages')}
               className="h-11 w-56 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none focus:border-brand" />
           </div>
         </div>
@@ -581,7 +583,7 @@ export function MessagesModule() {
             ))}
           </div>
           <div className="relative">
-            <button onClick={() => setFilterOpen((v) => !v)} aria-label="Filter conversations"
+            <button onClick={() => setFilterOpen((v) => !v)} aria-label={tr('messages.filterConversations')}
               className={cn('grid h-8 w-8 place-items-center rounded-lg border border-border text-muted hover:text-fg',
                 unreadOnly && 'border-brand/50 text-brand-text')}>
               <SlidersHorizontal className="h-4 w-4" />
@@ -592,7 +594,7 @@ export function MessagesModule() {
                 <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
                   <button onClick={() => { setUnreadOnly((v) => !v); setFilterOpen(false); }}
                     className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
-                    Unread only {unreadOnly && <Check className="h-4 w-4 text-brand-text" />}
+                    {tr('messages.unreadOnly')} {unreadOnly && <Check className="h-4 w-4 text-brand-text" />}
                   </button>
                   <button onClick={() => { setShowArchived((v) => !v); setFilterOpen(false); }}
                     className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
@@ -659,8 +661,8 @@ export function MessagesModule() {
         <button onClick={() => setShowArchived((v) => !v)}
           className="flex items-center justify-center gap-1.5 border-t border-border py-3 text-xs font-semibold text-brand-text hover:bg-elevated/30">
           {showArchived
-            ? <><ArrowLeft className="h-3.5 w-3.5" /> Back to conversations</>
-            : <>View archived conversations {archivedCount > 0 && `(${archivedCount})`} <ChevronRight className="h-3.5 w-3.5" /></>}
+            ? <><ArrowLeft className="h-3.5 w-3.5" /> {tr('messages.backToConversations')}</>
+            : <>{tr('messages.viewArchivedConversations')} {archivedCount > 0 && `(${archivedCount})`} <ChevronRight className="h-3.5 w-3.5" /></>}
         </button>
       </div>
 
@@ -672,13 +674,13 @@ export function MessagesModule() {
         {!activeConv ? (
           <div className="flex flex-1 flex-col items-center justify-center">
             <MessageCircle className="mb-3 h-12 w-12 text-muted/40" />
-            <p className="text-sm font-medium text-muted">Select a conversation</p>
+            <p className="text-sm font-medium text-muted">{tr('messages.selectAConversation')}</p>
           </div>
         ) : (
           <>
             {/* Thread header */}
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-              <button onClick={() => setMobileShowThread(false)} className="md:hidden mr-1 text-muted" aria-label="Back to conversations">
+              <button onClick={() => setMobileShowThread(false)} className="md:hidden mr-1 text-muted" aria-label={tr('messages.backToConversations')}>
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div className="grid h-10 w-10 place-items-center rounded-full bg-brand/20 text-lg">
@@ -693,11 +695,11 @@ export function MessagesModule() {
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button onClick={() => toastError('Video calling isn’t available yet.')} aria-label="Start video call"
+              <button onClick={() => toastError(tr('messagesModule.videoCallingIsnTAvailable'))} aria-label={tr('messages.startVideoCall')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
-              <button onClick={() => toastError('Voice calling isn’t available yet.')} aria-label="Start voice call"
+              <button onClick={() => toastError(tr('messagesModule.voiceCallingIsnTAvailable'))} aria-label={tr('messages.startVoiceCall')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
-              <button onClick={() => setShowAbout(true)} aria-label="About this chat"
+              <button onClick={() => setShowAbout(true)} aria-label={tr('messages.aboutThisChat')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
 
@@ -706,8 +708,8 @@ export function MessagesModule() {
               {loadingMsgs ? (
                 <SkeletonList />
               ) : messages.length === 0 ? (
-                <EmptyState icon={MessageCircle} title="No messages yet"
-                  description="Say hello to your family!" />
+                <EmptyState icon={MessageCircle} title={tr('messages.noMessagesYet')}
+                  description={tr('messagesModule.sayHelloToYourFamily')} />
               ) : (
                 grouped.map(({ label, msgs }) => (
                   <div key={label}>
@@ -761,7 +763,7 @@ export function MessagesModule() {
                             {/* Bubble */}
                             {msg.deleted_at ? (
                               <div className="rounded-2xl bg-elevated/40 px-4 py-2 text-xs italic text-muted">
-                                Message deleted
+                                {tr('messages.messageDeleted')}
                               </div>
                             ) : (
                               <div className={cn(
@@ -803,7 +805,7 @@ export function MessagesModule() {
                                     legacy/seed kind; 'audio' is what the recorder sends). */}
                                 {(msg.kind === 'audio' || msg.kind === 'voice') && msg.attachment_url && (
                                   <audio controls preload="none" src={msg.attachment_url}
-                                    className="mb-1 h-10 w-56 max-w-full" aria-label="Voice message" />
+                                    className="mb-1 h-10 w-56 max-w-full" aria-label={tr('messages.voiceMessage')} />
                                 )}
                                 {/* Text */}
                                 {msg.content && <span>{msg.content}</span>}
@@ -865,11 +867,11 @@ export function MessagesModule() {
                                   <Pin className="h-3.5 w-3.5" /> {msg.is_pinned ? 'Unpin' : 'Pin'}
                                 </button>
                                 <button onClick={() => setReplyTo(msg)} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
-                                  <Reply className="h-3.5 w-3.5" /> Reply
+                                  <Reply className="h-3.5 w-3.5" /> {tr('messages.reply')}
                                 </button>
                                 {isMine && (
                                   <button onClick={() => deleteMessage(msg.id)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface/40">
-                                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                                    <Trash2 className="h-3.5 w-3.5" /> {tr('messages.delete')}
                                   </button>
                                 )}
                               </div>
@@ -889,7 +891,7 @@ export function MessagesModule() {
               <div className="flex items-center gap-2 border-t border-brand/20 bg-brand/5 px-4 py-2 text-xs">
                 <Reply className="h-3.5 w-3.5 text-brand-text" />
                 <span className="flex-1 truncate text-muted">
-                  Replying to <span className="font-semibold text-brand-text">{replyTo.sender_name}</span>:{' '}
+                  {tr('messages.replyingTo')} <span className="font-semibold text-brand-text">{replyTo.sender_name}</span>:{' '}
                   <span>{replyTo.content?.slice(0, 60)}</span>
                 </span>
                 <button onClick={() => setReplyTo(null)} className="text-muted hover:text-fg">✕</button>
@@ -909,20 +911,20 @@ export function MessagesModule() {
                 <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as React.FormEvent); } }}
                   enterKeyHint="send"
-                  placeholder="Type a message..."
+                  placeholder={tr('messages.typeAMessage')}
                   className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm placeholder:text-muted focus:outline-none" />
 
                 {/* Trailing tools */}
-                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label="Attach file"
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label={tr('messages.attachFile')}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
                   {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                 </button>
-                <button type="button" onClick={() => imageRef.current?.click()} disabled={uploadingFile} aria-label="Send a photo"
+                <button type="button" onClick={() => imageRef.current?.click()} disabled={uploadingFile} aria-label={tr('messages.sendAPhoto')}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
                   <ImageIcon className="h-4 w-4" />
                 </button>
                 <div className="relative">
-                  <button type="button" onClick={() => setShowPicker(!showPicker)} aria-label="Emoji"
+                  <button type="button" onClick={() => setShowPicker(!showPicker)} aria-label={tr('messages.emoji')}
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg">
                     <Smile className="h-4 w-4" />
                   </button>
@@ -948,13 +950,13 @@ export function MessagesModule() {
 
               {/* Send when typing · recording controls while recording · mic when empty */}
               {text.trim() ? (
-                <button type="submit" disabled={sending} aria-label="Send message"
+                <button type="submit" disabled={sending} aria-label={tr('messages.sendMessage')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </button>
               ) : recording ? (
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <button type="button" onClick={() => stopRecording(true)} aria-label="Cancel recording"
+                  <button type="button" onClick={() => stopRecording(true)} aria-label={tr('messages.cancelRecording')}
                     className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-rose-400">
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -962,13 +964,13 @@ export function MessagesModule() {
                     <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
                     {Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')}
                   </span>
-                  <button type="button" onClick={() => stopRecording(false)} aria-label="Stop and send voice message"
+                  <button type="button" onClick={() => stopRecording(false)} aria-label={tr('messages.stopAndSendVoiceMessage')}
                     className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
                     <Send className="h-5 w-5" />
                   </button>
                 </div>
               ) : (
-                <button type="button" onClick={startRecording} disabled={uploadingFile} aria-label="Record voice message"
+                <button type="button" onClick={startRecording} disabled={uploadingFile} aria-label={tr('messages.recordVoiceMessage')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
                   {uploadingFile ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                 </button>
@@ -987,8 +989,8 @@ export function MessagesModule() {
             : 'hidden xl:flex xl:w-80',
         )}>
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">About this chat</h2>
-            <button onClick={() => setShowAbout(false)} className="rounded-lg p-1 text-muted hover:text-fg xl:hidden" aria-label="Close">
+            <h2 className="font-semibold">{tr('messages.aboutThisChat')}</h2>
+            <button onClick={() => setShowAbout(false)} className="rounded-lg p-1 text-muted hover:text-fg xl:hidden" aria-label={tr('messages.close')}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -1015,21 +1017,21 @@ export function MessagesModule() {
               <UserPlus className="h-5 w-5" /> Add
             </button>
             <button onClick={() => { setShowAbout(false); searchRef.current?.focus(); }} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
-              <Search className="h-5 w-5" /> Search
+              <Search className="h-5 w-5" /> {tr('messages.search')}
             </button>
             <button onClick={() => toggleMute(activeConv.id)} className={cn('flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg', isMuted && 'text-brand-text')}>
               <BellOff className="h-5 w-5" /> {isMuted ? 'Unmute' : 'Mute'}
             </button>
             <a href="/dashboard/settings#members" className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
-              <Settings className="h-5 w-5" /> Settings
+              <Settings className="h-5 w-5" /> {tr('messages.settings')}
             </a>
           </div>
 
           {/* Members */}
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">Members ({activeConv.kind === 'direct' ? Math.max(memberCount, activeParticipants.length) : memberCount})</h3>
-              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand-text">Add members</button>
+              <h3 className="font-semibold">{tr('messages.members')}{activeConv.kind === 'direct' ? Math.max(memberCount, activeParticipants.length) : memberCount})</h3>
+              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand-text">{tr('messages.addMembers')}</button>
             </div>
             <div className="space-y-2.5">
               {(activeParticipants.length ? activeParticipants : members).map((m) => {
@@ -1060,12 +1062,12 @@ export function MessagesModule() {
           {/* Shared Photos */}
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">Shared Photos</h3>
-              <a href="/dashboard/photos" className="text-xs font-semibold text-brand-text">View all</a>
+              <h3 className="font-semibold">{tr('messages.sharedPhotos')}</h3>
+              <a href="/dashboard/photos" className="text-xs font-semibold text-brand-text">{tr('messages.viewAll')}</a>
             </div>
             {sharedPhotos.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border py-4 text-center text-xs text-muted">
-                Photos shared in this chat appear here.
+                {tr('messages.photosSharedInThisChatAppear')}
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2">
@@ -1129,6 +1131,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
   onClose: () => void;
   onCreated: (conv: Conversation) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [step, setStep] = useState<Step>('people');
   const [tab, setTab] = useState<Tab>('suggested');
@@ -1218,7 +1221,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
     });
 
     setLoading(false);
-    if (error || !data) { toastError(describeDbError(error, 'Could not create conversation')); return; }
+    if (error || !data) { toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
     onCreated(data);
   }
 
@@ -1226,7 +1229,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
     <Modal
       open
       onClose={onClose}
-      title="New Conversation"
+      title={tr('messages.newConversation')}
       description={step === 'people' ? 'Start a conversation with the people who matter most.' : 'Name it and pick an icon (optional).'}
       className="max-w-2xl"
     >
@@ -1326,7 +1329,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
               {selected.size === 0 ? 'Select at least one person' : `${selected.size} selected`}
             </p>
             <Button onClick={() => setStep('details')} disabled={selected.size === 0}>
-              Next {selected.size > 0 && `(${selected.size})`}
+              {tr('messages.next')} {selected.size > 0 && `(${selected.size})`}
             </Button>
           </div>
         </div>
@@ -1349,7 +1352,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
           {selectedMembers.length > 1 && (
             <div>
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted">
-                <Camera className="h-3.5 w-3.5" /> Choose an icon
+                <Camera className="h-3.5 w-3.5" /> {tr('messages.chooseAnIcon')}
               </p>
               <div className="flex flex-wrap gap-2">
                 {CONV_EMOJIS.map((e) => (
@@ -1364,7 +1367,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
 
           {/* Members */}
           <div>
-            <p className="mb-2 text-xs font-semibold text-muted">Members ({selectedMembers.length + 1})</p>
+            <p className="mb-2 text-xs font-semibold text-muted">{tr('messages.members')}{selectedMembers.length + 1})</p>
             <div className="space-y-1.5">
               <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2">
                 <Avatar name={myName} size={32} />
@@ -1389,7 +1392,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
           {/* Footer */}
           <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
             <Button variant="ghost" onClick={() => setStep('people')}>
-              <ArrowLeft className="h-4 w-4" /> Back
+              <ArrowLeft className="h-4 w-4" /> {tr('messages.back')}
             </Button>
             <Button onClick={create} loading={loading} disabled={selectedMembers.length === 0}>
               {selectedMembers.length === 1 ? 'Start chatting' : 'Create'}

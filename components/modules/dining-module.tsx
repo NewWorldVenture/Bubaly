@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type DiningRow = {
   id: string; name: string; kind: string; cuisine: string | null; category: string | null;
@@ -22,6 +23,7 @@ const usd = (cents: number | null) => (cents == null ? '' : `$${(cents / 100).to
 const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
 export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]; visits: DiningRow[] }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -82,7 +84,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
         visitedAt: logForm.when ? new Date(logForm.when + 'T19:00:00').toISOString() : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
-      success('Visit logged.');
+      success(t('diningModule.visitLogged'));
       setLogOpen(false);
       setLogForm({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
       router.refresh();
@@ -92,12 +94,12 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
   return (
     <div className="space-y-5 pb-28">
       <PageHeader
-        title="Dining Out"
-        description="Discover restaurants, save favorites, and track your dining-out history."
+        title={t('dining.diningOut')}
+        description={t('diningModule.discoverRestaurantsSaveFavoritesAnd')}
         action={
           <>
-            <Button variant="outline" onClick={() => setLogOpen(true)}><Receipt className="h-4 w-4" /> Log visit</Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add place</Button>
+            <Button variant="outline" onClick={() => setLogOpen(true)}><Receipt className="h-4 w-4" /> {t('dining.logVisit')}</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('dining.addPlace')}</Button>
           </>
         }
       />
@@ -124,10 +126,10 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center gap-2">
           <MapPin className="h-4 w-4 text-emerald-400" />
-          <h2 className="text-sm font-bold">Saved places</h2>
+          <h2 className="text-sm font-bold">{t('dining.savedPlaces')}</h2>
         </div>
         {restaurants.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted">No saved restaurants yet — add places you&apos;d like to try.</p>
+          <p className="py-8 text-center text-sm text-muted">{t('dining.noSavedRestaurantsYetAddPlaces')}</p>
         ) : (
           <ul className="divide-y divide-border/60">
             {restaurants.map((r) => (
@@ -160,10 +162,10 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center gap-2">
           <Receipt className="h-4 w-4 text-brand-text" />
-          <h2 className="text-sm font-bold">Recent dining out</h2>
+          <h2 className="text-sm font-bold">{t('dining.recentDiningOut')}</h2>
         </div>
         {visits.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted">No dining-out history yet — log your first visit.</p>
+          <p className="py-8 text-center text-sm text-muted">{t('dining.noDiningOutHistoryYetLog')}</p>
         ) : (
           <ul className="divide-y divide-border/60">
             {visits.map((v) => (
@@ -184,21 +186,21 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
 
       {/* Add place */}
       {addOpen && (
-        <Modal open onClose={() => setAddOpen(false)} title="Add a place">
+        <Modal open onClose={() => setAddOpen(false)} title={t('dining.addAPlace')}>
           <form onSubmit={submitAdd} className="space-y-3">
-            <Field label="Name">{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Nonna's Trattoria" autoFocus />}</Field>
+            <Field label={t('dining.name')}>{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder={t('diningModule.nonnaSTrattoria')} autoFocus />}</Field>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Cuisine">{(id) => <Input id={id} value={addForm.cuisine} onChange={e => setAddForm({ ...addForm, cuisine: e.target.value })} placeholder="Italian" />}</Field>
-              <Field label="Price">{(id) => (
+              <Field label={t('dining.cuisine')}>{(id) => <Input id={id} value={addForm.cuisine} onChange={e => setAddForm({ ...addForm, cuisine: e.target.value })} placeholder={t('dining.italian')} />}</Field>
+              <Field label={t('dining.price')}>{(id) => (
                 <Select id={id} value={addForm.priceLevel} onChange={e => setAddForm({ ...addForm, priceLevel: e.target.value })}>
                   {['1', '2', '3', '4'].map(p => <option key={p} value={p}>{'$'.repeat(Number(p))}</option>)}
                 </Select>
               )}</Field>
-              <Field label="Rating">{(id) => <Input id={id} type="number" inputMode="decimal" min="0" max="5" step="0.1" value={addForm.rating} onChange={e => setAddForm({ ...addForm, rating: e.target.value })} placeholder="4.5" />}</Field>
+              <Field label={t('dining.rating')}>{(id) => <Input id={id} type="number" inputMode="decimal" min="0" max="5" step="0.1" value={addForm.rating} onChange={e => setAddForm({ ...addForm, rating: e.target.value })} placeholder="4.5" />}</Field>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button type="submit" loading={pending}>Save place</Button>
+              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>{t('dining.cancel')}</Button>
+              <Button type="submit" loading={pending}>{t('dining.savePlace')}</Button>
             </div>
           </form>
         </Modal>
@@ -206,17 +208,17 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
 
       {/* Log visit */}
       {logOpen && (
-        <Modal open onClose={() => setLogOpen(false)} title="Log a visit">
+        <Modal open onClose={() => setLogOpen(false)} title={t('dining.logAVisit')}>
           <form onSubmit={submitLog} className="space-y-3">
-            <Field label="Restaurant">{(id) => <Input id={id} value={logForm.name} onChange={e => setLogForm({ ...logForm, name: e.target.value })} placeholder="Where did you eat?" autoFocus />}</Field>
+            <Field label={t('dining.restaurant')}>{(id) => <Input id={id} value={logForm.name} onChange={e => setLogForm({ ...logForm, name: e.target.value })} placeholder={t('dining.whereDidYouEat')} autoFocus />}</Field>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Total ($)">{(id) => <Input id={id} type="number" inputMode="decimal" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({ ...logForm, amount: e.target.value })} placeholder="64.20" />}</Field>
-              <Field label="Items">{(id) => <Input id={id} type="number" min="0" value={logForm.items} onChange={e => setLogForm({ ...logForm, items: e.target.value })} placeholder="5" />}</Field>
-              <Field label="When">{(id) => <Input id={id} type="date" value={logForm.when} onChange={e => setLogForm({ ...logForm, when: e.target.value })} />}</Field>
+              <Field label={t('dining.total')}>{(id) => <Input id={id} type="number" inputMode="decimal" min="0" step="0.01" value={logForm.amount} onChange={e => setLogForm({ ...logForm, amount: e.target.value })} placeholder="64.20" />}</Field>
+              <Field label={t('dining.items')}>{(id) => <Input id={id} type="number" min="0" value={logForm.items} onChange={e => setLogForm({ ...logForm, items: e.target.value })} placeholder="5" />}</Field>
+              <Field label={t('dining.when')}>{(id) => <Input id={id} type="date" value={logForm.when} onChange={e => setLogForm({ ...logForm, when: e.target.value })} />}</Field>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setLogOpen(false)}>Cancel</Button>
-              <Button type="submit" loading={pending}>Log it</Button>
+              <Button type="button" variant="secondary" onClick={() => setLogOpen(false)}>{t('dining.cancel')}</Button>
+              <Button type="submit" loading={pending}>{t('dining.logIt')}</Button>
             </div>
           </form>
         </Modal>

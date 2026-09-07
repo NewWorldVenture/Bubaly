@@ -27,6 +27,7 @@ import {
   startConnectOnboardingAction, issueCardAction, setCardFrozenAction, updateCardControlsAction,
 } from '@/app/(app)/money/actions';
 import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -44,6 +45,8 @@ export function MoneyCardsView({
   justCompletedSetup?: boolean;
   childWallets: CardChild[]; cards: IssuedCard[]; canManage: boolean;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -82,7 +85,7 @@ export function MoneyCardsView({
     const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Virtual card created!');
+    success(t('moneyCardsView.virtualCardCreated'));
     router.refresh();
   }
 
@@ -110,11 +113,11 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title="Cards" description="Spending cards are not enabled for this family yet." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.spendingCardsAreNotEnabled')} />
         <div className="mt-4 rounded-2xl border border-border bg-surface/40 p-6">
           <EmptyState
             icon={CreditCard}
-            title="Spending cards are unavailable"
+            title={tr('moneyCards.spendingCardsAreUnavailable')}
             description="Your Family Wallet tracks allowances, gifts, savings goals and chore rewards today. A parent can return here after the family card program has been configured."
           />
         </div>
@@ -127,7 +130,7 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title="Cards" description="Set up safe spending cards for your kids in 3 quick steps." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.setUpSafeSpendingCards')} />
 
         {/* Progress steps */}
         <div className="mt-4 mb-6">
@@ -154,7 +157,7 @@ export function MoneyCardsView({
                     {onboardingStarted ? 'Continue setup' : 'Get started — 5 mins'}
                   </Button>
                 ) : (
-                  <p className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm text-muted">Ask a parent to set this up.</p>
+                  <p className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm text-muted">{tr('moneyCards.askAParentToSetThis')}</p>
                 )}
               </div>
             </div>
@@ -183,13 +186,13 @@ export function MoneyCardsView({
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title="Cards" description="Kid-safe spending cards — each purchase checks the Spend balance in real time." />
+      <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.kidSafeSpendingCardsEach')} />
 
       {/* Setup success banner */}
       {showSetupSuccess && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
           <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-400" />
-          <p className="flex-1 text-sm font-medium text-emerald-300">Account verified! Issue virtual cards for your kids below.</p>
+          <p className="flex-1 text-sm font-medium text-emerald-300">{tr('moneyCards.accountVerifiedIssueVirtualCardsFor')}</p>
           <button type="button" onClick={() => setShowSetupSuccess(false)} className="text-muted hover:text-fg">✕</button>
         </div>
       )}
@@ -206,13 +209,13 @@ export function MoneyCardsView({
             </p>
           </div>
           <Button size="sm" onClick={issueAllVirtual} loading={busy === 'issue-all'}>
-            Issue all
+            {tr('moneyCards.issueAll')}
           </Button>
         </div>
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={CreditCard} title="No child wallets" description="Add child members to issue cards." />
+        <EmptyState icon={CreditCard} title={tr('moneyCards.noChildWallets')} description={t('moneyCardsView.addChildMembersToIssue')} />
       ) : (
         <div className="space-y-4">
           {childWallets.map((child) => {
@@ -243,8 +246,7 @@ export function MoneyCardsView({
                           type="button" onClick={() => { setOrderingCard(child); setIssueType('physical'); }}
                           className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition"
                         >
-                          <Package className="h-3.5 w-3.5" /> Physical
-                        </button>
+                          <Package className="h-3.5 w-3.5" />{' '}{t('moneyCardsView.physical')}</button>
                       )}
                     </div>
                   )}
@@ -252,7 +254,7 @@ export function MoneyCardsView({
 
                 {/* Cards list */}
                 {childCards.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-muted">No card yet — use the buttons above to issue one.</div>
+                  <div className="px-4 py-3 text-sm text-muted">{t('moneyCardsView.noCardYetUseThe')}</div>
                 ) : (
                   <div className="divide-y divide-border/30">
                     {childCards.map((card) => (
@@ -328,6 +330,8 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   return (
     <div className="px-4 py-3">
       <div className="flex items-center gap-3">
@@ -341,16 +345,16 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
-            {card.brand ?? (card.type === 'physical' ? 'Physical' : 'Virtual')} card
+            {card.brand ?? (card.type === 'physical' ? t('moneyCardsView.physical') : 'Virtual')} card
             {card.last4 && <span className="font-normal text-muted"> ···· {card.last4}</span>}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted">
             {card.isFrozen
-              ? <span className="flex items-center gap-1 text-sky-400"><Snowflake className="h-3 w-3" /> Frozen</span>
-              : <span className="flex items-center gap-1 text-emerald-400"><ShieldCheck className="h-3 w-3" /> Active</span>}
+              ? <span className="flex items-center gap-1 text-sky-400"><Snowflake className="h-3 w-3" /> {tr('moneyCards.frozen')}</span>
+              : <span className="flex items-center gap-1 text-emerald-400"><ShieldCheck className="h-3 w-3" /> {tr('moneyCards.active')}</span>}
             {card.spendLimitCents != null && <span>· {formatCents(card.spendLimitCents)} {windowShort(card.spendWindow)}</span>}
             {card.blockedCategories.length > 0 && <span>· {card.blockedCategories.length} blocked</span>}
-            {card.type === 'physical' && <span className="flex items-center gap-0.5"><Package className="h-3 w-3" /> Physical</span>}
+            {card.type === 'physical' && <span className="flex items-center gap-0.5"><Package className="h-3 w-3" /> {tr('moneyCards.physical')}</span>}
           </p>
         </div>
 
@@ -358,11 +362,11 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
           <div className="flex items-center gap-1">
             <button type="button" onClick={onReveal}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
-              <Eye className="h-3.5 w-3.5" /> Reveal
+              <Eye className="h-3.5 w-3.5" /> {tr('moneyCards.reveal')}
             </button>
             <button type="button" onClick={onToggleControls}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
-              <SlidersHorizontal className="h-3.5 w-3.5" /> Controls
+              <SlidersHorizontal className="h-3.5 w-3.5" /> {tr('moneyCards.controls')}
             </button>
             <button type="button" onClick={onFreeze} disabled={busy === `freeze-${card.id}`}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated disabled:opacity-60 transition">
@@ -384,6 +388,8 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 function PhysicalCardModal({ child, onClose, onIssued }: {
   child: CardChild; onClose: () => void; onIssued: () => void;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [limitDollars, setLimitDollars] = useState('');
@@ -409,8 +415,8 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
         <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
           <Package className="h-5 w-5 flex-shrink-0 text-brand-text" />
           <div>
-            <p className="text-sm font-semibold">Physical Visa Debit Card</p>
-            <p className="text-xs text-muted">Shipped in 5–7 business days. Works everywhere Visa is accepted.</p>
+            <p className="text-sm font-semibold">{tr('moneyCards.physicalVisaDebitCard')}</p>
+            <p className="text-xs text-muted">{tr('moneyCards.shippedIn57BusinessDays')}</p>
           </div>
         </div>
 
@@ -418,30 +424,30 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
           <div className="flex items-start gap-2">
             <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" />
             <div>
-              <p className="text-sm font-semibold">Real-time balance gate</p>
-              <p className="text-xs text-muted">Every swipe checks {child.name}&apos;s Spend bucket. Declines instantly if insufficient — no overdraft possible.</p>
+              <p className="text-sm font-semibold">{tr('moneyCards.realTimeBalanceGate')}</p>
+              <p className="text-xs text-muted">{tr('moneyCards.everySwipeChecks')} {child.name}{tr('moneyCards.aposSSpendBucketDeclinesInstantly')}</p>
             </div>
           </div>
         </div>
 
-        <Field label="Daily spend limit (optional — leave blank for no limit)">
+        <Field label={tr('moneyCards.dailySpendLimitOptionalLeaveBlank')}>
           {(id) => (
             <div className="flex items-center gap-1.5">
               <span className="text-muted">$</span>
               <Input id={id} type="number" min="1" step="1" value={limitDollars}
-                onChange={(e) => setLimitDollars(e.target.value)} placeholder="No limit" />
+                onChange={(e) => setLimitDollars(e.target.value)} placeholder={t('moneyCardsView.noLimit')} />
             </div>
           )}
         </Field>
 
         <p className="text-xs text-muted">
-          The physical card will be registered under {child.name}&apos;s cardholder profile. You can freeze it instantly from this page.
+          {tr('moneyCards.thePhysicalCardWillBeRegistered')} {child.name}{tr('moneyCards.aposSCardholderProfileYouCan')}
         </p>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('moneyCards.cancel')}</Button>
           <Button type="submit" loading={loading}>
-            <Package className="h-4 w-4" /> Order card
+            <Package className="h-4 w-4" /> {tr('moneyCards.orderCard')}
           </Button>
         </div>
       </form>
@@ -452,6 +458,8 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 // ─── Card Controls Editor ─────────────────────────────────────────────────────
 
 function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [limitDollars, setLimitDollars] = useState(card.spendLimitCents != null ? String(card.spendLimitCents / 100) : '');
   const [windowVal, setWindowVal] = useState<SpendWindow>((card.spendWindow as SpendWindow) ?? 'per_authorization');
@@ -468,12 +476,12 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
     const spendLimitCents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
     if (spendLimitCents != null && (!Number.isFinite(spendLimitCents) || spendLimitCents <= 0)) {
       setSaving(false);
-      return toastError('Enter a valid limit, or leave it blank for no limit.');
+      return toastError(t('moneyCardsView.enterAValidLimitOr'));
     }
     const res = await updateCardControlsAction({ cardId: card.id, spendLimitCents, spendWindow: windowVal, blockedCategories: blocked });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save controls.');
-    success('Controls saved');
+    success(t('moneyCardsView.controlsSaved'));
     onSaved();
   }
 
@@ -481,18 +489,18 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
     <div className="mt-3 space-y-3 border-t border-border pt-3">
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Spend limit (blank = no limit)</span>
+          <span className="mb-1 block text-xs font-medium text-muted">{tr('moneyCards.spendLimitBlankNoLimit')}</span>
           <div className="flex items-center gap-1">
             <span className="text-muted">$</span>
             <input
               type="number" min="0" step="1" inputMode="decimal" value={limitDollars}
-              onChange={(e) => setLimitDollars(e.target.value)} placeholder="No limit"
+              onChange={(e) => setLimitDollars(e.target.value)} placeholder={tr('moneyCards.noLimit')}
               className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring"
             />
           </div>
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Resets</span>
+          <span className="mb-1 block text-xs font-medium text-muted">{tr('moneyCards.resets')}</span>
           <select
             value={windowVal} onChange={(e) => setWindowVal(e.target.value as SpendWindow)}
             className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring"
@@ -503,7 +511,7 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
       </div>
 
       <div>
-        <span className="mb-1.5 block text-xs font-medium text-muted">Block these categories</span>
+        <span className="mb-1.5 block text-xs font-medium text-muted">{tr('moneyCards.blockTheseCategories')}</span>
         <div className="flex flex-wrap gap-1.5">
           {BLOCKABLE_CATEGORIES.map((c) => {
             const on = blocked.includes(c.value);
@@ -519,7 +527,7 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={save} loading={saving}>Save controls</Button>
+        <Button onClick={save} loading={saving}>{tr('moneyCards.saveControls')}</Button>
       </div>
     </div>
   );

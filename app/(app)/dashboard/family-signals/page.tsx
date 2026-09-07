@@ -1,18 +1,20 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { FamilySignalsModule, type SignalView } from '@/components/modules/family-signals-module';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Family Intelligence' };
+export const metadata: Metadata = { title: 'familySignals.familyIntelligence' };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Intelligence</h1>
-      <ErrorState message="Could not load family intelligence from Supabase. Refresh and try again." />
-      <Link href="/dashboard/family-signals" className="text-sm font-medium text-brand-text underline">Refresh family intelligence</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('familySignals.familyIntelligence')}</h1>
+      <ErrorState message={t('familySignals.couldNotLoadFamilyIntelligence')} />
+      <Link href="/dashboard/family-signals" className="text-sm font-medium text-brand-text underline">{t('familySignals.refreshFamilyIntelligence')}</Link>
     </div>
   );
 }

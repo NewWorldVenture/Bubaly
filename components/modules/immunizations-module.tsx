@@ -15,6 +15,7 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Immunization = Tables<'immunizations'>;
 
@@ -27,6 +28,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -69,9 +71,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this immunization record?')) return;
+    if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
     const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {
@@ -89,7 +91,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
-              <option value="all">Everyone</option>
+              <option value="all">{t('immunizations.everyone')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
@@ -99,7 +101,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
       {due.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> Doses coming due</p>
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> {t('immunizations.dosesComingDue')}</p>
           <ul className="space-y-1 text-sm">
             {due.slice(0, 4).map((s) => {
               const d = daysUntilDue(s)!;
@@ -112,9 +114,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load immunization records. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('immunizationsModule.couldNotLoadImmunizationRecords')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Syringe} title="No immunizations recorded" description="Track vaccines and next-due dates — handy for school, camp, and travel forms." />
+        <EmptyState icon={Syringe} title={t('immunizations.noImmunizationsRecorded')} description={t('immunizationsModule.trackVaccinesAndNextDue')} />
       ) : (
         <ul className="space-y-2">
           {scoped.map((s) => {
@@ -150,33 +152,33 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit immunization' : 'Add immunization'}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Vaccine" required>{(id) => (
+              <Field label={t('immunizations.vaccine')} required>{(id) => (
                 <Select id={id} value={COMMON_VACCINES.includes(form.vaccine) ? form.vaccine : 'Other'} onChange={(e) => setForm({ ...form, vaccine: e.target.value === 'Other' ? '' : e.target.value })}>
                   {COMMON_VACCINES.map((v) => <option key={v} value={v}>{v}</option>)}
                 </Select>
               )}</Field>
-              <Field label="Family member">{(id) => (
+              <Field label={t('immunizations.familyMember')}>{(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">{t('immunizations.select')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}</Field>
             </div>
             {!COMMON_VACCINES.includes(form.vaccine) && (
-              <Field label="Vaccine name" required>{(id) => <Input id={id} value={form.vaccine} onChange={(e) => setForm({ ...form, vaccine: e.target.value })} placeholder="e.g. Typhoid" required />}</Field>
+              <Field label={t('immunizations.vaccineName')} required>{(id) => <Input id={id} value={form.vaccine} onChange={(e) => setForm({ ...form, vaccine: e.target.value })} placeholder={t('immunizations.eGTyphoid')} required />}</Field>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Dose">{(id) => <Input id={id} value={form.dose_label} onChange={(e) => setForm({ ...form, dose_label: e.target.value })} placeholder="Dose 1 / Booster" />}</Field>
-              <Field label="Provider">{(id) => <Input id={id} value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} />}</Field>
+              <Field label={t('immunizations.dose')}>{(id) => <Input id={id} value={form.dose_label} onChange={(e) => setForm({ ...form, dose_label: e.target.value })} placeholder={t('immunizations.dose1Booster')} />}</Field>
+              <Field label={t('immunizations.provider')}>{(id) => <Input id={id} value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Date given">{(id) => <Input id={id} type="date" value={form.date_given} onChange={(e) => setForm({ ...form, date_given: e.target.value })} />}</Field>
-              <Field label="Next dose due">{(id) => <Input id={id} type="date" value={form.next_due_date} onChange={(e) => setForm({ ...form, next_due_date: e.target.value })} />}</Field>
+              <Field label={t('immunizations.dateGiven')}>{(id) => <Input id={id} type="date" value={form.date_given} onChange={(e) => setForm({ ...form, date_given: e.target.value })} />}</Field>
+              <Field label={t('immunizations.nextDoseDue')}>{(id) => <Input id={id} type="date" value={form.next_due_date} onChange={(e) => setForm({ ...form, next_due_date: e.target.value })} />}</Field>
             </div>
-            <Field label="Lot number">{(id) => <Input id={id} value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />}</Field>
-            <Field label="Notes">{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
+            <Field label={t('immunizations.lotNumber')}>{(id) => <Input id={id} value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />}</Field>
+            <Field label={t('immunizations.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('immunizations.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>

@@ -9,9 +9,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 // Fifteen call sites bypassed it. The three that woke a house most often —
 // every screened text, every WhatsApp, every voicemail — went through it first.
 // Five more followed: autopilot, gift, locator, close-auctions and
-// return-reminders. What remains is enumerated below WITH A REASON, so it is a
-// list someone chose rather than a list nobody counted, and so the next one has
-// to be added here deliberately.
+// return-reminders. The batch generator was the last, and took a different route
+// (see below). What remains is enumerated below WITH A REASON, so it is a list
+// someone chose rather than a list nobody counted, and so the next one has to be
+// added here deliberately.
 //
 // The crons matter more than their names suggest, because cron schedules are in
 // UTC and families are not. `autopilot-scan` runs at 06:30 UTC — 23:30 for a
@@ -49,11 +50,15 @@ const ALLOWED: Record<string, string> = {
   'app/api/contact-center/sms/route.ts': 'only fires when shouldNotifyFamily(intent) — an urgent inbound message',
   'app/api/contact-center/voice/transcription/route.ts': 'titled "Urgent voicemail at your family line"; same gate',
 
-  // DEBT, named. The other five entries that stood here are gone because the
-  // files are: autopilot, gift, locator, close-auctions and return-reminders all
-  // go through notify() now. This one is the last, and it is genuinely
-  // different — a batch generator that assembles its own rows.
-  'lib/server/notifications.ts': 'the generator writes its own batch; it predates the service and needs its own tranche',
+  // NO DEBT LEFT. This last one still writes its own batch, and that is now a
+  // justified exemption rather than something owed: 150 rows through notify()
+  // would be 150 dedupe reads on a cron, re-solving duplicates this function
+  // already handles per type. What it was actually missing was the quiet-hours
+  // window, and it takes that from `deliveryTimeFor` — the same function
+  // notify() uses. Asserted in its own block below, because "does not call
+  // notify()" and "ignores quiet hours" turned out to be different claims, and
+  // only the second one was ever the problem.
+  'lib/server/notifications.ts': 'batches its own insert on purpose (150 rows, own per-type dedupe) but takes the quiet-hours window from deliveryTimeFor',
 };
 
 describe('a notification that can wake a house goes through notify()', () => {
@@ -154,5 +159,39 @@ describe('the five that followed', () => {
     for (const file of ['app/api/cron/close-auctions/route.ts', 'app/api/cron/return-reminders/route.ts']) {
       expect(READ(file), `${file} must key its scopes by family`).toMatch(/new Map<string, ServiceScope \| null>\(\)/);
     }
+  });
+});
+
+describe('the batch generator takes the window without taking the round trips', () => {
+  const src = readFileSync('lib/server/notifications.ts', 'utf8');
+
+  it('stamps every row from the shared delivery-time function', () => {
+    // ONE definition of "when does this land". Two would eventually disagree,
+    // and the one that drifts is the one nobody is testing.
+    expect(src).toContain("import { deliveryTimeFor } from '@/lib/services/notifications'");
+    expect(src).toContain('const { sendAt } = await deliveryTimeFor(scope);');
+    expect(src).toContain('for (const row of allRows) row.send_at = sendAt;');
+  });
+
+  it('resolves the window ONCE for the whole batch', () => {
+    // Every row belongs to one family, so a per-row lookup would be the same
+    // answer fetched 150 times — which is the cost that kept this off notify().
+    expect(src.match(/deliveryTimeFor\(/g) ?? []).toHaveLength(1);
+  });
+
+  it('asks for the family’s real zone', () => {
+    expect(src).toContain('systemScopeForFamily(');
+  });
+
+  it('sends rather than holds when the family cannot be read', () => {
+    // A notice that arrives is recoverable; one held for eight hours against a
+    // guessed clock is not.
+    expect(src).toMatch(/could not read the family for quiet hours/);
+  });
+
+  it('does not mark itself urgent', () => {
+    // Everything it produces is a courtesy notice about a day's events,
+    // reminders and medications.
+    expect(src).not.toMatch(/urgent:\s*true/);
   });
 });

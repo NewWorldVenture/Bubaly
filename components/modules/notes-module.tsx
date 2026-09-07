@@ -9,6 +9,9 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import {
+  deleteNoteAction, duplicateNoteAction, saveNoteAction, setNotePinnedAction,
+} from '@/app/(app)/dashboard/notes/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -21,6 +24,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Note = Tables<'notes'>;
 
@@ -81,7 +85,8 @@ function renderChecklist(body: string) {
 }
 
 export function NotesModule() {
-  const { familyId, userId } = useApp();
+  const t = useTranslations();
+  const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
@@ -114,31 +119,27 @@ export function NotesModule() {
   const rest = filtered.filter((n) => !n.is_pinned);
 
   async function remove(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
-    success('Note deleted');
+    const res = await deleteNoteAction(id);
+    if (!res.ok) return toastError(res.error);
+    success(t('notesModule.noteDeleted'));
     void refresh();
     if (viewing?.id === id) setViewing(null);
   }
 
   async function togglePin(note: Note) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').update({ is_pinned: !note.is_pinned }).eq('id', note.id);
-    if (error) return toastError(describeDbError(error));
+    // The VALUE, not a toggle of what this tab last rendered.
+    const next = !note.is_pinned;
+    const res = await setNotePinnedAction(note.id, next);
+    if (!res.ok) return toastError(res.error);
     void refresh();
-    if (viewing?.id === note.id) setViewing({ ...note, is_pinned: !note.is_pinned });
+    if (viewing?.id === note.id) setViewing({ ...note, is_pinned: next });
   }
 
   async function duplicate(note: Note) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').insert({
-      family_id: familyId, created_by: userId,
-      title: note.title ? `Copy of ${note.title}` : null,
-      body: note.body,
-    });
-    if (error) return toastError(describeDbError(error));
-    success('Note duplicated');
+    // Only the id: the copy is made from the note as the database has it.
+    const res = await duplicateNoteAction(note.id);
+    if (!res.ok) return toastError(res.error);
+    success(t('notesModule.noteDuplicated'));
     void refresh();
   }
 
@@ -148,14 +149,14 @@ export function NotesModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Notes"
-        description="Shared family notes, checklists, ideas, and reminders."
+        title={t('notes.notes')}
+        description={t('notesModule.sharedFamilyNotesChecklistsIdeas')}
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search notes…"
+                placeholder={t('notes.searchNotes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
@@ -164,7 +165,7 @@ export function NotesModule() {
               {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
             </button>
             <AiInsight kind="notes" iconOnly />
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('notes.newNote')}</Button>
           </div>
         }
       />
@@ -184,22 +185,22 @@ export function NotesModule() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={StickyNote} title="No notes yet"
-          description="Create notes, checklists, meeting minutes, or family announcements."
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>} />
+        <EmptyState icon={StickyNote} title={t('notes.noNotesYet')}
+          description={t('notesModule.createNotesChecklistsMeetingMinutes')}
+          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('notes.newNote')}</Button>} />
       ) : (
         <div className="space-y-5">
           {pinned.length > 0 && (
             <div>
               <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted">
-                <Pin className="h-3 w-3" /> Pinned
+                <Pin className="h-3 w-3" /> {t('notes.pinned')}
               </h2>
               <NoteGroup notes={pinned} view={view} onOpen={setViewing} onTogglePin={togglePin} onDelete={remove} onDuplicate={duplicate} />
             </div>
           )}
           {rest.length > 0 && (
             <div>
-              {pinned.length > 0 && <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">Notes</h2>}
+              {pinned.length > 0 && <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{t('notes.notes')}</h2>}
               <NoteGroup notes={rest} view={view} onOpen={setViewing} onTogglePin={togglePin} onDelete={remove} onDuplicate={duplicate} />
             </div>
           )}
@@ -220,10 +221,10 @@ export function NotesModule() {
                 </button>
                 <button onClick={() => { setEditing(viewing); setViewing(null); }}
                   className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
-                  Edit
+                  {t('notes.edit')}
                 </button>
               </div>
-              <button onClick={() => { if (confirm('Delete this note?')) remove(viewing.id); }}
+              <button onClick={() => { if (confirm(t('notesModule.deleteThisNote'))) remove(viewing.id); }}
                 className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -232,7 +233,7 @@ export function NotesModule() {
             {viewing.body && isChecklist(viewing.body)
               ? <div className="space-y-0.5">{renderChecklist(viewing.body)}</div>
               : <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{viewing.body}</p>}
-            <p className="mt-6 text-xs text-muted">Updated {fmtRelative(viewing.updated_at)}</p>
+            <p className="mt-6 text-xs text-muted">{t('notes.updated')} {fmtRelative(viewing.updated_at)}</p>
           </div>
         </Modal>
       )}
@@ -240,8 +241,6 @@ export function NotesModule() {
       {(addOpen || editing) && (
         <NoteModal
           note={editing}
-          familyId={familyId}
-          userId={userId}
           onClose={() => { setAddOpen(false); setEditing(null); }}
           onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
         />
@@ -296,6 +295,13 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {notes.map((note) => {
+        // NOTHING EVER SETS THIS. `public.notes` (0002_tables.sql:357) has no
+        // `color` column and no migration adds one, so this cast reads
+        // `undefined` on every note and `noteColor` falls back to 'default'.
+        // The cast is why the type checker never said so. The picker below is
+        // therefore decorative: a family picks yellow, saves, and gets grey.
+        // Wiring it up needs a migration, which is a decision, not a cleanup —
+        // recorded in docs/SPEC_GAP_LEDGER.md §7 rather than half-fixed here.
         const color = noteColor((note as Record<string, unknown>).color as string);
         const checklist = note.body && isChecklist(note.body);
         const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
@@ -351,12 +357,15 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   );
 }
 
-function NoteModal({ note, familyId, userId, onClose, onSaved }: {
-  note: Note | null; familyId: string; userId: string;
+function NoteModal({ note, onClose, onSaved }: {
+  note: Note | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // Local only, and it stays local: there is no `notes.color` column for the
+  // save below to write it to. See the note on `noteColor` above.
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
@@ -382,7 +391,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
       if (!res.ok || !json.insights) throw new Error(json.error || 'Could not analyze note');
       setInsights(json.insights);
     } catch (err) {
-      toastError(describeDbError(err, 'AI assist failed'));
+      toastError(describeDbError(err, t('notesModule.aiAssistFailed')));
     } finally {
       setAiLoading(false);
     }
@@ -392,7 +401,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
     if (!insights) return;
     setBodyValue((v) => (v.trimEnd() + formatInsightsForNote(insights)).trimStart());
     setInsights(null);
-    success('AI summary added to note');
+    success(t('notesModule.aiSummaryAddedToNote'));
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -400,15 +409,12 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim() || null;
     const body = bodyValue.trim() || null;
-    if (!body && !title) return toastError('Note must have content');
+    if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
-    const supabase = createClient();
-    const { error } = note
-      ? await supabase.from('notes').update({ title, body: body ?? '' }).eq('id', note.id)
-      : await supabase.from('notes').insert({ family_id: familyId, created_by: userId, title, body: body ?? '' });
+    const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
     setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    success(note ? 'Note saved' : 'Note created');
+    if (!res.ok) return toastError(res.error);
+    success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
     onSaved();
   }
 
@@ -431,20 +437,20 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
           </div>
         </div>
 
-        <Field label="Title (optional)">
+        <Field label={t('notes.titleOptional')}>
           {(id) => (
             <Input id={id} name="title" defaultValue={note?.title ?? ''}
-              placeholder="Note title…" autoFocus={!note} />
+              placeholder={t('notes.noteTitle')} autoFocus={!note} />
           )}
         </Field>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium">Content</label>
+            <label className="text-sm font-medium">{t('notes.content')}</label>
             <div className="flex items-center gap-1">
               <button type="button" onClick={insertChecklistItem}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">
-                <CheckSquare className="h-3 w-3" /> Add checklist item
+                <CheckSquare className="h-3 w-3" /> {t('notes.addChecklistItem')}
               </button>
               <button type="button" onClick={runAiAssist} disabled={aiLoading}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition disabled:opacity-50">
@@ -464,7 +470,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
             <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
-                  <Sparkles className="h-3.5 w-3.5" /> AI summary
+                  <Sparkles className="h-3.5 w-3.5" /> {t('notes.aiSummary')}
                 </span>
                 <button type="button" onClick={() => setInsights(null)} className="text-muted hover:text-fg">
                   <X className="h-3.5 w-3.5" />
@@ -490,7 +496,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
               <div className="mt-3 flex justify-end">
                 <button type="button" onClick={applyInsights}
                   className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                  Add to note
+                  {t('notes.addToNote')}
                 </button>
               </div>
             </div>
@@ -498,7 +504,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('notes.cancel')}</Button>
           <Button type="submit" loading={loading}>{note ? 'Save' : 'Create Note'}</Button>
         </div>
       </form>

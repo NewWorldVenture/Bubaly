@@ -17,6 +17,7 @@ import { superAdminEmails } from '@/lib/constants/super-admins';
 import { RoleDonut } from '@/components/admin/role-donut';
 import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Users & Families', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -53,6 +54,7 @@ type EnrichedUser = {
 };
 
 export default async function AdminUsersPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
 
@@ -179,8 +181,8 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     <div className="module-page">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Users & Families</h1>
-          <p className="mt-1 text-sm text-muted">Manage all users, families, and their access levels.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminUsers.usersFamilies')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('adminUsers.manageAllUsersFamiliesAndTheir')}</p>
         </div>
         <UsersToolbar families={(families ?? []).map((f) => ({ id: f.id, name: f.name }))} exportRows={pageRows.map((u) => ({
           name: u.name, email: u.email ?? '', family: u.family?.name ?? '',
@@ -193,7 +195,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
             <div>
-              <p className="text-sm font-semibold text-danger">Some data couldn’t be loaded from Supabase</p>
+              <p className="text-sm font-semibold text-danger">{tr('adminUsers.someDataCouldntBeLoadedFrom')}</p>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
                 {loadErrors.map((err, i) => <li key={i}>{err}</li>)}
               </ul>
@@ -214,16 +216,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={UsersRound} label="Total Members" value={totalUsers} tone="bg-brand/10 text-brand-text" />
-              <StatCard icon={UserCheck} label="With Account" value={activeUsers} tone="bg-success/10 text-success" />
-              <StatCard icon={UserPlus} label="New This Month" value={newThisMonth} tone="bg-accent/10 text-accent" />
-              <StatCard icon={UserX} label="No Account" value={noAccountUsers} tone="bg-warning/10 text-warning" />
-              <StatCard icon={ShieldCheck} label="Parents" value={adminCount} tone="bg-danger/10 text-danger" />
+              <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={totalUsers} tone="bg-brand/10 text-brand-text" />
+              <StatCard icon={UserCheck} label={tr('adminUsers.withAccount')} value={activeUsers} tone="bg-success/10 text-success" />
+              <StatCard icon={UserPlus} label={tr('adminUsers.newThisMonth')} value={newThisMonth} tone="bg-accent/10 text-accent" />
+              <StatCard icon={UserX} label={tr('adminUsers.noAccount')} value={noAccountUsers} tone="bg-warning/10 text-warning" />
+              <StatCard icon={ShieldCheck} label={tr('adminUsers.parents')} value={adminCount} tone="bg-danger/10 text-danger" />
             </div>
 
             <Card>
               <FilterForm action="/admin/users" hidden={{ tab: 'all' }}>
-                <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search users by name, email, or family..." />
+                <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminUsers.searchUsersByNameEmailOr')} />
                 <FilterSelect name="role" defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
                   ...Object.entries(ROLE_LABELS).map(([v, label]) => ({ value: v, label })),
@@ -243,24 +245,24 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 totalUsers === 0 && loadErrors.length === 0 ? (
                   <EmptyState
                     icon={UsersRound}
-                    title="No members yet"
-                    description="When families add members — or you add a user with “Add User” above — they’ll appear here. The console is reading live from Supabase."
+                    title={tr('adminUsers.noMembersYet')}
+                    description={tr('users.whenFamiliesAddMembersOr')}
                   />
                 ) : (
-                  <EmptyState icon={UsersRound} title="No members match these filters" />
+                  <EmptyState icon={UsersRound} title={tr('adminUsers.noMembersMatchTheseFilters')} />
                 )
               ) : (
                 <div className="table-responsive mt-4">
                   <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
-                        <th className="px-3 py-2 font-medium">User</th>
-                        <th className="px-3 py-2 font-medium">Family</th>
-                        <th className="px-3 py-2 font-medium">Role</th>
-                        <th className="px-3 py-2 font-medium">Plan</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium">Admin</th>
-                        <th className="px-3 py-2 font-medium">Joined</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.user')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.family')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.role')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.plan')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.status')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.admin')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('adminUsers.joined')}</th>
                         <th className="px-3 py-2 font-medium" />
                       </tr>
                     </thead>
@@ -269,7 +271,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <tr key={u.member.id}>
                           <td className="px-3 py-2.5">
                             <p className="font-medium">{u.name || '—'}</p>
-                            <p className="text-xs text-muted">{u.email ?? <span className="italic">No login account</span>}</p>
+                            <p className="text-xs text-muted">{u.email ?? <span className="italic">{tr('users.noLoginAccount')}</span>}</p>
                           </td>
                           <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{ROLE_LABELS[u.role]}</Badge> : '—'}</td>
@@ -298,7 +300,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               )}
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-                <span>Showing {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
+                <span>{tr('adminUsers.showing')} {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
                 <div className="flex gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 7).map((p) => (
                     <a key={p} href={`/admin/users?${new URLSearchParams({ ...hiddenDefined, page: String(p) }).toString()}`}
@@ -313,13 +315,13 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
           <div className="space-y-5">
             <Card>
-              <h2 className="mb-3 text-base font-semibold">Users by Role</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.usersByRole')}</h2>
               <RoleDonut counts={roleCounts} total={totalUsers} />
             </Card>
             <Card>
-              <h2 className="mb-3 text-base font-semibold">Recent Invites</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('adminUsers.recentInvites')}</h2>
               {!invites || invites.length === 0 ? (
-                <p className="text-sm text-muted">No invites yet.</p>
+                <p className="text-sm text-muted">{tr('adminUsers.noInvitesYet')}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {invites.slice(0, 5).map((inv) => (
@@ -340,19 +342,19 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'families' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">All families <span className="text-muted">({families?.length ?? 0})</span></h2>
+          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allFamilies')} <span className="text-muted">({families?.length ?? 0})</span></h2>
           {!families || families.length === 0 ? (
-            <EmptyState icon={UsersRound} title="No families yet" />
+            <EmptyState icon={UsersRound} title={tr('adminUsers.noFamiliesYet')} />
           ) : (
             <div className="table-responsive">
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">Family</th>
-                    <th className="px-3 py-2 font-medium">Members</th>
-                    <th className="px-3 py-2 font-medium">Plan</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Created</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.family')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.members')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.plan')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.status')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.created')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -377,20 +379,20 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'invitations' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">All invitations <span className="text-muted">({invites?.length ?? 0})</span></h2>
+          <h2 className="mb-4 text-base font-semibold">{tr('adminUsers.allInvitations')} <span className="text-muted">({invites?.length ?? 0})</span></h2>
           {!invites || invites.length === 0 ? (
-            <EmptyState icon={UserPlus} title="No invitations sent yet" />
+            <EmptyState icon={UserPlus} title={tr('adminUsers.noInvitationsSentYet')} />
           ) : (
             <div className="table-responsive">
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">Email</th>
-                    <th className="px-3 py-2 font-medium">Family</th>
-                    <th className="px-3 py-2 font-medium">Role</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Sent</th>
-                    <th className="px-3 py-2 font-medium">Expires</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.email')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.family')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.role')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.status')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.sent')}</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.expires')}</th>
                     <th className="px-3 py-2 font-medium" />
                   </tr>
                 </thead>
@@ -419,8 +421,8 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
       {tab === 'roles' && (
         <Card>
-          <h2 className="mb-1 text-base font-semibold">Role definitions</h2>
-          <p className="mb-4 text-sm text-muted">The real permission matrix enforced by every family-scoped table’s RLS policy.</p>
+          <h2 className="mb-1 text-base font-semibold">{tr('adminUsers.roleDefinitions')}</h2>
+          <p className="mb-4 text-sm text-muted">{tr('adminUsers.theRealPermissionMatrixEnforcedBy')}</p>
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {(roles ?? []).map((r) => (
               <div key={r.role} className="rounded-xl border border-border bg-surface/40 p-3">
@@ -434,7 +436,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
-                    <th className="px-3 py-2 font-medium">Resource</th>
+                    <th className="px-3 py-2 font-medium">{tr('adminUsers.resource')}</th>
                     {(roles ?? []).map((r) => <th key={r.role} className="px-3 py-2 text-center font-medium">{r.label.split(' / ')[0]}</th>)}
                   </tr>
                 </thead>
@@ -457,7 +459,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               </table></div>
             </div>
           ) : (
-            <EmptyState icon={ShieldCheck} title="Permission matrix not seeded" description="Run supabase/seed.sql against this project to populate roles & permissions." />
+            <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
           )}
         </Card>
       )}
@@ -465,15 +467,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   );
 }
 
-function AdminUsersReadError() {
+async function AdminUsersReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Users &amp; Families</h1>
-        <p className="mt-1 text-sm text-muted">Manage all users, families, and their access levels.</p>
+        <p className="mt-1 text-sm text-muted">{tr('users.manageAllUsersFamiliesAnd')}</p>
       </div>
-      <ErrorState message="Could not load users and family access data from Supabase. Refresh and try again." />
-      <a href="/admin/users" className="text-sm font-medium text-brand-text underline">Refresh users</a>
+      <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+      <a href="/admin/users" className="text-sm font-medium text-brand-text underline">{tr('users.refreshUsers')}</a>
     </div>
   );
 }

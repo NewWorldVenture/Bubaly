@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Campaigns', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning'> =
 };
 
 export default async function CampaignsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: campaigns, error: campaignsError } = await supabase.from('marketing_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (campaignsError) {
@@ -27,12 +29,12 @@ export default async function CampaignsPage() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">{(campaigns ?? []).length} campaign{(campaigns ?? []).length === 1 ? '' : 's'}</p>
         <Link href="/admin/marketing/campaigns/new" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
-          <Plus className="h-4 w-4" /> New campaign
+          <Plus className="h-4 w-4" /> {t('adminMarketingCampaigns.newCampaign')}
         </Link>
       </div>
 
       {(campaigns ?? []).length === 0 ? (
-        <EmptyState icon={Send} title="No campaigns yet" description="Create your first marketing campaign to get started." />
+        <EmptyState icon={Send} title={t('adminMarketingCampaigns.noCampaignsYet')} description={t('campaigns.createYourFirstMarketingCampaign')} />
       ) : (
         <div className="space-y-3">
           {(campaigns ?? []).map((c) => (
@@ -61,15 +63,16 @@ export default async function CampaignsPage() {
   );
 }
 
-function AdminCampaignsReadError() {
+async function AdminCampaignsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaigns</h1>
-        <p className="mt-1 text-sm text-muted">Plan and monitor lifecycle campaigns.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaigns')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('campaigns.planAndMonitorLifecycleCampaigns')}</p>
       </div>
-      <ErrorState message="Could not load marketing campaigns from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Refresh campaigns</Link>
+      <ErrorState message={t('campaigns.couldNotLoadMarketingCampaigns')} />
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">{t('campaigns.refreshCampaigns')}</Link>
     </div>
   );
 }

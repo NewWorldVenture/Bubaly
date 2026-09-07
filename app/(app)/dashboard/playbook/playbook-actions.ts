@@ -9,6 +9,7 @@
 // dismissing hides it. All reads/writes go through the RLS-scoped server client.
 
 import { confirmFact } from '@/lib/services/memory';
+import { getTranslations } from '@/lib/i18n/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -153,9 +154,10 @@ export async function refreshPlaybookAction(): Promise<Result> {
  * One accept, one set of rules. The service owns them.
  */
 export async function acceptSuggestionAction(input: { id: string }): Promise<Result> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const id = String(input?.id || '').trim();
-  if (!id) return { ok: false, error: 'Missing suggestion' };
+  if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const scope = scopeFromUserContext(ctx, await createServer());
   const res = await confirmFact(scope, id);
   return res.ok ? { ok: true } : { ok: false, error: res.error };
@@ -163,9 +165,10 @@ export async function acceptSuggestionAction(input: { id: string }): Promise<Res
 
 /** Dismiss a suggestion (kept, so it isn't re-suggested on the next refresh). */
 export async function dismissSuggestionAction(input: { id: string }): Promise<Result> {
+  const tr = await getTranslations();
   await requireUserContext();
   const id = String(input?.id || '').trim();
-  if (!id) return { ok: false, error: 'Missing suggestion' };
+  if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
   const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
   if (error) return { ok: false, error: error.message };

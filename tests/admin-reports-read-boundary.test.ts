@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync('app/(app)/admin/reports/page.tsx', 'utf8');
@@ -8,6 +9,6 @@ describe('admin reports read boundary', () => {
     expect(source).toContain('familyCountResult.error');
     expect(source).toContain('activityResult.error');
     expect(source).toContain('const readError = [');
-    expect(source).toContain('Could not load reports from Supabase. Refresh and try again.');
+    expectSays(source, 'reports.couldNotLoadReportsFrom', 'Could not load reports from Supabase. Refresh and try again.');
   });
 });

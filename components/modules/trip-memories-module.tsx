@@ -16,6 +16,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { groupByTrip } from '@/lib/vacations/memories';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Memory = Tables<'trip_memories'>;
 type VacationLite = { id: string; title: string };
@@ -23,6 +24,7 @@ type VacationLite = { id: string; title: string };
 const blank = () => ({ title: '', memory_date: new Date().toISOString().slice(0, 10), note: '', location: '', vacation_id: '', member_id: '', file: null as File | null });
 
 export function TripMemoriesModule() {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -87,7 +89,7 @@ export function TripMemoriesModule() {
         created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Memory saved');
+      success(t('tripMemoriesModule.memorySaved'));
       setForm(null);
     } finally {
       setSaving(false);
@@ -95,28 +97,28 @@ export function TripMemoriesModule() {
   }
 
   async function remove(m: Memory) {
-    if (!confirm('Delete this memory?')) return;
+    if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
     if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
     const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load trip memories. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('tripMemoriesModule.couldNotLoadTripMemories')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> Trip Memories</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {t('tripMemories.tripMemories')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="memories" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('tripMemories.addMemory')}</Button>
         </div>
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={BookHeart} title="No memories yet" description="Capture moments from your trips — a photo, a note, a place you loved." />
+        <EmptyState icon={BookHeart} title={t('tripMemories.noMemoriesYet')} description={t('tripMemoriesModule.captureMomentsFromYourTrips')} />
       ) : groups.map((g) => (
         <div key={g.vacationId || 'general'}>
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
@@ -138,7 +140,7 @@ export function TripMemoriesModule() {
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium">{m.title}</p>
-                      <button onClick={() => remove(m)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => remove(m)} className="text-muted hover:text-danger" aria-label={t('tripMemories.delete')}><Trash2 className="h-4 w-4" /></button>
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
                       {fmtDate(m.memory_date)}{m.location ? <> · <MapPin className="inline h-3 w-3" /> {m.location}</> : ''}{mem ? ` · ${mem.display_name}` : ''}
@@ -153,21 +155,21 @@ export function TripMemoriesModule() {
       ))}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Add trip memory">
+        <Modal open onClose={() => setForm(null)} title={t('tripMemories.addTripMemory')}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Title">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Sunset at the beach" />}</Field>
+            <Field label={t('tripMemories.title')}>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('tripMemories.sunsetAtTheBeach')} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Date">{(id) => <Input id={id} type="date" value={form.memory_date} onChange={(e) => setForm({ ...form, memory_date: e.target.value })} />}</Field>
-              <Field label="Location">{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Maui, HI" />}</Field>
+              <Field label={t('tripMemories.date')}>{(id) => <Input id={id} type="date" value={form.memory_date} onChange={(e) => setForm({ ...form, memory_date: e.target.value })} />}</Field>
+              <Field label={t('tripMemories.location')}>{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder={t('tripMemories.mauiHi')} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {(vacations ?? []).length > 0 && (
-                <Field label="Trip">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">— None —</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
+                <Field label={t('tripMemories.trip')}>{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">{t('tripMemories.none')}</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
               )}
-              <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">— None —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label={t('tripMemories.member')}>{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}><option value="">{t('tripMemories.none')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="What made this special?" />}</Field>
-            <Field label="Photo (optional)">
+            <Field label={t('tripMemories.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={t('tripMemories.whatMadeThisSpecial')} />}</Field>
+            <Field label={t('tripMemories.photoOptional')}>
               {(id) => <input id={id} type="file" accept="image/*" onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
                 if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`); e.target.value = ''; return; }
@@ -175,8 +177,8 @@ export function TripMemoriesModule() {
               }} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit" loading={saving}>Save memory</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('tripMemories.cancel')}</Button>
+              <Button type="submit" loading={saving}>{t('tripMemories.saveMemory')}</Button>
             </div>
           </form>
         </Modal>

@@ -13,6 +13,7 @@ import { BUDGET_CATEGORIES, dollars, lookup } from '@/lib/vacations/meta';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables, VacBudgetCategory } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Budget = Tables<'vacation_budgets'>;
 type Expense = Tables<'vacation_expenses'>;
@@ -27,6 +28,7 @@ const expenseFields: FieldDef[] = [
 ];
 
 export function TripBudget({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -51,30 +53,30 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     const { error } = existing
       ? await createClient().from('vacation_budgets').update({ planned_cents: cents }).eq('id', existing.id)
       : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId });
-    if (error) toastError(error.message); else success('Budget updated');
+    if (error) toastError(error.message); else success(t('tripBudget.budgetUpdated'));
     setEditing(null);
   }
 
   if (budgetsLoading || expensesLoading) return <LoadingBlock />;
-  if (budgetsError || expensesError) return <ErrorState message="Could not load this trip budget. Refresh and try again." onRetry={refreshAll} />;
+  if (budgetsError || expensesError) return <ErrorState message={t('tripBudget.couldNotLoadThisTrip')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatPill label="Planned" value={dollars(summary.planned_cents)} />
-        <StatPill label="Spent" value={dollars(summary.spent_cents)} />
-        <StatPill label="Remaining" value={dollars(summary.remaining_cents)} tone={summary.remaining_cents < 0 ? 'border-rose-500/40' : ''} />
-        <StatPill label="Used" value={`${summary.pct === 999 ? '∞' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
+        <StatPill label={t('tripBudget.planned')} value={dollars(summary.planned_cents)} />
+        <StatPill label={t('tripBudget.spent')} value={dollars(summary.spent_cents)} />
+        <StatPill label={t('tripBudget.remaining')} value={dollars(summary.remaining_cents)} tone={summary.remaining_cents < 0 ? 'border-rose-500/40' : ''} />
+        <StatPill label={t('tripBudget.used')} value={`${summary.pct === 999 ? '∞' : summary.pct}%`} tone={summary.over ? 'border-rose-500/40' : ''} />
       </div>
 
       {summary.over && (
         <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-200">
-          <AlertTriangle className="h-4 w-4" /> You are over budget in {summary.categories.filter((c) => c.over).map((c) => lookup(BUDGET_CATEGORIES, c.category).label).join(', ')}.
+          <AlertTriangle className="h-4 w-4" /> {t('tripBudget.youAreOverBudgetIn')} {summary.categories.filter((c) => c.over).map((c) => lookup(BUDGET_CATEGORIES, c.category).label).join(', ')}.
         </div>
       )}
 
       <div className="space-y-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Wallet className="h-5 w-5 text-brand-text" /> Budget by category</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Wallet className="h-5 w-5 text-brand-text" /> {t('tripBudget.budgetByCategory')}</h2>
         <div className="space-y-2">
           {BUDGET_CATEGORIES.map((cat) => {
             const roll = summary.categories.find((c) => c.category === cat.value);
@@ -103,8 +105,8 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
       </div>
 
       <TripCrudSection<Expense>
-        table="vacation_expenses" vacationId={vacationId} title="Expenses" icon={Receipt}
-        fields={expenseFields} emptyText="No expenses logged" addLabel="Log expense"
+        table="vacation_expenses" vacationId={vacationId} title={t('tripBudget.expenses')} icon={Receipt}
+        fields={expenseFields} emptyText={t('tripBudget.noExpensesLogged')} addLabel="Log expense"
         orderBy={(a, b) => b.spent_on.localeCompare(a.spent_on)}
         renderRow={(x, members) => {
           const who = x.paid_by_member_id ? members.get(x.paid_by_member_id)?.display_name : null;

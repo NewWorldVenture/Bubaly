@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { initials } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 function presetSvgUrl(from: string, to: string, id: string): string {
   const svg = [
@@ -49,6 +50,7 @@ interface AvatarPickerProps {
 }
 
 export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayName = '', onChange }: AvatarPickerProps) {
+  const t = useTranslations();
   const [selected, setSelectedState] = useState(defaultValue);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -68,7 +70,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
       if (upErr) throw new Error(upErr);
       setSelected(url ?? '');
     } catch (err) {
-      setError(describeDbError(err, 'Upload failed'));
+      setError(describeDbError(err, t('avatarPicker.uploadFailed')));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -87,7 +89,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={selected}
-              alt="Your avatar"
+              alt={t('avatarPicker.yourAvatar')}
               className="h-full w-full rounded-full object-cover ring-2 ring-brand/30"
             />
           ) : (
@@ -99,7 +101,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
             <button
               type="button"
               onClick={() => setSelected('')}
-              aria-label="Remove avatar"
+              aria-label={t('avatarPicker.removeAvatar')}
               className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface shadow-sm transition hover:bg-elevated"
             >
               <X className="h-3 w-3" />
@@ -107,8 +109,8 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
           )}
         </div>
         <div>
-          <p className="text-sm font-medium">Profile photo</p>
-          <p className="mt-0.5 text-xs text-muted">Pick a color theme or upload your photo</p>
+          <p className="text-sm font-medium">{t('avatarPicker.profilePhoto')}</p>
+          <p className="mt-0.5 text-xs text-muted">{t('avatarPicker.pickAColorThemeOrUpload')}</p>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -17,6 +18,7 @@ const QUICK = [
 ];
 
 export function TripConcierge({ vacationId }: { vacationId: string }) {
+  const t = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -50,7 +52,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const data = await res.json();
       if (!res.ok) { toastError(data.error || 'Failed'); setMessages((m) => m.slice(0, -1)); }
       else { setConversationId(data.conversationId); setMessages((m) => [...m, { role: 'assistant', content: data.reply }]); }
-    } catch { toastError('Network error'); setMessages((m) => m.slice(0, -1)); }
+    } catch { toastError(t('tripConcierge.networkError')); setMessages((m) => m.slice(0, -1)); }
     setBusy(false);
   }
 
@@ -61,22 +63,22 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Build failed');
       else success(`Added ${data.added.activities} activities, ${data.added.items} itinerary items, ${data.added.budget} budget lines, ${data.added.packing} packing items`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(t('tripConcierge.networkError')); }
     setBuilding(false);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> AI Vacation Concierge</h2>
-        <Button size="sm" variant="secondary" onClick={autoBuild} loading={building}><Wand2 className="h-4 w-4" /> Auto-build trip</Button>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> {t('tripConcierge.aiVacationConcierge')}</h2>
+        <Button size="sm" variant="secondary" onClick={autoBuild} loading={building}><Wand2 className="h-4 w-4" /> {t('tripConcierge.autoBuildTrip')}</Button>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         {messages.length === 0 ? (
           <div className="py-6 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-brand-text/60" />
-            <p className="mt-2 text-sm text-muted">Your personal travel agent. Ask anything about this trip, or tap a prompt below.</p>
+            <p className="mt-2 text-sm text-muted">{t('tripConcierge.yourPersonalTravelAgentAskAnything')}</p>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {QUICK.map((q) => <button key={q} onClick={() => send(q)} className="rounded-xl border border-border bg-elevated/40 p-3 text-left text-sm hover:border-brand/40">{q}</button>)}
             </div>
@@ -95,7 +97,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex items-center gap-2">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask your concierge…" disabled={busy}
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('tripConcierge.askYourConcierge')} disabled={busy}
           className="h-11 flex-1 rounded-xl border border-border bg-surface/60 px-4 text-sm focus-ring" />
         <Button type="submit" size="icon" loading={busy} disabled={!input.trim()}><Send className="h-4 w-4" /></Button>
       </form>

@@ -12,6 +12,7 @@ import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
 import { saveServiceDescriptionAction } from '@/app/(app)/admin/services/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EditorGroup = { title: string; items: { key: string; label: string }[] };
 
@@ -19,6 +20,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
   groups: EditorGroup[];
   overrides: Record<string, string>;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [query, setQuery] = useState('');
   // Working values start from override-or-default; saved snapshot tracks "clean".
@@ -47,7 +49,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
     setValues((v) => ({ ...v, [key]: description }));
     setJustSaved(key);
     setTimeout(() => setJustSaved((k) => (k === key ? null : k)), 1500);
-    success('Description saved.');
+    success(t('serviceDescriptionsEditor.descriptionSaved'));
   }
 
   function resetToDefault(key: string) {
@@ -64,7 +66,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search services…"
+            placeholder={t('serviceDescriptionsEditor.searchServices')}
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm outline-none focus:border-brand"
           />
         </div>
@@ -92,7 +94,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-fg">{it.label}</span>
-                        {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">Custom</span>}
+                        {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">{t('serviceDescriptionsEditor.custom')}</span>}
                       </div>
                       <code className="hidden text-[11px] text-muted/60 sm:block">{it.key}</code>
                     </div>
@@ -112,8 +114,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                             onClick={() => resetToDefault(it.key)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
                           >
-                            <RotateCcw className="h-3 w-3" /> Reset
-                          </button>
+                            <RotateCcw className="h-3 w-3" />{' '}{t('serviceDescriptionsEditor.reset')}</button>
                         )}
                         <button
                           type="button" disabled={!dirty || isBusy}

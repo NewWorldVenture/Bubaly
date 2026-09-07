@@ -8,6 +8,7 @@ import { PLATFORMS, PROVIDERS, isPlatform, type SocialPlatform } from '@/lib/soc
 import { PlatformBadge } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Feed · Social' };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
 type SP = { platform?: string; media?: string; q?: string };
 
 export default async function FeedPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const t = await getTranslations();
   const sp = await searchParams;
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -39,7 +41,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       {/* Filters */}
       <Card>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={qs({ platform: undefined })} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${!platform ? 'bg-brand text-brand-fg' : 'border border-border text-muted'}`}>All platforms</Link>
+          <Link href={qs({ platform: undefined })} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${!platform ? 'bg-brand text-brand-fg' : 'border border-border text-muted'}`}>{t('dashboardSocialFeed.allPlatforms')}</Link>
           {PLATFORMS.map((p) => (
             <Link key={p} href={qs({ platform: p })} className={`rounded-lg px-2.5 py-1 text-xs font-medium ${platform === p ? 'bg-brand text-brand-fg' : 'border border-border text-muted'}`}>
               {PROVIDERS[p].label}
@@ -48,8 +50,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         </div>
         <form className="mt-3 flex gap-2" action="/dashboard/social/feed">
           {platform && <input type="hidden" name="platform" value={platform} />}
-          <input name="q" defaultValue={sp.q ?? ''} placeholder="Search the feed…" className="flex-1 rounded-lg border border-border bg-elevated px-3 py-1.5 text-sm" />
-          <button className="rounded-lg bg-elevated px-3 py-1.5 text-sm font-medium">Search</button>
+          <input name="q" defaultValue={sp.q ?? ''} placeholder={t('dashboardSocialFeed.searchTheFeed')} className="flex-1 rounded-lg border border-border bg-elevated px-3 py-1.5 text-sm" />
+          <button className="rounded-lg bg-elevated px-3 py-1.5 text-sm font-medium">{t('dashboardSocialFeed.search')}</button>
         </form>
       </Card>
 
@@ -65,7 +67,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           action={
             connected.length === 0 ? (
               <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">
-                <Plug className="h-4 w-4" /> Connect an account
+                <Plug className="h-4 w-4" /> {t('dashboardSocialFeed.connectAnAccount')}
               </Link>
             ) : undefined
           }

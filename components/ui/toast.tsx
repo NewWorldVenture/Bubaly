@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -47,6 +48,7 @@ function hapticFor(tone: ToastTone) {
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const tr = useTranslations();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
 
@@ -103,7 +105,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => setToasts((arr) => arr.filter((x) => x.id !== t.id))}
                 className="text-muted hover:text-fg"
-                aria-label="Dismiss"
+                aria-label={tr('toast.dismiss')}
               >
                 <X className="h-4 w-4" />
               </button>

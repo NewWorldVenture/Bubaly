@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies, headers } from 'next/headers';
+import { getTranslations } from '@/lib/i18n/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
@@ -59,18 +60,19 @@ export async function stitchIdentityAction(): Promise<void> {
  * Deliberately vague on failure so it can't be used to enumerate usernames.
  */
 export async function childSignInAction(input: { username: string; pin: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getTranslations();
   const sec = process.env.CHILD_LOGIN_SECRET || null;
-  if (!sec) return { ok: false, error: 'Kid sign-in isn’t available right now.' };
+  if (!sec) return { ok: false, error: t('actions.kidSignInIsnT') };
 
   const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const username = normalizeUsername(typeof payload.username === 'string' ? payload.username : '');
   const pin = typeof payload.pin === 'string' ? payload.pin : '';
   const admin = createServiceClient();
   const limited = await enforceRequestRateLimit(admin, `child-login:${clientIp(await headers())}`, { limit: 30 });
-  if (!limited.ok) return { ok: false, error: 'Too many sign-in attempts. Try again shortly.' };
+  if (!limited.ok) return { ok: false, error: t('actions.tooManySignInAttempts') };
 
   if (!isValidUsername(username) || !isValidPin(pin)) {
-    return { ok: false, error: 'Check the username and PIN and try again.' };
+    return { ok: false, error: t('actions.checkTheUsernameAndPin') };
   }
 
   // Brute-force guard: reject flooded attempts BEFORE touching the password, so a
@@ -82,7 +84,7 @@ export async function childSignInAction(input: { username: string; pin: string }
     .select('fails, window_start, locked_until').eq('username', username).maybeSingle();
   if (throttleReadError) {
     console.error('[child-login] throttle lookup failed', throttleReadError);
-    return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+    return { ok: false, error: t('actions.kidSignInIsTemporarily') };
   }
   const gate = evaluateThrottle(tRow as ThrottleRow | null, now);
   if (gate.locked) {
@@ -100,12 +102,12 @@ export async function childSignInAction(input: { username: string; pin: string }
   const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username').ilike('username', username).limit(1);
   if (loginLookupError) {
     console.error('[child-login] login lookup failed', loginLookupError);
-    return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+    return { ok: false, error: t('actions.kidSignInIsTemporarily') };
   }
   const row = rows?.[0];
   if (!row) {
-    if (!(await recordFailure())) return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
-    return { ok: false, error: 'That username or PIN isn’t right.' };
+    if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+    return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
   }
 
   const supabase = await createServer(); // cookie-bound → sets the session on success
@@ -114,8 +116,8 @@ export async function childSignInAction(input: { username: string; pin: string }
     password: deriveChildPassword(sec, row.username, pin),
   });
   if (error) {
-    if (!(await recordFailure())) return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
-    return { ok: false, error: 'That username or PIN isn’t right.' };
+    if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+    return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
   }
 
   // Success: wipe the throttle so a genuine kid never carries a stale lock.

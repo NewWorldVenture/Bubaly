@@ -12,10 +12,12 @@ import { closeAccountAction } from '@/app/(app)/account/actions';
 import { BASIC_ANNUAL_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const fmt = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
+  const t = useTranslations();
   const [busy, setBusy] = useState<string | null>(null);
   const { error: toastError, success } = useToast();
 
@@ -32,20 +34,20 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.url) { window.location.href = json.url as string; return; }
-      toastError(json.error || 'Could not start checkout. Please try again.');
+      toastError(json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } catch {
-      toastError('Could not start checkout. Please try again.');
+      toastError(t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } finally {
       setBusy(null);
     }
   }
 
   async function close() {
-    if (!window.confirm('Close your account? Nothing is deleted — you can reopen anytime and everything will be here.')) return;
+    if (!window.confirm(t('trialPaywallGate.closeYourAccountNothingIs'))) return;
     setBusy('close');
     const res = await closeAccountAction();
     setBusy(null);
-    if (res.ok) { success('Your account is closed. Your data is safe.'); window.location.reload(); }
+    if (res.ok) { success(t('trialPaywallGate.yourAccountIsClosedYour')); window.location.reload(); }
     else toastError(res.error);
   }
 
@@ -56,9 +58,9 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-400 ring-1 ring-violet-400/30">
           <Lock className="h-6 w-6" />
         </div>
-        <h1 id="paywall-title" className="mt-4 text-center text-2xl font-black text-fg">Your free trial has ended</h1>
+        <h1 id="paywall-title" className="mt-4 text-center text-2xl font-black text-fg">{t('trialPaywallGate.yourFreeTrialHasEnded')}</h1>
         <p className="mx-auto mt-2 max-w-sm text-center text-sm text-muted">
-          Choose a plan to unlock Bubaly again. Everything you created is safe and waiting — nothing was deleted.
+          {t('trialPaywallGate.chooseAPlanToUnlockBubaly')}
         </p>
 
         <div className="mt-6 space-y-3">
@@ -75,12 +77,12 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-          <Link href="/pricing" className="text-brand-text hover:underline">See all plans & monthly pricing</Link>
+          <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
           <span className="text-muted/40">·</span>
-          <a href="/auth/signout" className="text-muted hover:text-fg">Log out</a>
+          <a href="/auth/signout" className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</a>
           <span className="text-muted/40">·</span>
           <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
-            Close account
+            {t('trialPaywallGate.closeAccount')}
           </button>
         </div>
       </div>

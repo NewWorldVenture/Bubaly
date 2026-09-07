@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
@@ -38,6 +39,7 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
 
 /** Manually re-syncs one feed. */
 export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -47,7 +49,7 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
     .eq('id', feedId)
     .eq('family_id', ctx.active.familyId)
     .single();
-  if (error || !feed) return { ok: false, error: 'Feed not found' };
+  if (error || !feed) return { ok: false, error: t('actions.feedNotFound') };
 
   const result = await syncFeed(supabase, feed);
   revalidatePath('/dashboard/settings');

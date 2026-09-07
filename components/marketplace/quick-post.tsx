@@ -22,6 +22,7 @@ import { draftListing, suggestPriceCents, type Comparable, type QuickDraft } fro
 import { PhotoUpload } from '@/components/marketplace/photo-upload';
 import { removeMarketplacePhotoPath } from '@/lib/storage/marketplace-photos';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ListingCategory[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as ListingCondition[];
@@ -31,6 +32,7 @@ const MATCH_LABEL: Record<QuickDraft['matched'][number], string> = {
 };
 
 export function QuickPost({ className }: { className?: string }) {
+  const t = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -67,7 +69,7 @@ export function QuickPost({ className }: { className?: string }) {
 
   const makeDraft = () => {
     const text = input.trim();
-    if (!text) { toastError('Describe the item first — one sentence is plenty'); return; }
+    if (!text) { toastError(t('quickPost.describeTheItemFirstOne')); return; }
     const d = draftListing(text);
     setDraft(d);
     setPrice(d.priceCents != null ? String(d.priceCents / 100) : '');
@@ -77,7 +79,7 @@ export function QuickPost({ className }: { className?: string }) {
   const cleanupPhoto = async (path = ownedPhotoPath) => {
     if (!path) return;
     const { error } = await removeMarketplacePhotoPath(createClient(), path);
-    if (error) toastError('The uploaded photo could not be cleaned up.');
+    if (error) toastError(t('quickPost.theUploadedPhotoCouldNot'));
     setOwnedPhotoPath((current) => (current === path ? null : current));
   };
 
@@ -93,7 +95,7 @@ export function QuickPost({ className }: { className?: string }) {
 
   async function post() {
     if (!draft) return;
-    if (!draft.title.trim()) { toastError('Give it a title'); return; }
+    if (!draft.title.trim()) { toastError(t('quickPost.giveItATitle')); return; }
     setPosting(true);
     const sb = createClient();
     const priced = kindHasPrice(draft.kind);
@@ -132,8 +134,8 @@ export function QuickPost({ className }: { className?: string }) {
           <Zap className="h-5 w-5 text-brand-text" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-black sm:text-base">Post in 60 seconds</h2>
-          <p className="text-xs text-muted">One sentence — AI drafts the whole listing.</p>
+          <h2 className="text-sm font-black sm:text-base">{t('quickPost.postIn60Seconds')}</h2>
+          <p className="text-xs text-muted">{t('quickPost.oneSentenceAiDraftsTheWhole')}</p>
         </div>
         {startedAt != null && (
           <span className={cn(
@@ -161,7 +163,7 @@ export function QuickPost({ className }: { className?: string }) {
             type="submit"
             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
           >
-            <Wand2 className="h-4 w-4" /> Draft it
+            <Wand2 className="h-4 w-4" /> {t('quickPost.draftIt')}
           </button>
         </form>
       ) : (
@@ -169,7 +171,7 @@ export function QuickPost({ className }: { className?: string }) {
           {/* What the AI detected */}
           {draft.matched.length > 0 && (
             <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-              <Sparkles className="h-3 w-3 text-brand-text" /> AI filled:
+              <Sparkles className="h-3 w-3 text-brand-text" /> {t('quickPost.aiFilled')}
               {draft.matched.map((m) => (
                 <span key={m} className="rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand-text">{MATCH_LABEL[m]}</span>
               ))}
@@ -180,7 +182,7 @@ export function QuickPost({ className }: { className?: string }) {
             value={draft.title}
             onChange={(e) => set('title', e.target.value)}
             maxLength={80}
-            aria-label="Title"
+            aria-label={t('quickPost.title')}
             className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm font-semibold outline-none focus:border-brand"
           />
 
@@ -195,7 +197,7 @@ export function QuickPost({ className }: { className?: string }) {
             <select
               value={draft.kind}
               onChange={(e) => set('kind', e.target.value as ListingKind)}
-              aria-label="Listing type"
+              aria-label={t('quickPost.listingType')}
               className="h-10 rounded-xl border border-border bg-bg px-2 text-xs outline-none focus:border-brand"
             >
               {KIND_ORDER.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
@@ -203,7 +205,7 @@ export function QuickPost({ className }: { className?: string }) {
             <select
               value={draft.category}
               onChange={(e) => set('category', e.target.value as ListingCategory)}
-              aria-label="Category"
+              aria-label={t('quickPost.category')}
               className="h-10 rounded-xl border border-border bg-bg px-2 text-xs outline-none focus:border-brand"
             >
               {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
@@ -211,7 +213,7 @@ export function QuickPost({ className }: { className?: string }) {
             <select
               value={draft.condition ?? ''}
               onChange={(e) => set('condition', (e.target.value || null) as ListingCondition | null)}
-              aria-label="Condition"
+              aria-label={t('quickPost.condition')}
               className="h-10 rounded-xl border border-border bg-bg px-2 text-xs outline-none focus:border-brand"
             >
               <option value="">Condition…</option>
@@ -224,13 +226,13 @@ export function QuickPost({ className }: { className?: string }) {
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   inputMode="decimal"
-                  aria-label="Price"
+                  aria-label={t('quickPost.price')}
                   placeholder="0"
                   className="h-10 w-full rounded-xl border border-border bg-bg pl-6 pr-2 text-xs outline-none focus:border-brand"
                 />
               </div>
             ) : (
-              <span className="inline-flex h-10 items-center justify-center rounded-xl border border-dashed border-border text-[11px] text-muted">No price</span>
+              <span className="inline-flex h-10 items-center justify-center rounded-xl border border-dashed border-border text-[11px] text-muted">{t('quickPost.noPrice')}</span>
             )}
           </div>
 
@@ -240,7 +242,7 @@ export function QuickPost({ className }: { className?: string }) {
               onClick={() => setPrice(String(suggested / 100))}
               className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300 ring-1 ring-emerald-400/30 transition hover:bg-emerald-500/20"
             >
-              <Sparkles className="h-3 w-3" /> AI suggests ${suggested / 100} from your family&apos;s comparable listings
+              <Sparkles className="h-3 w-3" /> {t('quickPost.aiSuggests')}{suggested / 100} {t('quickPost.fromYourFamilyAposSComparable')}
             </button>
           )}
 
@@ -249,7 +251,7 @@ export function QuickPost({ className }: { className?: string }) {
             onChange={(e) => set('description', e.target.value)}
             rows={2}
             maxLength={500}
-            aria-label="Description"
+            aria-label={t('quickPost.description')}
             className="w-full rounded-xl border border-border bg-bg p-3 text-xs outline-none focus:border-brand"
           />
 
@@ -260,7 +262,7 @@ export function QuickPost({ className }: { className?: string }) {
               disabled={posting}
               className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
             >
-              {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Post now
+              {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} {t('quickPost.postNow')}
             </button>
             <button
               type="button"
@@ -268,7 +270,7 @@ export function QuickPost({ className }: { className?: string }) {
               disabled={posting}
               className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold text-muted transition hover:text-fg disabled:opacity-50"
             >
-              <X className="h-3.5 w-3.5" /> Start over
+              <X className="h-3.5 w-3.5" /> {t('quickPost.startOver')}
             </button>
           </div>
         </div>

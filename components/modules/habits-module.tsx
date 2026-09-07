@@ -26,6 +26,7 @@ import {
 import type { HabitCoaching } from '@/lib/habits/ai';
 import { HABIT_PRESETS, PRESET_CATEGORIES, presetToHabit, presetTarget, dayProgress, doneDates, hydrationNudge, type HabitPreset } from '@/lib/habits/presets';
 import { ageOn } from '@/lib/members/age';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Habit = Tables<'habits'>;
 type HabitLog = Tables<'habit_logs'>;
@@ -47,6 +48,7 @@ function colorOf(id: string | null | undefined) {
 }
 
 export function HabitsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const today = toISODate(new Date());
@@ -99,7 +101,7 @@ export function HabitsModule() {
         log_date: today, count: 1, created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Nice! Checked in for today 🔥');
+      success(t('habitsModule.niceCheckedInForToday'));
     }
     void logsQ.refresh();
   }
@@ -131,7 +133,7 @@ export function HabitsModule() {
     const { error } = await supabase.from('habits')
       .update({ is_active: false, archived_at: new Date().toISOString() }).eq('id', habit.id);
     if (error) return toastError(describeDbError(error));
-    success('Habit archived');
+    success(t('habitsModule.habitArchived'));
     void habitsQ.refresh();
   }
 
@@ -145,7 +147,7 @@ export function HabitsModule() {
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not generate coaching');
       setCoaching(json.coaching);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach failed'));
+      toastError(describeDbError(err, t('habitsModule.coachFailed')));
       setCoachOpen(false);
     } finally {
       setCoachLoading(false);
@@ -165,30 +167,30 @@ export function HabitsModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Habits"
-        description="Build routines that stick — streaks, check-ins, and an AI coach."
+        title={t('habits.habits')}
+        description={t('habitsModule.buildRoutinesThatStickStreaks')}
         action={
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={runCoach}>
-              <Sparkles className="h-4 w-4" /> AI Coach
+              <Sparkles className="h-4 w-4" /> {t('habits.aiCoach')}
             </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Habit</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>
           </div>
         }
       />
 
       {habits.length > 0 && (
         <div className="mb-5 grid grid-cols-3 gap-3">
-          <StatCard icon={CalendarCheck} label="Done today" value={`${doneTodayCount}/${habits.length}`} />
-          <StatCard icon={Flame} label="Best streak" value={`${bestStreak}d`} />
-          <StatCard icon={Target} label="Active habits" value={`${habits.length}`} />
+          <StatCard icon={CalendarCheck} label={t('habits.doneToday')} value={`${doneTodayCount}/${habits.length}`} />
+          <StatCard icon={Flame} label={t('habits.bestStreak')} value={`${bestStreak}d`} />
+          <StatCard icon={Target} label={t('habits.activeHabits')} value={`${habits.length}`} />
         </div>
       )}
 
       {habits.length === 0 ? (
-        <EmptyState icon={Target} title="No habits yet"
-          description="Start small — one habit, checked in daily, builds the routine."
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Habit</Button>} />
+        <EmptyState icon={Target} title={t('habits.noHabitsYet')}
+          description={t('habitsModule.startSmallOneHabitChecked')}
+          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {habits.map((h) => (
@@ -208,10 +210,10 @@ export function HabitsModule() {
       )}
 
       {coachOpen && (
-        <Modal open onClose={() => setCoachOpen(false)} title="AI Habit Coach">
+        <Modal open onClose={() => setCoachOpen(false)} title={t('habits.aiHabitCoach')}>
           {coachLoading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted">
-              <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> Analyzing your streaks…
+              <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> {t('habits.analyzingYourStreaks')}
             </div>
           ) : coaching ? (
             <div className="space-y-4">
@@ -227,7 +229,7 @@ export function HabitsModule() {
               )}
               {coaching.suggestion && (
                 <div className="rounded-xl border border-brand/30 bg-brand/5 p-3 text-sm">
-                  <span className="font-semibold text-brand-text">Try this: </span>{coaching.suggestion}
+                  <span className="font-semibold text-brand-text">{t('habits.tryThis')} </span>{coaching.suggestion}
                 </div>
               )}
             </div>
@@ -252,6 +254,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
   habit: Habit; today: string; logDates: string[]; progress: { count: number; target: number; pct: number; done: boolean } | null; memberName?: string;
   onToggle: () => void; onCount: (delta: number) => void; onEdit: () => void; onArchive: () => void;
 }) {
+  const t = useTranslations();
   const c = colorOf(habit.color);
   const h: HabitLike = { cadence: habit.cadence, target_per_period: habit.target_per_period, weekdays: habit.weekdays };
   const streak = currentStreak(h, logDates, today);
@@ -276,11 +279,11 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
         </div>
         {progress ? (
           <div className="flex flex-shrink-0 items-center gap-1">
-            <button onClick={() => onCount(-1)} aria-label="Remove one" disabled={progress.count === 0} className={cn('flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition hover:border-current disabled:opacity-40', c.text)}><Minus className="h-4 w-4" /></button>
-            <button onClick={() => onCount(1)} aria-label="Add one" className={cn('flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border-2 px-2 text-sm font-semibold transition', done ? cn(c.dot, 'border-transparent text-white') : cn('border-border hover:border-current', c.text))}><Plus className="h-4 w-4" />1</button>
+            <button onClick={() => onCount(-1)} aria-label={t('habits.removeOne')} disabled={progress.count === 0} className={cn('flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition hover:border-current disabled:opacity-40', c.text)}><Minus className="h-4 w-4" /></button>
+            <button onClick={() => onCount(1)} aria-label={t('habits.addOne')} className={cn('flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border-2 px-2 text-sm font-semibold transition', done ? cn(c.dot, 'border-transparent text-white') : cn('border-border hover:border-current', c.text))}><Plus className="h-4 w-4" />1</button>
           </div>
         ) : (
-        <button onClick={onToggle} aria-label="Toggle today"
+        <button onClick={onToggle} aria-label={t('habits.toggleToday')}
           className={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
             done ? cn(c.dot, 'border-transparent text-white') : cn('border-border text-muted hover:border-current', c.text))}>
           <Check className="h-4 w-4" />
@@ -302,7 +305,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
       <div className="mt-3 flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1 font-semibold"><Flame className={cn('h-3.5 w-3.5', streak > 0 ? 'text-orange-500' : 'text-muted')} /> {streak}d</span>
         <span className="flex items-center gap-1 text-muted"><Trophy className="h-3.5 w-3.5" /> {best}d</span>
-        <span className="text-muted">{rate}% · 30d</span>
+        <span className="text-muted">{rate}{t('habits.30d')}</span>
       </div>
 
       {/* 28-day heatmap */}
@@ -318,8 +321,8 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
       </div>
 
       <div className="mt-3 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-        <button onClick={onEdit} aria-label="Edit habit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-        <button onClick={() => { if (confirm('Archive this habit?')) onArchive(); }} aria-label="Archive habit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
+        <button onClick={onEdit} aria-label={t('habits.editHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+        <button onClick={() => { if (confirm(t('habitsModule.archiveThisHabit'))) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );
@@ -330,6 +333,8 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
   members: Tables<'family_members'>[]; defaultMemberId: string | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState(habit?.title ?? '');
@@ -356,7 +361,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
     e.preventDefault();
     const name = title.trim();
     const detail = description.trim() || null;
-    if (!name) return toastError('Give your habit a name');
+    if (!name) return toastError(t('habitsModule.giveYourHabitAName'));
     setLoading(true);
     const supabase = createClient();
     const patch = {
@@ -380,7 +385,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
         {!habit && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs font-semibold text-brand-text">Start from a preset</span>
+              <span className="mr-1 text-xs font-semibold text-brand-text">{t('habits.startFromAPreset')}</span>
               {PRESET_CATEGORIES.map((c) => (
                 <button key={c.value} type="button" onClick={() => setPresetCategory(c.value)} className={cn('rounded-full px-2 py-0.5 text-[11px]', presetCategory === c.value ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>{c.label}</button>
               ))}
@@ -393,18 +398,18 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
                 </button>
               ))}
             </div>
-            {presetCategory === 'hydration' && <p className="mt-2 text-[11px] text-muted">Water targets follow the member’s age{memberAge !== null ? ` (${memberAge}: ${presetTarget(HABIT_PRESETS[0], memberAge)} cups a day)` : ''}; log each cup with +1 on the card.</p>}
+            {presetCategory === 'hydration' && <p className="mt-2 text-[11px] text-muted">{t('habits.waterTargetsFollowTheMembersAge')}{memberAge !== null ? ` (${memberAge}: ${presetTarget(HABIT_PRESETS[0], memberAge)} cups a day)` : ''}{t('habits.logEachCupWith1On')}</p>}
           </div>
         )}
-        <Field label="Habit">
-          {(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Morning walk, Read 20 min" autoFocus />}
+        <Field label={t('habits.habit')}>
+          {(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('habits.eGMorningWalkRead20')} autoFocus />}
         </Field>
-        <Field label="Description (optional)">
-          {(id) => <Textarea id={id} name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Why does this matter to you?" className="min-h-[60px]" />}
+        <Field label={t('habits.descriptionOptional')}>
+          {(id) => <Textarea id={id} name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('habits.whyDoesThisMatterToYou')} className="min-h-[60px]" />}
         </Field>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Color</label>
+          <label className="mb-1.5 block text-sm font-medium">{t('habits.color')}</label>
           <div className="flex flex-wrap gap-2">
             {COLORS.map((c) => (
               <button key={c.id} type="button" onClick={() => setColor(c.id)}
@@ -415,7 +420,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Cadence</label>
+          <label className="mb-1.5 block text-sm font-medium">{t('habits.cadence')}</label>
           <div className="flex gap-2">
             {(['daily', 'weekly'] as const).map((cd) => (
               <button key={cd} type="button" onClick={() => setCadence(cd)}
@@ -428,16 +433,16 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
         </div>
 
         {cadence === 'weekly' ? (
-          <Field label="Times per week">
+          <Field label={t('habits.timesPerWeek')}>
             {(id) => <Input id={id} type="number" min={1} max={7} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
           </Field>
         ) : (
           <div className="space-y-3">
-            <Field label="Times per day" hint="1 for a check-in; 8 for “8 cups of water” with +1 logging">
+            <Field label={t('habits.timesPerDay')} hint="1 for a check-in; 8 for “8 cups of water” with +1 logging">
               {(id) => <Input id={id} type="number" min={1} max={30} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
             </Field>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Days (optional — leave blank for every day)</label>
+            <label className="mb-1.5 block text-sm font-medium">{t('habits.daysOptionalLeaveBlankForEvery')}</label>
             <div className="flex gap-1.5">
               {WEEKDAYS.map((d, i) => (
                 <button key={i} type="button" onClick={() => toggleWeekday(i)}
@@ -451,18 +456,18 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
           </div>
         )}
 
-        <Field label="Who's it for?">
+        <Field label={tr('habits.whosItFor')}>
           {(id) => (
             <select id={id} value={memberId ?? ''} onChange={(e) => setMemberId(e.target.value || null)}
               className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
-              <option value="">Whole family</option>
+              <option value="">{t('habits.wholeFamily')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
         </Field>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('habits.cancel')}</Button>
           <Button type="submit" loading={loading}>{habit ? 'Save' : 'Create Habit'}</Button>
         </div>
       </form>

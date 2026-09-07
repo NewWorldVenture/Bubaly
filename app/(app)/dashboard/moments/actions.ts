@@ -4,13 +4,15 @@
 // it quiet for the rest of the day; engaging one records the family acted on it
 // (a signal the reasoning layer can learn from). Family-scoped via RLS.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 
 type Result = { ok: boolean; error?: string };
 
 async function setMomentStatus(momentKey: string, status: 'engaged' | 'dismissed'): Promise<Result> {
-  if (!momentKey) return { ok: false, error: 'Invalid moment' };
+  const t = await getTranslations();
+  if (!momentKey) return { ok: false, error: t('actions.invalidMoment') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const today = new Date().toISOString().slice(0, 10);

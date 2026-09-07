@@ -4,7 +4,7 @@
 // what the family needs, auto-handles the high-confidence items, and surfaces
 // the rest for one-tap approval or awareness. 100% Supabase-wired via the
 // `autopilot_suggestions` table; the prediction logic lives in lib/autopilot.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Rocket, ShieldCheck, AlertTriangle, Sparkles, Check, X, RefreshCw, Gauge,
   CalendarClock, FileClock, Cake, ShoppingCart, ListChecks, CircleDot,
@@ -13,6 +13,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -23,6 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import { successProbability, confidenceTier } from '@/lib/autopilot/engine';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAutopilot } from '@/lib/ai/explanation';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 
@@ -38,6 +41,7 @@ function iconFor(kind: string) {
 }
 
 export function AutopilotModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [scanning, setScanning] = useState(false);
@@ -57,11 +61,11 @@ export function AutopilotModule() {
     try {
       const res = await fetch('/api/autopilot/scan', { method: 'POST' });
       const json = (await res.json()) as { autoExecuted?: number; error?: string };
-      if (!res.ok) throw new Error(json.error || 'Scan failed');
+      if (!res.ok) throw new Error(json.error || t('autopilotModule.scanFailed'));
       if (json.autoExecuted && json.autoExecuted > 0) success(`Autopilot handled ${json.autoExecuted} thing${json.autoExecuted === 1 ? '' : 's'} for you`);
       void refresh();
     } catch (err) {
-      toastError(describeDbError(err, 'Scan failed'));
+      toastError(describeDbError(err, t('autopilotModule.scanFailed')));
     } finally {
       setScanning(false);
     }
@@ -87,6 +91,10 @@ export function AutopilotModule() {
   );
   const highRisks = open.filter((s) => s.urgency === 3).length;
 
+  // One submission id per suggestion: approving the same one twice must not
+  // leave the family two copies of the reminder it creates.
+  const reminderIds = useRef<Record<string, string>>({});
+
   async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     const supabase = createClient();
     // Approving a "create reminder" writes a real reminder the family sees on the
@@ -94,21 +102,25 @@ export function AutopilotModule() {
     // it up via dueFamilyReminderNotices, same as the Front Desk's call reminders.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      const { error: remErr } = await supabase.from('family_reminders').insert({
-        family_id: familyId,
-        created_by: userId,
+      // Through the service. `status: 'pending'` and `priority: 'normal'` are
+      // both outside 0014's CHECK sets, so this insert was rejected every time —
+      // the guard below then correctly refused to mark the suggestion executed,
+      // which is why approving a reminder suggestion has always just errored.
+      const reminder = await createReminderAction({
         title: payload.title ?? s.title,
         notes: s.detail ?? null,
         kind: 'task',
-        priority: s.urgency >= 3 ? 'high' : 'normal',
-        remind_at: payload.at ?? new Date().toISOString(),
-        member_id: s.member_id,
-        status: 'pending',
-        ai_suggested: true,
+        priority: s.urgency >= 3 ? 'high' : 'medium',
+        remindAt: payload.at ?? new Date().toISOString(),
+        memberId: s.member_id,
+        aiSuggested: true,
+        // The suggestion is the composition: approving it twice must not leave
+        // the family two copies of the same reminder.
+        submissionId: reminderIds.current[s.id] ||= newSubmissionId(),
       });
       // Don't claim "Bubaly handled it" / mark the suggestion executed if the
       // reminder the user approved never actually got written.
-      if (remErr) return toastError(describeDbError(remErr));
+      if (!reminder.ok) return toastError(reminder.error);
       status = 'executed';
     }
     const { error: upErr } = await supabase.from('autopilot_suggestions')
@@ -125,8 +137,8 @@ export function AutopilotModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Autopilot"
-        description="Mission control. Bubaly predicts what your family needs and quietly handles what it can."
+        title={t('autopilot.familyAutopilot')}
+        description={t('autopilotModule.missionControlBubalyPredictsWhat')}
         action={
           <Button variant="ghost" onClick={runScan} loading={scanning}>
             <RefreshCw className={cn('h-4 w-4', scanning && 'animate-spin')} /> Re-scan
@@ -138,35 +150,35 @@ export function AutopilotModule() {
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-gradient-to-br from-brand/10 to-transparent p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <Gauge className="h-4 w-4" /> Today&apos;s success
+            <Gauge className="h-4 w-4" /> {t('autopilot.todayAposSSuccess')}
           </div>
           <p className={cn('text-3xl font-black', probability >= 85 ? 'text-success' : probability >= 60 ? 'text-amber-500' : 'text-danger')}>{probability}%</p>
-          <p className="text-xs text-muted">probability the day runs smoothly</p>
+          <p className="text-xs text-muted">{t('autopilot.probabilityTheDayRunsSmoothly')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <ShieldCheck className="h-4 w-4" /> Handled for you
+            <ShieldCheck className="h-4 w-4" /> {t('autopilot.handledForYou')}
           </div>
           <p className="text-3xl font-black text-fg">{handled.length}</p>
-          <p className="text-xs text-muted">auto-resolved by autopilot</p>
+          <p className="text-xs text-muted">{t('autopilot.autoResolvedByAutopilot')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            <AlertTriangle className="h-4 w-4" /> Risk alerts
+            <AlertTriangle className="h-4 w-4" /> {t('autopilot.riskAlerts')}
           </div>
           <p className={cn('text-3xl font-black', highRisks > 0 ? 'text-danger' : 'text-success')}>{highRisks}</p>
-          <p className="text-xs text-muted">high-urgency items needing you</p>
+          <p className="text-xs text-muted">{t('autopilot.highUrgencyItemsNeedingYou')}</p>
         </div>
       </div>
 
       {open.length === 0 && handled.length === 0 ? (
-        <EmptyState icon={Rocket} title="All clear ✨"
-          description="Autopilot scanned your family and found nothing that needs you right now. We'll keep watching."
-          action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> Scan again</Button>} />
+        <EmptyState icon={Rocket} title={t('autopilot.allClear')}
+          description={t('autopilotModule.autopilotScannedYourFamilyAnd')}
+          action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> {t('autopilot.scanAgain')}</Button>} />
       ) : (
         <div className="space-y-6">
           {handled.length > 0 && (
-            <Section icon={Sparkles} title="Bubaly already handled it" tone="success">
+            <Section icon={Sparkles} title={t('autopilot.bubalyAlreadyHandledIt')} tone="success">
               {handled.slice(0, 8).map((s) => (
                 <HandledRow key={s.id} s={s} />
               ))}
@@ -174,7 +186,7 @@ export function AutopilotModule() {
           )}
 
           {approveItems.length > 0 && (
-            <Section icon={ShieldCheck} title="Needs a quick yes" tone="brand">
+            <Section icon={ShieldCheck} title={t('autopilot.needsAQuickYes')} tone="brand">
               {approveItems.map((s) => (
                 <SuggestionRow key={s.id} s={s}
                   onApprove={() => resolve(s, 'approved')} onDismiss={() => resolve(s, 'dismissed')} />
@@ -183,7 +195,7 @@ export function AutopilotModule() {
           )}
 
           {askItems.length > 0 && (
-            <Section icon={AlertTriangle} title="Heads up" tone="muted">
+            <Section icon={AlertTriangle} title={t('autopilot.headsUp')} tone="muted">
               {askItems.map((s) => (
                 <SuggestionRow key={s.id} s={s}
                   onApprove={() => resolve(s, 'approved')} onDismiss={() => resolve(s, 'dismissed')} />
@@ -227,6 +239,7 @@ function HandledRow({ s }: { s: Suggestion }) {
 function SuggestionRow({ s, onApprove, onDismiss }: {
   s: Suggestion; onApprove: () => void; onDismiss: () => void;
 }) {
+  const t = useTranslations();
   const Icon = iconFor(s.kind);
   const urgent = s.urgency === 3;
   return (
@@ -244,7 +257,7 @@ function SuggestionRow({ s, onApprove, onDismiss }: {
             className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
             <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
           </button>
-          <button onClick={onDismiss} aria-label="Dismiss"
+          <button onClick={onDismiss} aria-label={t('autopilot.dismiss')}
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
             <X className="h-3.5 w-3.5" />
           </button>

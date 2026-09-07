@@ -11,6 +11,7 @@ import {
 } from '@/lib/marketing/quotes';
 import type { Tables } from '@/lib/database.types';
 import { saveQuoteAction, setQuoteStatusAction, deleteQuoteAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Proposals · Quotes', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,7 @@ const STATUS_TINT: Record<QuoteStatus, string> = {
 };
 
 export default async function ProposalsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [quotesResult, contactsResult] = await Promise.all([
     supabase.from('crm_quotes').select('*').order('created_at', { ascending: false }).limit(500),
@@ -55,7 +57,7 @@ export default async function ProposalsPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Quotes and proposals that convert qualified leads into customers — tracked from draft to accepted.</p>
+      <p className="text-sm text-muted">{t('adminMarketingProposals.quotesAndProposalsThatConvertQualified')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -67,33 +69,33 @@ export default async function ProposalsPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">New quote</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('adminMarketingProposals.newQuote')}</h2>
         <form action={saveQuoteAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="title" required placeholder="Proposal title" className={`${inputCls} lg:col-span-2`} />
-          <input name="amount" type="number" min="0" step="0.01" placeholder="Amount ($)" className={inputCls} />
+          <input name="title" required placeholder={t('adminMarketingProposals.proposalTitle')} className={`${inputCls} lg:col-span-2`} />
+          <input name="amount" type="number" min="0" step="0.01" placeholder={t('adminMarketingProposals.amount')} className={inputCls} />
           <select name="status" defaultValue="draft" className={inputCls}>
             {QUOTE_STATUSES.filter((s) => s !== 'expired').map((s) => <option key={s} value={s}>{QUOTE_STATUS_LABELS[s]}</option>)}
           </select>
           <select name="contact_id" defaultValue="" className={`${inputCls} lg:col-span-2`}>
-            <option value="">No contact</option>
+            <option value="">{t('adminMarketingProposals.noContact')}</option>
             {contactList.map((c) => <option key={c.id} value={c.id}>{contactDisplayName(c)}</option>)}
           </select>
           <input name="valid_until" type="date" className={inputCls} />
-          <button type="submit" className={btnCls}>Create quote</button>
+          <button type="submit" className={btnCls}>{t('adminMarketingProposals.createQuote')}</button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Proposals</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminMarketingProposals.proposals')}</h2>
         {list.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No proposals yet.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('adminMarketingProposals.noProposalsYet')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
-                  <th className="pb-2">Title</th><th className="pb-2">Contact</th><th className="pb-2">Amount</th>
-                  <th className="pb-2">Status</th><th className="pb-2">Valid until</th><th className="pb-2 text-right">Actions</th>
+                  <th className="pb-2">{t('adminMarketingProposals.title')}</th><th className="pb-2">{t('adminMarketingProposals.contact')}</th><th className="pb-2">{t('adminMarketingProposals.amount')}</th>
+                  <th className="pb-2">{t('adminMarketingProposals.status')}</th><th className="pb-2">{t('adminMarketingProposals.validUntil')}</th><th className="pb-2 text-right">{t('adminMarketingProposals.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,16 +112,16 @@ export default async function ProposalsPage() {
                         <div className="flex items-center justify-end gap-1">
                           {qt.status === 'draft' && (
                             <form action={setQuoteStatusAction.bind(null, qt.id, 'sent')}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">Send</button>
+                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{t('proposals.send')}</button>
                             </form>
                           )}
                           {(qt.status === 'sent') && (
                             <>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'accepted')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">Accept</button>
+                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('proposals.accept')}</button>
                               </form>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'declined')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">Decline</button>
+                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">{t('proposals.decline')}</button>
                               </form>
                             </>
                           )}
@@ -140,15 +142,16 @@ export default async function ProposalsPage() {
   );
 }
 
-function AdminProposalsReadError() {
+async function AdminProposalsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Proposals &amp; Quotes</h1>
-        <p className="mt-1 text-sm text-muted">Create and track quotes from draft through acceptance.</p>
+        <p className="mt-1 text-sm text-muted">{t('proposals.createAndTrackQuotesFrom')}</p>
       </div>
-      <ErrorState message="Could not load proposals from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/proposals" className="text-sm font-medium text-brand-text underline">Refresh proposals</Link>
+      <ErrorState message={t('proposals.couldNotLoadProposalsFrom')} />
+      <Link href="/admin/marketing/proposals" className="text-sm font-medium text-brand-text underline">{t('proposals.refreshProposals')}</Link>
     </div>
   );
 }

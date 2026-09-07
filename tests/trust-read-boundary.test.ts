@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/trust/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('trust page read boundary', () => {
   it('logs and returns an ErrorState on a trust read failure', () => {
     expect(page).toContain('if (trustError) {');
     expect(page).toContain("console.error('[dashboard/trust] trust read failed', trustError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family trust & permissions from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'trust.couldNotLoadYourFamily', "Could not load your family trust & permissions from Supabase. Refresh and try again.");
   });
 
   it('keeps the trust_audit_logs display best-effort (not in the fail-closed set)', () => {

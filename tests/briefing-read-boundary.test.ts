@@ -14,6 +14,7 @@
 // function, in tests/operating-index-today-anchor.test.ts. What is checked here
 // is that the page delegates to it instead of growing a second copy.
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/briefing/page.tsx', 'utf8');
@@ -39,7 +40,8 @@ describe('briefing read boundary', () => {
   it('fails visibly when the operating index cannot be read', () => {
     expect(page).toContain("if (indexResult.status === 'rejected')");
     expect(page).toContain("console.error('[dashboard/briefing] operating index read failed'");
-    expect(page).toContain('return <ErrorState message="Could not load your daily briefing from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'briefing.couldNotLoadYourDaily', "Could not load your daily briefing from Supabase. Refresh and try again.");
   });
 
   it('reads the index and the reasoning context together, not one after the other', () => {

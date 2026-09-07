@@ -15,6 +15,7 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Visit = Tables<'health_visits'>;
 
@@ -23,6 +24,7 @@ const blank = (kind: VisitKind) => ({ id: '', member_id: '', kind, title: '', pr
 export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lockKind = false }: {
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
+  const t = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -69,9 +71,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this visit record?')) return;
+    if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
     const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Visit deleted');
+    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {
@@ -90,17 +92,17 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
-              <option value="all">Everyone</option>
+              <option value="all">{t('healthVisits.everyone')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical'))}><Plus className="h-4 w-4" /> Add visit</Button>
+          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>
         </div>
       </div>
 
       {followUps.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> Upcoming follow-ups</p>
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> {t('healthVisits.upcomingFollowUps')}</p>
           <ul className="space-y-1 text-sm">
             {followUps.slice(0, 4).map((v) => {
               const d = daysUntilFollowUp(v)!;
@@ -113,9 +115,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load health visits. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('healthVisitsModule.couldNotLoadHealthVisits')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Stethoscope} title="No visits logged" description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
+        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description={t('healthVisitsModule.addADoctorDentistOr')} />
       ) : (
         <ul className="space-y-2">
           {scoped.map((v) => {
@@ -156,33 +158,33 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               {!lockKind && (
-                <Field label="Type">{(id) => (
+                <Field label={t('healthVisits.type')}>{(id) => (
                   <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as VisitKind })}>
                     {VISIT_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
                   </Select>
                 )}</Field>
               )}
-              <Field label="Family member">{(id) => (
+              <Field label={t('healthVisits.familyMember')}>{(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm({ ...form, member_id: e.target.value })}>
-                  <option value="">— Select —</option>
+                  <option value="">{t('healthVisits.select')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}</Field>
             </div>
-            <Field label="Title" required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Annual checkup / Cleaning / Flu shot" required />}</Field>
+            <Field label={t('healthVisits.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('healthVisits.eGAnnualCheckupCleaningFlu')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Date">{(id) => <Input id={id} type="date" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} />}</Field>
-              <Field label="Follow-up date">{(id) => <Input id={id} type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} />}</Field>
+              <Field label={t('healthVisits.date')}>{(id) => <Input id={id} type="date" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} />}</Field>
+              <Field label={t('healthVisits.followUpDate')}>{(id) => <Input id={id} type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Provider">{(id) => <Input id={id} value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} placeholder="Dr. / clinic" />}</Field>
-              <Field label="Location">{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
+              <Field label={t('healthVisits.provider')}>{(id) => <Input id={id} value={form.provider_name} onChange={(e) => setForm({ ...form, provider_name: e.target.value })} placeholder={t('healthVisits.drClinic')} />}</Field>
+              <Field label={t('healthVisits.location')}>{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
             </div>
-            <Field label="Reason / visit for">{(id) => <Input id={id} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />}</Field>
-            <Field label="Outcome / notes">{(id) => <Textarea id={id} value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} rows={3} />}</Field>
-            <Field label="Cost ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+            <Field label={t('healthVisits.reasonVisitFor')}>{(id) => <Input id={id} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />}</Field>
+            <Field label={t('healthVisits.outcomeNotes')}>{(id) => <Textarea id={id} value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} rows={3} />}</Field>
+            <Field label={t('healthVisits.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('healthVisits.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add visit'}</Button>
             </div>
           </form>

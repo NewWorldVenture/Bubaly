@@ -21,6 +21,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-sheet';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -57,6 +58,7 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
 }
 
 export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -141,8 +143,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deleteProvider(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('health_providers').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function uploadCard(side: 'front' | 'back', file: File) {
@@ -181,16 +183,16 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
     setSaving(false);
-    if (err) { toastError('Could not save insurance'); return; }
-    success('Insurance saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
 
   async function deletePolicy(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function saveProfile() {
@@ -217,8 +219,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     };
     const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
     setSaving(false);
-    if (err) { toastError('Could not save profile'); return; }
-    success('Profile saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }
 
@@ -250,11 +252,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             <AiInsight kind="medical" iconOnly />
             {canEdit ? (
               <>
-                <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> At the Doctor</Button>
+                <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
                 <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
               </>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> View only</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>
             )}
           </div>
         }
@@ -263,11 +265,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Insurance ─────────────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> Insurance Cards</h2>
-          {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">+ Add insurance</button>}
+          <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {t('medicalRecords.insuranceCards')}</h2>
+          {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
         </div>
         {policies.length === 0 ? (
-          <EmptyState icon={ShieldCheck} title="No insurance on file" description={canEdit ? `Add a ${title.toLowerCase()} insurance plan and snap a photo of the card.` : 'No insurance has been added yet.'} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> Add Insurance</Button> : undefined} />
+          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? `Add a ${title.toLowerCase()} insurance plan and snap a photo of the card.` : 'No insurance has been added yet.'} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {policies.map((p) => {
@@ -290,15 +292,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     </div>
                   </div>
                   <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                    {p.policy_number && <div><dt className="text-muted">Member ID</dt><dd className="font-semibold">{p.policy_number}</dd></div>}
-                    {p.group_number && <div><dt className="text-muted">Group</dt><dd className="font-semibold">{p.group_number}</dd></div>}
-                    {m && <div><dt className="text-muted">Covers</dt><dd className="font-semibold">{m.display_name}</dd></div>}
-                    {p.customer_service_phone && <div><dt className="text-muted">Phone</dt><dd className="font-semibold">{p.customer_service_phone}</dd></div>}
+                    {p.policy_number && <div><dt className="text-muted">{t('medicalRecords.memberId')}</dt><dd className="font-semibold">{p.policy_number}</dd></div>}
+                    {p.group_number && <div><dt className="text-muted">{t('medicalRecords.group')}</dt><dd className="font-semibold">{p.group_number}</dd></div>}
+                    {m && <div><dt className="text-muted">{t('medicalRecords.covers')}</dt><dd className="font-semibold">{m.display_name}</dd></div>}
+                    {p.customer_service_phone && <div><dt className="text-muted">{t('medicalRecords.phone')}</dt><dd className="font-semibold">{p.customer_service_phone}</dd></div>}
                   </dl>
                   {(p.front_image_path || p.back_image_path) && (
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <CardImage path={p.front_image_path} label="Front" />
-                      <CardImage path={p.back_image_path} label="Back" />
+                      <CardImage path={p.front_image_path} label={t('medicalRecords.front')} />
+                      <CardImage path={p.back_image_path} label={t('medicalRecords.back')} />
                     </div>
                   )}
                 </div>
@@ -312,7 +314,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {providerWord}s</h2>
-          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">+ Add {providerWord.toLowerCase()}</button>}
+          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.add')} {providerWord.toLowerCase()}</button>}
         </div>
         {providerGroups.length === 0 ? (
           <EmptyState icon={Icon} title={`No ${providerWord.toLowerCase()}s yet`} description={canEdit ? `Add your family's ${providerWord.toLowerCase()}s and generate a printable info file.` : 'No providers have been added yet.'} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> Add {providerWord}</Button> : undefined} />
@@ -326,7 +328,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     <span className="text-sm font-semibold">{g.label}</span>
                   </div>
                   <button onClick={() => setInfoSheet({ member: g.member, items: g.items })} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-muted hover:text-fg">
-                    <FileText className="h-3.5 w-3.5" /> Info File
+                    <FileText className="h-3.5 w-3.5" /> {t('medicalRecords.infoFile')}
                   </button>
                 </div>
                 <div className="space-y-2">
@@ -355,7 +357,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Medical Profiles ──────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand-text" /> Health Profiles</h2>
+          <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand-text" /> {t('medicalRecords.healthProfiles')}</h2>
         </div>
         <div className="grid max-h-[36rem] gap-3 overflow-y-auto sm:grid-cols-2">
           {members.map((m) => {
@@ -374,10 +376,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                 </div>
                 {prof ? (
                   <dl className="space-y-1 text-xs">
-                    {prof.blood_type && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">Blood Type</dt><dd className="font-medium">{prof.blood_type}</dd></div>}
-                    <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">Allergies</dt><dd className="font-medium">{prof.allergies || 'None reported'}</dd></div>
-                    <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">Conditions</dt><dd className="font-medium">{prof.conditions || 'None reported'}</dd></div>
-                    {kind === 'dental' && prof.dental_notes && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">Dental</dt><dd className="font-medium">{prof.dental_notes}</dd></div>}
+                    {prof.blood_type && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">{t('medicalRecords.bloodType')}</dt><dd className="font-medium">{prof.blood_type}</dd></div>}
+                    <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">{t('medicalRecords.allergies')}</dt><dd className="font-medium">{prof.allergies || 'None reported'}</dd></div>
+                    <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">{t('medicalRecords.conditions')}</dt><dd className="font-medium">{prof.conditions || 'None reported'}</dd></div>
+                    {kind === 'dental' && prof.dental_notes && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted">{t('medicalRecords.dental')}</dt><dd className="font-medium">{prof.dental_notes}</dd></div>}
                   </dl>
                 ) : (
                   <p className="text-xs text-muted">{canEdit ? 'No profile yet — click the pencil to add allergies, conditions, and emergency contacts.' : 'No profile on file.'}</p>
@@ -392,20 +394,20 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       <Modal open={!!providerForm} title={providerForm?.id ? `Edit ${providerWord}` : `Add ${providerWord}`} onClose={() => setProviderForm(null)}>
         {providerForm && (
           <div className="space-y-3">
-            <Field label="Belongs to">{(id) => <Select id={id} value={providerForm.member_id} onChange={(e) => setProviderForm({ ...providerForm, member_id: e.target.value })}><option value="">Whole Family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-            <Field label="Name">{(id) => <Input id={id} value={providerForm.name} onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })} placeholder={kind === 'dental' ? 'e.g. Dr. Mark Williams' : 'e.g. Dr. Sarah Patel'} />}</Field>
+            <Field label={t('medicalRecords.belongsTo')}>{(id) => <Select id={id} value={providerForm.member_id} onChange={(e) => setProviderForm({ ...providerForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+            <Field label={t('medicalRecords.name')}>{(id) => <Input id={id} value={providerForm.name} onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })} placeholder={kind === 'dental' ? 'e.g. Dr. Mark Williams' : 'e.g. Dr. Sarah Patel'} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Specialty">{(id) => <Input id={id} value={providerForm.specialty} onChange={(e) => setProviderForm({ ...providerForm, specialty: e.target.value })} placeholder={kind === 'dental' ? 'Orthodontist' : 'Pediatrician'} />}</Field>
-              <Field label="Practice">{(id) => <Input id={id} value={providerForm.practice_name} onChange={(e) => setProviderForm({ ...providerForm, practice_name: e.target.value })} placeholder="Clinic name" />}</Field>
+              <Field label={t('medicalRecords.specialty')}>{(id) => <Input id={id} value={providerForm.specialty} onChange={(e) => setProviderForm({ ...providerForm, specialty: e.target.value })} placeholder={kind === 'dental' ? 'Orthodontist' : 'Pediatrician'} />}</Field>
+              <Field label={t('medicalRecords.practice')}>{(id) => <Input id={id} value={providerForm.practice_name} onChange={(e) => setProviderForm({ ...providerForm, practice_name: e.target.value })} placeholder={t('medicalRecords.clinicName')} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Phone">{(id) => <Input id={id} value={providerForm.phone} onChange={(e) => setProviderForm({ ...providerForm, phone: e.target.value })} placeholder="(555) 123-4567" />}</Field>
+              <Field label={t('medicalRecords.phone')}>{(id) => <Input id={id} value={providerForm.phone} onChange={(e) => setProviderForm({ ...providerForm, phone: e.target.value })} placeholder="(555) 123-4567" />}</Field>
               <Field label="Fax">{(id) => <Input id={id} value={providerForm.fax} onChange={(e) => setProviderForm({ ...providerForm, fax: e.target.value })} placeholder="(555) 123-4568" />}</Field>
             </div>
-            <Field label="Email">{(id) => <Input id={id} value={providerForm.email} onChange={(e) => setProviderForm({ ...providerForm, email: e.target.value })} placeholder="office@clinic.com" />}</Field>
-            <Field label="Address">{(id) => <Input id={id} value={providerForm.address} onChange={(e) => setProviderForm({ ...providerForm, address: e.target.value })} placeholder="123 Main St, Suite 200" />}</Field>
-            <Field label="Notes">{(id) => <Textarea id={id} value={providerForm.notes} onChange={(e) => setProviderForm({ ...providerForm, notes: e.target.value })} rows={2} placeholder="Hours, parking, portal login, etc." />}</Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> Primary {providerWord.toLowerCase()}</label>
+            <Field label={t('medicalRecords.email')}>{(id) => <Input id={id} value={providerForm.email} onChange={(e) => setProviderForm({ ...providerForm, email: e.target.value })} placeholder="office@clinic.com" />}</Field>
+            <Field label={t('medicalRecords.address')}>{(id) => <Input id={id} value={providerForm.address} onChange={(e) => setProviderForm({ ...providerForm, address: e.target.value })} placeholder={t('medicalRecords.123MainStSuite200')} />}</Field>
+            <Field label={t('medicalRecords.notes')}>{(id) => <Textarea id={id} value={providerForm.notes} onChange={(e) => setProviderForm({ ...providerForm, notes: e.target.value })} rows={2} placeholder={t('medicalRecords.hoursParkingPortalLoginEtc')} />}</Field>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> {t('medicalRecords.primary')} {providerWord.toLowerCase()}</label>
             <Button onClick={saveProvider} disabled={saving || !providerForm.name} loading={saving} className="w-full">{providerForm.id ? 'Save Changes' : `Add ${providerWord}`}</Button>
           </div>
         )}
@@ -415,29 +417,29 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       <Modal open={!!policyForm} title={policyForm?.id ? 'Edit Insurance' : 'Add Insurance'} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
         {policyForm && (
           <div className="space-y-3">
-            <Field label="Covers">{(id) => <Select id={id} value={policyForm.member_id} onChange={(e) => setPolicyForm({ ...policyForm, member_id: e.target.value })}><option value="">Whole Family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+            <Field label={t('medicalRecords.covers')}>{(id) => <Select id={id} value={policyForm.member_id} onChange={(e) => setPolicyForm({ ...policyForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Insurer">{(id) => <Input id={id} value={policyForm.insurer} onChange={(e) => setPolicyForm({ ...policyForm, insurer: e.target.value })} placeholder={kind === 'dental' ? 'Delta Dental' : 'Blue Cross Blue Shield'} />}</Field>
-              <Field label="Plan Name">{(id) => <Input id={id} value={policyForm.plan_name} onChange={(e) => setPolicyForm({ ...policyForm, plan_name: e.target.value })} placeholder="PPO Family" />}</Field>
+              <Field label={t('medicalRecords.insurer')}>{(id) => <Input id={id} value={policyForm.insurer} onChange={(e) => setPolicyForm({ ...policyForm, insurer: e.target.value })} placeholder={kind === 'dental' ? 'Delta Dental' : 'Blue Cross Blue Shield'} />}</Field>
+              <Field label={t('medicalRecords.planName')}>{(id) => <Input id={id} value={policyForm.plan_name} onChange={(e) => setPolicyForm({ ...policyForm, plan_name: e.target.value })} placeholder={t('medicalRecords.ppoFamily')} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Member / Policy #">{(id) => <Input id={id} value={policyForm.policy_number} onChange={(e) => setPolicyForm({ ...policyForm, policy_number: e.target.value })} placeholder="XYZ123456789" />}</Field>
-              <Field label="Group #">{(id) => <Input id={id} value={policyForm.group_number} onChange={(e) => setPolicyForm({ ...policyForm, group_number: e.target.value })} placeholder="GRP-0042" />}</Field>
+              <Field label={t('medicalRecords.memberPolicy')}>{(id) => <Input id={id} value={policyForm.policy_number} onChange={(e) => setPolicyForm({ ...policyForm, policy_number: e.target.value })} placeholder="XYZ123456789" />}</Field>
+              <Field label={t('medicalRecords.group')}>{(id) => <Input id={id} value={policyForm.group_number} onChange={(e) => setPolicyForm({ ...policyForm, group_number: e.target.value })} placeholder="GRP-0042" />}</Field>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Rx BIN">{(id) => <Input id={id} value={policyForm.rx_bin} onChange={(e) => setPolicyForm({ ...policyForm, rx_bin: e.target.value })} />}</Field>
-              <Field label="Rx PCN">{(id) => <Input id={id} value={policyForm.rx_pcn} onChange={(e) => setPolicyForm({ ...policyForm, rx_pcn: e.target.value })} />}</Field>
-              <Field label="Rx Group">{(id) => <Input id={id} value={policyForm.rx_group} onChange={(e) => setPolicyForm({ ...policyForm, rx_group: e.target.value })} />}</Field>
+              <Field label={t('medicalRecords.rxBin')}>{(id) => <Input id={id} value={policyForm.rx_bin} onChange={(e) => setPolicyForm({ ...policyForm, rx_bin: e.target.value })} />}</Field>
+              <Field label={t('medicalRecords.rxPcn')}>{(id) => <Input id={id} value={policyForm.rx_pcn} onChange={(e) => setPolicyForm({ ...policyForm, rx_pcn: e.target.value })} />}</Field>
+              <Field label={t('medicalRecords.rxGroup')}>{(id) => <Input id={id} value={policyForm.rx_group} onChange={(e) => setPolicyForm({ ...policyForm, rx_group: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Member Services Phone">{(id) => <Input id={id} value={policyForm.customer_service_phone} onChange={(e) => setPolicyForm({ ...policyForm, customer_service_phone: e.target.value })} placeholder="(800) 555-1000" />}</Field>
-              <Field label="Effective Date">{(id) => <Input id={id} type="date" value={policyForm.effective_date} onChange={(e) => setPolicyForm({ ...policyForm, effective_date: e.target.value })} />}</Field>
+              <Field label={t('medicalRecords.memberServicesPhone')}>{(id) => <Input id={id} value={policyForm.customer_service_phone} onChange={(e) => setPolicyForm({ ...policyForm, customer_service_phone: e.target.value })} placeholder="(800) 555-1000" />}</Field>
+              <Field label={t('medicalRecords.effectiveDate')}>{(id) => <Input id={id} type="date" value={policyForm.effective_date} onChange={(e) => setPolicyForm({ ...policyForm, effective_date: e.target.value })} />}</Field>
             </div>
             {/* Card photos */}
             <div className="grid grid-cols-2 gap-3">
               {(['front', 'back'] as const).map((side) => (
                 <div key={side}>
-                  <p className="mb-1.5 text-xs font-medium text-muted capitalize">{side} of card</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted capitalize">{side} {t('medicalRecords.ofCard')}</p>
                   <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={`${side} of card`} />
                   <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs font-semibold text-muted hover:text-fg">
                     <Camera className="h-4 w-4" /> {uploading === side ? 'Uploading…' : 'Take photo / Upload'}
@@ -446,47 +448,47 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                 </div>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policyForm.is_primary} onChange={(e) => setPolicyForm({ ...policyForm, is_primary: e.target.checked })} /> Primary plan</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policyForm.is_primary} onChange={(e) => setPolicyForm({ ...policyForm, is_primary: e.target.checked })} /> {t('medicalRecords.primaryPlan')}</label>
             <Button onClick={savePolicy} disabled={saving || !policyForm.insurer} loading={saving} className="w-full">{policyForm.id ? 'Save Changes' : 'Add Insurance'}</Button>
           </div>
         )}
       </Modal>
 
       {/* ── Profile modal ─────────────────────────────────── */}
-      <Modal open={!!profileForm} title="Health Profile" description={profileForm ? memberById.get(profileForm.member_id)?.display_name : undefined} onClose={() => setProfileForm(null)} className="sm:max-w-lg">
+      <Modal open={!!profileForm} title={t('medicalRecords.healthProfile')} description={profileForm ? memberById.get(profileForm.member_id)?.display_name : undefined} onClose={() => setProfileForm(null)} className="sm:max-w-lg">
         {profileForm && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Blood Type">{(id) => <Input id={id} value={profileForm.blood_type} onChange={(e) => setProfileForm({ ...profileForm, blood_type: e.target.value })} placeholder="O+" />}</Field>
-              <Field label="Primary Physician">{(id) => <Input id={id} value={profileForm.primary_physician} onChange={(e) => setProfileForm({ ...profileForm, primary_physician: e.target.value })} placeholder="Dr. Patel" />}</Field>
+              <Field label={t('medicalRecords.bloodType')}>{(id) => <Input id={id} value={profileForm.blood_type} onChange={(e) => setProfileForm({ ...profileForm, blood_type: e.target.value })} placeholder="O+" />}</Field>
+              <Field label={t('medicalRecords.primaryPhysician')}>{(id) => <Input id={id} value={profileForm.primary_physician} onChange={(e) => setProfileForm({ ...profileForm, primary_physician: e.target.value })} placeholder={t('medicalRecords.drPatel')} />}</Field>
             </div>
-            <Field label="Allergies">{(id) => <Textarea id={id} value={profileForm.allergies} onChange={(e) => setProfileForm({ ...profileForm, allergies: e.target.value })} rows={2} placeholder="Penicillin, peanuts…" />}</Field>
-            <Field label="Conditions">{(id) => <Textarea id={id} value={profileForm.conditions} onChange={(e) => setProfileForm({ ...profileForm, conditions: e.target.value })} rows={2} placeholder="Asthma, ADHD…" />}</Field>
-            <Field label="Current Medications">{(id) => <Textarea id={id} value={profileForm.current_medications} onChange={(e) => setProfileForm({ ...profileForm, current_medications: e.target.value })} rows={2} placeholder="Albuterol inhaler as needed…" />}</Field>
-            <Field label="Immunizations">{(id) => <Input id={id} value={profileForm.immunizations} onChange={(e) => setProfileForm({ ...profileForm, immunizations: e.target.value })} placeholder="Up to date · Flu 2025" />}</Field>
-            {kind === 'dental' && <Field label="Dental Notes">{(id) => <Textarea id={id} value={profileForm.dental_notes} onChange={(e) => setProfileForm({ ...profileForm, dental_notes: e.target.value })} rows={2} placeholder="Braces, sensitivity, last cleaning…" />}</Field>}
+            <Field label={t('medicalRecords.allergies')}>{(id) => <Textarea id={id} value={profileForm.allergies} onChange={(e) => setProfileForm({ ...profileForm, allergies: e.target.value })} rows={2} placeholder={t('medicalRecords.penicillinPeanuts')} />}</Field>
+            <Field label={t('medicalRecords.conditions')}>{(id) => <Textarea id={id} value={profileForm.conditions} onChange={(e) => setProfileForm({ ...profileForm, conditions: e.target.value })} rows={2} placeholder={t('medicalRecords.asthmaAdhd')} />}</Field>
+            <Field label={t('medicalRecords.currentMedications')}>{(id) => <Textarea id={id} value={profileForm.current_medications} onChange={(e) => setProfileForm({ ...profileForm, current_medications: e.target.value })} rows={2} placeholder={t('medicalRecords.albuterolInhalerAsNeeded')} />}</Field>
+            <Field label={t('medicalRecords.immunizations')}>{(id) => <Input id={id} value={profileForm.immunizations} onChange={(e) => setProfileForm({ ...profileForm, immunizations: e.target.value })} placeholder={t('medicalRecords.upToDateFlu2025')} />}</Field>
+            {kind === 'dental' && <Field label={t('medicalRecords.dentalNotes')}>{(id) => <Textarea id={id} value={profileForm.dental_notes} onChange={(e) => setProfileForm({ ...profileForm, dental_notes: e.target.value })} rows={2} placeholder={t('medicalRecords.bracesSensitivityLastCleaning')} />}</Field>}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Preferred Pharmacy">{(id) => <Input id={id} value={profileForm.preferred_pharmacy} onChange={(e) => setProfileForm({ ...profileForm, preferred_pharmacy: e.target.value })} placeholder="Walgreens, Oak St" />}</Field>
-              <Field label="Pharmacy Phone">{(id) => <Input id={id} value={profileForm.pharmacy_phone} onChange={(e) => setProfileForm({ ...profileForm, pharmacy_phone: e.target.value })} placeholder="(555) 222-3333" />}</Field>
+              <Field label={t('medicalRecords.preferredPharmacy')}>{(id) => <Input id={id} value={profileForm.preferred_pharmacy} onChange={(e) => setProfileForm({ ...profileForm, preferred_pharmacy: e.target.value })} placeholder={t('medicalRecords.walgreensOakSt')} />}</Field>
+              <Field label={t('medicalRecords.pharmacyPhone')}>{(id) => <Input id={id} value={profileForm.pharmacy_phone} onChange={(e) => setProfileForm({ ...profileForm, pharmacy_phone: e.target.value })} placeholder="(555) 222-3333" />}</Field>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Emergency Contact">{(id) => <Input id={id} value={profileForm.emergency_contact_name} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_name: e.target.value })} placeholder="Name" />}</Field>
-              <Field label="Relationship">{(id) => <Input id={id} value={profileForm.emergency_contact_relation} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_relation: e.target.value })} placeholder="Grandmother" />}</Field>
-              <Field label="Their Phone">{(id) => <Input id={id} value={profileForm.emergency_contact_phone} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_phone: e.target.value })} placeholder="(555) 876-5432" />}</Field>
+              <Field label={t('medicalRecords.emergencyContact')}>{(id) => <Input id={id} value={profileForm.emergency_contact_name} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_name: e.target.value })} placeholder={t('medicalRecords.name')} />}</Field>
+              <Field label={t('medicalRecords.relationship')}>{(id) => <Input id={id} value={profileForm.emergency_contact_relation} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_relation: e.target.value })} placeholder={t('medicalRecords.grandmother')} />}</Field>
+              <Field label={t('medicalRecords.theirPhone')}>{(id) => <Input id={id} value={profileForm.emergency_contact_phone} onChange={(e) => setProfileForm({ ...profileForm, emergency_contact_phone: e.target.value })} placeholder="(555) 876-5432" />}</Field>
             </div>
-            <Field label="Other Notes">{(id) => <Textarea id={id} value={profileForm.notes} onChange={(e) => setProfileForm({ ...profileForm, notes: e.target.value })} rows={2} />}</Field>
-            <Button onClick={saveProfile} disabled={saving} loading={saving} className="w-full">Save Profile</Button>
+            <Field label={t('medicalRecords.otherNotes')}>{(id) => <Textarea id={id} value={profileForm.notes} onChange={(e) => setProfileForm({ ...profileForm, notes: e.target.value })} rows={2} />}</Field>
+            <Button onClick={saveProfile} disabled={saving} loading={saving} className="w-full">{t('medicalRecords.saveProfile')}</Button>
           </div>
         )}
       </Modal>
 
       {/* ── Check-in member picker ────────────────────────── */}
-      <Modal open={checkInPicker} title="At the Doctor — Check-In" description="Who is this visit for? We'll show everything you need for the intake form." onClose={() => setCheckInPicker(false)}>
+      <Modal open={checkInPicker} title={t('medicalRecords.atTheDoctorCheckIn')} description={t('medicalRecordsModule.whoIsThisVisitFor')} onClose={() => setCheckInPicker(false)}>
         <div className="space-y-2">
           {selfMember && (
             <button onClick={() => { setCheckInMemberId(selfMember.id); setCheckInPicker(false); }} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-elevated">
               <Avatar name={selfMember.display_name} color={selfMember.color} size={36} />
-              <div className="flex-1"><p className="text-sm font-semibold">{selfMember.display_name} (Me)</p><p className="text-xs text-muted">Myself</p></div>
+              <div className="flex-1"><p className="text-sm font-semibold">{selfMember.display_name} (Me)</p><p className="text-xs text-muted">{t('medicalRecords.myself')}</p></div>
               <ChevronRight className="h-4 w-4 text-muted" />
             </button>
           )}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-coo/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('family-coo page read boundary', () => {
   it('logs and returns an ErrorState on a household read failure', () => {
     expect(page).toContain('if (cooError) {');
     expect(page).toContain("console.error('[dashboard/family-coo] household read failed', cooError);");
-    expect(page).toContain('return <ErrorState message="Could not load your household from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familyCoo.couldNotLoadYourHousehold', "Could not load your household from Supabase. Refresh and try again.");
   });
 
   it('derives the household data only after the fail-closed guard', () => {

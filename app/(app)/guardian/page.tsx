@@ -5,11 +5,13 @@ import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { GuardianDashboard } from '@/components/guardian/guardian-dashboard';
 import { Shield } from 'lucide-react';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -85,13 +87,13 @@ export default async function GuardianPage() {
           <Shield className="h-5 w-5 text-brand-text" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">AI Call Guardian™</h1>
-          <p className="text-sm text-muted">Smart protection for every call, text, and message</p>
+          <h1 className="text-xl font-bold leading-tight">{t('guardian.aiCallGuardian')}</h1>
+          <p className="text-sm text-muted">{t('guardian.smartProtectionForEveryCallText')}</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <a href="/guardian/contacts" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">Contacts</a>
-          <a href="/guardian/rules" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">Rules</a>
-          <a href="/guardian/settings" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">Settings</a>
+          <a href="/guardian/contacts" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.contacts')}</a>
+          <a href="/guardian/rules" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.rules')}</a>
+          <a href="/guardian/settings" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.settings')}</a>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { rescheduleEventAction } from '@/app/(app)/dashboard/conflicts/actions';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type EventView = { id: string; title: string; whenLabel: string; location: string | null; assignee: string | null };
 export type QuickFixView = { eventId: string; label: string; startsAtIso: string; endsAtIso: string; newWhenLabel: string };
@@ -35,6 +36,7 @@ function EventLine({ e }: { e: EventView }) {
 }
 
 export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
+  const t = useTranslations();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
@@ -44,8 +46,8 @@ export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
     return (
       <EmptyState
         icon={Check}
-        title="No schedule conflicts"
-        description="Nothing on the calendar overlaps in the next two weeks. Nicely run."
+        title={t('conflictResolver.noScheduleConflicts')}
+        description={t('conflictResolver.nothingOnTheCalendarOverlaps')}
       />
     );
   }
@@ -53,8 +55,8 @@ export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
     return (
       <EmptyState
         icon={Check}
-        title="All conflicts handled"
-        description="You've resolved or dismissed every detected conflict. New ones will appear here automatically."
+        title={t('conflictResolver.allConflictsHandled')}
+        description={t('conflictResolver.youVeResolvedOrDismissed')}
       />
     );
   }
@@ -78,6 +80,7 @@ function ConflictCard({
 }: {
   conflict: ConflictView; onResolved: () => void; onDismiss: () => void;
 }) {
+  const t = useTranslations();
   const [pending, start] = useTransition();
   const [error, setError] = useState('');
   const [ideas, setIdeas] = useState<string[] | null>(null);
@@ -91,7 +94,7 @@ function ConflictCard({
     start(async () => {
       const r = await rescheduleEventAction(qf.eventId, qf.startsAtIso, qf.endsAtIso);
       if (r.ok) onResolved();
-      else setError(r.error ?? 'Could not reschedule.');
+      else setError(r.error ?? t('conflictResolver.couldNotReschedule'));
     });
   }
 
@@ -118,7 +121,7 @@ function ConflictCard({
     <Card>
       <div className="mb-3 flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-sm font-semibold">
-          <CalendarClock className="h-4 w-4 text-danger" /> Schedule conflict
+          <CalendarClock className="h-4 w-4 text-danger" /> {t('conflictResolver.scheduleConflict')}
         </span>
         <Badge tone="danger">{conflict.overlapLabel}</Badge>
       </div>
@@ -132,14 +135,14 @@ function ConflictCard({
       {/* Quick fix (deterministic) */}
       {conflict.quickFix && (
         <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
-          <p className="text-xs font-medium text-brand-text">Quick fix</p>
-          <p className="mt-0.5 text-sm">{conflict.quickFix.label} — new time {conflict.quickFix.newWhenLabel}.</p>
+          <p className="text-xs font-medium text-brand-text">{t('conflictResolver.quickFix')}</p>
+          <p className="mt-0.5 text-sm">{conflict.quickFix.label} {t('conflictResolver.newTime')} {conflict.quickFix.newWhenLabel}.</p>
           <button
             onClick={applyQuickFix}
             disabled={pending}
             className="mt-2 inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60"
           >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Apply &amp; reschedule
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {t('conflictResolver.applyAmpReschedule')}
           </button>
           {error && <p className="mt-1 text-xs text-danger">{error}</p>}
         </div>
@@ -149,9 +152,9 @@ function ConflictCard({
       <div className="mt-3">
         {ideas ? (
           <div className="rounded-xl border border-border p-3">
-            <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-accent"><Sparkles className="h-3.5 w-3.5" /> AI ideas</p>
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-accent"><Sparkles className="h-3.5 w-3.5" /> {t('conflictResolver.aiIdeas')}</p>
             <ul className="space-y-1 text-sm">
-              {ideas.length === 0 ? <li className="text-muted">No suggestions returned.</li> : ideas.map((idea, i) => (
+              {ideas.length === 0 ? <li className="text-muted">{t('conflictResolver.noSuggestionsReturned')}</li> : ideas.map((idea, i) => (
                 <li key={i} className="flex items-start gap-2"><Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" /> {idea}</li>
               ))}
             </ul>
@@ -162,7 +165,7 @@ function ConflictCard({
             disabled={aiBusy}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-elevated disabled:opacity-60"
           >
-            {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />} Ask AI for ideas
+            {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />} {t('conflictResolver.askAiForIdeas')}
           </button>
         )}
         {aiError && <p className="mt-1 text-xs text-danger">{aiError}</p>}
@@ -170,7 +173,7 @@ function ConflictCard({
 
       <div className="mt-3 flex justify-end">
         <button onClick={onDismiss} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg">
-          <X className="h-3.5 w-3.5" /> Dismiss
+          <X className="h-3.5 w-3.5" /> {t('conflictResolver.dismiss')}
         </button>
       </div>
     </Card>

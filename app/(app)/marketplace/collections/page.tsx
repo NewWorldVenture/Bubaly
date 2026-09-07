@@ -7,11 +7,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceCollectionsPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { id } = await searchParams;
@@ -26,7 +28,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   if (collectionsError) {
     console.error('[marketplace-collections] Collections read failed', collectionsError);
-    return <ErrorState message="Could not load your marketplace collections. Refresh and try again." />;
+    return <ErrorState message={t('collections.couldNotLoadYourMarketplace')} />;
   }
 
   const { data: items, error: itemsError } = await sb
@@ -56,17 +58,17 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
     return (
       <div>
         <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand-text">
-          <ArrowLeft className="h-3 w-3" /> All collections
+          <ArrowLeft className="h-3 w-3" /> {t('marketplaceCollections.allCollections')}
         </Link>
         <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
         {dataWarnings.length > 0 && (
-          <div role="status" aria-label="Marketplace collections data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <div role="status" aria-label={t('marketplaceCollections.marketplaceCollectionsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <p>Some collection details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+            <p>{t('marketplaceCollections.someCollectionDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
           </div>
         )}
         {(listings ?? []).length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">Nothing in this collection yet.</div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">{t('marketplaceCollections.nothingInThisCollectionYet')}</div>
         ) : (
           <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {(listings ?? []).map((l) => {
@@ -98,17 +100,17 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   return (
     <div>
-      <PageHeader title="Collections" description="Curated sets from the family board — dresses for the wedding, camping season, baby gear." />
+      <PageHeader title={t('marketplaceCollections.collections')} description={t('collections.curatedSetsFromTheFamily')} />
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Marketplace collections data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('marketplaceCollections.marketplaceCollectionsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some collection details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{t('marketplaceCollections.someCollectionDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       {(collections ?? []).length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <FolderHeart className="mx-auto mb-2 h-6 w-6" />
-          No collections yet.
+          {t('marketplaceCollections.noCollectionsYet')}
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">

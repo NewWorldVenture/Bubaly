@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 // A-13 — the Vacations list and calendar both read `vacations` (their primary
@@ -16,7 +17,8 @@ describe('vacations-list surfaces the primary read failure', () => {
   });
   it('renders a retryable ErrorState before the empty state', () => {
     expect(list).toContain('error ? (');
-    expect(list).toContain('<ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />');
+    expect(list).toContain("<ErrorState message={");
+    expectSays(list, 'vacationsList.couldNotLoadYourTrips', "Could not load your trips. Refresh and try again.");
     // the error branch must precede the empty-state JSX (anchor on the
     // component, not the comment text which also mentions "No trips yet")
     expect(list.indexOf('error ? (')).toBeLessThan(list.indexOf('<EmptyState icon={Plane}'));

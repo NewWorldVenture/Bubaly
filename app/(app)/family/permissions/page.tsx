@@ -5,11 +5,13 @@ import { createServer } from '@/lib/supabase/server';
 import { ROLE_LABELS, ROLE_ORDER, ROLE_DESCRIPTIONS, type MemberRole } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Permissions' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyPermissionsPage() {
+  const t = await getTranslations();
   await requireUserContext();
   const supabase = await createServer();
   const { data: perms } = await supabase
@@ -30,9 +32,9 @@ export default async function FamilyPermissionsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Roles & Permissions" description="The access model behind your family — enforced by database row-level security." />
+      <PageHeader title={t('familyPermissions.rolesPermissions')} description={t('permissions.theAccessModelBehindYour')} />
 
-      <SectionCard title="Role Overview">
+      <SectionCard title={t('familyPermissions.roleOverview')}>
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ROLE_ORDER.map((role) => (
             <li key={role} className="rounded-xl border border-border bg-surface/40 p-3">
@@ -43,13 +45,13 @@ export default async function FamilyPermissionsPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Permission Matrix" description="Create / Read / Update / Delete per resource & role">
+      <SectionCard title={t('familyPermissions.permissionMatrix')} description={t('permissions.createReadUpdateDeletePer')}>
         {resources.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="text-left text-muted">
-                  <th className="py-2 pr-4 font-medium">Resource</th>
+                  <th className="py-2 pr-4 font-medium">{t('familyPermissions.resource')}</th>
                   {ROLE_ORDER.map((role) => <th key={role} className="px-2 py-2 text-center font-medium">{ROLE_LABELS[role].split(' ')[0]}</th>)}
                 </tr>
               </thead>
@@ -75,7 +77,7 @@ export default async function FamilyPermissionsPage() {
             </table>
           </div>
         ) : (
-          <MiniEmpty icon={ShieldCheck} text="Permission rules load from the database once the policy seed is applied." />
+          <MiniEmpty icon={ShieldCheck} text={t('permissions.permissionRulesLoadFromThe')} />
         )}
       </SectionCard>
     </div>

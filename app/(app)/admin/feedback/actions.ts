@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -18,7 +19,8 @@ type Guarded = { supabase: AdminClient; userId: string | null } | { ok: false; e
 const NOTE_MAX = 2000;
 
 async function guard(): Promise<Guarded> {
-  if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
+  const t = await getTranslations();
+  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
   const user = await getUser();
   return { supabase: createServiceClient(), userId: user?.id ?? null };
 }
@@ -36,39 +38,42 @@ function fail(op: string, error: unknown): Result {
 
 /** Move an idea through the roadmap and set its public note in one write. */
 export async function updateIdeaAction(input: { ideaId: string; status: string; note: string }): Promise<Result> {
+  const t = await getTranslations();
   const g = await guard();
   if (!('supabase' in g)) return g;
-  if (!input.ideaId) return { ok: false, error: 'Missing idea.' };
-  if (!isFeedbackStatus(input.status)) return { ok: false, error: 'Unknown status.' };
+  if (!input.ideaId) return { ok: false, error: t('actions.missingIdea') };
+  if (!isFeedbackStatus(input.status)) return { ok: false, error: t('actions.unknownStatus') };
   const note = (input.note ?? '').trim().slice(0, NOTE_MAX);
   const { data, error } = await g.supabase.from('feedback_ideas')
     .update({ status: input.status, admin_note: note || null })
     .eq('id', input.ideaId).select('id').maybeSingle();
   if (error) return fail('update the idea', error);
-  if (!data) return { ok: false, error: 'Idea not found.' };
+  if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
 
 /** Pin / unpin an idea to the top of the board. */
 export async function setIdeaPinnedAction(input: { ideaId: string; pinned: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const g = await guard();
   if (!('supabase' in g)) return g;
   const { data, error } = await g.supabase.from('feedback_ideas')
     .update({ pinned: !!input.pinned })
     .eq('id', input.ideaId).select('id').maybeSingle();
   if (error) return fail('pin the idea', error);
-  if (!data) return { ok: false, error: 'Idea not found.' };
+  if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
 
 /** Remove an idea (spam / duplicate). Cascades to its votes + comments. */
 export async function deleteIdeaAction(input: { ideaId: string }): Promise<Result> {
+  const t = await getTranslations();
   const g = await guard();
   if (!('supabase' in g)) return g;
   const { data, error } = await g.supabase.from('feedback_ideas')
     .delete().eq('id', input.ideaId).select('id').maybeSingle();
   if (error) return fail('delete the idea', error);
-  if (!data) return { ok: false, error: 'Idea not found.' };
+  if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
 
@@ -111,10 +116,11 @@ export async function markAdminNotificationsReadAction(ids?: string[]): Promise<
 
 /** Post an official team reply on an idea (rendered as a Bubaly-team comment). */
 export async function postTeamReplyAction(input: { ideaId: string; body: string }): Promise<Result> {
+  const t = await getTranslations();
   const g = await guard();
   if (!('supabase' in g)) return g;
   const body = (input.body ?? '').trim().slice(0, NOTE_MAX);
-  if (!body) return { ok: false, error: 'Write a reply first.' };
+  if (!body) return { ok: false, error: t('actions.writeAReplyFirst') };
   const { error } = await g.supabase.from('feedback_comments').insert({
     idea_id: input.ideaId,
     author_id: g.userId,

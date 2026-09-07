@@ -10,6 +10,7 @@ import {
 } from '@/lib/marketing/crm';
 import type { Tables } from '@/lib/database.types';
 import { saveContactAction, deleteContactAction } from './actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'CRM · Contacts', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm'
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
 export default async function CrmPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: contacts, error: contactsError } = await supabase
     .from('crm_contacts')
@@ -46,7 +48,7 @@ export default async function CrmPage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Your single source of truth for people — leads, prospects, and customers. The CRM cornerstone of the marketing platform.
+        {t('adminMarketingCrm.yourSingleSourceOfTruthFor')}
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -60,36 +62,36 @@ export default async function CrmPage() {
 
       {/* Add contact */}
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Add a contact</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('adminMarketingCrm.addAContact')}</h2>
         <form action={saveContactAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <input name="first_name" placeholder="First name" className={inputCls} />
-          <input name="last_name" placeholder="Last name" className={inputCls} />
-          <input name="email" type="email" placeholder="Email" className={inputCls} />
-          <input name="phone" type="tel" placeholder="Phone" className={inputCls} />
-          <input name="company" placeholder="Company" className={inputCls} />
-          <input name="lead_source" placeholder="Lead source (e.g. Google)" className={inputCls} />
+          <input name="first_name" placeholder={t('adminMarketingCrm.firstName')} className={inputCls} />
+          <input name="last_name" placeholder={t('adminMarketingCrm.lastName')} className={inputCls} />
+          <input name="email" type="email" placeholder={t('adminMarketingCrm.email')} className={inputCls} />
+          <input name="phone" type="tel" placeholder={t('adminMarketingCrm.phone')} className={inputCls} />
+          <input name="company" placeholder={t('adminMarketingCrm.company')} className={inputCls} />
+          <input name="lead_source" placeholder={t('adminMarketingCrm.leadSourceEGGoogle')} className={inputCls} />
           <select name="lead_status" defaultValue="new" className={inputCls}>
             {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <select name="lifecycle_stage" defaultValue="lead" className={inputCls}>
             {LIFECYCLE_STAGES.map((s) => <option key={s} value={s}>{LIFECYCLE_LABELS[s]}</option>)}
           </select>
-          <button type="submit" className={btnCls}>Add contact</button>
+          <button type="submit" className={btnCls}>{t('adminMarketingCrm.addContact')}</button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Contacts</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminMarketingCrm.contacts')}</h2>
         {list.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No contacts yet. Add one above, or they’ll flow in from forms and signups.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('adminMarketingCrm.noContactsYetAddOneAbove')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
-                  <th className="pb-2">Name</th><th className="pb-2">Company</th>
-                  <th className="pb-2">Lifecycle</th><th className="pb-2">Status</th>
-                  <th className="pb-2">Source</th><th className="pb-2">Added</th><th className="pb-2"></th>
+                  <th className="pb-2">{t('adminMarketingCrm.name')}</th><th className="pb-2">{t('adminMarketingCrm.company')}</th>
+                  <th className="pb-2">{t('adminMarketingCrm.lifecycle')}</th><th className="pb-2">{t('adminMarketingCrm.status')}</th>
+                  <th className="pb-2">{t('adminMarketingCrm.source')}</th><th className="pb-2">{t('adminMarketingCrm.added')}</th><th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -110,7 +112,7 @@ export default async function CrmPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteContactAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('crm.delete')}</button>
                       </form>
                     </td>
                   </tr>
@@ -124,15 +126,16 @@ export default async function CrmPage() {
   );
 }
 
-function AdminCrmReadError() {
+async function AdminCrmReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">CRM Contacts</h1>
-        <p className="mt-1 text-sm text-muted">Manage leads, prospects, and customer contacts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('crm.crmContacts')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('crm.manageLeadsProspectsAndCustomer')}</p>
       </div>
-      <ErrorState message="Could not load CRM contacts from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/crm" className="text-sm font-medium text-brand-text underline">Refresh CRM</Link>
+      <ErrorState message={t('crm.couldNotLoadCrmContacts')} />
+      <Link href="/admin/marketing/crm" className="text-sm font-medium text-brand-text underline">{t('crm.refreshCrm')}</Link>
     </div>
   );
 }

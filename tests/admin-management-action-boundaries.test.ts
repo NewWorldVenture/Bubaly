@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const actions = readFileSync('app/(app)/admin/admins/actions.ts', 'utf8');
@@ -10,7 +11,7 @@ describe('Admin Management action boundaries', () => {
     expect(actions).toContain("if (!('supabase' in guarded)) return guarded;");
     expect(actions).toContain(".select('id').maybeSingle()");
     expect(actions).toContain('if (error) return actionFailure');
-    expect(actions).toContain("if (!data) return { ok: false, error: 'Admin record not found.' }");
+    expect(actions).toContain("if (!data) return { ok: false, error: t('actions.adminRecordNotFound') }");
   });
 
   it('validates invitations and surfaces mutation failures in the client', () => {
@@ -20,6 +21,6 @@ describe('Admin Management action boundaries', () => {
     expect(client).toContain('toastError');
     expect(client).toContain('success');
     expect(client).toContain('if (!result.ok)');
-    expect(client).toContain('Please try again.');
+    expectSays(client, 'adminRowActions.couldNotUpdateAdminAccess', "Could not update admin access. Please try again.");
   });
 });

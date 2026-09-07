@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { archiveLandingPage, createLandingPage, setLandingPublished, updateLandingPage } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Landing Pages', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function LandingPagesPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { data: pages, error: pagesError } = await supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false });
   if (pagesError) {
@@ -24,7 +26,7 @@ export default async function LandingPagesPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(pages ?? []).length === 0 ? (
-          <EmptyState icon={Layout} title="No landing pages yet" description="Draft your first landing page on the right." />
+          <EmptyState icon={Layout} title={t('adminMarketingLandingPages.noLandingPagesYet')} description={t('landingPages.draftYourFirstLandingPage')} />
         ) : (
           (pages ?? []).map((p) => (
             <Card key={p.id} className="flex items-start justify-between gap-3">
@@ -36,17 +38,17 @@ export default async function LandingPagesPage() {
                <p className="font-mono text-xs text-muted">/lp/{p.slug}</p>
                {p.headline && <p className="mt-1 text-sm text-muted">{p.headline}</p>}
                <details className="mt-3 text-sm">
-                 <summary className="cursor-pointer text-xs text-muted hover:text-fg">Edit page</summary>
+                 <summary className="cursor-pointer text-xs text-muted hover:text-fg">{t('landingPages.editPage')}</summary>
                  <form action={updateLandingPage} className="mt-3 grid gap-2 sm:grid-cols-2">
                    <input type="hidden" name="id" value={p.id} />
-                   <input name="title" required defaultValue={p.title} placeholder="Internal title" className={inputCls} />
+                   <input name="title" required defaultValue={p.title} placeholder={t('landingPages.internalTitle')} className={inputCls} />
                    <input name="slug" required defaultValue={p.slug} placeholder="url-slug" className={inputCls} />
-                   <input name="headline" defaultValue={p.headline ?? ''} placeholder="Hero headline" className={inputCls} />
-                   <input name="subhead" defaultValue={p.subhead ?? ''} placeholder="Subhead" className={inputCls} />
-                   <input name="cta_label" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_label === 'string' ? (p.metadata as Record<string, unknown>).cta_label as string : ''} placeholder="CTA label" className={inputCls} />
-                   <input name="cta_href" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_href === 'string' ? (p.metadata as Record<string, unknown>).cta_href as string : ''} placeholder="CTA link" className={inputCls} />
-                   <textarea name="body" rows={4} defaultValue={p.body ?? ''} placeholder="Body copy" className="sm:col-span-2 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-                   <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">Save changes</button>
+                   <input name="headline" defaultValue={p.headline ?? ''} placeholder={t('landingPages.heroHeadline')} className={inputCls} />
+                   <input name="subhead" defaultValue={p.subhead ?? ''} placeholder={t('landingPages.subhead')} className={inputCls} />
+                   <input name="cta_label" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_label === 'string' ? (p.metadata as Record<string, unknown>).cta_label as string : ''} placeholder={t('landingPages.ctaLabel')} className={inputCls} />
+                   <input name="cta_href" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_href === 'string' ? (p.metadata as Record<string, unknown>).cta_href as string : ''} placeholder={t('landingPages.ctaLink')} className={inputCls} />
+                   <textarea name="body" rows={4} defaultValue={p.body ?? ''} placeholder={t('landingPages.bodyCopy')} className="sm:col-span-2 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+                   <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('landingPages.saveChanges')}</button>
                  </form>
                </details>
              </div>
@@ -57,8 +59,7 @@ export default async function LandingPagesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {p.published && (
-                    <a href={`/lp/${p.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">
-                      View <ExternalLink className="h-3 w-3" />
+                    <a href={`/lp/${p.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">{t('landingPages.view')}{' '}<ExternalLink className="h-3 w-3" />
                     </a>
                   )}
                    <form action={setLandingPublished}>
@@ -70,7 +71,7 @@ export default async function LandingPagesPage() {
                    </form>
                    <form action={archiveLandingPage}>
                      <input type="hidden" name="id" value={p.id} />
-                     <button type="submit" className="text-muted hover:text-rose-400">Archive</button>
+                     <button type="submit" className="text-muted hover:text-rose-400">{t('landingPages.archive')}</button>
                    </form>
                  </div>
               </div>
@@ -79,32 +80,33 @@ export default async function LandingPagesPage() {
         )}
       </div>
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New landing page</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingLandingPages.newLandingPage')}</h2>
         <form action={createLandingPage} className="space-y-3 text-sm">
-          <input name="title" required placeholder="Internal title" className={inputCls} />
+          <input name="title" required placeholder={t('adminMarketingLandingPages.internalTitle')} className={inputCls} />
           <input name="slug" required placeholder="url-slug" className={inputCls} />
-          <input name="headline" placeholder="Hero headline" className={inputCls} />
-          <input name="subhead" placeholder="Subhead" className={inputCls} />
-          <textarea name="body" rows={4} placeholder="Body copy (blank line between paragraphs)…" className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <input name="cta_label" placeholder="CTA label (e.g. Get started free)" className={inputCls} />
-          <input name="cta_href" placeholder="CTA link (/signup or https://…)" className={inputCls} />
-          <p className="text-xs text-muted">Pages are created as drafts. Use <strong>Publish</strong> to make them live at <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create page</button>
+          <input name="headline" placeholder={t('adminMarketingLandingPages.heroHeadline')} className={inputCls} />
+          <input name="subhead" placeholder={t('adminMarketingLandingPages.subhead')} className={inputCls} />
+          <textarea name="body" rows={4} placeholder={t('adminMarketingLandingPages.bodyCopyBlankLineBetweenParagraphs')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
+          <input name="cta_label" placeholder={t('adminMarketingLandingPages.ctaLabelEGGetStarted')} className={inputCls} />
+          <input name="cta_href" placeholder={t('adminMarketingLandingPages.ctaLinkSignupOrHttps')} className={inputCls} />
+          <p className="text-xs text-muted">{t('adminMarketingLandingPages.pagesAreCreatedAsDraftsUse')} <strong>{t('adminMarketingLandingPages.publish')}</strong> {t('adminMarketingLandingPages.toMakeThemLiveAt')} <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingLandingPages.createPage')}</button>
         </form>
       </Card>
     </div>
   );
 }
 
-function AdminLandingPagesReadError() {
+async function AdminLandingPagesReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Landing Pages</h1>
-        <p className="mt-1 text-sm text-muted">Draft and publish conversion-focused landing pages.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('landingPages.marketingLandingPages')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('landingPages.draftAndPublishConversionFocused')}</p>
       </div>
-      <ErrorState message="Could not load landing pages from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/landing-pages" className="text-sm font-medium text-brand-text underline">Refresh landing pages</Link>
+      <ErrorState message={t('landingPages.couldNotLoadLandingPages')} />
+      <Link href="/admin/marketing/landing-pages" className="text-sm font-medium text-brand-text underline">{t('landingPages.refreshLandingPages')}</Link>
     </div>
   );
 }

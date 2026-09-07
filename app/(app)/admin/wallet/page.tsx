@@ -4,11 +4,13 @@ import { Wallet, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { ErrorState } from '@/components/ui/states';
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminWalletPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
 
   const [
@@ -44,12 +46,12 @@ export default async function AdminWalletPage() {
       <div className="space-y-5">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <Wallet className="h-6 w-6 text-brand-text" /> Family Wallet
+            <Wallet className="h-6 w-6 text-brand-text" /> {tr('adminWallet.familyWallet')}
           </h1>
-          <p className="mt-1 text-sm text-muted">Live wallet oversight across every family.</p>
+          <p className="mt-1 text-sm text-muted">{tr('adminWallet.liveWalletOversightAcrossEveryFamily')}</p>
         </div>
-        <ErrorState message="Could not load wallet oversight from Supabase. Refresh and try again." />
-        <a href="/admin/wallet" className="text-sm font-medium text-brand-text underline">Refresh wallet overview</a>
+        <ErrorState message={tr('wallet.couldNotLoadWalletOversight')} />
+        <a href="/admin/wallet" className="text-sm font-medium text-brand-text underline">{tr('adminWallet.refreshWalletOverview')}</a>
       </div>
     );
   }
@@ -76,16 +78,13 @@ export default async function AdminWalletPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <Wallet className="h-6 w-6 text-brand-text" /> Family Wallet
+            <Wallet className="h-6 w-6 text-brand-text" /> {tr('adminWallet.familyWallet')}
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Oversight for the virtual-ledger Family Wallet across every family — activation, pending
-            approvals, ledger volume, feature flags, and recent audit activity.
-          </p>
+          <p className="mt-1 text-sm text-muted">{tr('wallet.oversightForTheVirtualLedger')}</p>
         </div>
         <Link href="/admin/wallet/reconciliation"
           className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text">
-          <ShieldCheck className="h-4 w-4" /> Reconciliation
+          <ShieldCheck className="h-4 w-4" /> {tr('adminWallet.reconciliation')}
         </Link>
       </div>
       <AdminWalletClient

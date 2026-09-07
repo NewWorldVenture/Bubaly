@@ -13,6 +13,7 @@ import {
 } from '@/lib/storage/feedback-attachments';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
@@ -23,6 +24,7 @@ export function FeedbackAttachmentUpload({
   onChange: (url: string) => void;
   userId: string;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -30,8 +32,8 @@ export function FeedbackAttachmentUpload({
   const [ownedPath, setOwnedPath] = useState<string | null>(null);
 
   async function handleFile(file: File) {
-    if (!OK_TYPES.includes(file.type)) { toastError('Please choose a JPEG, PNG, WebP, GIF or AVIF image.'); return; }
-    if (file.size > FEEDBACK_ATTACHMENT_MAX_BYTES) { toastError('That image is over 10 MB — pick a smaller one.'); return; }
+    if (!OK_TYPES.includes(file.type)) { toastError(t('feedbackAttachmentUpload.pleaseChooseAJpegPng')); return; }
+    if (file.size > FEEDBACK_ATTACHMENT_MAX_BYTES) { toastError(t('feedbackAttachmentUpload.thatImageIsOver10')); return; }
     setUploading(true);
     try {
       const sb = createClient();
@@ -45,7 +47,7 @@ export function FeedbackAttachmentUpload({
       setOwnedPath(data.path);
       onChange(pub.publicUrl);
     } catch {
-      toastError('Upload failed. Please try again.');
+      toastError(t('feedbackAttachmentUpload.uploadFailedPleaseTryAgain'));
     } finally {
       setUploading(false);
     }
@@ -64,12 +66,12 @@ export function FeedbackAttachmentUpload({
     return (
       <div className="relative overflow-hidden rounded-xl border border-border">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={value.trim()} alt="Idea attachment" className="max-h-48 w-full object-cover" />
+        <img src={value.trim()} alt={t('feedbackFeedbackAttachmentUpload.ideaAttachment')} className="max-h-48 w-full object-cover" />
         <button
           type="button" onClick={() => void remove()}
           className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/80"
         >
-          <X className="h-3.5 w-3.5" /> Remove
+          <X className="h-3.5 w-3.5" /> {t('feedbackFeedbackAttachmentUpload.remove')}
         </button>
       </div>
     );
@@ -94,8 +96,8 @@ export function FeedbackAttachmentUpload({
         ) : (
           <>
             {dragging ? <UploadCloud className="h-5 w-5" /> : <ImagePlus className="h-5 w-5" />}
-            <span className="text-sm font-semibold">Drag &amp; drop, or <span className="text-brand-text">browse</span></span>
-            <span className="text-[11px]">Add an image or file · up to 10 MB</span>
+            <span className="text-sm font-semibold">{t('feedbackFeedbackAttachmentUpload.dragAmpDropOr')} <span className="text-brand-text">browse</span></span>
+            <span className="text-[11px]">{t('feedbackFeedbackAttachmentUpload.addAnImageOrFileUp')}</span>
           </>
         )}
       </button>

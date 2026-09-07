@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { getSocialAccess } from '@/lib/social/access';
 import { generate, AI_GENERATION_KINDS, type AiGenerationKind } from '@/lib/social/ai';
 import { isPlatform } from '@/lib/social/capabilities';
@@ -10,39 +12,44 @@ import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/se
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
   try {
     ctx = await requireUserContext();
   } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('ai.unauthorized') }, { status: 401 });
   }
   const familyId = ctx.active.familyId;
 
   const access = await getSocialAccess(familyId);
   if (!access || !access.can('generate_ai')) {
-    return NextResponse.json({ error: 'You do not have permission to generate AI content.' }, { status: 403 });
+    return NextResponse.json({ error: t('ai.youDoNotHavePermission') }, { status: 403 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('ai.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = String(body.kind ?? '') as AiGenerationKind;
   if (!AI_GENERATION_KINDS.includes(kind)) {
-    return NextResponse.json({ error: 'Unknown generation kind' }, { status: 400 });
+    return NextResponse.json({ error: t('ai.unknownGenerationKind') }, { status: 400 });
   }
   const platform = isPlatform(body.platform) ? body.platform : null;
   const topic = String(body.topic ?? '').slice(0, 2000);
   const tone = body.tone ? String(body.tone).slice(0, 60) : undefined;
   const source = body.source ? String(body.source).slice(0, 8000) : undefined;
 
+  // One client for the whole handler: the request row, the failure log and the
+  // success log all want it, and three `createServer()` calls for one request
+  // is three of everything it builds.
+  const supabase = await createServer();
+
   let result;
   try {
-    result = await generate({ kind, topic, platform, tone, source });
+    result = await generate(scopeFromUserContext(ctx, supabase), { kind, topic, platform, tone, source });
   } catch (err) {
     console.error('Social AI generation error:', err);
     const message = describeAIError(err).message;
     // Persist the failed attempt for auditability.
-    const supabase = await createServer();
     await supabase.from('social_ai_generations').insert({
       family_id: familyId, user_id: ctx.user.id, kind, platform, prompt: topic,
       input: { tone: tone ?? null, hasSource: Boolean(source) }, status: 'failed',
@@ -51,7 +58,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  const supabase = await createServer();
   await supabase.from('social_ai_generations').insert({
     family_id: familyId,
     user_id: ctx.user.id,

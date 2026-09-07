@@ -14,6 +14,7 @@ import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/
 import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -47,6 +48,7 @@ function routeCapture(text: string): { destination: string; url: string } {
 }
 
 export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: string[] | null }) {
+  const t = useTranslations();
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const { familyId, userId, selfMember } = useApp();
@@ -68,13 +70,13 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     try {
       await undoCapture(createClient(), created.undo);
       const restore = text || created.title;
-      success('Undone');
+      success(t('captureShell.undone'));
       setCreated(null);
       setText(restore);
       setMode('type');
       textRef.current?.focus();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not undo'));
+      toastError(describeDbError(err, t('captureShell.couldNotUndo')));
     } finally {
       setUndoing(false);
     }
@@ -100,7 +102,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
         setCreated({ ...res, destination: route.destination });
       } catch (err) {
-        toastError(describeDbError(err, 'Could not save'));
+        toastError(describeDbError(err, t('captureShell.couldNotSave')));
       } finally {
         setRouting(false);
       }
@@ -133,7 +135,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     };
     const w = window as unknown as Record<string, unknown>;
     const SR: SRCtor | undefined = (w['SpeechRecognition'] ?? w['webkitSpeechRecognition']) as SRCtor | undefined;
-    if (!SR) { toastError('Voice input is not supported in this browser.'); return; }
+    if (!SR) { toastError(t('captureShell.voiceInputIsNotSupported')); return; }
     const recognition = new SR();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
@@ -144,7 +146,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
       setRecording(false);
       setMode('type');
     };
-    recognition.onerror = () => { setRecording(false); toastError('Could not capture voice. Try again.'); };
+    recognition.onerror = () => { setRecording(false); toastError(t('captureShell.couldNotCaptureVoiceTry')); };
     recognition.onend = () => setRecording(false);
     recognition.start();
   }
@@ -155,8 +157,8 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Capture</h1>
-            <p className="text-sm text-muted">Speak, type, or snap — AI routes it instantly.</p>
+            <h1 className="text-2xl font-bold">{t('captureShell.capture')}</h1>
+            <p className="text-sm text-muted">{t('captureShell.speakTypeOrSnapAiRoutes')}</p>
           </div>
           <button type="button" onClick={() => router.back()}
             className="grid h-9 w-9 place-items-center rounded-full bg-elevated text-muted hover:text-fg">
@@ -192,7 +194,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
                 <span className="absolute inset-0 animate-ping rounded-full bg-brand/30" />
               </div>
               <p className="text-sm font-medium text-brand-text">Listening…</p>
-              <button type="button" onClick={() => setRecording(false)} className="text-xs text-muted underline">Cancel</button>
+              <button type="button" onClick={() => setRecording(false)} className="text-xs text-muted underline">{t('captureShell.cancel')}</button>
             </div>
           ) : (
             <textarea
@@ -208,7 +210,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
           {text && !recording && (
             <div className="flex items-center justify-between border-t border-border/60 px-4 py-2">
               <span className="text-xs text-muted">{text.length} chars</span>
-              <button type="button" onClick={() => handleInput('')} className="text-xs text-muted hover:text-fg">Clear</button>
+              <button type="button" onClick={() => handleInput('')} className="text-xs text-muted hover:text-fg">{t('captureShell.clear')}</button>
             </div>
           )}
         </div>
@@ -226,17 +228,17 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
               </div>
               <button type="button" onClick={undoCreated} disabled={undoing}
                 className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-elevated hover:text-fg disabled:opacity-60">
-                {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Undo
+                {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} {t('captureShell.undo')}
               </button>
             </div>
             <div className="flex gap-2 border-t border-emerald-500/20 p-3">
               <button type="button" onClick={goToDestination}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600/90">
-                View in {created.destination} <ArrowRight className="h-4 w-4" />
+                {t('captureShell.viewIn')} {created.destination} <ArrowRight className="h-4 w-4" />
               </button>
               <button type="button" onClick={captureAnother}
                 className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
-                Capture another
+                {t('captureShell.captureAnother')}
               </button>
             </div>
           </div>
@@ -245,18 +247,18 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
             <div className="flex items-center gap-3 p-4">
               <Sparkles className="h-5 w-5 shrink-0 text-brand-text" />
               <div className="flex-1">
-                <p className="text-sm font-semibold">Sending to <span className="text-brand-text">{routed.destination}</span></p>
-                <p className="text-xs text-muted">AI matched your input to the best destination.</p>
+                <p className="text-sm font-semibold">{t('captureShell.sendingTo')} <span className="text-brand-text">{routed.destination}</span></p>
+                <p className="text-xs text-muted">{t('captureShell.aiMatchedYourInputToThe')}</p>
               </div>
             </div>
             <div className="flex gap-2 border-t border-brand/20 p-3">
               <button type="button" onClick={goToDestination}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
-                Go to {routed.destination} <ArrowRight className="h-4 w-4" />
+                {t('captureShell.goTo')} {routed.destination} <ArrowRight className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => setRouted(null)}
                 className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
-                <ChevronDown className="h-4 w-4" /> Change
+                <ChevronDown className="h-4 w-4" /> {t('captureShell.change')}
               </button>
             </div>
           </div>
@@ -270,7 +272,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
 
         {/* Quick route shortcuts — the member's own picks; customize to edit.
             Shared component = identical behavior in the Quick-capture modal. */}
-        <CaptureShortcuts initialKeys={initialShortcuts} heading="Or jump directly to" columns={3} />
+        <CaptureShortcuts initialKeys={initialShortcuts} heading={t('captureShell.orJumpDirectlyTo')} columns={3} />
       </div>
     </div>
   );

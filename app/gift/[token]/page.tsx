@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { occasionLabel, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
 import { PublicGiftForm } from '@/components/wallet/public-gift-form';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Send a gift · Bubaly', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function PublicGiftPage({ params }: { params: Promise<{ token: string }> }) {
+  const t = await getTranslations();
   const { token } = await params;
   const supabase = createServiceClient();
 
@@ -27,7 +29,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
       <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
         <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
-          We couldn&apos;t load this gift link right now. Please refresh and try again in a moment.
+          {t('gift.weCouldnAposTLoadThis')}
         </p>
       </div>
     );
@@ -54,7 +56,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
     <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10">
       <div className="text-center">
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
-        <h1 className="text-2xl font-bold">Send a gift to {childName}</h1>
+        <h1 className="text-2xl font-bold">{t('gift.sendAGiftTo')} {childName}</h1>
         <p className="mt-1 text-sm text-muted">{occasionLabel(link?.occasion ?? null)} · {familyName}</p>
         {link?.message && <p className="mt-3 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">“{link.message}”</p>}
       </div>
@@ -67,14 +69,11 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
         />
       ) : (
         <p className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-          This gift link is no longer active. Please ask the family for a new one.
+          {t('gift.thisGiftLinkIsNoLonger')}
         </p>
       )}
 
-      <p className="max-w-xs text-center text-[11px] text-muted">
-        Bubaly is not a bank. Your gift is added to a parent-managed wallet after the family approves it.
-        No fees are charged until you confirm a payment.
-      </p>
+      <p className="max-w-xs text-center text-[11px] text-muted">{t('gift.bubalyIsNotABank')}</p>
     </div>
   );
 }

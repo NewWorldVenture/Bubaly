@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Phone, MessageSquare, Mail, Instagram, BookOpen, Trophy,
   FileText, Plus, Search, Wand2, X, Archive,
@@ -10,6 +10,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -20,6 +22,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
@@ -54,6 +57,7 @@ function fmtTime(iso: string) {
 }
 
 export function InboxModule() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -154,20 +158,20 @@ export function InboxModule() {
       <div className="module-main">
         <div className="module-page">
           <PageHeader
-            title="Communications Hub"
-            description="All your family messages, calls, and school updates in one place."
+            title={tr('inbox.communicationsHub')}
+            description={tr('inboxModule.allYourFamilyMessagesCalls')}
             action={
               <div className="flex items-center gap-2">
                 <Link href="/dashboard/paperwork"
                   className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:bg-elevated transition">
-                  📄 Paperwork Inbox
+                  {tr('inbox.paperworkInbox')}
                 </Link>
                 <button onClick={() => setShowAiImport(true)}
                   className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
-                  <Sparkles className="h-3.5 w-3.5" /> AI Import
+                  <Sparkles className="h-3.5 w-3.5" /> {tr('inbox.aiImport')}
                 </button>
                 <Button onClick={() => setShowAdd(true)}>
-                  <Plus className="h-4 w-4" /> Log Message
+                  <Plus className="h-4 w-4" /> {tr('inbox.logMessage')}
                 </Button>
               </div>
             }
@@ -194,7 +198,7 @@ export function InboxModule() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={e => setSearch(e.target.value)}
-                placeholder="Search messages, contacts…"
+                placeholder={tr('inbox.searchMessagesContacts')}
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (
                 <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
@@ -218,16 +222,16 @@ export function InboxModule() {
                 <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-brand/10">
                   <MessageSquare className="h-7 w-7 text-brand-text opacity-60" />
                 </div>
-                <p className="text-sm font-semibold">No messages here</p>
-                <p className="mt-1 text-xs text-muted">Log a message or use AI Import to add one.</p>
+                <p className="text-sm font-semibold">{tr('inbox.noMessagesHere')}</p>
+                <p className="mt-1 text-xs text-muted">{tr('inbox.logAMessageOrUseAi')}</p>
                 <div className="mt-4 flex gap-2">
                   <button onClick={() => setShowAiImport(true)}
                     className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-4 py-2 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
-                    <Sparkles className="h-3.5 w-3.5" /> AI Import
+                    <Sparkles className="h-3.5 w-3.5" /> {tr('inbox.aiImport')}
                   </button>
                   <button onClick={() => setShowAdd(true)}
                     className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                    <Plus className="h-3.5 w-3.5" /> Log Message
+                    <Plus className="h-3.5 w-3.5" /> {tr('inbox.logMessage')}
                   </button>
                 </div>
               </div>
@@ -274,7 +278,7 @@ export function InboxModule() {
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); void archive(comm); }}
-                        aria-label="Archive"
+                        aria-label={tr('inbox.archive')}
                         className="flex sm:hidden sm:group-hover:flex items-center justify-center h-9 w-9 sm:h-7 sm:w-7 rounded-lg hover:bg-surface text-muted hover:text-fg transition shrink-0">
                         <Archive className="h-3.5 w-3.5" />
                       </button>
@@ -300,13 +304,13 @@ export function InboxModule() {
         <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
           <div className="sidebar-card">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold">Contacts</p>
+              <p className="text-sm font-semibold">{tr('inbox.contacts')}</p>
               <span className="text-[10px] text-muted">{contacts.length} total</span>
             </div>
             {contactsLoading ? (
               <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-8 rounded-lg bg-surface animate-pulse" />)}</div>
             ) : contacts.length === 0 ? (
-              <p className="text-xs text-muted">No contacts yet. Add them in the Contacts module.</p>
+              <p className="text-xs text-muted">{tr('inbox.noContactsYetAddThemIn')}</p>
             ) : (
               <div className="space-y-1.5">
                 {contacts.slice(0, 8).map(c => (
@@ -323,7 +327,7 @@ export function InboxModule() {
           </div>
 
           <div className="sidebar-card">
-            <p className="mb-3 text-sm font-semibold">By Channel</p>
+            <p className="mb-3 text-sm font-semibold">{tr('inbox.byChannel')}</p>
             <div className="space-y-2">
               {(['school', 'call', 'sms', 'email', 'sports'] as const).map(ch => {
                 const count = comms.filter(c => c.channel === ch && c.status !== 'archived').length;
@@ -359,6 +363,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;
   const actions = comm.action_items as string[];
@@ -369,6 +374,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   const [copied, setCopied] = useState(false);
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
+  // One submission id per action item, keyed by COMMUNICATION AND INDEX — not
+  // index alone. `<CommDetail comm={selected} />` carries no `key`, so selecting
+  // a different message reuses this instance and this ref; keyed by position,
+  // the next message's first action item would reuse the previous one's id and
+  // be answered with the reminder that id already created.
+  const reminderIds = useRef<Record<string, string>>({});
 
   const canReply = comm.direction === 'inbound';
 
@@ -395,7 +406,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       if (!res.ok) { toastError(data.error ?? 'Could not draft a reply.'); return; }
       setDraft((data.message ?? '').trim());
     } catch {
-      toastError('Could not reach the AI. Please try again.');
+      toastError(tr('inboxModule.couldNotReachTheAi'));
     } finally {
       setDrafting(false);
     }
@@ -404,7 +415,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   async function copyDraft() {
     try {
       await navigator.clipboard.writeText(draft);
-      setCopied(true); success('Reply copied');
+      setCopied(true); success(tr('inboxModule.replyCopied'));
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard unavailable */ }
   }
@@ -430,7 +441,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Reply logged to the thread');
+    success(tr('inboxModule.replyLoggedToTheThread'));
     setDraft('');
     onRefresh();
   }
@@ -439,24 +450,27 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   async function addReminder(text: string, i: number) {
     if (busyItem !== null) return;
     setBusyItem(i);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_reminders').insert({
-      family_id: familyId, created_by: userId,
+    // Through the service. `status: 'pending'` and `priority: 'normal'` are both
+    // outside 0014's CHECK sets, so the raw insert was rejected every time and
+    // this one-tap button never saved anything.
+    const result = await createReminderAction({
       title: text.slice(0, 200),
       notes: comm.contact?.name ? `From ${comm.contact.name} · ${ch.label}` : `From ${ch.label}`,
-      kind: 'task', priority: comm.priority === 'urgent' ? 'high' : 'normal',
-      status: 'pending', ai_suggested: true,
+      kind: 'task',
+      priority: comm.priority === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+      submissionId: reminderIds.current[`${comm.id}:${i}`] ||= newSubmissionId(),
     });
     setBusyItem(null);
-    if (error) { toastError(describeDbError(error)); return; }
+    if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
-    success('Added to reminders');
+    success(tr('inboxModule.addedToReminders'));
   }
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3 flex-shrink-0">
-        <button onClick={onClose} aria-label="Back" className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
+        <button onClick={onClose} aria-label={tr('inbox.back')} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className={cn('grid h-9 w-9 place-items-center rounded-xl flex-shrink-0', ch.color)}>
@@ -466,7 +480,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <div className="truncate text-sm font-bold">{comm.contact?.name ?? comm.subject ?? 'No subject'}</div>
           <div className="text-[10px] text-muted">{ch.label} · {fmtTime(comm.received_at)}</div>
         </div>
-        <button onClick={onArchive} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg" title="Archive">
+        <button onClick={onArchive} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg" title={tr('inbox.archive')}>
           <Archive className="h-4 w-4" />
         </button>
       </div>
@@ -487,14 +501,14 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
 
         {comm.subject && comm.contact && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">Subject</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{tr('inbox.subject')}</p>
             <p className="text-sm font-medium">{comm.subject}</p>
           </div>
         )}
 
         {comm.body && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">Message</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{tr('inbox.message')}</p>
             <p className="text-sm whitespace-pre-wrap leading-relaxed text-fg/90">{comm.body}</p>
           </div>
         )}
@@ -503,7 +517,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex items-center gap-1.5 mb-1.5">
               <Sparkles className="h-3.5 w-3.5 text-brand-text" />
-              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Summary</span>
+              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">{tr('inbox.aiSummary')}</span>
             </div>
             <p className="text-xs leading-relaxed text-fg/80">{comm.summary}</p>
           </div>
@@ -513,7 +527,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <CheckCircle className="h-3.5 w-3.5 text-amber-400" />
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Action Items</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('inbox.actionItems')}</p>
             </div>
             <div className="space-y-1.5">
               {actions.map((a, i) => {
@@ -525,9 +539,9 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
                       className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
                         added ? 'text-green-400' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
-                      {added ? <><Check className="h-3 w-3" /> Added</>
+                      {added ? <><Check className="h-3 w-3" /> {tr('inbox.added')}</>
                         : busyItem === i ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : <><Bell className="h-3 w-3" /> Remind</>}
+                        : <><Bell className="h-3 w-3" /> {tr('inbox.remind')}</>}
                     </button>
                   </div>
                 );
@@ -542,7 +556,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Reply className="h-3.5 w-3.5 text-brand-text" />
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">AI Reply Agent</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('inbox.aiReplyAgent')}</span>
               </div>
               <button onClick={generateReply} disabled={drafting}
                 className="flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-[10px] font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-60">
@@ -551,7 +565,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
               </button>
             </div>
             <textarea value={draft} onChange={e => setDraft(e.target.value)}
-              placeholder="Tap “Draft reply” for an AI-written response you can edit, copy, or log…"
+              placeholder={tr('inbox.tapDraftReplyForAnAi')}
               rows={draft ? 5 : 2}
               className="w-full resize-none rounded-lg border border-border bg-background/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
             {draft && (
@@ -561,7 +575,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
                 </button>
                 <button onClick={logReply} disabled={sendingReply}
                   className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
-                  {sendingReply ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />} Log reply
+                  {sendingReply ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />} {tr('inbox.logReply')}
                 </button>
               </div>
             )}
@@ -570,7 +584,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
 
         {comm.contact && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Contact</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">{tr('inbox.contact')}</p>
             <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface/60 px-3 py-2.5">
               <Avatar name={comm.contact.name} src={comm.contact.photo_url} size={36} />
               <div>
@@ -590,6 +604,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
   familyId: string; userId: string; contacts: Contact[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -606,7 +621,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
     const contact_id = String(form.get('contact_id') ?? '') || null;
     const received_at = String(form.get('received_at') ?? '') || new Date().toISOString();
 
-    if (!subject && !body) return toastError('Add a subject or message body');
+    if (!subject && !body) return toastError(tr('inboxModule.addASubjectOrMessage'));
 
     setLoading(true);
     const supabase = createClient();
@@ -622,38 +637,38 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title="Log Communication" onClose={onClose}>
+    <Modal open title={tr('inbox.logCommunication')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Channel">
+          <Field label={tr('inbox.channel')}>
             {id => <Select id={id} name="channel">{Object.entries(CHANNELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
           </Field>
-          <Field label="Direction">
-            {id => <Select id={id} name="direction"><option value="inbound">Inbound</option><option value="outbound">Outbound</option></Select>}
+          <Field label={tr('inbox.direction')}>
+            {id => <Select id={id} name="direction"><option value="inbound">{tr('inbox.inbound')}</option><option value="outbound">{tr('inbox.outbound')}</option></Select>}
           </Field>
         </div>
-        <Field label="Contact">
-          {id => <Select id={id} name="contact_id"><option value="">No contact</option>{contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>}
+        <Field label={tr('inbox.contact')}>
+          {id => <Select id={id} name="contact_id"><option value="">{tr('inbox.noContact')}</option>{contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>}
         </Field>
-        <Field label="Subject">
-          {id => <Input id={id} name="subject" placeholder="What was it about?" />}
+        <Field label={tr('inbox.subject')}>
+          {id => <Input id={id} name="subject" placeholder={tr('inbox.whatWasItAbout')} />}
         </Field>
-        <Field label="Message / Notes">
-          {id => <Textarea id={id} name="body" rows={4} placeholder="What was said or written…" />}
+        <Field label={tr('inbox.messageNotes')}>
+          {id => <Textarea id={id} name="body" rows={4} placeholder={tr('inbox.whatWasSaidOrWritten')} />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">
+          <Field label={tr('inbox.category')}>
             {id => <Select id={id} name="category">{Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
           </Field>
-          <Field label="Priority">
-            {id => <Select id={id} name="priority"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select>}
+          <Field label={tr('inbox.priority')}>
+            {id => <Select id={id} name="priority"><option value="low">Low</option><option value="normal">{tr('inbox.normal')}</option><option value="high">{tr('inbox.high')}</option><option value="urgent">{tr('inbox.urgent')}</option></Select>}
           </Field>
         </div>
-        <Field label="Date / Time">
+        <Field label={tr('inbox.dateTime')}>
           {id => <Input id={id} name="received_at" type="datetime-local" />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('inbox.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Log Message'}</Button>
         </div>
       </form>
@@ -672,6 +687,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
   familyId: string; userId: string; contacts: Contact[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -721,20 +737,20 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
     });
     setSaving(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Saved to Communications Hub!');
+    success(tr('inboxModule.savedToCommunicationsHub'));
     onSaved();
   }
 
   return (
-    <Modal open title="AI Import" onClose={onClose}>
+    <Modal open title={tr('inbox.aiImport')} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">Paste any message — from a school email, text, or app notification — and AI will extract key info.</p>
+        <p className="text-sm text-muted">{tr('inbox.pasteAnyMessageFromASchool')}</p>
         {!result ? (
           <>
-            <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Paste text here…" rows={6}
+            <textarea value={text} onChange={e => setText(e.target.value)} placeholder={tr('inbox.pasteTextHere')} rows={6}
               className="w-full rounded-xl border border-border bg-surface/60 p-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
             <div className="space-y-1.5">
-              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">Examples</p>
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">{tr('inbox.examples')}</p>
               {EXAMPLES.map((ex, i) => (
                 <button key={i} onClick={() => setText(ex)}
                   className="w-full rounded-lg border border-border/60 px-3 py-2 text-left text-xs text-muted hover:bg-surface/60 hover:text-fg transition">
@@ -743,9 +759,9 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
               ))}
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={onClose}>{tr('inbox.cancel')}</Button>
               <Button onClick={parse} loading={parsing} disabled={!text.trim()}>
-                {parsing ? 'Analyzing…' : <><Wand2 className="h-3.5 w-3.5" /> Parse with AI</>}
+                {parsing ? 'Analyzing…' : <><Wand2 className="h-3.5 w-3.5" /> {tr('inbox.parseWithAi')}</>}
               </Button>
             </div>
           </>
@@ -754,7 +770,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
             <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-2">
               <div className="flex items-center gap-1.5 mb-1">
                 <Sparkles className="h-3.5 w-3.5 text-brand-text" />
-                <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Extracted</span>
+                <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">{tr('inbox.aiExtracted')}</span>
               </div>
               <div className="text-sm font-medium">{result.subject}</div>
               <div className="text-xs text-muted">{result.summary}</div>
@@ -769,16 +785,16 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
                 </div>
               )}
             </div>
-            <Field label="Link to contact (optional)">
+            <Field label={tr('inbox.linkToContactOptional')}>
               {id => (
                 <Select id={id} value={contactId} onChange={e => setContactId(e.target.value)}>
-                  <option value="">No contact</option>
+                  <option value="">{tr('inbox.noContact')}</option>
                   {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               )}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setResult(null)}>Back</Button>
+              <Button type="button" variant="ghost" onClick={() => setResult(null)}>{tr('inbox.back')}</Button>
               <Button onClick={save} loading={saving}>{saving ? 'Saving…' : 'Save to Hub'}</Button>
             </div>
           </div>

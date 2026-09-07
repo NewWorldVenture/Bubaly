@@ -19,6 +19,7 @@ import { loadFamilyGraph } from '@/lib/reasoning/context';
 import { graphReasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Operating Index' };
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ function barColor(score: number): string {
 // Every figure is computed live from real family-scoped data (lib/operating-index)
 // and persisted as one snapshot per day so the composite can trend.
 export default async function FamilyOperatingIndexPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   let indexResult;
@@ -63,7 +65,7 @@ export default async function FamilyOperatingIndexPage() {
     indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const { index, priorComposite, trend, change, orchestrator } = indexResult;
   const band = BAND_COPY[index.band];
@@ -75,7 +77,7 @@ export default async function FamilyOperatingIndexPage() {
     graph = await loadFamilyGraph(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] graph read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const relationshipInsights = graph ? graphReasoningInsights(graph, index.band) : [];
 
@@ -92,7 +94,7 @@ export default async function FamilyOperatingIndexPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
       <PageHeader
-        title="Family Operating Index"
+        title={t('dashboardFamilyOperatingIndex.familyOperatingIndex')}
         description="How well your household is running right now — with the highest-leverage things to do next. Not a grade; a to-do list."
       />
 
@@ -124,7 +126,7 @@ export default async function FamilyOperatingIndexPage() {
             </p>
             {index.overloaded && (
               <p className="mt-1 text-xs text-muted">
-                <span className="font-medium text-fg">{index.overloaded.name}</span> is carrying the most this week.
+                <span className="font-medium text-fg">{index.overloaded.name}</span> {t('dashboardFamilyOperatingIndex.isCarryingTheMostThisWeek')}
               </p>
             )}
           </div>
@@ -145,10 +147,10 @@ export default async function FamilyOperatingIndexPage() {
       <section className="mt-5">
         <div className="mb-2 flex items-center gap-2">
           <Compass className="h-4 w-4 text-brand-text" />
-          <h2 className="text-sm font-semibold">Your family chief of staff</h2>
+          <h2 className="text-sm font-semibold">{t('dashboardFamilyOperatingIndex.yourFamilyChiefOfStaff')}</h2>
           {orchestrator.allClear && (
             <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              <Check className="h-3 w-3" /> All clear
+              <Check className="h-3 w-3" /> {t('dashboardFamilyOperatingIndex.allClear')}
             </span>
           )}
         </div>
@@ -193,11 +195,11 @@ export default async function FamilyOperatingIndexPage() {
       {/* Top suggestions — the "system of execution" payoff */}
       <section className="mt-5">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <Sparkles className="h-4 w-4 text-brand-text" /> Do these next
+          <Sparkles className="h-4 w-4 text-brand-text" /> {t('dashboardFamilyOperatingIndex.doTheseNext')}
         </h2>
         {index.suggestions.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface/40 p-5 text-center text-sm text-muted">
-            Nothing needs you right now — the household is in great shape. 🎉
+            {t('dashboardFamilyOperatingIndex.nothingNeedsYouRightNowThe')}
           </div>
         ) : (
           <ul className="space-y-2">
@@ -241,7 +243,7 @@ export default async function FamilyOperatingIndexPage() {
       {/* Dimension breakdown */}
       <section className="mt-6">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <ListChecks className="h-4 w-4 text-brand-text" /> What went into the score
+          <ListChecks className="h-4 w-4 text-brand-text" /> {t('dashboardFamilyOperatingIndex.whatWentIntoTheScore')}
         </h2>
         <div className="grid gap-2.5 sm:grid-cols-2">
           {index.dimensions.map((d) => {
@@ -263,10 +265,7 @@ export default async function FamilyOperatingIndexPage() {
         </div>
       </section>
 
-      <p className="mt-5 text-center text-[11px] text-muted">
-        Computed live from your family’s calendar, chores, bills, documents, approvals and goals.
-        Saved once a day so you can watch the trend.
-      </p>
+      <p className="mt-5 text-center text-[11px] text-muted">{t('familyOperatingIndex.computedLiveFromYourFamily')}</p>
     </div>
   );
 }

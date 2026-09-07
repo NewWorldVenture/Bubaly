@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -27,29 +30,30 @@ function fmt(e: EventLite): string {
  * (the deterministic reschedule on the page). Never invents details it wasn't given.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
   try {
     ctx = await requireUserContext();
   } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('resolveConflict.unauthorized') }, { status: 401 });
   }
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-resolve-conflict:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many conflict-resolution requests. Please try again shortly.' },
+    { error: t('resolveConflict.tooManyConflictResolutionRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: t('resolveConflict.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('resolveConflict.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const a = (body.a ?? {}) as EventLite;
   const b = (body.b ?? {}) as EventLite;
   if (!a.title || !b.title) {
-    return NextResponse.json({ error: 'Both events are required.' }, { status: 400 });
+    return NextResponse.json({ error: t('resolveConflict.bothEventsAreRequired') }, { status: 400 });
   }
   const provider = await resolveProvider();
   const system =
@@ -59,16 +63,29 @@ export async function POST(req: Request) {
     'Only use the facts provided — never invent names, places, or times. Return one option per line, no numbering.';
 
   try {
-    const completion = await provider.complete({
-      system,
-      messages: [{ role: 'user', content: `Event A: ${fmt(a)}\nEvent B: ${fmt(b)}\n\nHow can we resolve this clash?` }],
-      tools: [],
-    });
-    const ideas = completion.text
-      .split('\n')
-      .map((l) => l.replace(/^[\s\-*\d.)]+/, '').trim())
-      .filter(Boolean)
-      .slice(0, 3);
+    const ideas = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'calendar.resolve-conflict', text: 'Resolve a calendar clash' },
+      async (obs) => {
+        const completion = await provider.complete({
+          system,
+          messages: [{ role: 'user', content: `Event A: ${fmt(a)}\nEvent B: ${fmt(b)}\n\nHow can we resolve this clash?` }],
+          tools: [],
+        });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = completion.text
+          .split('\n')
+          .map((l) => l.replace(/^[\s\-*\d.)]+/, '').trim())
+          .filter(Boolean)
+          .slice(0, 3);
+        // A distinct shape of silence: this route answers 200 with `ideas: []`
+        // when nothing parses, so the parent sees "no suggestions" — which is
+        // exactly what a working model with nothing to say would produce. The
+        // response is unchanged; the row is the only place the difference lives.
+        if (parsed.length === 0) obs.failed(new Error('The model returned no usable options.'));
+        return parsed;
+      },
+    );
     return NextResponse.json({ ideas });
   } catch (err) {
     console.error('Conflict-resolution assistant error:', err);

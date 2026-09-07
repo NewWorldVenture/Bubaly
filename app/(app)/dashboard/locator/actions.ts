@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -15,7 +16,13 @@ export type LocationResult = { ok: boolean; error?: string; place?: string | nul
 // have real logins, so a child could delete or silence the geofences watching
 // them. Editing shared geofences is therefore a manager-only action. (Posting
 // your OWN location / toggling your OWN sharing stays self-service.)
-const MANAGER_ONLY_PLACE = { ok: false as const, error: 'Only a parent or guardian can change family places.' };
+// A refusal message belongs to the REQUEST, not to module load: the locale is
+// resolved per request, so a constant evaluated once would freeze whichever
+// language happened to be first. A function reads it each time.
+async function managerOnlyPlace() {
+  const t = await getTranslations();
+  return { ok: false as const, error: t('actions.onlyAParentOrGuardian') };
+}
 
 /**
  * Records the caller's current position, evaluates it against the family's saved
@@ -25,12 +32,13 @@ const MANAGER_ONLY_PLACE = { ok: false as const, error: 'Only a parent or guardi
 export async function updateMyLocation(input: {
   latitude: number; longitude: number; accuracy?: number | null; battery?: number | null;
 }): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   const familyId = c.active.familyId;
   const member = c.active.member;
-  if (!member) return { ok: false, error: 'No family member profile.' };
+  if (!member) return { ok: false, error: t('actions.noFamilyMemberProfile') };
   if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) {
-    return { ok: false, error: 'Invalid coordinates.' };
+    return { ok: false, error: t('actions.invalidCoordinates') };
   }
   const supabase = await createServer();
   const point = { latitude: input.latitude, longitude: input.longitude };
@@ -114,9 +122,10 @@ export async function updateMyLocation(input: {
 
 /** Toggles whether the caller shares their location. Disabling clears coordinates. */
 export async function setLocationSharing(enabled: boolean): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   const member = c.active.member;
-  if (!member) return { ok: false, error: 'No family member profile.' };
+  if (!member) return { ok: false, error: t('actions.noFamilyMemberProfile') };
   const supabase = await createServer();
   const { error } = await supabase.from('member_locations').upsert({
     family_id: c.active.familyId, member_id: member.id, is_sharing: enabled,
@@ -131,9 +140,10 @@ export async function savePlace(input: {
   id?: string; name: string; icon?: string | null; address?: string | null;
   latitude: number; longitude: number; radius_m?: number;
 }): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
-  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
-  if (!input.name?.trim()) return { ok: false, error: 'Name is required.' };
+  if (!isManager(c.active.role)) return managerOnlyPlace();
+  if (!input.name?.trim()) return { ok: false, error: t('actions.nameIsRequired') };
   const supabase = await createServer();
   const fields = {
     name: input.name.trim(), icon: input.icon ?? null, address: input.address ?? null,
@@ -149,7 +159,7 @@ export async function savePlace(input: {
 
 export async function deletePlace(id: string): Promise<LocationResult> {
   const c = await requireUserContext();
-  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
+  if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
   const { error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId);
   if (error) return { ok: false, error: error.message };
@@ -160,7 +170,7 @@ export async function deletePlace(id: string): Promise<LocationResult> {
 /** Toggle a place's geofence on/off (drives the Geofences rail switches). */
 export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<LocationResult> {
   const c = await requireUserContext();
-  if (!isManager(c.active.role)) return MANAGER_ONLY_PLACE;
+  if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
   const { error } = await supabase.from('family_places')
     .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);

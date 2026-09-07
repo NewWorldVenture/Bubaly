@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { setCampaignStatus } from '../../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
 const STATUSES = ['draft', 'scheduled', 'active', 'paused', 'completed', 'archived'];
 
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const supabase = createServiceClient();
   const { data: c, error: campaignError } = await supabase.from('marketing_campaigns').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
@@ -46,7 +48,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">← Back to campaigns</Link>
+      <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">{t('adminMarketingCampaigns.backToCampaigns')}</Link>
 
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -66,17 +68,17 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         {c.objective && <p className="mt-4 text-sm">{c.objective}</p>}
 
         <div className="mt-4 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm sm:grid-cols-4">
-          <div><p className="text-xs text-muted">Audience</p><p className="font-semibold">{segmentName ? `${audience}` : '—'}</p></div>
-          <div><p className="text-xs text-muted">Segment</p><p className="font-semibold">{segmentName ?? 'None'}</p></div>
-          <div><p className="text-xs text-muted">Starts</p><p className="font-semibold">{c.starts_at ? fmtDate(c.starts_at) : '—'}</p></div>
-          <div><p className="text-xs text-muted">Ends</p><p className="font-semibold">{c.ends_at ? fmtDate(c.ends_at) : '—'}</p></div>
+          <div><p className="text-xs text-muted">{t('adminMarketingCampaigns.audience')}</p><p className="font-semibold">{segmentName ? `${audience}` : '—'}</p></div>
+          <div><p className="text-xs text-muted">{t('adminMarketingCampaigns.segment')}</p><p className="font-semibold">{segmentName ?? 'None'}</p></div>
+          <div><p className="text-xs text-muted">{t('adminMarketingCampaigns.starts')}</p><p className="font-semibold">{c.starts_at ? fmtDate(c.starts_at) : '—'}</p></div>
+          <div><p className="text-xs text-muted">{t('adminMarketingCampaigns.ends')}</p><p className="font-semibold">{c.ends_at ? fmtDate(c.ends_at) : '—'}</p></div>
         </div>
 
         {c.notes && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-surface/40 p-3 text-sm text-muted">{c.notes}</p>}
       </Card>
 
       <Card>
-        <h2 className="mb-3 font-semibold">Status</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingCampaigns.status')}</h2>
         <div className="flex flex-wrap gap-2">
           {STATUSES.map((s) => (
             <form key={s} action={setCampaignStatus}>
@@ -96,15 +98,16 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   );
 }
 
-function CampaignDetailReadError() {
+async function CampaignDetailReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaign</h1>
-        <p className="mt-1 text-sm text-muted">Review campaign details, audience, and status.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaign')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('campaigns.reviewCampaignDetailsAudienceAnd')}</p>
       </div>
-      <ErrorState message="Could not load this marketing campaign from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Back to campaigns</Link>
+      <ErrorState message={t('campaigns.couldNotLoadThisMarketing')} />
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">{t('campaigns.backToCampaigns')}</Link>
     </div>
   );
 }

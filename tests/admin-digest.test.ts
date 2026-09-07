@@ -1,3 +1,4 @@
+import { expectTranslates } from './helpers/translated';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
@@ -85,7 +86,7 @@ describe('summarizeDigestDelivery', () => {
 describe('admin digest route failure boundary', () => {
   it('fails closed when the Supabase notification feed read fails', () => {
     expect(routeSource).toContain('feedError');
-    expect(routeSource).toContain("Notification feed unavailable.");
+    expectTranslates(routeSource, 'adminDigest.notificationFeedUnavailable', "Notification feed unavailable.");
     expect(routeSource).toContain('{ status: 502 }');
   });
 

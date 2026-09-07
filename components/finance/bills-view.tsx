@@ -14,6 +14,7 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -27,6 +28,7 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 };
 
 export function BillsView({ mode }: { mode: BillsMode }) {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const meta = MODE_META[mode];
@@ -57,12 +59,13 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     if (error) toastError(error.message); else success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
-    if (!confirm('Delete this bill?')) return;
+    if (!confirm(t('billsView.deleteThisBill'))) return;
     const { error } = await createClient().from('bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('billsView.deleted'));
   }
 
   const Row = ({ b }: { b: Bill }) => {
+  const t = useTranslations();
     const ds = billDueStatus(b);
     const dm = DUE_META[ds];
     return (
@@ -72,7 +75,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           <p className="truncate text-sm font-semibold">{b.name}</p>
           <p className="truncate text-xs text-muted">
             Due {fmtDueDate(b.due_date)}{b.category ? ` · ${b.category}` : ''}{b.is_recurring ? ' · recurring' : ''}
-            {b.autopay && <span className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><Repeat className="h-3 w-3" /> Auto Pay</span>}
+            {b.autopay && <span className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><Repeat className="h-3 w-3" /> {t('bills.autoPay')}</span>}
           </p>
         </div>
         <div className="text-right">
@@ -81,12 +84,12 @@ export function BillsView({ mode }: { mode: BillsMode }) {
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {mode !== 'due' && (
-            <button onClick={() => toggleAutopay(b)} title="Toggle Auto Pay"
+            <button onClick={() => toggleAutopay(b)} title={t('bills.toggleAutoPay')}
               className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand-text' : 'text-muted/50 hover:text-fg')}><Repeat className="h-4 w-4" /></button>
           )}
           <button onClick={() => markPaid(b)} title={b.status === 'paid' ? 'Reopen' : 'Mark paid'}
             className="rounded-lg p-1.5 text-muted/50 transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
-          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
     );
@@ -103,7 +106,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   return (
     <div className="module-page">
       <PageHeader title={meta.title} description={meta.desc}
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add bill</Button>} />
+        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
 
       {mode !== 'autopay' && visible.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -115,7 +118,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       {loading ? <SkeletonList /> : visible.length === 0 ? (
         <EmptyState icon={meta.icon} title={mode === 'autopay' ? 'No Auto Pay bills' : mode === 'due' ? 'Nothing due' : 'No bills yet'}
           description={mode === 'autopay' ? 'Turn on Auto Pay for a bill to see it here.' : 'Add a bill to start tracking due dates.'}
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> Add bill</Button>} />
+          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
       ) : grouped ? (
         <div className="space-y-5">
           {(['overdue', 'due_soon', 'upcoming'] as const).map((k) => grouped[k].length > 0 && (
@@ -135,13 +138,14 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 }
 
 function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState({ name: '', amount: '', due_date: new Date().toISOString().slice(0, 10), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim() || !v.amount) return toastError('Add a name and amount');
+    if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
     const { error } = await createClient().from('bills').insert({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
@@ -150,25 +154,25 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Bill added');
+    success(t('billsView.billAdded'));
     onClose();
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Bill">
+    <Modal open onClose={onClose} title={t('bills.addBill')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Bill name">{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Electric bill" required autoFocus />}</Field>
+        <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
-          <Field label="Due date">{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>
+          <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
+          <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>
         </div>
-        <Field label="Category">{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+        <Field label={t('bills.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_recurring} onChange={(e) => setV({ ...v, is_recurring: e.target.checked })} /> Recurring</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.autopay} onChange={(e) => setV({ ...v, autopay: e.target.checked })} /> Auto Pay</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_recurring} onChange={(e) => setV({ ...v, is_recurring: e.target.checked })} /> {t('bills.recurring')}</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.autopay} onChange={(e) => setV({ ...v, autopay: e.target.checked })} /> {t('bills.autoPay')}</label>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t('bills.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.name.trim() || !v.amount}>Add</Button>
         </div>
       </form>

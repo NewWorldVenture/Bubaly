@@ -19,6 +19,7 @@ import { WhyThis } from '@/components/ai/why-this';
 import { explainConsensus } from '@/lib/ai/explanation';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Poll = Tables<'family_polls'>;
 type Option = Tables<'family_poll_options'>;
@@ -44,6 +45,7 @@ const parseTags = (s: string): string[] =>
 const usd = (cents: number) => `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
 
 export function VotingModule() {
+  const tr = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
@@ -92,7 +94,7 @@ export function VotingModule() {
     e.preventDefault();
     if (!form || !form.question.trim()) return;
     const opts = form.options.filter((o) => o.label.trim());
-    if (opts.length < 2) return toastError('Add at least two options');
+    if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
     const supabase = createClient();
     const { data: poll, error } = await supabase.from('family_polls').insert({
       family_id: familyId,
@@ -106,7 +108,7 @@ export function VotingModule() {
       closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
       created_by: userId,
     }).select('id').single();
-    if (error || !poll) return toastError(describeDbError(error, 'Could not create'));
+    if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
     const { error: oErr } = await supabase.from('family_poll_options').insert(
       opts.map((o, i) => ({
         family_id: familyId, poll_id: poll.id, label: o.label.trim(), sort: i,
@@ -116,12 +118,12 @@ export function VotingModule() {
       })),
     );
     if (oErr) return toastError(describeDbError(oErr));
-    success('Poll created');
+    success(tr('votingModule.pollCreated'));
     setForm(null);
   }
 
   async function vote(poll: Poll, optionId: string) {
-    if (!meId) return toastError('Join the family as a member to vote');
+    if (!meId) return toastError(tr('votingModule.joinTheFamilyAsA'));
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
@@ -145,13 +147,13 @@ export function VotingModule() {
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this poll?')) return;
+    if (!confirm(tr('votingModule.deleteThisPoll'))) return;
     const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('votingModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family voting data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('votingModule.couldNotLoadFamilyVoting')} onRetry={refresh} />;
   const all = polls ?? [];
   const budgetRows = budgets ?? [];
 
@@ -159,17 +161,17 @@ export function VotingModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand-text" /> Group Voting</h3>
-          <p className="mt-0.5 text-xs text-muted">The family votes — Bubaly weighs it against your budget and needs, and recommends.</p>
+          <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand-text" /> {tr('voting.groupVoting')}</h3>
+          <p className="mt-0.5 text-xs text-muted">{tr('voting.theFamilyVotesBubalyWeighsIt')}</p>
         </div>
         <div className="flex items-center gap-2">
           <AiInsight kind="votes" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> New poll</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('voting.newPoll')}</Button>
         </div>
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Vote} title="No polls yet" description="Create a poll to make a collaborative family decision — a trip, a restaurant, a movie night. Add each option's cost and Bubaly will facilitate consensus." />
+        <EmptyState icon={Vote} title={tr('voting.noPollsYet')} description={tr('votingModule.createAPollToMake')} />
       ) : all.map((p) => {
         const opts = (optionsByPoll.get(p.id) ?? []) as Option[];
         const pollVotes = (votesByPoll.get(p.id) ?? []) as VoteRow[];
@@ -220,7 +222,7 @@ export function VotingModule() {
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
                 <button onClick={() => setStatus(p.id, closed ? 'open' : 'closed')} className="text-muted hover:text-fg hover:underline">{closed ? 'Reopen' : 'Close'}</button>
-                <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => remove(p.id)} className="text-muted hover:text-danger" aria-label={tr('voting.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
 
@@ -230,7 +232,7 @@ export function VotingModule() {
                 <div className="flex items-center gap-2 text-sm">
                   <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span>
-                    Bubaly recommends <strong>{consensus.recommendation.label}</strong> — {consensus.recommendation.rationale}
+                    {tr('voting.bubalyRecommends')} <strong>{consensus.recommendation.label}</strong> — {consensus.recommendation.rationale}
                   </span>
                 </div>
                 {consensus.totalVotes > 0 && (
@@ -301,49 +303,49 @@ export function VotingModule() {
                 );
               })}
             </div>
-            {!meId && <p className="mt-2 text-xs text-muted">You need a family member profile to vote.</p>}
+            {!meId && <p className="mt-2 text-xs text-muted">{tr('voting.youNeedAFamilyMemberProfile')}</p>}
           </div>
         );
       })}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="New poll">
+        <Modal open onClose={() => setForm(null)} title={tr('voting.newPoll')}>
           <form onSubmit={createPoll} className="space-y-3">
-            <Field label="Question">{(id) => <Input id={id} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder="Where should we go this summer?" />}</Field>
-            <Field label="Description (optional)">{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />}</Field>
+            <Field label={tr('voting.question')}>{(id) => <Input id={id} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder={tr('voting.whereShouldWeGoThisSummer')} />}</Field>
+            <Field label={tr('voting.descriptionOptional')}>{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category">{(id) => <Select id={id} value={form.decision_category} onChange={(e) => setForm({ ...form, decision_category: e.target.value })}>{Object.entries(CATEGORY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>}</Field>
-              <Field label="Type">{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}><option value="single">Single choice</option><option value="multi">Multiple choice</option></Select>}</Field>
-              <Field label="Budget cap ($, optional)">{(id) => <Input id={id} type="number" min="0" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="uses your budget if blank" />}</Field>
-              <Field label="Closes (optional)">{(id) => <Input id={id} type="datetime-local" value={form.closes_at} onChange={(e) => setForm({ ...form, closes_at: e.target.value })} />}</Field>
+              <Field label={tr('voting.category')}>{(id) => <Select id={id} value={form.decision_category} onChange={(e) => setForm({ ...form, decision_category: e.target.value })}>{Object.entries(CATEGORY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>}</Field>
+              <Field label={tr('voting.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}><option value="single">{tr('voting.singleChoice')}</option><option value="multi">{tr('voting.multipleChoice')}</option></Select>}</Field>
+              <Field label={tr('voting.budgetCapOptional')}>{(id) => <Input id={id} type="number" min="0" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder={tr('voting.usesYourBudgetIfBlank')} />}</Field>
+              <Field label={tr('voting.closesOptional')}>{(id) => <Input id={id} type="datetime-local" value={form.closes_at} onChange={(e) => setForm({ ...form, closes_at: e.target.value })} />}</Field>
             </div>
-            <Field label="Required tags (optional, comma-separated)">{(id) => <Input id={id} value={form.required_tags} onChange={(e) => setForm({ ...form, required_tags: e.target.value })} placeholder="vegetarian, gluten-free" />}</Field>
+            <Field label={tr('voting.requiredTagsOptionalCommaSeparated')}>{(id) => <Input id={id} value={form.required_tags} onChange={(e) => setForm({ ...form, required_tags: e.target.value })} placeholder={tr('voting.vegetarianGlutenFree')} />}</Field>
             {(vacations ?? []).length > 0 && (
-              <Field label="Link to a trip (optional)">{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">— None —</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
+              <Field label={tr('voting.linkToATripOptional')}>{(id) => <Select id={id} value={form.vacation_id} onChange={(e) => setForm({ ...form, vacation_id: e.target.value })}><option value="">{tr('voting.none')}</option>{(vacations ?? []).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</Select>}</Field>
             )}
-            <Field label="Options">
+            <Field label={tr('voting.options')}>
               {() => (
                 <div className="space-y-2">
                   {form.options.map((opt, i) => (
                     <div key={i} className="rounded-lg border border-border p-2">
                       <div className="flex gap-2">
                         <Input value={opt.label} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], label: e.target.value }; setForm({ ...form, options: o }); }} placeholder={`Option ${i + 1}`} />
-                        {form.options.length > 2 && <button type="button" onClick={() => setForm({ ...form, options: form.options.filter((_, j) => j !== i) })} className="text-muted hover:text-danger" aria-label="Remove option"><Trash2 className="h-4 w-4" /></button>}
+                        {form.options.length > 2 && <button type="button" onClick={() => setForm({ ...form, options: form.options.filter((_, j) => j !== i) })} className="text-muted hover:text-danger" aria-label={tr('voting.removeOption')}><Trash2 className="h-4 w-4" /></button>}
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder="Cost $" aria-label={`Option ${i + 1} cost`} />
-                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder="Travel min" aria-label={`Option ${i + 1} travel`} />
+                        <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.cost')} aria-label={`Option ${i + 1} cost`} />
+                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={`Option ${i + 1} travel`} />
                         <Input value={opt.tags} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], tags: e.target.value }; setForm({ ...form, options: o }); }} placeholder="tags" aria-label={`Option ${i + 1} tags`} />
                       </div>
                     </div>
                   ))}
-                  <button type="button" onClick={() => setForm({ ...form, options: [...form.options, blankOption()] })} className="text-xs font-semibold text-brand-text">+ Add option</button>
+                  <button type="button" onClick={() => setForm({ ...form, options: [...form.options, blankOption()] })} className="text-xs font-semibold text-brand-text">{tr('voting.addOption')}</button>
                 </div>
               )}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit">Create poll</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('voting.cancel')}</Button>
+              <Button type="submit">{tr('voting.createPoll')}</Button>
             </div>
           </form>
         </Modal>

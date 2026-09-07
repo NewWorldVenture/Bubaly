@@ -16,6 +16,7 @@ import {
   type Forecast, type GeoResult,
 } from '@/lib/weather/open-meteo';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SavedLocation = Tables<'weather_locations'>;
 
@@ -50,6 +51,7 @@ function dayName(date: string, i: number): string {
 }
 
 export function WeatherModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const supabase = useMemo(() => createClient(), []);
@@ -135,8 +137,8 @@ export function WeatherModule() {
     let cancelled = false;
     setLoading(true); setError(null);
     fetchForecast(active.lat, active.lon, 14)
-      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError('Could not load the forecast.'); } })
-      .catch(() => { if (!cancelled) setError('Could not load the forecast.'); })
+      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError(t('weatherModule.couldNotLoadTheForecast')); } })
+      .catch(() => { if (!cancelled) setError(t('weatherModule.couldNotLoadTheForecast')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [active?.key, active?.lat, active?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -155,7 +157,7 @@ export function WeatherModule() {
       name: r.name, admin1: r.admin1, country: r.country, latitude: r.latitude, longitude: r.longitude,
       sort_order: saved.length,
     }).select('id').single();
-    if (err || !data) { toastError(describeDbError(err, 'Could not add city')); return; }
+    if (err || !data) { toastError(describeDbError(err, t('weatherModule.couldNotAddCity'))); return; }
     success(`Added ${r.name}`);
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();
@@ -166,7 +168,7 @@ export function WeatherModule() {
     await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
     const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
     if (err) return toastError(describeDbError(err));
-    success('Default city set');
+    success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 
@@ -182,7 +184,7 @@ export function WeatherModule() {
 
   return (
     <div className="module-page space-y-5">
-      <PageHeader title="Weather" description="Live conditions and forecasts for your locations." action={<AiInsight kind="weather" />} />
+      <PageHeader title={t('weather.weather')} description={t('weatherModule.liveConditionsAndForecastsFor')} action={<AiInsight kind="weather" />} />
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">
@@ -201,7 +203,7 @@ export function WeatherModule() {
           </button>
         ))}
         <button onClick={() => setAdding((v) => !v)} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:bg-elevated">
-          <Plus className="h-3.5 w-3.5" /> Add city
+          <Plus className="h-3.5 w-3.5" /> {t('weather.addCity')}
         </button>
       </div>
 
@@ -211,9 +213,9 @@ export function WeatherModule() {
           <form onSubmit={runSearch} className="flex gap-2">
             <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-border bg-surface/60 px-3">
               <Search className="h-4 w-4 text-muted" />
-              <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder="Search for a city…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={t('weather.searchForACity')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </div>
-            <Button type="submit" loading={searching}>Search</Button>
+            <Button type="submit" loading={searching}>{t('weather.search')}</Button>
             <button type="button" onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
           </form>
           {results.length > 0 && (
@@ -228,7 +230,7 @@ export function WeatherModule() {
               ))}
             </ul>
           )}
-          {!searching && query && results.length === 0 && <p className="mt-3 text-sm text-muted">Search to find a city to add.</p>}
+          {!searching && query && results.length === 0 && <p className="mt-3 text-sm text-muted">{t('weather.searchToFindACityTo')}</p>}
         </div>
       )}
 
@@ -241,8 +243,8 @@ export function WeatherModule() {
         </div>
         {active && !active.isGeo && active.id && (
           <div className="flex items-center gap-2">
-            {!active.isDefault && <button onClick={() => makeDefault(active.id!)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-amber-400"><Star className="h-3.5 w-3.5" /> Set default</button>}
-            <button onClick={() => removeCity(active.id!)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+            {!active.isDefault && <button onClick={() => makeDefault(active.id!)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-amber-400"><Star className="h-3.5 w-3.5" /> {t('weather.setDefault')}</button>}
+            <button onClick={() => removeCity(active.id!)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> {t('weather.remove')}</button>
           </div>
         )}
       </div>
@@ -254,8 +256,8 @@ export function WeatherModule() {
       ) : !active ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <MapPin className="mx-auto h-10 w-10 text-muted/50" />
-          <p className="mt-3 font-medium">No location yet</p>
-          <p className="mt-1 text-sm text-muted">Allow location access, or add a city to see the forecast.</p>
+          <p className="mt-3 font-medium">{t('weather.noLocationYet')}</p>
+          <p className="mt-1 text-sm text-muted">{t('weather.allowLocationAccessOrAddA')}</p>
         </div>
       ) : forecast && (
         <>
@@ -270,7 +272,7 @@ export function WeatherModule() {
                   <span className="text-5xl font-black">{Math.round(forecast.current.temp)}°</span>
                   <div className="pb-1">
                     <p className="text-lg font-semibold">{weatherInfo(forecast.current.code, forecast.current.isDay).label}</p>
-                    <p className="text-xs text-muted">Feels like {Math.round(forecast.current.feelsLike)}°</p>
+                    <p className="text-xs text-muted">{t('weather.feelsLike')} {Math.round(forecast.current.feelsLike)}°</p>
                   </div>
                 </div>
                 <div className="mt-3 flex gap-4 text-xs text-muted">
@@ -320,7 +322,7 @@ export function WeatherModule() {
               </ul>
             </div>
           )}
-          <p className="text-center text-xs text-muted">Weather data by Open-Meteo · times in {forecast.timezone}</p>
+          <p className="text-center text-xs text-muted">{t('weather.weatherDataByOpenMeteoTimes')} {forecast.timezone}</p>
         </>
       )}
     </div>

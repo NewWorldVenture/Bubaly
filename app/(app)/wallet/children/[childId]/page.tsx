@@ -7,10 +7,12 @@ import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, normalizeSplit, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { ChildDetailView } from '@/components/wallet/child-detail-view';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Child Wallet' };
 
 export default async function ChildWalletPage({ params }: { params: Promise<{ childId: string }> }) {
+  const tr = await getTranslations();
   const { childId } = await params;
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -20,7 +22,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     .from('child_wallets').select('id, member_id, is_active').eq('id', childId).eq('family_id', familyId).maybeSingle();
   if (childWalletError) {
     console.error('[wallet-child] Child wallet read failed', childWalletError);
-    return <ErrorState message="Could not load this child wallet. Refresh and try again." />;
+    return <ErrorState message={tr('children.couldNotLoadThisChild')} />;
   }
   if (!cw) notFound();
 
@@ -43,7 +45,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   ]);
   if (bucketsError || txnsError || ruleError) {
     console.error('[wallet-child] Balance reads failed', bucketsError ?? txnsError ?? ruleError);
-    return <ErrorState message="Could not load this child wallet balance. Refresh and try again." />;
+    return <ErrorState message={tr('children.couldNotLoadThisChild2')} />;
   }
   const dataWarnings: string[] = [];
   if (memberError) { console.error('[wallet-child] Member read failed', memberError); dataWarnings.push('Child profile'); }
@@ -88,9 +90,9 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Child wallet data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={tr('walletChildren.childWalletDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some child wallet details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{tr('walletChildren.someChildWalletDetailsAreTemporarily')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <ChildDetailView child={child} goals={goals ?? []} history={history} canManage={isManager(ctx.active.role)} siblings={siblings} />

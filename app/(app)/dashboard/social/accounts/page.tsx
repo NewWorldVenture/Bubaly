@@ -9,6 +9,7 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Accounts · Social' };
 export const dynamic = 'force-dynamic';
@@ -18,24 +19,25 @@ function cap(ok: boolean, limitation?: string) {
 }
 
 export default async function AccountsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const accounts = await getAccounts(ctx.active.familyId);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Connected accounts</h2>
+        <h2 className="text-sm font-semibold">{t('dashboardSocialAccounts.connectedAccounts')}</h2>
         <Link href="/dashboard/social/accounts/connect" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <Plug className="h-4 w-4" /> Connect
+          <Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connect')}
         </Link>
       </div>
 
       {accounts.length === 0 ? (
         <EmptyState
           icon={Plug}
-          title="No accounts yet"
-          description="Connect a social account to begin."
-          action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> Connect an account</Link>}
+          title={t('dashboardSocialAccounts.noAccountsYet')}
+          description={t('accounts.connectASocialAccountTo')}
+          action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connectAnAccount')}</Link>}
         />
       ) : (
         <div className="space-y-2">
@@ -55,17 +57,17 @@ export default async function AccountsPage() {
 
       {/* Honest capability matrix */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">What each platform supports</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialAccounts.whatEachPlatformSupports')}</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted">
               <tr>
-                <th className="px-2 py-1.5 font-medium">Platform</th>
-                <th className="px-2 py-1.5 font-medium">Feed</th>
-                <th className="px-2 py-1.5 font-medium">Post</th>
-                <th className="px-2 py-1.5 font-medium">Analytics</th>
-                <th className="px-2 py-1.5 font-medium">Inbox</th>
-                <th className="px-2 py-1.5 font-medium">App review</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.platform')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.feed')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.post')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.analytics')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.inbox')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('dashboardSocialAccounts.appReview')}</th>
               </tr>
             </thead>
             <tbody>
@@ -78,14 +80,14 @@ export default async function AccountsPage() {
                     <td className="px-2 py-1.5">{cap(d.posting.supported, d.posting.limitation)}</td>
                     <td className="px-2 py-1.5">{cap(d.analytics.supported, d.analytics.limitation)}</td>
                     <td className="px-2 py-1.5">{cap(d.inbox.supported, d.inbox.limitation)}</td>
-                    <td className="px-2 py-1.5">{d.needsAppReview ? <Badge tone="warning">Required</Badge> : <Badge tone="neutral">No</Badge>}</td>
+                    <td className="px-2 py-1.5">{d.needsAppReview ? <Badge tone="warning">{t('accounts.required')}</Badge> : <Badge tone="neutral">No</Badge>}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-muted">Hover a cell for the exact API limitation. This matrix is the single source of truth — the studio never offers a capability a platform can’t actually do.</p>
+        <p className="mt-2 text-xs text-muted">{t('accounts.hoverACellForThe')}</p>
       </Card>
     </div>
   );

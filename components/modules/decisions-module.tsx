@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { evaluateDecision, type OptionInput, type Criterion } from '@/lib/decisions/engine';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Decision = Tables<'family_decisions'>;
 type Option = Tables<'decision_options'>;
@@ -28,6 +29,7 @@ type Option = Tables<'decision_options'>;
 const num = (v: number | null | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
 
 export function DecisionsModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -74,7 +76,7 @@ export function DecisionsModule() {
     const results = await Promise.all(updates);
     const err = results.find((x) => x.error)?.error;
     if (err) { toastError(describeDbError(err)); return; }
-    success('Scores saved to the decision');
+    success(t('decisionsModule.scoresSavedToTheDecision'));
   }
 
   async function choose(optionId: string) {
@@ -83,7 +85,7 @@ export function DecisionsModule() {
     const { error } = await sb.from('family_decisions')
       .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Decision recorded');
+    success(t('decisionsModule.decisionRecorded'));
   }
 
   const loading = ld || lo;
@@ -92,15 +94,15 @@ export function DecisionsModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Decision Engine"
-        description="Weigh the trade-offs, see the reasoning, then decide together — the AI recommends, your family chooses."
-        action={<Button onClick={() => setAddDecision(true)}><Plus className="size-4" /> New decision</Button>}
+        title={t('decisions.decisionEngine')}
+        description={t('decisionsModule.weighTheTradeOffsSee')}
+        action={<Button onClick={() => setAddDecision(true)}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>}
       />
 
       {loading ? (
         <SkeletonList count={4} />
       ) : readError ? (
-        <ErrorState message="Could not load decision data. Refresh and try again." onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
+        <ErrorState message={t('decisionsModule.couldNotLoadDecisionData')} onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
       ) : (decisions ?? []).length === 0 ? (
         <EmptyState onAdd={() => setAddDecision(true)} />
       ) : (
@@ -132,21 +134,21 @@ export function DecisionsModule() {
                       <h2 className="text-base font-semibold">{selected.question}</h2>
                       {selected.detail && <p className="mt-0.5 text-sm text-muted">{selected.detail}</p>}
                     </div>
-                    <Button variant="secondary" onClick={() => setAddOption(true)}><Plus className="size-4" /> Option</Button>
+                    <Button variant="secondary" onClick={() => setAddOption(true)}><Plus className="size-4" /> {t('decisions.option')}</Button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
                     {typeof selected.budget_cents === 'number' && (
-                      <span className="rounded-full border border-border px-2 py-0.5">Budget ${(selected.budget_cents / 100).toFixed(0)}</span>
+                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.budget')}{(selected.budget_cents / 100).toFixed(0)}</span>
                     )}
                     {typeof selected.max_travel_minutes === 'number' && (
-                      <span className="rounded-full border border-border px-2 py-0.5">Travel ≤ {selected.max_travel_minutes}m</span>
+                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.travel')} {selected.max_travel_minutes}m</span>
                     )}
                   </div>
                 </div>
 
                 {myOptions.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
-                    Add two or more options to compare.
+                    {t('decisions.addTwoOrMoreOptionsTo')}
                   </div>
                 ) : (
                   <>
@@ -172,7 +174,7 @@ export function DecisionsModule() {
                                 <span className="flex size-6 items-center justify-center rounded-full bg-muted/10 text-xs font-semibold">{i + 1}</span>
                                 <span className="font-medium">{opt.label}</span>
                                 {isWinner && <Trophy className="size-4 text-amber-400" />}
-                                {!r.feasible && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] text-rose-300">doesn&apos;t fit</span>}
+                                {!r.feasible && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] text-rose-300">{t('decisions.doesnAposTFit')}</span>}
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-semibold tabular-nums">{r.score}</span>
@@ -190,7 +192,7 @@ export function DecisionsModule() {
                               {typeof opt.benefit === 'number' && <span className="flex items-center gap-1"><Star className="size-3" />benefit {opt.benefit}</span>}
                               {!isWinner && (
                                 <button onClick={() => choose(r.id)} className="ml-auto rounded-full border border-border px-2.5 py-1 hover:bg-muted/5">
-                                  <Check className="mr-1 inline size-3" />Choose
+                                  <Check className="mr-1 inline size-3" />{t('decisions.choose')}
                                 </button>
                               )}
                             </div>
@@ -199,7 +201,7 @@ export function DecisionsModule() {
                       })}
                     </div>
                     <div className="flex justify-end">
-                      <Button variant="secondary" onClick={saveScores}>Save scores</Button>
+                      <Button variant="secondary" onClick={saveScores}>{t('decisions.saveScores')}</Button>
                     </div>
                   </>
                 )}
@@ -212,13 +214,13 @@ export function DecisionsModule() {
       {addDecision && (
         <AddDecisionModal familyId={familyId} userId={userId}
           onClose={() => setAddDecision(false)}
-          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success('Decision created'); }}
+          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success(t('decisionsModule.decisionCreated')); }}
           onError={toastError} />
       )}
       {addOption && selected && (
         <AddOptionModal familyId={familyId} userId={userId} decisionId={selected.id}
           onClose={() => setAddOption(false)}
-          onSaved={() => { setAddOption(false); success('Option added'); }}
+          onSaved={() => { setAddOption(false); success(t('decisionsModule.optionAdded')); }}
           onError={toastError} />
       )}
     </div>
@@ -226,15 +228,13 @@ export function DecisionsModule() {
 }
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
+  const t = useTranslations();
   return (
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Scale className="mx-auto mb-3 size-8 text-muted" />
-      <h3 className="mb-1 text-base font-semibold">Decide the hard ones together</h3>
-      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Which vacation fits the budget and calendar? Is another activity worth the load? Add the
-        options and their trade-offs — the engine scores them, explains why, and you choose.
-      </p>
-      <Button onClick={onAdd}><Plus className="size-4" /> New decision</Button>
+      <h3 className="mb-1 text-base font-semibold">{t('decisions.decideTheHardOnesTogether')}</h3>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('decisionsModule.whichVacationFitsTheBudget')}</p>
+      <Button onClick={onAdd}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>
     </div>
   );
 }
@@ -242,6 +242,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; onClose: () => void; onSaved: (id: string) => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [question, setQuestion] = useState('');
   const [detail, setDetail] = useState('');
   const [budget, setBudget] = useState('');
@@ -250,7 +251,7 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = question.trim();
-    if (!q) { onError('Ask the question first'); return; }
+    if (!q) { onError(t('decisionsModule.askTheQuestionFirst')); return; }
     setSaving(true);
     const sb = createClient();
     const { data, error } = await sb.from('family_decisions').insert({
@@ -264,16 +265,16 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
     onSaved(data.id);
   }
   return (
-    <Modal open onClose={onClose} title="New decision">
+    <Modal open onClose={onClose} title={t('decisions.newDecision')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Question">{(id) => <Input id={id} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Which vacation this summer?" autoFocus />}</Field>
-        <Field label="Detail (optional)">{(id) => <Input id={id} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Late July, everyone free…" />}</Field>
+        <Field label={t('decisions.question')}>{(id) => <Input id={id} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('decisions.whichVacationThisSummer')} autoFocus />}</Field>
+        <Field label={t('decisions.detailOptional')}>{(id) => <Input id={id} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder={t('decisions.lateJulyEveryoneFree')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Budget cap ($, optional)">{(id) => <Input id={id} type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />}</Field>
-          <Field label="Max travel (min, optional)">{(id) => <Input id={id} type="number" min="0" value={maxTravel} onChange={(e) => setMaxTravel(e.target.value)} />}</Field>
+          <Field label={t('decisions.budgetCapOptional')}>{(id) => <Input id={id} type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />}</Field>
+          <Field label={t('decisions.maxTravelMinOptional')}>{(id) => <Input id={id} type="number" min="0" value={maxTravel} onChange={(e) => setMaxTravel(e.target.value)} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('decisions.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create'}</Button>
         </div>
       </form>
@@ -284,6 +285,7 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
 function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; decisionId: string; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
+  const t = useTranslations();
   const [label, setLabel] = useState('');
   const [cost, setCost] = useState('');
   const [time, setTime] = useState('');
@@ -295,7 +297,7 @@ function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onErro
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const l = label.trim();
-    if (!l) { onError('Name the option'); return; }
+    if (!l) { onError(t('decisionsModule.nameTheOption')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('decision_options').insert({
@@ -309,18 +311,18 @@ function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onErro
     onSaved();
   }
   return (
-    <Modal open onClose={onClose} title="Add option">
+    <Modal open onClose={onClose} title={t('decisions.addOption')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Option">{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Beach week" autoFocus />}</Field>
+        <Field label={t('decisions.option')}>{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('decisions.beachWeek')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Cost ($)">{(id) => <Input id={id} type="number" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />}</Field>
-          <Field label="Effort (min)">{(id) => <Input id={id} type="number" min="0" value={time} onChange={(e) => setTime(e.target.value)} />}</Field>
-          <Field label="Travel (min)">{(id) => <Input id={id} type="number" min="0" value={travel} onChange={(e) => setTravel(e.target.value)} />}</Field>
-          <Field label="Family load (0–100)">{(id) => <Input id={id} type="number" min="0" max="100" value={load} onChange={(e) => setLoad(e.target.value)} />}</Field>
-          <Field label="Benefit (0–100)">{(id) => <Input id={id} type="number" min="0" max="100" value={benefit} onChange={(e) => setBenefit(e.target.value)} />}</Field>
+          <Field label={t('decisions.cost')}>{(id) => <Input id={id} type="number" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />}</Field>
+          <Field label={t('decisions.effortMin')}>{(id) => <Input id={id} type="number" min="0" value={time} onChange={(e) => setTime(e.target.value)} />}</Field>
+          <Field label={t('decisions.travelMin')}>{(id) => <Input id={id} type="number" min="0" value={travel} onChange={(e) => setTravel(e.target.value)} />}</Field>
+          <Field label={t('decisions.familyLoad0100')}>{(id) => <Input id={id} type="number" min="0" max="100" value={load} onChange={(e) => setLoad(e.target.value)} />}</Field>
+          <Field label={t('decisions.benefit0100')}>{(id) => <Input id={id} type="number" min="0" max="100" value={benefit} onChange={(e) => setBenefit(e.target.value)} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('decisions.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Adding…' : 'Add'}</Button>
         </div>
       </form>

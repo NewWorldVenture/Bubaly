@@ -8,11 +8,13 @@ import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Grandparent Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function GrandparentPortalPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -40,7 +42,7 @@ export default async function GrandparentPortalPage() {
   // enrichment reads stay best-effort (each degrades to a hidden section).
   if (membersRes.error) {
     console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);
-    return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
   }
   const members = membersRes.data;
 
@@ -88,7 +90,7 @@ export default async function GrandparentPortalPage() {
       {/* Family members */}
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-          <Users className="h-4 w-4 text-brand-text" /> Family
+          <Users className="h-4 w-4 text-brand-text" /> {t('dashboardGrandparentPortal.family')}
         </h2>
         <div className="grid max-h-[32rem] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
           {digest.members.map((m) => (
@@ -107,7 +109,7 @@ export default async function GrandparentPortalPage() {
       {digest.recentPhotos.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-            <Camera className="h-4 w-4 text-pink-400" /> Recent Photos
+            <Camera className="h-4 w-4 text-pink-400" /> {t('dashboardGrandparentPortal.recentPhotos')}
           </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {digest.recentPhotos.map((p, i) => (
@@ -129,7 +131,7 @@ export default async function GrandparentPortalPage() {
       {digest.recentMilestones.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-            <Award className="h-4 w-4 text-amber-400" /> Milestones
+            <Award className="h-4 w-4 text-amber-400" /> {t('dashboardGrandparentPortal.milestones')}
           </h2>
           <ul className="space-y-2">
             {digest.recentMilestones.map((m, i) => (
@@ -149,7 +151,7 @@ export default async function GrandparentPortalPage() {
       {digest.recentAnnouncements.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-            <Megaphone className="h-4 w-4 text-violet-400" /> Family Updates
+            <Megaphone className="h-4 w-4 text-violet-400" /> {t('dashboardGrandparentPortal.familyUpdates')}
           </h2>
           <ul className="space-y-2">
             {digest.recentAnnouncements.map((a, i) => (
@@ -169,7 +171,7 @@ export default async function GrandparentPortalPage() {
       {digest.upcomingCelebrations.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-            <Cake className="h-4 w-4 text-rose-400" /> Coming Up
+            <Cake className="h-4 w-4 text-rose-400" /> {t('dashboardGrandparentPortal.comingUp')}
           </h2>
           <ul className="space-y-2">
             {digest.upcomingCelebrations.map((c, i) => (
@@ -188,7 +190,7 @@ export default async function GrandparentPortalPage() {
       )}
 
       <p className="text-center text-xs text-muted">
-        Simplified view for grandparents and extended family
+        {t('dashboardGrandparentPortal.simplifiedViewForGrandparentsAndExtended')}
       </p>
     </div>
   );

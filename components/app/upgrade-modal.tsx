@@ -12,9 +12,16 @@ import {
 import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
-/** Stripe checkout — same endpoint the billing module uses. */
-async function startCheckout(plan: StripePlan): Promise<string | null> {
+/**
+ * Stripe checkout — same endpoint the billing module uses.
+ *
+ * Takes the translator as an ARGUMENT rather than calling `useTranslations()`.
+ * This is module scope, not a component, so a hook here is a rules-of-hooks
+ * violation — and it is one that only lint and `next build` report, never tsc.
+ */
+async function startCheckout(plan: StripePlan, t: (key: string) => string): Promise<string | null> {
   const res = await fetch('/api/billing/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -22,7 +29,7 @@ async function startCheckout(plan: StripePlan): Promise<string | null> {
   });
   const json = (await res.json()) as { url?: string; error?: string };
   if (json.url) return json.url;
-  throw new Error(json.error ?? 'Could not start checkout');
+  throw new Error(json.error ?? t('upgradeModal.couldNotStartCheckout'));
 }
 
 const dollars = (cents: number) =>
@@ -62,6 +69,7 @@ export function UpgradeModal({
   featureLabel?: string | null;
   requiredLevel?: number;
 }) {
+  const t = useTranslations();
   const { role } = useApp();
   const { error: toastError } = useToast();
   const [pending, setPending] = useState<StripePlan | null>(null);
@@ -73,11 +81,11 @@ export function UpgradeModal({
   async function checkout(stripePlan: StripePlan) {
     setPending(stripePlan);
     try {
-      const url = await startCheckout(stripePlan);
+      const url = await startCheckout(stripePlan, t);
       if (url) window.location.href = url;
     } catch (err) {
       setPending(null);
-      toastError(describeDbError(err, 'Could not start checkout'));
+      toastError(describeDbError(err, t('upgradeModal.couldNotStartCheckout')));
     }
   }
 
@@ -115,7 +123,7 @@ export function UpgradeModal({
               disabled={pending !== null}
               className="rounded-2xl border border-border bg-surface/40 p-4 text-left transition hover:bg-elevated disabled:opacity-60"
             >
-              <p className="text-sm font-semibold">Monthly</p>
+              <p className="text-sm font-semibold">{t('upgradeModal.monthly')}</p>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.monthlyCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.monthlyPlan ? 'Redirecting…' : 'Choose monthly →'}
@@ -127,8 +135,8 @@ export function UpgradeModal({
               className="rounded-2xl border border-brand/30 bg-brand/5 p-4 text-left transition hover:bg-brand/10 disabled:opacity-60"
             >
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Annual</p>
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">Save ~17%</span>
+                <p className="text-sm font-semibold">{t('upgradeModal.annual')}</p>
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('upgradeModal.save17')}</span>
               </div>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
@@ -140,16 +148,16 @@ export function UpgradeModal({
           <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface/40 p-4">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
             <p className="text-sm text-muted">
-              Ask a family admin to upgrade your plan to unlock this feature.
+              {t('upgradeModal.askAFamilyAdminToUpgrade')}
             </p>
           </div>
         )}
 
         <div className="flex items-center justify-between">
           <Link href="/pricing" onClick={onClose} className="text-xs font-semibold text-muted hover:text-fg">
-            Compare all plans →
+            {t('upgradeModal.compareAllPlans')}
           </Link>
-          <Button variant="ghost" size="sm" onClick={onClose}>Maybe later</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>{t('upgradeModal.maybeLater')}</Button>
         </div>
       </div>
     </Modal>

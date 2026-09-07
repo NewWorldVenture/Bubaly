@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { adminRemoveMemberAction, adminUpdateMemberAction } from '@/app/(app)/admin/actions';
 import type { MemberRole } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function MemberRowActions({ memberId, displayName, role }: { memberId: string; displayName: string; role: MemberRole }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -19,13 +21,13 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
   const [busy, setBusy] = useState(false);
 
   async function removeFromFamily() {
-    if (!confirm('Remove this person from the family? This is reversible — they can be re-invited.')) return;
+    if (!confirm(t('memberRowActions.removeThisPersonFromThe'))) return;
     setBusy(true);
     const res = await adminRemoveMemberAction(memberId);
     setBusy(false);
     setOpen(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed from family');
+    success(t('memberRowActions.removedFromFamily'));
     router.refresh();
   }
 
@@ -34,19 +36,19 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
     const form = new FormData(e.currentTarget);
     const newName = String(form.get('display_name') ?? '').trim();
     const newRole = String(form.get('role') ?? role) as MemberRole;
-    if (!newName) { toastError('Name is required'); return; }
+    if (!newName) { toastError(t('memberRowActions.nameIsRequired')); return; }
     setBusy(true);
     const res = await adminUpdateMemberAction(memberId, { displayName: newName, role: newRole });
     setBusy(false);
     if (!res.ok) return toastError(res.error);
-    success('Member updated');
+    success(t('memberRowActions.memberUpdated'));
     setEditing(false);
     router.refresh();
   }
 
   return (
     <div className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated" aria-label="Row actions">
+      <button onClick={() => setOpen((v) => !v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated" aria-label={t('memberRowActions.rowActions')}>
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
@@ -54,22 +56,22 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <button onClick={() => { setOpen(false); setEditing(true); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated">
-              <Pencil className="h-4 w-4" /> Edit member
+              <Pencil className="h-4 w-4" /> {t('memberRowActions.editMember')}
             </button>
             <button onClick={removeFromFamily} disabled={busy} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated disabled:opacity-50">
-              <UserMinus className="h-4 w-4" /> Remove from family
+              <UserMinus className="h-4 w-4" /> {t('memberRowActions.removeFromFamily')}
             </button>
           </div>
         </>
       )}
 
       {editing && (
-        <Modal open onClose={() => setEditing(false)} title="Edit member">
+        <Modal open onClose={() => setEditing(false)} title={t('memberRowActions.editMember')}>
           <form onSubmit={saveEdit} className="space-y-4">
-            <Field label="Name" required>
+            <Field label={t('memberRowActions.name')} required>
               {(id) => <Input id={id} name="display_name" defaultValue={displayName} autoFocus />}
             </Field>
-            <Field label="Role">
+            <Field label={t('memberRowActions.role')}>
               {(id) => (
                 <Select id={id} name="role" defaultValue={role}>
                   {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -77,7 +79,7 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
               )}
             </Field>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setEditing(false)}>{t('memberRowActions.cancel')}</Button>
               <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
             </div>
           </form>

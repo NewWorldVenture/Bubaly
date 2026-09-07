@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -21,6 +22,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (result: MoveDateResult) => void;
 }) {
+  const t = useTranslations();
   const key = JSON.stringify([moveDateContextKey(context), move.id, move.move_date, move.updated_at, move.status]);
   const [date, setDate] = useState(move.move_date);
   const [reviewed, setReviewed] = useState<{ preview: MoveDatePreview; requestId: string } | null>(null);
@@ -86,7 +88,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
       if (!response.ok) {
         if ([403, 404, 409].includes(response.status)) setReviewed(null);
         setError(response.status === 409
-          ? 'The move or its tasks changed. Review the current deadlines again before saving.'
+          ? t('moveDateRecalculation.theMoveOrItsTasks')
           : response.status === 403
             ? 'Your current membership cannot change this move. No new review is available.'
             : response.status === 404
@@ -112,7 +114,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
       }
     } catch {
       if (stillCurrent()) setError(apply
-        ? 'The save response was lost. Retry this reviewed change with the same request identifier, or refresh to check the dates.'
+        ? t('moveDateRecalculation.theSaveResponseWasLost')
         : 'The date review could not be loaded. No dates were changed.');
     } finally {
       if (stillCurrent()) {
@@ -123,28 +125,24 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title="Review move-date change" onClose={onClose}>
+    <Modal open title={t('moveDateRecalculation.reviewMoveDateChange')} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-muted">Recorded move date: {move.move_date}. Review every deadline before changing it.</p>
         <label className="block space-y-1 text-sm">
-          <span>New move date</span>
-          <Input aria-label="New move date" type="date" min="0001-01-01" max="9999-12-31" value={date}
+          <span>{t('moveDateRecalculation.newMoveDate')}</span>
+          <Input aria-label={t('moveDateRecalculation.newMoveDate')} type="date" min="0001-01-01" max="9999-12-31" value={date}
             disabled={!allowed || pending !== null} onChange={(event) => changeDate(event.target.value)} />
         </label>
-        <p className="text-xs text-muted">
-          Only unfinished tasks explicitly set to follow the move date can shift. Fixed dates, older tasks without date-following evidence,
-          completed tasks and skipped tasks stay unchanged. To opt a fixed task in, edit that task first.
-          No addresses, bookings, boxes or external accounts are changed.
-        </p>
-        {!allowed && <p role="alert" className="text-sm text-muted">An active parent or adult must change the date of an open move.</p>}
+        <p className="text-xs text-muted">{t('moveDateRecalculation.onlyUnfinishedTasksExplicitlySet')}</p>
+        {!allowed && <p role="alert" className="text-sm text-muted">{t('moveDateRecalculation.anActiveParentOrAdult')}</p>}
         {error && <p role="alert" className="text-sm text-rose-400">{error}</p>}
         <Button type="button" variant="secondary" onClick={() => request(false)} loading={pending === 'preview'}
-          disabled={!allowed || pending !== null || !isMoveDate(date) || date === move.move_date}>Review date change</Button>
+          disabled={!allowed || pending !== null || !isMoveDate(date) || date === move.move_date}>{t('moveDateRecalculation.reviewDateChange')}</Button>
         {reviewed && (
-          <section aria-label="Reviewed deadline changes" className="space-y-3 rounded-xl border border-border p-3">
+          <section aria-label={t('moveDateRecalculation.reviewedDeadlineChanges')} className="space-y-3 rounded-xl border border-border p-3">
             <p className="text-sm font-semibold">{reviewed.preview.fromDate} to {reviewed.preview.toDate}</p>
             <p className="text-sm text-muted">{reviewed.preview.changes} deadlines shift; {reviewed.preview.tasks.length - reviewed.preview.changes} stay unchanged.</p>
-            {reviewed.preview.tasks.length === 0 && <p className="text-sm text-muted">No recorded tasks. Only the move date will change.</p>}
+            {reviewed.preview.tasks.length === 0 && <p className="text-sm text-muted">{t('moveDateRecalculation.noRecordedTasksOnlyThe')}</p>}
             <ul className="max-h-72 space-y-2 overflow-y-auto">
               {reviewed.preview.tasks.map((task) => (
                 <li key={task.id} className="rounded-lg bg-surface/50 p-2 text-sm">
@@ -154,13 +152,13 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-muted">Saving records this exact review and applies the move date and eligible deadlines together. If anything changes first, a new review is required.</p>
+            <p className="text-xs text-muted">{t('moveDateRecalculation.savingRecordsThisExactReview')}</p>
           </section>
         )}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('moveDateRecalculation.cancel')}</Button>
           <Button type="button" onClick={() => request(true)} loading={pending === 'apply'}
-            disabled={!allowed || pending !== null || !reviewed || reviewed.preview.toDate !== date}>Apply reviewed date change</Button>
+            disabled={!allowed || pending !== null || !reviewed || reviewed.preview.toDate !== date}>{t('moveDateRecalculation.applyReviewedDateChange')}</Button>
         </div>
       </div>
     </Modal>

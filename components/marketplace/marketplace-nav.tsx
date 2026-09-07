@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { SidebarTrustScore } from './sidebar-trust-score';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const BASE = '/marketplace';
 
@@ -58,6 +59,7 @@ const ITEMS: Item[] = [
 const EXTERNAL = new Set(['/dashboard', '/dashboard/assistant', '/dashboard/messages', '/dashboard/trust']);
 
 function NavList() {
+  const t = useTranslations();
   const pathname = usePathname();
   const params = useSearchParams();
   const activeKind = pathname === `${BASE}/browse` ? params.get('kind') : null;
@@ -71,7 +73,7 @@ function NavList() {
   };
 
   return (
-    <nav aria-label="Marketplace sections" className="space-y-0.5">
+    <nav aria-label={t('marketplaceNav.marketplaceSections')} className="space-y-0.5">
       {ITEMS.map((it) => {
         const Icon = it.icon;
         const active = isActive(it);
@@ -94,6 +96,7 @@ function NavList() {
 }
 
 export function MarketplaceNav() {
+  const t = useTranslations();
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
@@ -106,9 +109,9 @@ export function MarketplaceNav() {
           href={`${BASE}/browse?post=1`}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
         >
-          <Plus className="h-4 w-4" /> Post an Item
+          <Plus className="h-4 w-4" /> {t('marketplaceNav.postAnItem')}
         </Link>
-        <p className="text-center text-[11px] text-muted">Sell, rent, lend, borrow &amp; more</p>
+        <p className="text-center text-[11px] text-muted">{t('marketplaceNav.sellRentLendBorrowAmpMore')}</p>
         <SidebarTrustScore />
       </div>
     </div>

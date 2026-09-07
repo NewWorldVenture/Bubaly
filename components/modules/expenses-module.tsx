@@ -20,6 +20,7 @@ import {
   type SplitLike, type ShareLike,
 } from '@/lib/finance/splits';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
@@ -28,6 +29,7 @@ const CATEGORIES = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Entertainment
 const blank = () => ({ description: '', amount: '', category: 'Groceries', paid_by: '', spent_on: new Date().toISOString().slice(0, 10), participants: [] as string[] });
 
 export function ExpensesModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -68,13 +70,13 @@ export function ExpensesModule() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!form || !form.description.trim()) return toastError('Add a description');
+    if (!form || !form.description.trim()) return toastError(tr('expensesModule.addADescription'));
     if (form.description.trim().length > 120) return toastError('Description is too long (max 120 characters)');
     const parsed = parseFloat(form.amount || '0');
-    if (!Number.isFinite(parsed) || parsed <= 0) return toastError('Enter a valid amount greater than $0');
+    if (!Number.isFinite(parsed) || parsed <= 0) return toastError(tr('expensesModule.enterAValidAmountGreater'));
     const totalCents = Math.round(parsed * 100);
     const participants = form.participants.length ? form.participants : members.map((m) => m.id);
-    if (participants.length === 0) return toastError('Add a family member first');
+    if (participants.length === 0) return toastError(tr('expensesModule.addAFamilyMemberFirst'));
 
     setSaving(true);
     const supabase = createClient();
@@ -102,7 +104,7 @@ export function ExpensesModule() {
         toastError(describeDbError(sErr));
         return;
       }
-      success('Expense split');
+      success(tr('expensesModule.expenseSplit'));
       setForm(null);
     } catch (err) {
       toastError(describeDbError(err));
@@ -121,11 +123,11 @@ export function ExpensesModule() {
   }
 
   function removeSplit(id: string) {
-    if (!confirm('Delete this expense and its shares?')) return;
+    if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
       const { error } = await createClient().from('expense_splits').delete().eq('id', id);
       if (error) throw error;
-      success('Deleted');
+      success(tr('expensesModule.deleted'));
     });
   }
 
@@ -136,28 +138,28 @@ export function ExpensesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load shared expenses. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('expensesModule.couldNotLoadSharedExpenses')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> Expense Splitting</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Expenses</p><p className="text-xl font-bold">{summary.count}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Total split</p><p className="text-xl font-bold">{usd(summary.totalCents)}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Outstanding</p><p className="text-xl font-bold">{usd(summary.unsettledCents)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{tr('expenses.expenses')}</p><p className="text-xl font-bold">{summary.count}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{tr('expenses.totalSplit')}</p><p className="text-xl font-bold">{usd(summary.totalCents)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{tr('expenses.outstanding')}</p><p className="text-xl font-bold">{usd(summary.unsettledCents)}</p></div>
       </div>
 
       {/* Settle up */}
       {transfers.length > 0 && (
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Scale className="h-4 w-4 text-brand-text" /> Settle up</p>
+          <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Scale className="h-4 w-4 text-brand-text" /> {tr('expenses.settleUp')}</p>
           <ul className="space-y-1 text-sm">
             {transfers.map((t, i) => (
               <li key={i} className="flex items-center gap-2">
@@ -174,7 +176,7 @@ export function ExpensesModule() {
       {/* Splits */}
       <div className="space-y-2">
         {allSplits.length === 0 ? (
-          <EmptyState icon={Split} title="No shared expenses yet" description="Split a bill or purchase across family members and track who owes whom." />
+          <EmptyState icon={Split} title={tr('expenses.noSharedExpensesYet')} description={tr('expensesModule.splitABillOrPurchase')} />
         ) : allSplits.map((sp) => {
           const sh = sharesBySplit.get(sp.id) ?? [];
           return (
@@ -182,9 +184,9 @@ export function ExpensesModule() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
-                  <p className="text-xs text-muted">{sp.category ?? 'Other'} · paid by {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
+                  <p className="text-xs text-muted">{sp.category ?? 'Other'} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
-                <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label="Delete">
+                <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
                   {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </button>
               </div>
@@ -207,18 +209,18 @@ export function ExpensesModule() {
       </div>
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Split an expense">
+        <Modal open onClose={() => setForm(null)} title={tr('expenses.splitAnExpense')}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Description">{(id) => <Input id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Dinner, groceries…" />}</Field>
+            <Field label={tr('expenses.description')}>{(id) => <Input id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={tr('expenses.dinnerGroceries')} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
-              <Field label="Date">{(id) => <Input id={id} type="date" value={form.spent_on} onChange={(e) => setForm({ ...form, spent_on: e.target.value })} />}</Field>
+              <Field label={tr('expenses.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />}</Field>
+              <Field label={tr('expenses.date')}>{(id) => <Input id={id} type="date" value={form.spent_on} onChange={(e) => setForm({ ...form, spent_on: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-              <Field label="Paid by">{(id) => <Select id={id} value={form.paid_by} onChange={(e) => setForm({ ...form, paid_by: e.target.value })}><option value="">— Select —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+              <Field label={tr('expenses.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={tr('expenses.paidBy')}>{(id) => <Select id={id} value={form.paid_by} onChange={(e) => setForm({ ...form, paid_by: e.target.value })}><option value="">{tr('expenses.select')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
-            <Field label="Split between (default: everyone)">
+            <Field label={tr('expenses.splitBetweenDefaultEveryone')}>
               {() => (
                 <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
                   {members.map((m) => {
@@ -234,8 +236,8 @@ export function ExpensesModule() {
               )}
             </Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit" loading={saving}>Split it</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('expenses.cancel')}</Button>
+              <Button type="submit" loading={saving}>{tr('expenses.splitIt')}</Button>
             </div>
           </form>
         </Modal>

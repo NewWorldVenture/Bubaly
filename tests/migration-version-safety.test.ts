@@ -16,8 +16,15 @@ describe('Supabase migration filename safety', () => {
       .toEqual(KNOWN_DUPLICATE_MIGRATIONS);
   });
 
+  // 0275 is the newest file, so the next free number is 0276. The gap this
+  // leaves is deliberate and is not the collision this suite exists to catch:
+  // 0270 is reserved by the travel-confirmations branch and 0274 by the
+  // finance-receipts branch, both of which are held behind an unproven
+  // production migration ledger. Taking a reserved number to close the gap
+  // would hand whichever of them merges first a real collision; the audit
+  // takes max+1, so a hole costs nothing.
   it('points new migrations at the next unused version', () => {
-    expect(audit.nextVersion).toBe('0275');
+    expect(audit.nextVersion).toBe('0276');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -6,11 +6,13 @@ import { PROVIDERS, type SocialPlatform } from '@/lib/social/capabilities';
 import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Analytics · Social' };
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const [{ totals, byPlatform }, accounts] = await Promise.all([
@@ -48,15 +50,12 @@ export default async function AnalyticsPage() {
 
       {!hasData && (
         <Card>
-          <p className="text-sm text-muted">
-            No analytics snapshots yet. Metrics are written from each platform’s analytics API once accounts are connected and
-            credentialed — nothing here is invented. The totals above reflect real stored snapshots (currently zero).
-          </p>
+          <p className="text-sm text-muted">{t('analytics.noAnalyticsSnapshotsYetMetrics')}</p>
         </Card>
       )}
 
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">By platform</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialAnalytics.byPlatform')}</h2>
         <div className="space-y-2">
           {(['x','facebook','instagram','linkedin','tiktok','youtube','pinterest','threads','reddit'] as SocialPlatform[]).map((p) => {
             const def = PROVIDERS[p];
@@ -68,10 +67,10 @@ export default async function AnalyticsPage() {
                 {def.analytics.supported ? (
                   <>
                     <span className="text-muted">{impressions.toLocaleString()} impressions</span>
-                    {!connectedPlatforms.has(p) && <Badge tone="neutral" className="ml-auto">not connected</Badge>}
+                    {!connectedPlatforms.has(p) && <Badge tone="neutral" className="ml-auto">{t('analytics.notConnected')}</Badge>}
                   </>
                 ) : (
-                  <Badge tone="neutral" className="ml-auto" title={def.analytics.limitation}>Analytics unavailable</Badge>
+                  <Badge tone="neutral" className="ml-auto" title={def.analytics.limitation}>{t('analytics.analyticsUnavailable')}</Badge>
                 )}
               </div>
             );

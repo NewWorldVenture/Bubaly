@@ -33,6 +33,7 @@ import {
   saveTripPlanAction, deleteTripPlanAction,
   saveDeparturePlanAction, refreshDeparturePlanAction, deleteDeparturePlanAction,
 } from '@/app/(app)/dashboard/trip-intel/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type UpcomingEvent = {
   id: string; title: string; location: string; startsAt: string;
@@ -81,19 +82,20 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
   departurePlans: SavedDeparturePlan[];
   tablesMissing: boolean;
 }) {
+  const tr = useTranslations();
   const [researchEvent, setResearchEvent] = useState<UpcomingEvent | null>(null);
   const [departureEvent, setDepartureEvent] = useState<UpcomingEvent | null>(null);
 
   return (
     <div className="module-page">
       <PageHeader
-        title="Trip Intelligence"
-        description="AI plans your visits and tells you exactly when to head out — with live traffic & weather."
+        title={tr('tripIntel.tripIntelligence')}
+        description={tr('tripIntelModule.aiPlansYourVisitsAnd')}
       />
 
       {tablesMissing && (
         <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
-          <p className="font-semibold">Setup pending</p>
+          <p className="font-semibold">{tr('tripIntel.setupPending')}</p>
           <p className="text-xs text-muted">Trip Intelligence storage isn&apos;t provisioned on this environment yet. You can still research trips below; saving turns on once the migration is applied.</p>
         </div>
       )}
@@ -102,7 +104,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
       {departurePlans.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-            <Car className="h-4 w-4" /> Smart Departures
+            <Car className="h-4 w-4" /> {tr('tripIntel.smartDepartures')}
           </h2>
           <div className="space-y-3">
             {departurePlans.map((p) => <DepartureCard key={p.id} plan={p} />)}
@@ -113,11 +115,11 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
       {/* Upcoming located events */}
       <section className="mb-8">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-          <Calendar className="h-4 w-4" /> Upcoming with a location
+          <Calendar className="h-4 w-4" /> {tr('tripIntel.upcomingWithALocation')}
         </h2>
         {upcoming.length === 0 ? (
-          <EmptyState icon={MapPin} title="No upcoming events with a location"
-            description="Add a location to a calendar event (a trip, a dinner) and it'll show up here for AI research and smart-departure planning." />
+          <EmptyState icon={MapPin} title={tr('tripIntel.noUpcomingEventsWithALocation')}
+            description={tr('tripIntelModule.addALocationToA')} />
         ) : (
           <div className="space-y-2">
             {upcoming.map((e) => (
@@ -134,11 +136,11 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setResearchEvent(e)}
                     className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
-                    <Sparkles className="h-3.5 w-3.5" /> Research
+                    <Sparkles className="h-3.5 w-3.5" /> {tr('tripIntel.research')}
                   </button>
                   <button onClick={() => setDepartureEvent(e)}
                     className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                    <Car className="h-3.5 w-3.5" /> Plan departure
+                    <Car className="h-3.5 w-3.5" /> {tr('tripIntel.planDeparture')}
                   </button>
                 </div>
               </div>
@@ -151,7 +153,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
       {tripPlans.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
-            <Plane className="h-4 w-4" /> Researched trips
+            <Plane className="h-4 w-4" /> {tr('tripIntel.researchedTrips')}
           </h2>
           <div className="space-y-3">
             {tripPlans.map((t) => <TripPlanCard key={t.id} plan={t} />)}
@@ -174,6 +176,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
 function ResearchModal({ event, memberOptions, onClose, canSave }: {
   event: UpcomingEvent; memberOptions: MemberOption[]; onClose: () => void; canSave: boolean;
 }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [interests, setInterests] = useState('');
@@ -223,11 +226,11 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
       setRecs(json.recommendations);
       setSource(json.source);
     } catch {
-      toastError('Network problem — please try again.');
+      toastError(tr('tripIntelModule.networkProblemPleaseTryAgain'));
     } finally {
       setLoading(false);
     }
-  }, [event, interests, selectedMembers, toastError]);
+  }, [event, interests, selectedMembers, toastError, tr]);
 
   async function save() {
     if (!recs) return;
@@ -241,7 +244,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Trip research saved');
+    success(tr('tripIntelModule.tripResearchSaved'));
     onClose();
     router.refresh();
   }
@@ -252,7 +255,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
         {!recs && (
           <>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted">Who&apos;s going?</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whoAposSGoing')}</label>
               <div className="flex flex-wrap gap-1.5">
                 {memberOptions.map((m) => {
                   const on = selectedMembers.includes(m.name);
@@ -267,9 +270,9 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted">What do you like? (food, history, outdoors…)</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whatDoYouLikeFoodHistory')}</label>
               <textarea value={interests} onChange={(e) => setInterests(e.target.value)} rows={2}
-                placeholder="e.g. great seafood, walkable history, a relaxed pace"
+                placeholder={tr('tripIntel.eGGreatSeafoodWalkableHistory')}
                 className="w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring" />
             </div>
             <Button onClick={research} loading={loading} className="w-full">
@@ -282,7 +285,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
           <div className="space-y-4">
             {source === 'fallback' && (
               <p className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-[11px] text-muted">
-                AI isn&apos;t configured — showing general guidance. Connect an AI provider for tailored picks.
+                {tr('tripIntel.aiIsnAposTConfiguredShowing')}
               </p>
             )}
             {geo?.weather && (
@@ -293,8 +296,8 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
             <RecsView recs={recs} />
 
             <div className="flex justify-end gap-2 border-t border-border pt-3">
-              <Button variant="ghost" onClick={() => { setRecs(null); setSource(null); }}>Back</Button>
-              {canSave && <Button onClick={save} loading={saving}>Save trip</Button>}
+              <Button variant="ghost" onClick={() => { setRecs(null); setSource(null); }}>{tr('tripIntel.back')}</Button>
+              {canSave && <Button onClick={save} loading={saving}>{tr('tripIntel.saveTrip')}</Button>}
             </div>
           </div>
         )}
@@ -304,6 +307,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
 }
 
 function RecsView({ recs }: { recs: TripRecommendations }) {
+  const tr = useTranslations();
   return (
     <div className="space-y-4">
       {recs.restaurants.length > 0 && (
@@ -345,7 +349,7 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
       {recs.tips.length > 0 && (
         <div>
           <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-            <Lightbulb className="h-3.5 w-3.5" /> Tips
+            <Lightbulb className="h-3.5 w-3.5" /> {tr('tripIntel.tips')}
           </h4>
           <ul className="space-y-1">
             {recs.tips.map((t, i) => (
@@ -359,6 +363,7 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
 }
 
 function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -369,7 +374,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
     const res = await deleteTripPlanAction({ id: plan.id });
     setDeleting(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(tr('tripIntelModule.removed'));
     router.refresh();
   }
 
@@ -384,7 +389,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
             {plan.startDate ? ` · ${new Date(plan.startDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}
           </p>
         </button>
-        <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label="Remove">
+        <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label={tr('tripIntel.remove')}>
           {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
         </button>
       </div>
@@ -401,6 +406,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
 // ─── Departure Modal ──────────────────────────────────────────────────────────
 
 function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onClose: () => void; canSave: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [home, setHome] = useState('');
@@ -419,7 +425,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
   }, []);
 
   const compute = useCallback(async () => {
-    if (!home.trim()) return toastError('Enter your starting address or city.');
+    if (!home.trim()) return toastError(tr('tripIntelModule.enterYourStartingAddressOr'));
     setComputing(true);
     try { localStorage.setItem(HOME_KEY, home); } catch { /* ignore */ }
 
@@ -432,7 +438,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 
     if (!originLL || !destLL) {
       setComputing(false);
-      return toastError('Could not locate one of the addresses. Try a more specific place.');
+      return toastError(tr('tripIntelModule.couldNotLocateOneOf'));
     }
 
     // Real driving time (OSRM), with a haversine/avg-speed fallback.
@@ -452,7 +458,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 
     setResult({ driveSeconds, trafficFactor, weatherDelay, weatherSummary, originLL, destLL, miles, usedFallback });
     setComputing(false);
-  }, [home, event, toastError]);
+  }, [home, event, toastError, tr]);
 
   const plan = useMemo(() => result ? computeDeparture({
     eventStartISO: event.startsAt, driveSeconds: result.driveSeconds, prepMinutes: prep, parkMinutes: park,
@@ -472,7 +478,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Added to your calendar — we’ll tell you when to head out');
+    success(tr('tripIntelModule.addedToYourCalendarWe'));
     onClose();
     router.refresh();
   }
@@ -484,26 +490,26 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
       <div className="space-y-4">
         <div className="rounded-xl border border-brand/20 bg-brand/5 px-4 py-2.5 text-sm">
           <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand-text" /> {event.location}</p>
-          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted"><Clock className="h-3.5 w-3.5" /> Arrive by {fmtDateTime(event.startsAt)}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted"><Clock className="h-3.5 w-3.5" /> {tr('tripIntel.arriveBy')} {fmtDateTime(event.startsAt)}</p>
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted">Starting from (home address or city)</label>
-          <input value={home} onChange={(e) => setHome(e.target.value)} placeholder="e.g. 123 Main St, Atlanta GA"
+          <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.startingFromHomeAddressOrCity')}</label>
+          <input value={home} onChange={(e) => setHome(e.target.value)} placeholder={tr('tripIntel.eG123MainStAtlanta')}
             className="h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring" />
         </div>
 
         <div className="grid grid-cols-3 gap-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Get ready (min)</span>
+            <span className="mb-1 block text-xs font-medium text-muted">{tr('tripIntel.getReadyMin')}</span>
             <input type="number" min="0" max="240" value={prep} onChange={(e) => setPrep(Math.max(0, Number(e.target.value)))} className={numCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Park & walk (min)</span>
+            <span className="mb-1 block text-xs font-medium text-muted">{tr('tripIntel.parkWalkMin')}</span>
             <input type="number" min="0" max="120" value={park} onChange={(e) => setPark(Math.max(0, Number(e.target.value)))} className={numCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">Arrive early (min)</span>
+            <span className="mb-1 block text-xs font-medium text-muted">{tr('tripIntel.arriveEarlyMin')}</span>
             <input type="number" min="0" max="120" value={buffer} onChange={(e) => setBuffer(Math.max(0, Number(e.target.value)))} className={numCls} />
           </label>
         </div>
@@ -515,9 +521,9 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
         {result && plan && (
           <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
             <div className="text-center">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted">Leave by</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">{tr('tripIntel.leaveBy')}</p>
               <p className="text-3xl font-black">{fmtTime(plan.leaveByISO)}</p>
-              <p className="text-xs text-muted">{leaveByLabel(plan.minutesUntilLeave)} · start getting ready at {fmtTime(plan.getReadyByISO)}</p>
+              <p className="text-xs text-muted">{leaveByLabel(plan.minutesUntilLeave)} {tr('tripIntel.startGettingReadyAt')} {fmtTime(plan.getReadyByISO)}</p>
             </div>
             <div className="space-y-1 border-t border-border pt-3">
               {plan.breakdown.map((b) => (
@@ -527,18 +533,18 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
                 </div>
               ))}
               <div className="flex items-center justify-between border-t border-border/50 pt-1 text-xs font-semibold">
-                <span>Total travel</span><span>{plan.totalTravelMinutes} min</span>
+                <span>{tr('tripIntel.totalTravel')}</span><span>{plan.totalTravelMinutes} min</span>
               </div>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
               {result.miles != null && <span>📍 {result.miles} mi</span>}
-              <span>🚦 traffic ×{result.trafficFactor.toFixed(2)}</span>
+              <span>{tr('tripIntel.traffic')}{result.trafficFactor.toFixed(2)}</span>
               {result.weatherSummary && <span>{result.weatherSummary}</span>}
-              {result.usedFallback && <span className="text-amber-500">estimated route</span>}
+              {result.usedFallback && <span className="text-amber-500">{tr('tripIntel.estimatedRoute')}</span>}
             </div>
             {canSave && (
               <Button onClick={save} loading={saving} className="w-full">
-                <Calendar className="h-4 w-4" /> Add &ldquo;head out&rdquo; to calendar
+                <Calendar className="h-4 w-4" /> {tr('tripIntel.addLdquoHeadOutRdquoTo')}
               </Button>
             )}
           </div>
@@ -551,6 +557,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 // ─── Live Departure Card (saved) ──────────────────────────────────────────────
 
 function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [refreshing, setRefreshing] = useState(false);
@@ -603,7 +610,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
       }
       const res = await refreshDeparturePlanAction({ id: plan.id, driveSeconds, trafficFactor, weatherDelayMinutes: weatherDelay, weatherSummary });
       if (!res.ok) { toastError(res.error); return; }
-      success('Updated with live traffic & weather');
+      success(tr('tripIntelModule.updatedWithLiveTrafficWeather'));
       router.refresh();
     } finally {
       setRefreshing(false);
@@ -615,7 +622,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
     const res = await deleteDeparturePlanAction({ id: plan.id });
     setDeleting(false);
     if (!res.ok) return toastError(res.error);
-    success('Removed');
+    success(tr('tripIntelModule.removed'));
     router.refresh();
   }
 
@@ -629,25 +636,25 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', chipCls)}>{copy.label}</span>
           </div>
           <p className="mt-0.5 truncate text-xs text-muted">
-            {plan.destination} · arrive by {fmtTime(plan.eventStart)}
+            {plan.destination} {tr('tripIntel.arriveBy')} {fmtTime(plan.eventStart)}
           </p>
           {plan.leaveBy && (
             <p className="mt-1.5 text-sm font-bold">
-              {live.status === 'arrived' ? 'Event has passed' : <>Leave by {fmtTime(plan.leaveBy)} · <span className="text-brand-text">{leaveByLabel(live.minutesUntilLeave)}</span></>}
+              {live.status === 'arrived' ? 'Event has passed' : <>{tr('tripIntel.leaveBy')} {fmtTime(plan.leaveBy)} · <span className="text-brand-text">{leaveByLabel(live.minutesUntilLeave)}</span></>}
             </p>
           )}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
-            <span>🚗 {live.driveMinutesAdjusted} min drive</span>
+            <span>🚗 {live.driveMinutesAdjusted} {tr('tripIntel.minDrive')}</span>
             <span>🚦 ×{plan.trafficFactor.toFixed(2)}</span>
             {plan.weatherSummary && <span>{plan.weatherSummary}</span>}
-            {plan.lastCheckedAt && <span>· checked {fmtTime(plan.lastCheckedAt)}</span>}
+            {plan.lastCheckedAt && <span>{tr('tripIntel.checked')} {fmtTime(plan.lastCheckedAt)}</span>}
           </div>
         </div>
         <div className="flex flex-shrink-0 flex-col gap-1">
-          <button onClick={refresh} disabled={refreshing} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition" aria-label="Refresh live intel">
+          <button onClick={refresh} disabled={refreshing} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition" aria-label={tr('tripIntel.refreshLiveIntel')}>
             {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </button>
-          <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label="Remove">
+          <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label={tr('tripIntel.remove')}>
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
         </div>

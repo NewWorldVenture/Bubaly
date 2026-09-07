@@ -8,6 +8,7 @@
 // place a child could widen what the AI may do, and the service is also what
 // the tool gate reads, so page and gate can never disagree about the rules.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { getAISettings, updateAISettings, type AISettingsPatch } from '@/lib/services/ai-settings';
 import { clearAiMemory, confirmFact, forgetFact, isAiFact, isSensitiveMemory, listMemories } from '@/lib/services/memory';
@@ -19,17 +20,19 @@ import { isManager } from '@/lib/constants/roles';
 export type AISettingsResult = { ok: true; settings: AISettings } | { ok: false; error: string };
 
 export async function loadAISettingsAction(): Promise<AISettingsResult> {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const scope = scopeFromUserContext(ctx, await createServer());
     return { ok: true, settings: await getAISettings(scope) };
   } catch (error) {
     console.error('[settings:ai] load failed', error);
-    return { ok: false, error: 'Could not load your Bubaly settings.' };
+    return { ok: false, error: t('aiActions.couldNotLoadYourBubaly') };
   }
 }
 
 export async function saveAISettingsAction(patch: AISettingsPatch): Promise<AISettingsResult> {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const scope = scopeFromUserContext(ctx, await createServer());
@@ -42,7 +45,7 @@ export async function saveAISettingsAction(patch: AISettingsPatch): Promise<AISe
     return { ok: true, settings: saved.data };
   } catch (error) {
     console.error('[settings:ai] save failed', error);
-    return { ok: false, error: 'Could not save those settings.' };
+    return { ok: false, error: t('aiActions.couldNotSaveThoseSettings') };
   }
 }
 
@@ -73,6 +76,7 @@ export type AiMemoryItem = {
 export type AiMemoryResult = { ok: true; items: AiMemoryItem[] } | { ok: false; error: string };
 
 export async function loadAiMemoryAction(): Promise<AiMemoryResult> {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const scope = scopeFromUserContext(ctx, await createServer());
@@ -95,11 +99,12 @@ export async function loadAiMemoryAction(): Promise<AiMemoryResult> {
     return { ok: true, items: [...pending, ...facts] };
   } catch (error) {
     console.error('[settings:ai] memory load failed', error);
-    return { ok: false, error: 'Could not load what Bubaly remembers.' };
+    return { ok: false, error: t('aiActions.couldNotLoadWhatBubaly') };
   }
 }
 
 export async function forgetAiMemoryAction(input: { id: string; kind: 'fact' | 'suggestion' }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const scope = scopeFromUserContext(ctx, await createServer());
@@ -109,11 +114,12 @@ export async function forgetAiMemoryAction(input: { id: string; kind: 'fact' | '
     return { ok: true };
   } catch (error) {
     console.error('[settings:ai] forget failed', error);
-    return { ok: false, error: 'Could not forget that.' };
+    return { ok: false, error: t('aiActions.couldNotForgetThat') };
   }
 }
 
 export async function confirmAiMemoryAction(input: { id: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const scope = scopeFromUserContext(ctx, await createServer());
@@ -123,7 +129,7 @@ export async function confirmAiMemoryAction(input: { id: string }): Promise<{ ok
     return { ok: true };
   } catch (error) {
     console.error('[settings:ai] confirm failed', error);
-    return { ok: false, error: 'Could not confirm that.' };
+    return { ok: false, error: t('aiActions.couldNotConfirmThat') };
   }
 }
 

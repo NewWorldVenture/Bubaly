@@ -4,8 +4,10 @@ import { useState, useTransition } from 'react';
 import { MoreHorizontal, CheckCircle, XCircle, RefreshCw, User } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { resolveTicketAction, closeTicketAction, reopenTicketAction } from '@/app/(app)/admin/support-tickets/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function TicketRowActions({ ticketId, status }: { ticketId: string; status: string }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
@@ -18,10 +20,10 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
           toastError(result.error ?? 'Could not update that ticket.');
           return;
         }
-        success('Ticket status updated.');
+        success(t('ticketRowActions.ticketStatusUpdated'));
         setOpen(false);
       } catch {
-        toastError('Could not update that ticket. Please try again.');
+        toastError(t('ticketRowActions.couldNotUpdateThatTicket'));
       }
     });
   }
@@ -44,7 +46,7 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
                 onClick={() => act(resolveTicketAction)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-success hover:bg-elevated"
               >
-                <CheckCircle className="h-4 w-4" /> Mark Resolved
+                <CheckCircle className="h-4 w-4" /> {t('ticketRowActions.markResolved')}
               </button>
             )}
             {status !== 'closed' && (
@@ -52,7 +54,7 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
                 onClick={() => act(closeTicketAction)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated"
               >
-                <XCircle className="h-4 w-4" /> Close Ticket
+                <XCircle className="h-4 w-4" /> {t('ticketRowActions.closeTicket')}
               </button>
             )}
             {(status === 'resolved' || status === 'closed') && (
@@ -60,11 +62,11 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
                 onClick={() => act(reopenTicketAction)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-brand-text hover:bg-elevated"
               >
-                <RefreshCw className="h-4 w-4" /> Reopen
+                <RefreshCw className="h-4 w-4" /> {t('ticketRowActions.reopen')}
               </button>
             )}
             <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated">
-              <User className="h-4 w-4" /> Assign Agent
+              <User className="h-4 w-4" /> {t('ticketRowActions.assignAgent')}
             </button>
           </div>
         </>

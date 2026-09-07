@@ -8,6 +8,51 @@ in this document, logs, or reports. Production's migration ledger records only
 `0001-0003` despite existing schema. A missing ledger entry does **not** establish
 that the corresponding schema or feature is absent.
 
+## Wallet mint boundary — the finding, and what closes it
+
+A production metadata audit reported that `public.wallet_transactions` still
+carries a **permissive INSERT policy** alongside the intended manager-only one:
+the shape that lets any family member — a child account included — submit a
+`completed` `credit` and create spendable wallet funds. The audit returned
+policy hashes rather than expressions, so the exact live condition is still
+unverified, and nothing in it showed exploitation or money movement.
+
+**The fix already exists in this repository: `0254_wallet_write_policy_drift.sql`.
+It is unapplied, and applying it is the whole of the remedy.** Nothing new needs
+writing.
+
+Why 0254 is sufficient even though its `drop policy` list is a list of *known
+names* — a stray policy under some other name would survive those drops:
+permissive policies OR together, but 0254 also creates **restrictive** guards
+(`wallet_transactions_manager_insert_guard` and siblings), and a restrictive
+policy ANDs with the union of the permissive ones. No permissive policy can
+grant past it, whatever it is called or whoever it is granted to.
+
+That is a claim about Postgres semantics on a money path, so it is now tested
+rather than reasoned about. `docs/audit/wallet-write-rls-check.sql` injects the
+drift against the replayed schema and asserts a child still cannot mint, in two
+shapes:
+
+| Injected permissive INSERT policy | Result |
+|---|---|
+| `to authenticated with check (is_family_member(family_id))` — the audited shape | child mint **rejected**, 42501, 0 rows |
+| `to public with check (true)` — no role limit, no condition | child mint **rejected**, 42501, 0 rows |
+
+The guards are `to authenticated`, which would not AND with a `to public` policy
+for an *anonymous* request — so the probe also asserts the grant layer closes
+that path: `anon` holds no INSERT privilege on `wallet_transactions`, so the
+question never reaches RLS.
+
+Verified not to be vacuous: dropping `wallet_transactions_manager_insert_guard`
+and re-running makes the probe fail with a child having **minted** the row
+(`blocked=f, rows=1`). The probe runs in CI's Database job, which globs
+`docs/audit/*-check.sql`.
+
+**Still human-owned, and deliberately not done here:** applying 0254 to
+production. Agents must not apply migrations to prod. Two things also remain
+unverified from here — the exact live policy expression (the audit gave hashes),
+and whether card issuing is reachable. Both need someone with production access.
+
 The one-time, hash-pinned `0240-0254` atomic release is defined in
 [PRODUCTION_FORWARD_RELEASE.md](PRODUCTION_FORWARD_RELEASE.md) and
 [supabase-forward-release.yml](../.github/workflows/supabase-forward-release.yml).
@@ -25,6 +70,31 @@ partial unique indexes to the six tables Bubaly writes, and `fingerprint` /
 from `handle_new_family()` and backfills existing families. Both are additive
 and both default to today's behaviour — `0257`'s `behavior` default is
 `execute` precisely so applying it changes no household's experience.
+
+**⚠️ `0256` is now coupled to app code on a path every family uses.** It always
+was on the assistant's side: `lib/services/calendar`, `.../reminders` and
+`.../tasks` name `idempotency_key` in their inserts, so on unmigrated schema
+PostgREST rejects the payload on the column name and Bubaly cannot add an event,
+a reminder or a to-do. §7's calendar tranche routes the **module's own** Add
+Event, Find a time and Edit through that same service
+(`app/(app)/dashboard/calendar/actions.ts`), which is the point — one write path,
+one duplicate guard — but it also means the blast radius of not applying `0256`
+grows from "the AI's calendar tool" to "the family's Save button". Apply `0256`
+before the deploy that ships that tranche. As with `0265` and `0268`, the column
+is written unconditionally and deliberately so: a one-off tolerance for it would
+be a code path that is dead the moment the migration lands.
+
+The same now applies to the **chores board's Add**. `createChore` keys the chore
+and its assignment as one unit, so a create carrying a submission id names
+`idempotency_key` on the assignment insert. `assignChore` writes the column only
+when a key was actually supplied — which is not a schema tolerance but the
+difference between "no key" and "a null key": the assistant's standalone assign
+tool passes none and stays unaffected. Note what `0256` buys on this path
+specifically: the PROBE half (a retried Add finds the first assignment) works on
+either schema, but the RACE half — two simultaneous taps, where the partial
+unique index is what refuses the second assignment and triggers the rollback that
+prevents an orphan chore — needs the index. Until `0256` is applied, two truly
+simultaneous Adds can still leave a chore nobody is assigned to.
 
 `0255` through `0268` are all outside the unchanged pinned bundle. Code
 presence and prior test reports do not establish completed review or production

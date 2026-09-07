@@ -28,6 +28,7 @@ import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wa
 import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,13 +62,14 @@ const BUCKET_KINDS: BucketKind[] = ['spend', 'save', 'give', 'invest'];
 // ─── Smart Split Donut ────────────────────────────────────────────────────────
 
 function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, number>; total: number }) {
+  const t = useTranslations();
   if (total <= 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 text-muted">
         <div className="h-32 w-32 rounded-full border-4 border-dashed border-border/50 flex items-center justify-center">
           <Banknote className="h-8 w-8 text-border" />
         </div>
-        <p className="mt-2 text-xs">Add funds to see your split</p>
+        <p className="mt-2 text-xs">{t('childDetail.addFundsToSeeYourSplit')}</p>
       </div>
     );
   }
@@ -100,7 +102,7 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
         />
         {/* Inner hole */}
         <div className="absolute inset-[20%] rounded-full bg-bg flex flex-col items-center justify-center">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted">Total</p>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted">{t('childDetail.total')}</p>
           <p className="text-sm font-black leading-tight">{formatCents(total)}</p>
         </div>
       </div>
@@ -126,6 +128,7 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
 // ─── Card status ──────────────────────────────────────────────────────────────
 
 function SpendingCardPreview({ child }: { child: Child }) {
+  const t = useTranslations();
   const spendable = child.buckets.spend ?? 0;
   return (
     <div className="relative overflow-hidden rounded-2xl p-5 text-white select-none"
@@ -137,33 +140,33 @@ function SpendingCardPreview({ child }: { child: Child }) {
       {/* Top row */}
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Bubaly Family</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{t('childDetail.bubalyFamily')}</p>
           <p className="mt-0.5 text-base font-bold text-foreground">{child.name}</p>
         </div>
         <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 py-1">
           <CreditCard className="h-3.5 w-3.5 text-muted" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Preview</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">{t('childDetail.preview')}</span>
         </div>
       </div>
 
       {/* Balance */}
       <div className="relative mt-4">
-        <p className="text-[10px] uppercase tracking-widest text-muted">Available spend balance</p>
+        <p className="text-[10px] uppercase tracking-widest text-muted">{t('childDetail.availableSpendBalance')}</p>
         <p className="text-3xl font-black text-foreground">{formatCents(spendable)}</p>
       </div>
 
-      <p className="relative mt-3 text-sm font-semibold text-foreground">No payment card issued</p>
-      <p className="relative mt-1 text-xs text-muted">This balance is tracked in the family ledger until a card is actually issued.</p>
+      <p className="relative mt-3 text-sm font-semibold text-foreground">{t('childDetail.noPaymentCardIssued')}</p>
+      <p className="relative mt-1 text-xs text-muted">{t('childDetail.thisBalanceIsTrackedInThe')}</p>
 
       {/* Bottom row */}
       <div className="relative mt-4 flex items-end justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-muted">Card setup</p>
+          <p className="text-[10px] uppercase tracking-widest text-muted">{t('childDetail.cardSetup')}</p>
           <Link href="/wallet/cards" className="text-xs font-semibold text-brand-text underline-offset-2 transition hover:underline">
-            Open card setup →
+            {t('childDetail.openCardSetup')}
           </Link>
         </div>
-        <p className="text-right text-[10px] font-semibold uppercase tracking-widest text-muted">Ledger only</p>
+        <p className="text-right text-[10px] font-semibold uppercase tracking-widest text-muted">{t('childDetail.ledgerOnly')}</p>
       </div>
     </div>
   );
@@ -172,6 +175,7 @@ function SpendingCardPreview({ child }: { child: Child }) {
 // ─── AI Money Coach card ──────────────────────────────────────────────────────
 
 function AICoachCard({ childId }: { childId: string }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [coaching, setCoaching] = useState<Coaching | null>(null);
   const [loading, setLoading] = useState(false);
@@ -186,11 +190,11 @@ function AICoachCard({ childId }: { childId: string }) {
       setCoaching(json.coaching);
       setDismissed(false);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach unavailable'));
+      toastError(describeDbError(err, t('childDetailView.coachUnavailable')));
     } finally {
       setLoading(false);
     }
-  }, [childId, toastError]);
+  }, [childId, toastError, t]);
 
   if (dismissed) return null;
 
@@ -210,7 +214,7 @@ function AICoachCard({ childId }: { childId: string }) {
         </div>
         <div>
           <p className="text-sm font-semibold text-brand-text">{loading ? 'Thinking…' : 'Ask AI Money Coach'}</p>
-          <p className="text-xs text-muted">Get personalised insights for this wallet</p>
+          <p className="text-xs text-muted">{t('childDetail.getPersonalisedInsightsForThisWallet')}</p>
         </div>
         {!loading && <ChevronRight className="ml-auto h-4 w-4 text-muted" />}
       </button>
@@ -221,15 +225,15 @@ function AICoachCard({ childId }: { childId: string }) {
     <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/8 to-violet-500/5 p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
-          <Sparkles className="h-3.5 w-3.5" /> AI Money Coach
+          <Sparkles className="h-3.5 w-3.5" /> {t('childDetail.aiMoneyCoach')}
         </span>
         <div className="flex items-center gap-1.5">
-          <button onClick={load} disabled={loading} className="rounded-md p-1 text-muted hover:text-brand-text disabled:opacity-50" title="Refresh">
+          <button onClick={load} disabled={loading} className="rounded-md p-1 text-muted hover:text-brand-text disabled:opacity-50" title={t('childDetail.refresh')}>
             {loading
               ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
               : <Sparkles className="h-3.5 w-3.5" />}
           </button>
-          <button onClick={() => setDismissed(true)} className="rounded-md p-1 text-muted hover:text-danger" title="Dismiss">
+          <button onClick={() => setDismissed(true)} className="rounded-md p-1 text-muted hover:text-danger" title={t('childDetail.dismiss')}>
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -246,7 +250,7 @@ function AICoachCard({ childId }: { childId: string }) {
       )}
       {coaching.suggestion && (
         <p className="mt-2.5 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs">
-          <span className="font-semibold text-brand-text">Try this: </span>{coaching.suggestion}
+          <span className="font-semibold text-brand-text">{t('childDetail.tryThis')} </span>{coaching.suggestion}
         </p>
       )}
     </div>
@@ -317,6 +321,7 @@ const TRUST_BASIS_LABEL: Record<string, string> = {
 };
 
 function TxnRow({ tx }: { tx: HistoryTxn }) {
+  const t = useTranslations();
   const signed = signedAmountCents(tx);
   const credit = signed >= 0;
   const Icon = TXN_TYPE_ICON[tx.type] ?? (credit ? ArrowDownLeft : ArrowUpRight);
@@ -344,7 +349,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
         <p className="flex items-center gap-1 text-[11px] text-muted">
           {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} · </span>}
           {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
-          {isPending && <span className="text-amber-500"> · Pending approval</span>}
+          {isPending && <span className="text-amber-500"> {t('childDetail.pendingApproval')}</span>}
           {trustLabel && <span className="ml-1 rounded bg-border/60 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">{trustLabel}</span>}
         </p>
       </div>
@@ -361,6 +366,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
 // ─── Request to Spend modal ───────────────────────────────────────────────────
 
 function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -371,8 +377,8 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!desc.trim()) return toastError('What is it for?');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!desc.trim()) return toastError(t('childDetailView.whatIsItFor'));
     setLoading(true);
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
@@ -386,15 +392,15 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
     <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
-          {formatCents(spendable)} available in Spend.
+          {formatCents(spendable)} {t('childDetail.availableInSpend')}
           {spendable < child.approvalThresholdCents
             ? ` Requests over ${formatCents(child.approvalThresholdCents)} need a parent's OK.`
             : ' A parent will review this request.'}
         </p>
-        <Field label="What for?">
-          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+        <Field label={t('childDetail.whatFor')}>
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('childDetailView.eGLegoSet')} autoFocus maxLength={120} />}
         </Field>
-        <Field label="Amount (USD)">
+        <Field label={t('childDetail.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
         </Field>
         <div className="flex flex-wrap gap-2">
@@ -406,8 +412,8 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
           ))}
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><HandCoins className="h-4 w-4" /> Request</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
+          <Button type="submit" loading={loading}><HandCoins className="h-4 w-4" /> {t('childDetail.request')}</Button>
         </div>
       </form>
     </Modal>
@@ -417,6 +423,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
 // ─── Send to Sibling modal ────────────────────────────────────────────────────
 
 function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblings: Sibling[]; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -428,13 +435,13 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!to) return toastError('Pick a recipient.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!to) return toastError(t('childDetailView.pickARecipient'));
     setLoading(true);
     const res = await sendMoneyAction({ fromChildWalletId: child.id, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send money');
-    success('Money sent');
+    success(t('childDetailView.moneySent'));
     onClose();
     router.refresh();
   }
@@ -445,7 +452,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
     <Modal open onClose={onClose} title={`Send from ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
-          {formatCents(spendable)} available in {child.name}&apos;s Spend bucket.
+          {formatCents(spendable)} {t('childDetail.availableIn')} {child.name}{t('childDetail.aposSSpendBucket')}
         </p>
         <Field label="To">
           {(id) => (
@@ -454,15 +461,15 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
             </select>
           )}
         </Field>
-        <Field label="Amount (USD)">
+        <Field label={t('childDetail.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
         </Field>
-        <Field label="Note (optional)">
-          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+        <Field label={t('childDetail.noteOptional')}>
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('childDetailView.birthdayGift')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><Send className="h-4 w-4" /> Send</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
+          <Button type="submit" loading={loading}><Send className="h-4 w-4" /> {t('childDetail.send')}</Button>
         </div>
       </form>
     </Modal>
@@ -472,6 +479,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
 // ─── Add Funds modal ──────────────────────────────────────────────────────────
 
 function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -480,7 +488,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);
@@ -494,10 +502,10 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
     <Modal open onClose={onClose} title={`Add funds — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
-          Split across {child.name}&apos;s buckets: {child.split.spend}% Spend, {child.split.save}% Save,
-          {' '}{child.split.give}% Give, {child.split.invest}% Invest.
+          {t('childDetail.splitAcross')} {child.name}{t('childDetail.aposSBuckets')} {child.split.spend}{t('childDetail.spend')} {child.split.save}{t('childDetail.save')}
+          {' '}{child.split.give}{t('childDetail.give')} {child.split.invest}{t('childDetail.invest')}
         </p>
-        <Field label="Amount (USD)">
+        <Field label={t('childDetail.amountUsd')}>
           {(id) => (
             <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" autoFocus
               value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" />
@@ -512,8 +520,8 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
           ))}
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><Plus className="h-4 w-4" /> Add funds</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
+          <Button type="submit" loading={loading}><Plus className="h-4 w-4" /> {t('childDetail.addFunds')}</Button>
         </div>
       </form>
     </Modal>
@@ -523,6 +531,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
 // ─── Request Allowance modal ──────────────────────────────────────────────────
 
 function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -532,12 +541,12 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await requestAllowanceAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), reason: reason.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send request');
-    success('Request sent to a parent');
+    success(t('childDetailView.requestSentToAParent'));
     onClose();
     router.refresh();
   }
@@ -546,9 +555,9 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
     <Modal open onClose={onClose} title={`Request allowance — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
-          A parent will see your request and can add funds directly to your wallet.
+          {t('childDetail.aParentWillSeeYourRequest')}
         </p>
-        <Field label="Amount (USD)">
+        <Field label={t('childDetail.amountUsd')}>
           {(id) => (
             <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" autoFocus
               value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" />
@@ -562,12 +571,12 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
             </button>
           ))}
         </div>
-        <Field label="Reason (optional)">
-          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra chores…" maxLength={120} />}
+        <Field label={t('childDetail.reasonOptional')}>
+          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('childDetailView.birthdayMoneyExtraChores')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><Banknote className="h-4 w-4" /> Send request</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
+          <Button type="submit" loading={loading}><Banknote className="h-4 w-4" /> {t('childDetail.sendRequest')}</Button>
         </div>
       </form>
     </Modal>
@@ -585,6 +594,8 @@ export function ChildDetailView({
   canManage: boolean;
   siblings: Sibling[];
 }) {
+  const tr = useTranslations();
+  const t = useTranslations();
   const [adding, setAdding] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [sending, setSending] = useState(false);
@@ -614,7 +625,7 @@ export function ChildDetailView({
     <div className="module-page space-y-5">
       {/* Back nav */}
       <Link href="/wallet" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg transition">
-        <ArrowLeft className="h-4 w-4" /> All wallets
+        <ArrowLeft className="h-4 w-4" /> {t('childDetail.allWallets')}
       </Link>
 
       {/* ── Hero header ──────────────────────────────────────────────────────── */}
@@ -622,10 +633,10 @@ export function ChildDetailView({
         <div className="flex items-center gap-4">
           <Avatar name={child.name} color={child.color ?? undefined} size={64} className="ring-2 ring-brand/20 ring-offset-2 ring-offset-bg" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-muted">{child.name}&apos;s Wallet</p>
+            <p className="text-sm font-semibold text-muted">{child.name}{t('childDetail.aposSWallet')}</p>
             <p className="text-4xl font-black tabular-nums">{formatCents(child.total)}</p>
             <p className="mt-0.5 text-xs text-muted">
-              {formatCents(child.buckets.spend ?? 0)} spendable · {formatCents(child.buckets.save ?? 0)} saved
+              {formatCents(child.buckets.spend ?? 0)} {t('childDetail.spendable')} {formatCents(child.buckets.save ?? 0)} saved
             </p>
           </div>
         </div>
@@ -636,14 +647,14 @@ export function ChildDetailView({
             onClick={() => setRequesting(true)}
             className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text"
           >
-            <HandCoins className="h-5 w-5" /> Request
+            <HandCoins className="h-5 w-5" /> {t('childDetail.request')}
           </button>
           {canManage && (
             <button
               onClick={() => setAdding(true)}
               className="flex flex-col items-center gap-1 rounded-2xl border border-brand/30 bg-brand/10 py-3 text-xs font-semibold text-brand-text transition hover:bg-brand/15"
             >
-              <Plus className="h-5 w-5" /> Add funds
+              <Plus className="h-5 w-5" /> {t('childDetail.addFunds')}
             </button>
           )}
           {siblings.length > 0 && canManage ? (
@@ -651,12 +662,12 @@ export function ChildDetailView({
               onClick={() => setSending(true)}
               className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text"
             >
-              <Send className="h-5 w-5" /> Send
+              <Send className="h-5 w-5" /> {t('childDetail.send')}
             </button>
           ) : (
             <Link href="/wallet/cards"
               className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand-text">
-              <CreditCard className="h-5 w-5" /> Cards
+              <CreditCard className="h-5 w-5" /> {t('childDetail.cards')}
             </Link>
           )}
         </div>
@@ -666,7 +677,7 @@ export function ChildDetailView({
           onClick={() => setRequestingAllowance(true)}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 py-2 text-xs font-medium text-muted transition hover:border-brand/40 hover:text-brand-text"
         >
-          <Banknote className="h-3.5 w-3.5" /> Ask for more allowance
+          <Banknote className="h-3.5 w-3.5" /> {t('childDetail.askForMoreAllowance')}
         </button>
       </div>
 
@@ -674,16 +685,16 @@ export function ChildDetailView({
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold">
-            <span className="inline-block h-2 w-2 rounded-full bg-brand" /> Smart Split
+            <span className="inline-block h-2 w-2 rounded-full bg-brand" /> {t('childDetail.smartSplit')}
           </h2>
-          <Link href="/wallet/settings" className="text-xs font-semibold text-brand-text hover:underline">Edit split →</Link>
+          <Link href="/wallet/settings" className="text-xs font-semibold text-brand-text hover:underline">{t('childDetail.editSplit')}</Link>
         </div>
         <SmartSplitDonut buckets={child.buckets} total={child.total} />
 
         {/* Target vs actual note */}
         {child.total > 0 && (
           <p className="mt-3 text-center text-[10px] text-muted">
-            Target: {child.split.spend}% Spend · {child.split.save}% Save · {child.split.give}% Give · {child.split.invest}% Invest
+            Target: {child.split.spend}{t('childDetail.spend')} {child.split.save}{t('childDetail.save')} {child.split.give}{t('childDetail.give')} {child.split.invest}{t('childDetail.invest')}
           </p>
         )}
       </div>
@@ -698,20 +709,20 @@ export function ChildDetailView({
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold">
-            <Target className="h-4 w-4 text-amber-500" /> Goals
+            <Target className="h-4 w-4 text-amber-500" /> {t('childDetail.goals')}
             {activeGoals.length > 0 && <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-bold text-amber-500">{activeGoals.length}</span>}
           </h2>
-          <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">Manage →</Link>
+          <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">{t('childDetail.manage')}</Link>
         </div>
         {goals.length === 0 ? (
-          <p className="text-sm text-muted">No goals yet. <Link href="/wallet/goals" className="text-brand-text hover:underline">Create one →</Link></p>
+          <p className="text-sm text-muted">{t('childDetail.noGoalsYet')} <Link href="/wallet/goals" className="text-brand-text hover:underline">{t('childDetail.createOne')}</Link></p>
         ) : (
           <div className="space-y-2">
             {activeGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
             {reachedGoals.length > 0 && (
               <details className="group">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted hover:text-brand-text">
-                  {reachedGoals.length} reached goal{reachedGoals.length !== 1 ? 's' : ''} 🎉
+                  {reachedGoals.length} {t('childDetail.reachedGoal')}{reachedGoals.length !== 1 ? 's' : ''} 🎉
                 </summary>
                 <div className="mt-1.5 space-y-2">
                   {reachedGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
@@ -756,20 +767,20 @@ export function ChildDetailView({
       <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
           <h2 className="flex items-center gap-2 text-sm font-bold">
-            <Receipt className="h-4 w-4 text-brand-text" /> Activity
+            <Receipt className="h-4 w-4 text-brand-text" /> {t('childDetail.activity')}
           </h2>
           <div className="flex items-center gap-3">
             {history.length > 0 && (
-              <button type="button" onClick={downloadStatement} className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg" aria-label="Download this child's statement as CSV">
-                <Download className="h-3.5 w-3.5" /> Statement
+              <button type="button" onClick={downloadStatement} className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg" aria-label={tr('childDetail.downloadThisChildsStatementAsCsv')}>
+                <Download className="h-3.5 w-3.5" /> {t('childDetail.statement')}
               </button>
             )}
-            <Link href="/wallet/activity" className="text-xs font-semibold text-brand-text hover:underline">All activity →</Link>
+            <Link href="/wallet/activity" className="text-xs font-semibold text-brand-text hover:underline">{t('childDetail.allActivity')}</Link>
           </div>
         </div>
         {history.length === 0 ? (
           <div className="py-4">
-            <EmptyState icon={Receipt} title="No transactions yet" description="Top-ups, allowance, chores and gifts will show here." />
+            <EmptyState icon={Receipt} title={t('childDetail.noTransactionsYet')} description={t('childDetailView.topUpsAllowanceChoresAnd')} />
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -786,7 +797,7 @@ export function ChildDetailView({
                 onClick={() => setActivityExpanded(!activityExpanded)}
                 className="flex w-full items-center justify-center gap-1 py-3 text-xs font-semibold text-muted hover:text-brand-text transition"
               >
-                {activityExpanded ? <><ChevronDown className="h-3.5 w-3.5 rotate-180" /> Show less</> : <><ChevronDown className="h-3.5 w-3.5" /> Show {groups.length - 3} more days</>}
+                {activityExpanded ? <><ChevronDown className="h-3.5 w-3.5 rotate-180" /> {t('childDetail.showLess')}</> : <><ChevronDown className="h-3.5 w-3.5" /> {t('childDetail.show')} {groups.length - 3} {t('childDetail.moreDays')}</>}
               </button>
             )}
           </div>

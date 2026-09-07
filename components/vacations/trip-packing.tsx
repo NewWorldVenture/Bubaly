@@ -15,6 +15,7 @@ import { PACK_CATEGORIES, lookup } from '@/lib/vacations/meta';
 import { tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import type { Tables, VacPackCategory } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type List = Tables<'vacation_packing_lists'>;
@@ -25,6 +26,7 @@ type Activity = Tables<'vacation_activities'>;
 const blank = () => ({ name: '', category: 'other' as VacPackCategory, quantity: '1' });
 
 export function TripPacking({ vacationId }: { vacationId: string }) {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -80,7 +82,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const existing = new Set(items.map((i) => i.name.toLowerCase()));
     const toAdd = suggestions.filter((s) => !existing.has(s.name.toLowerCase()))
       .map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category, quantity: s.quantity, ai_suggested: true, created_by: userId }));
-    if (toAdd.length === 0) { setBusy(false); return toastError('Your list already covers the essentials'); }
+    if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
     if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
@@ -95,7 +97,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (!form?.name.trim()) return;
     const listId = await ensureMasterList();
     const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-    if (error) toastError(error.message); else success('Added');
+    if (error) toastError(error.message); else success(tr('tripPacking.added'));
     setForm(null);
   }
   async function remove(id: string) {
@@ -104,27 +106,27 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load the packing plan. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={tr('tripPacking.couldNotLoadThePacking')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Luggage className="h-5 w-5 text-brand-text" /> Packing</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Luggage className="h-5 w-5 text-brand-text" /> {tr('tripPacking.packing')}</h2>
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={generate} loading={busy}><Wand2 className="h-4 w-4" /> Smart list</Button>
+          <Button size="sm" variant="secondary" onClick={generate} loading={busy}><Wand2 className="h-4 w-4" /> {tr('tripPacking.smartList')}</Button>
           <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>
         </div>
       </div>
 
       {items.length > 0 && (
         <div className="rounded-xl border border-border bg-surface/40 p-3">
-          <div className="mb-1.5 flex items-center justify-between text-sm"><span className="font-medium">Packed {packed} / {items.length}</span><span className="text-muted">{pct}%</span></div>
+          <div className="mb-1.5 flex items-center justify-between text-sm"><span className="font-medium">{tr('tripPacking.packed')} {packed} / {items.length}</span><span className="text-muted">{pct}%</span></div>
           <Progress pct={pct} tone={pct === 100 ? 'bg-emerald-500' : 'bg-brand'} />
         </div>
       )}
 
       {items.length === 0 ? (
-        <EmptyState icon={Luggage} title="Nothing packed yet" description="Tap “Smart list” to auto-generate a packing list from your trip type, weather, and activities." />
+        <EmptyState icon={Luggage} title={tr('tripPacking.nothingPackedYet')} description={tr('tripPacking.tapSmartListToAuto')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {PACK_CATEGORIES.filter((c) => byCategory.has(c.value)).map((cat) => (
@@ -146,15 +148,15 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Add packing item">
+        <Modal open onClose={() => setForm(null)} title={tr('tripPacking.addPackingItem')}>
           <form onSubmit={add} className="space-y-3">
-            <Field label="Item" required>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />}</Field>
+            <Field label={tr('tripPacking.item')} required>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as VacPackCategory })}>{PACK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</Select>}</Field>
-              <Field label="Quantity">{(id) => <Input id={id} type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />}</Field>
+              <Field label={tr('tripPacking.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as VacPackCategory })}>{PACK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</Select>}</Field>
+              <Field label={tr('tripPacking.quantity')}>{(id) => <Input id={id} type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />}</Field>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('tripPacking.cancel')}</Button>
               <Button type="submit">Add</Button>
             </div>
           </form>

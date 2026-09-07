@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { findFreeSlots, isCalendarContext, type BusyEvent, type CalendarContext } from '@/lib/calendar/scheduling';
@@ -9,6 +10,7 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 // engine the AI uses to schedule across each person's calendar. Resilient to the
 // `context` column not existing yet (treats events as 'family' until 0094 is applied).
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     const windowStart = body.windowStartISO ? new Date(body.windowStartISO).getTime() : now;
     const windowEnd = body.windowEndISO ? new Date(body.windowEndISO).getTime() : now + 14 * 24 * 60 * 60 * 1000;
     if (Number.isNaN(windowStart) || Number.isNaN(windowEnd) || windowEnd <= windowStart) {
-      return NextResponse.json({ error: 'Invalid window' }, { status: 400 });
+      return NextResponse.json({ error: t('schedule.invalidWindow') }, { status: 400 });
     }
     const memberIds = (body.memberIds ?? []).filter(Boolean);
     const contexts = (body.contexts ?? []).filter(isCalendarContext) as CalendarContext[];
@@ -84,6 +86,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('AI schedule error:', err);
-    return NextResponse.json({ error: 'Failed to find times' }, { status: 500 });
+    return NextResponse.json({ error: t('schedule.failedToFindTimes') }, { status: 500 });
   }
 }

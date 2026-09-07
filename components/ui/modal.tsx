@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -27,6 +28,7 @@ export function Modal({
   /** Optional control rendered in the header, just left of the close button. */
   headerAction?: React.ReactNode;
 }) {
+  const t = useTranslations();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -102,7 +104,7 @@ export function Modal({
             <button
               onClick={onClose}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted hover:bg-elevated hover:text-fg focus-ring"
-              aria-label="Close dialog"
+              aria-label={t('modal.closeDialog')}
             >
               <X className="h-5 w-5" />
             </button>

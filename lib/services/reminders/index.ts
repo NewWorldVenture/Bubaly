@@ -117,6 +117,7 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
 
       await recordActivitySafely(scope, {
         agent: 'reminders',
+        action: 'create',
         title: `Set a reminder: "${title}"`,
         detail: remindAt,
         href: '/dashboard/reminders',
@@ -170,7 +171,34 @@ export async function completeReminder(scope: ServiceScope, reminderId: string):
     return fail(describeDbError(error, 'Could not complete that reminder.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
   return ok(data);
+}
+
+/**
+ * Remove a reminder.
+ *
+ * Family-scoped, where the module deleted on `id` alone and left tenancy to RLS.
+ * Unlike the editor and the recurrence respawn — which cannot route through this
+ * service until it can express migration 0100's columns — a delete needs nothing
+ * the service does not already have.
+ */
+export async function deleteReminder(scope: ServiceScope, reminderId: string): Promise<ServiceResult<{ id: string; title: string }>> {
+  const { data, error } = await scope.db
+    .from('family_reminders')
+    .delete()
+    .eq('id', reminderId)
+    .eq('family_id', scope.familyId)
+    .select('id, title')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:reminders] delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that reminder.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, { action: 'delete', agent: 'reminders', title: `Removed the reminder "${data.title}"`, href: '/dashboard/reminders' });
+  return ok({ id: data.id, title: data.title });
 }
 
 /** Push a reminder out by `minutes` from now (not from its original time). */
@@ -191,6 +219,16 @@ export async function snoozeReminder(scope: ServiceScope, reminderId: string, mi
     return fail(describeDbError(error, 'Could not snooze that reminder.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That reminder could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'reminders',
+    action: 'update',
+    title: `Snoozed "${data.title}" for ${mins} minutes`,
+    detail: until,
+    href: '/dashboard/reminders',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
   return ok(data);
 }
 

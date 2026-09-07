@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
@@ -28,6 +29,7 @@ const SPORT_EMOJIS: Record<string, string> = { Soccer: '⚽', Basketball: '🏀'
 const RESULT_OPTIONS = ['win', 'loss', 'tie'] as const;
 
 export function SportsModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
@@ -108,8 +110,8 @@ export function SportsModule() {
       created_by: userId, member_id: eventForm.member_id || null,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save event'); return; }
-    success('Event added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveEvent')); return; }
+    success(tr('sportsModule.eventAdded'));
     setEventOpen(false);
     setEventForm({ title: '', event_type: 'game', sport: '', team: '', starts_at: '', location: '', notes: '', member_id: '' });
     refreshEvents();
@@ -125,8 +127,8 @@ export function SportsModule() {
       member_id: teamForm.member_id || null, is_active: true, created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to add team'); return; }
-    success('Team added!');
+    if (err) { toastError(tr('sportsModule.failedToAddTeam')); return; }
+    success(tr('sportsModule.teamAdded'));
     setTeamOpen(false);
     setTeamForm({ sport: '', team_name: '', season: '', coach: '', member_id: '' });
     refreshTeams();
@@ -144,8 +146,8 @@ export function SportsModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save result'); return; }
-    success('Game result added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveResult')); return; }
+    success(tr('sportsModule.gameResultAdded'));
     setGameOpen(false);
     setGameForm({ team_id: '', opponent: '', our_score: '', their_score: '', date: '', result: 'win', notes: '' });
     refreshGames();
@@ -161,9 +163,9 @@ export function SportsModule() {
     <div className="module-with-sidebar">
       <div className="module-main module-page">
         <PageHeader
-          title="Sports"
-          description="Track games, practices, standings, and team schedules."
-          action={<div className="flex items-center gap-2"><AiInsight kind="sports" iconOnly /><Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button></div>}
+          title={tr('sports.sports')}
+          description={tr('sportsModule.trackGamesPracticesStandingsAnd')}
+          action={<div className="flex items-center gap-2"><AiInsight kind="sports" iconOnly /><Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addEvent')}</Button></div>}
         />
 
         {/* Tab bar */}
@@ -193,24 +195,24 @@ export function SportsModule() {
         {/* Upcoming Events table */}
         <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
-            <h2 className="font-semibold">Upcoming Events</h2>
-            <button onClick={() => setTab('Schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
+            <h2 className="font-semibold">{tr('sports.upcomingEvents')}</h2>
+            <button onClick={() => setTab('Schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {upcoming.length === 0 ? (
             <div className="px-5 pb-5">
-              <EmptyState icon={Calendar} title="No upcoming events" description="Add a sports event to get started." action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button>} />
+              <EmptyState icon={Calendar} title={tr('sports.noUpcomingEvents')} description={tr('sportsModule.addASportsEventTo')} action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addEvent')}</Button>} />
             </div>
           ) : (
             <>
               <div className="table-responsive overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-t border-border text-xs text-muted">
-                    <th className="px-5 py-3 text-left font-medium">Event</th>
-                    <th className="px-4 py-3 text-left font-medium">Athlete</th>
-                    <th className="px-4 py-3 text-left font-medium">Sport / Team</th>
-                    <th className="px-4 py-3 text-left font-medium">Date &amp; Time</th>
-                    <th className="px-4 py-3 text-left font-medium">Location</th>
-                    <th className="px-4 py-3 text-left font-medium">Type</th>
+                    <th className="px-5 py-3 text-left font-medium">{tr('sports.event')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('sports.athlete')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('sports.sportTeam')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('sports.dateAmpTime')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('sports.location')}</th>
+                    <th className="px-4 py-3 text-left font-medium">{tr('sports.type')}</th>
                     <th className="w-8 px-4 py-3" />
                   </tr></thead>
                   <tbody className="divide-y divide-border">
@@ -238,7 +240,7 @@ export function SportsModule() {
                           <td className="px-4 py-3.5">
                             <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', isGame ? 'bg-violet-500/15 text-violet-300 border border-violet-500/25' : 'bg-blue-500/15 text-blue-300 border border-blue-500/25')}>{e.event_type}</span>
                           </td>
-                          <td className="px-4 py-3.5"><button aria-label="More options" className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                          <td className="px-4 py-3.5"><button aria-label={tr('sports.moreOptions')} className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                         </tr>
                       );
                     })}
@@ -246,7 +248,7 @@ export function SportsModule() {
                 </table>
               </div>
               <div className="border-t border-border p-4 text-center">
-                <button onClick={() => setTab('Schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
+                <button onClick={() => setTab('Schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
               </div>
             </>
           )}
@@ -257,11 +259,11 @@ export function SportsModule() {
           {/* My Teams */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">My Teams</h2>
-              <Button variant="ghost" size="sm" onClick={() => setTeamOpen(true)}><Plus className="h-3.5 w-3.5" /> Add Team</Button>
+              <h2 className="font-semibold">{tr('sports.myTeams')}</h2>
+              <Button variant="ghost" size="sm" onClick={() => setTeamOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addTeam')}</Button>
             </div>
             {activeTeams.length === 0 ? (
-              <EmptyState icon={Users} title="No teams yet" description="Add your first team to track rosters and records." action={<Button onClick={() => setTeamOpen(true)}><Plus className="h-4 w-4" /> Add Team</Button>} />
+              <EmptyState icon={Users} title={tr('sports.noTeamsYet')} description={tr('sportsModule.addYourFirstTeamTo')} action={<Button onClick={() => setTeamOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addTeam')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {activeTeams.map((team) => {
@@ -289,11 +291,11 @@ export function SportsModule() {
           {/* Recent Results */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Recent Results</h2>
-              <Button variant="ghost" size="sm" onClick={() => setGameOpen(true)}><Plus className="h-3.5 w-3.5" /> Add Result</Button>
+              <h2 className="font-semibold">{tr('sports.recentResults')}</h2>
+              <Button variant="ghost" size="sm" onClick={() => setGameOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addResult')}</Button>
             </div>
             {recentResults.length === 0 ? (
-              <EmptyState icon={Trophy} title="No game results" description="Log a game result to start tracking your record." action={<Button onClick={() => setGameOpen(true)}><Plus className="h-4 w-4" /> Add Result</Button>} />
+              <EmptyState icon={Trophy} title={tr('sports.noGameResults')} description={tr('sportsModule.logAGameResultTo')} action={<Button onClick={() => setGameOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addResult')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {recentResults.map((r) => {
@@ -324,9 +326,9 @@ export function SportsModule() {
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Upcoming Games */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming Games</h2><button onClick={() => setTab('Schedule')} className="text-xs font-semibold text-brand-text">View schedule &rarr;</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.upcomingGames')}</h2><button onClick={() => setTab('Schedule')} className="text-xs font-semibold text-brand-text">{tr('sports.viewScheduleRarr')}</button></div>
           {upcomingGames.length === 0 ? (
-            <p className="text-sm text-muted">No upcoming games scheduled.</p>
+            <p className="text-sm text-muted">{tr('sports.noUpcomingGamesScheduled')}</p>
           ) : (
             <div className="space-y-3">
               {upcomingGames.map((e) => {
@@ -346,13 +348,13 @@ export function SportsModule() {
 
         {/* Team Standings */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Team Standings</h2><button onClick={() => setTab('Standings')} className="text-xs font-semibold text-brand-text">View all &rarr;</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.teamStandings')}</h2><button onClick={() => setTab('Standings')} className="text-xs font-semibold text-brand-text">{tr('sports.viewAllRarr')}</button></div>
           {standings.length === 0 ? (
-            <p className="text-sm text-muted">No standings data yet. Log game results to see standings.</p>
+            <p className="text-sm text-muted">{tr('sports.noStandingsDataYetLogGame')}</p>
           ) : (
             <div className="overflow-x-auto">
             <table className="w-full min-w-[320px] text-xs">
-              <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">Team</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
+              <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">{tr('sports.team')}</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {standings.map((s, i) => (
                   <tr key={s.teamId} className="font-medium">
@@ -372,7 +374,7 @@ export function SportsModule() {
 
         {/* Quick Actions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Quick Actions</h2></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.quickActions')}</h2></div>
           <div className="space-y-2">
             {[
               { label: 'Add a game or event', action: () => setEventOpen(true) },
@@ -389,68 +391,68 @@ export function SportsModule() {
 
         {/* Sports News — empty state */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Sports News</h2></div>
-          <p className="text-sm text-muted">No news yet. Team updates and announcements will appear here.</p>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.sportsNews')}</h2></div>
+          <p className="text-sm text-muted">{tr('sports.noNewsYetTeamUpdatesAnd')}</p>
         </div>
 
         {/* AI Sports Coach */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
-          <h3 className="font-bold">AI Sports Coach</h3>
-          <p className="mt-2 text-xs leading-5 text-muted">Get training tips, schedule help, and insights for your athletes.</p>
-          <Button className="mt-4 w-full">Ask AI</Button>
+          <h3 className="font-bold">{tr('sports.aiSportsCoach')}</h3>
+          <p className="mt-2 text-xs leading-5 text-muted">{tr('sports.getTrainingTipsScheduleHelpAnd')}</p>
+          <Button className="mt-4 w-full">{tr('sports.askAi')}</Button>
         </div>
       </aside>
 
       {/* Add Event Modal */}
-      <Modal open={eventOpen} title="Add Sports Event" onClose={() => setEventOpen(false)}>
+      <Modal open={eventOpen} title={tr('sports.addSportsEvent')} onClose={() => setEventOpen(false)}>
         <div className="space-y-4">
-          <Field label="Title">{(id) => <Input id={id} value={eventForm.title} onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Soccer Game vs Storm FC" />}</Field>
+          <Field label={tr('sports.title')}>{(id) => <Input id={id} value={eventForm.title} onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('sports.eGSoccerGameVsStorm')} />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">{(id) => <Select id={id} value={eventForm.event_type} onChange={(e) => setEventForm((f) => ({ ...f, event_type: e.target.value }))}>{EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</Select>}</Field>
-            <Field label="Sport">{(id) => <Input id={id} value={eventForm.sport} onChange={(e) => setEventForm((f) => ({ ...f, sport: e.target.value }))} placeholder="e.g. Soccer" />}</Field>
+            <Field label={tr('sports.type')}>{(id) => <Select id={id} value={eventForm.event_type} onChange={(e) => setEventForm((f) => ({ ...f, event_type: e.target.value }))}>{EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</Select>}</Field>
+            <Field label={tr('sports.sport')}>{(id) => <Input id={id} value={eventForm.sport} onChange={(e) => setEventForm((f) => ({ ...f, sport: e.target.value }))} placeholder={tr('sports.eGSoccer')} />}</Field>
           </div>
-          <Field label="Team Name">{(id) => <Input id={id} value={eventForm.team} onChange={(e) => setEventForm((f) => ({ ...f, team: e.target.value }))} placeholder="e.g. Thunder FC" />}</Field>
-          <Field label="Athlete">{(id) => <Select id={id} value={eventForm.member_id} onChange={(e) => setEventForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Date &amp; Time">{(id) => <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
-          <Field label="Location">{(id) => <Input id={id} value={eventForm.location} onChange={(e) => setEventForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Riverside Park Field 3" />}</Field>
+          <Field label={tr('sports.teamName')}>{(id) => <Input id={id} value={eventForm.team} onChange={(e) => setEventForm((f) => ({ ...f, team: e.target.value }))} placeholder={tr('sports.eGThunderFc')} />}</Field>
+          <Field label={tr('sports.athlete')}>{(id) => <Select id={id} value={eventForm.member_id} onChange={(e) => setEventForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('sports.dateAmpTime')}>{(id) => <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
+          <Field label={tr('sports.location')}>{(id) => <Input id={id} value={eventForm.location} onChange={(e) => setEventForm((f) => ({ ...f, location: e.target.value }))} placeholder={tr('sports.eGRiversideParkField3')} />}</Field>
           <Button className="w-full" onClick={saveEvent} disabled={saving || !eventForm.title || !eventForm.starts_at}>{saving ? 'Saving…' : 'Add Event'}</Button>
         </div>
       </Modal>
 
       {/* Add Team Modal */}
-      <Modal open={teamOpen} title="Add Team" onClose={() => setTeamOpen(false)}>
+      <Modal open={teamOpen} title={tr('sports.addTeam')} onClose={() => setTeamOpen(false)}>
         <div className="space-y-4">
-          <Field label="Sport">{(id) => <Input id={id} value={teamForm.sport} onChange={(e) => setTeamForm((f) => ({ ...f, sport: e.target.value }))} placeholder="e.g. Soccer" />}</Field>
-          <Field label="Team Name">{(id) => <Input id={id} value={teamForm.team_name} onChange={(e) => setTeamForm((f) => ({ ...f, team_name: e.target.value }))} placeholder="e.g. Thunder FC" />}</Field>
-          <Field label="Season">{(id) => <Input id={id} value={teamForm.season} onChange={(e) => setTeamForm((f) => ({ ...f, season: e.target.value }))} placeholder="e.g. Spring 2026" />}</Field>
-          <Field label="Coach">{(id) => <Input id={id} value={teamForm.coach} onChange={(e) => setTeamForm((f) => ({ ...f, coach: e.target.value }))} placeholder="e.g. Coach Smith" />}</Field>
-          <Field label="Athlete">{(id) => <Select id={id} value={teamForm.member_id} onChange={(e) => setTeamForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select athlete</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('sports.sport')}>{(id) => <Input id={id} value={teamForm.sport} onChange={(e) => setTeamForm((f) => ({ ...f, sport: e.target.value }))} placeholder={tr('sports.eGSoccer')} />}</Field>
+          <Field label={tr('sports.teamName')}>{(id) => <Input id={id} value={teamForm.team_name} onChange={(e) => setTeamForm((f) => ({ ...f, team_name: e.target.value }))} placeholder={tr('sports.eGThunderFc')} />}</Field>
+          <Field label={tr('sports.season')}>{(id) => <Input id={id} value={teamForm.season} onChange={(e) => setTeamForm((f) => ({ ...f, season: e.target.value }))} placeholder={tr('sports.eGSpring2026')} />}</Field>
+          <Field label={tr('sports.coach')}>{(id) => <Input id={id} value={teamForm.coach} onChange={(e) => setTeamForm((f) => ({ ...f, coach: e.target.value }))} placeholder={tr('sports.eGCoachSmith')} />}</Field>
+          <Field label={tr('sports.athlete')}>{(id) => <Select id={id} value={teamForm.member_id} onChange={(e) => setTeamForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('sports.selectAthlete')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Button className="w-full" onClick={saveTeam} disabled={saving || !teamForm.sport || !teamForm.team_name}>{saving ? 'Saving…' : 'Add Team'}</Button>
         </div>
       </Modal>
 
       {/* Add Game Result Modal */}
-      <Modal open={gameOpen} title="Log Game Result" onClose={() => setGameOpen(false)}>
+      <Modal open={gameOpen} title={tr('sports.logGameResult')} onClose={() => setGameOpen(false)}>
         <div className="space-y-4">
-          <Field label="Team">{(id) => (
+          <Field label={tr('sports.team')}>{(id) => (
             <Select id={id} value={gameForm.team_id} onChange={(e) => setGameForm((f) => ({ ...f, team_id: e.target.value }))}>
-              <option value="">Select team</option>
+              <option value="">{tr('sports.selectTeam')}</option>
               {activeTeams.map((t) => <option key={t.id} value={t.id}>{t.team_name} ({t.sport})</option>)}
             </Select>
           )}</Field>
-          <Field label="Opponent">{(id) => <Input id={id} value={gameForm.opponent} onChange={(e) => setGameForm((f) => ({ ...f, opponent: e.target.value }))} placeholder="e.g. Storm FC" />}</Field>
+          <Field label={tr('sports.opponent')}>{(id) => <Input id={id} value={gameForm.opponent} onChange={(e) => setGameForm((f) => ({ ...f, opponent: e.target.value }))} placeholder={tr('sports.eGStormFc')} />}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Our Score">{(id) => <Input id={id} type="number" min="0" value={gameForm.our_score} onChange={(e) => setGameForm((f) => ({ ...f, our_score: e.target.value }))} placeholder="0" />}</Field>
-            <Field label="Their Score">{(id) => <Input id={id} type="number" min="0" value={gameForm.their_score} onChange={(e) => setGameForm((f) => ({ ...f, their_score: e.target.value }))} placeholder="0" />}</Field>
+            <Field label={tr('sports.ourScore')}>{(id) => <Input id={id} type="number" min="0" value={gameForm.our_score} onChange={(e) => setGameForm((f) => ({ ...f, our_score: e.target.value }))} placeholder="0" />}</Field>
+            <Field label={tr('sports.theirScore')}>{(id) => <Input id={id} type="number" min="0" value={gameForm.their_score} onChange={(e) => setGameForm((f) => ({ ...f, their_score: e.target.value }))} placeholder="0" />}</Field>
           </div>
-          <Field label="Date">{(id) => <Input id={id} type="date" value={gameForm.date} onChange={(e) => setGameForm((f) => ({ ...f, date: e.target.value }))} />}</Field>
-          <Field label="Result">{(id) => (
+          <Field label={tr('sports.date')}>{(id) => <Input id={id} type="date" value={gameForm.date} onChange={(e) => setGameForm((f) => ({ ...f, date: e.target.value }))} />}</Field>
+          <Field label={tr('sports.result')}>{(id) => (
             <Select id={id} value={gameForm.result} onChange={(e) => setGameForm((f) => ({ ...f, result: e.target.value }))}>
               {RESULT_OPTIONS.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
             </Select>
           )}</Field>
-          <Field label="Notes">{(id) => <Input id={id} value={gameForm.notes} onChange={(e) => setGameForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />}</Field>
+          <Field label={tr('sports.notes')}>{(id) => <Input id={id} value={gameForm.notes} onChange={(e) => setGameForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('sports.optionalNotes')} />}</Field>
           <Button className="w-full" onClick={saveGameResult} disabled={saving || !gameForm.team_id || !gameForm.opponent || !gameForm.date}>{saving ? 'Saving…' : 'Log Result'}</Button>
         </div>
       </Modal>

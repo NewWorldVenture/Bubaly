@@ -18,6 +18,7 @@ import {
 } from '@/lib/admin/notifications';
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ICONS: Record<string, typeof Bell> = {
   feedback_new: MessageSquare,
@@ -41,6 +42,7 @@ function timeAgo(iso: string): string {
 }
 
 export function AdminNotificationsList({ notifications }: { notifications: AdminNotificationRow[] }) {
+  const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<'all' | string>('all');
@@ -116,7 +118,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
               unreadOnly ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated',
             )}
           >
-            Unread only
+            {t('adminNotificationsList.unreadOnly')}
           </button>
           {unread > 0 && (
             <button
@@ -125,7 +127,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
               disabled={pending}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-fg transition hover:bg-elevated disabled:opacity-50"
             >
-              <Check className="h-3.5 w-3.5" /> Mark all read
+              <Check className="h-3.5 w-3.5" /> {t('adminNotificationsList.markAllRead')}
             </button>
           )}
         </div>
@@ -166,8 +168,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                         <Link
                           href={n.url}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline"
-                        >
-                          Open <ArrowUpRight className="h-3 w-3" />
+                        >{t('adminNotificationsList.open')}{' '}<ArrowUpRight className="h-3 w-3" />
                         </Link>
                       )}
                       {!n.is_read && (
@@ -177,8 +178,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                           disabled={pending}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg disabled:opacity-50"
                         >
-                          <Check className="h-3 w-3" /> Mark read
-                        </button>
+                          <Check className="h-3 w-3" />{' '}{t('adminNotificationsList.markRead')}</button>
                       )}
                     </div>
                   </div>

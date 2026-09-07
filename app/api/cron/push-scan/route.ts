@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
@@ -20,15 +21,16 @@ export const runtime = 'nodejs';
 // Safe to overlap the daily cron: generation dedups permanently by related_id,
 // push is gated on pushed_at and email on sent_at, so nothing double-sends.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('pushScan.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();
   const { data: families, error } = await supabase.from('families').select('id');
   if (error) {
     console.error('Push-scan cron read failed:', error);
-    return NextResponse.json({ error: 'Push-scan processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('pushScan.pushScanProcessingFailed') }, { status: 500 });
   }
 
   let created = 0;

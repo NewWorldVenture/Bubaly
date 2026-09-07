@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -20,8 +21,9 @@ export const runtime = 'nodejs';
 // before it ages out — no schema change / marker column needed. If no workflow
 // is active for a trigger, firing is a cheap no-op. Runs a few times a day.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('journeyRecovery.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();

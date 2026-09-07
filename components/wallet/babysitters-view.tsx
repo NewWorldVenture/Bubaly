@@ -18,6 +18,7 @@ import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import {
   saveBabysitterAction, archiveBabysitterAction, recordBabysitterPaymentAction,
 } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type BabysitterRow = {
   id: string; name: string; phone: string | null; email: string | null;
@@ -31,6 +32,8 @@ export type PaymentRow = {
 export function BabysittersView({ sitters, payments, canManage }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<BabysitterRow | null>(null);
@@ -43,16 +46,16 @@ export function BabysittersView({ sitters, payments, canManage }: {
   async function archive(s: BabysitterRow) {
     const res = await archiveBabysitterAction({ id: s.id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
-    success('Babysitter removed');
+    success(t('babysittersView.babysitterRemoved'));
     router.refresh();
   }
 
   return (
     <div className="module-page">
       <PageHeader
-        title="Family Wallet"
-        description="Keep babysitter contacts and track every payment in one place."
-        action={canManage ? <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add Sitter</Button> : undefined}
+        title={tr('babysitters.familyWallet')}
+        description={t('babysittersView.keepBabysitterContactsAndTrack')}
+        action={canManage ? <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {tr('babysitters.addSitter')}</Button> : undefined}
       />
       <WalletSubnav />
 
@@ -77,11 +80,11 @@ export function BabysittersView({ sitters, payments, canManage }: {
           <div className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-brand/10">
             <Baby className="h-6 w-6 text-brand-text opacity-60" />
           </div>
-          <p className="text-sm font-semibold">No babysitters yet</p>
-          <p className="mt-1 text-xs text-muted">Add a sitter to track payments and keep their contact handy.</p>
+          <p className="text-sm font-semibold">{tr('babysitters.noBabysittersYet')}</p>
+          <p className="mt-1 text-xs text-muted">{tr('babysitters.addASitterToTrackPayments')}</p>
           {canManage && (
             <button onClick={() => setAdding(true)} className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
-              <Plus className="h-3.5 w-3.5" /> Add Sitter
+              <Plus className="h-3.5 w-3.5" /> {tr('babysitters.addSitter')}
             </button>
           )}
         </div>
@@ -104,13 +107,13 @@ export function BabysittersView({ sitters, payments, canManage }: {
                 </div>
                 {canManage && (
                   <div className="flex flex-shrink-0 items-center gap-1">
-                    <button onClick={() => setPaying(s)} className="rounded-lg bg-green-500/15 px-2.5 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/25 transition" title="Record payment">
+                    <button onClick={() => setPaying(s)} className="rounded-lg bg-green-500/15 px-2.5 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/25 transition" title={t('babysittersView.recordPayment')}>
                       <DollarSign className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => setEditing(s)} className="rounded-lg p-1.5 text-muted hover:text-fg hover:bg-elevated transition" title="Edit">
+                    <button onClick={() => setEditing(s)} className="rounded-lg p-1.5 text-muted hover:text-fg hover:bg-elevated transition" title={t('babysittersView.edit')}>
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => archive(s)} className="rounded-lg p-1.5 text-muted hover:text-red-400 hover:bg-elevated transition" title="Remove">
+                    <button onClick={() => archive(s)} className="rounded-lg p-1.5 text-muted hover:text-red-400 hover:bg-elevated transition" title={t('babysittersView.remove')}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -124,7 +127,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
       {/* Recent payments */}
       {payments.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold">Recent Payments</h2>
+          <h2 className="mb-2 text-sm font-semibold">{tr('babysitters.recentPayments')}</h2>
           <div className="overflow-hidden rounded-2xl border border-border bg-surface/40 divide-y divide-border/50">
             {payments.slice(0, 15).map((p) => (
               <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -162,6 +165,8 @@ export function BabysittersView({ sitters, payments, canManage }: {
 function SitterModal({ sitter, onClose, onSaved }: {
   sitter: BabysitterRow | null; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -174,7 +179,7 @@ function SitterModal({ sitter, onClose, onSaved }: {
     const email = String(form.get('email') ?? '').trim();
     const rateStr = String(form.get('rate') ?? '').trim();
     const notes = String(form.get('notes') ?? '').trim();
-    if (!name) return toastError('Enter a name');
+    if (!name) return toastError(t('babysittersView.enterAName'));
     const rateCents = rateStr ? Math.round(parseFloat(rateStr) * 100) : undefined;
 
     setLoading(true);
@@ -187,15 +192,15 @@ function SitterModal({ sitter, onClose, onSaved }: {
   return (
     <Modal open title={sitter ? 'Edit Babysitter' : 'Add Babysitter'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus defaultValue={sitter?.name ?? ''} placeholder="Jamie Rivera" />}</Field>
+        <Field label={tr('babysitters.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={sitter?.name ?? ''} placeholder={t('babysittersView.jamieRivera')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Phone">{(id) => <Input id={id} name="phone" defaultValue={sitter?.phone ?? ''} placeholder="+1 555 …" />}</Field>
-          <Field label="Hourly rate ($)">{(id) => <Input id={id} name="rate" type="number" min="0" step="0.5" defaultValue={sitter?.rateCents != null ? (sitter.rateCents / 100).toString() : ''} placeholder="20" />}</Field>
+          <Field label={tr('babysitters.phone')}>{(id) => <Input id={id} name="phone" defaultValue={sitter?.phone ?? ''} placeholder="+1 555 …" />}</Field>
+          <Field label={tr('babysitters.hourlyRate')}>{(id) => <Input id={id} name="rate" type="number" min="0" step="0.5" defaultValue={sitter?.rateCents != null ? (sitter.rateCents / 100).toString() : ''} placeholder="20" />}</Field>
         </div>
-        <Field label="Email">{(id) => <Input id={id} name="email" type="email" defaultValue={sitter?.email ?? ''} placeholder="jamie@example.com" />}</Field>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={sitter?.notes ?? ''} placeholder="Great with toddlers, available weekends…" />}</Field>
+        <Field label={tr('babysitters.email')}>{(id) => <Input id={id} name="email" type="email" defaultValue={sitter?.email ?? ''} placeholder="jamie@example.com" />}</Field>
+        <Field label={tr('babysitters.notes')}>{(id) => <Textarea id={id} name="notes" rows={2} defaultValue={sitter?.notes ?? ''} placeholder={t('babysittersView.greatWithToddlersAvailableWeekends')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('babysitters.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : sitter ? 'Save Changes' : 'Add Sitter'}</Button>
         </div>
       </form>
@@ -206,6 +211,8 @@ function SitterModal({ sitter, onClose, onSaved }: {
 function PaymentModal({ sitter, onClose, onSaved }: {
   sitter: BabysitterRow; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [hours, setHours] = useState('');
@@ -224,7 +231,7 @@ function PaymentModal({ sitter, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const overrideStr = String(form.get('amount') ?? '').trim();
     const amountCents = overrideStr ? Math.round(parseFloat(overrideStr) * 100) : computed;
-    if (!amountCents || amountCents <= 0) return toastError('Enter hours or a payment amount');
+    if (!amountCents || amountCents <= 0) return toastError(t('babysittersView.enterHoursOrAPayment'));
     const h = parseFloat(hours) || undefined;
     const tipCents = Math.round((parseFloat(tip) || 0) * 100);
 
@@ -241,18 +248,18 @@ function PaymentModal({ sitter, onClose, onSaved }: {
     <Modal open title={`Pay ${sitter.name}`} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Hours">{(id) => <Input id={id} name="hours" type="number" min="0" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="3" />}</Field>
-          <Field label="Tip ($)">{(id) => <Input id={id} name="tip" type="number" min="0" step="0.5" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="5" />}</Field>
+          <Field label={tr('babysitters.hours')}>{(id) => <Input id={id} name="hours" type="number" min="0" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="3" />}</Field>
+          <Field label={tr('babysitters.tip')}>{(id) => <Input id={id} name="tip" type="number" min="0" step="0.5" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="5" />}</Field>
         </div>
         {rate > 0 && (
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-4 py-2.5 text-sm">
-            <span className="text-muted">Computed ({formatCents(rate)}/hr)</span>
+            <span className="text-muted">{tr('babysitters.computed')}{formatCents(rate)}/hr)</span>
             <span className="font-bold">{formatCents(computed)}</span>
           </div>
         )}
-        <Field label="Or enter exact amount ($)">{(id) => <Input id={id} name="amount" type="number" min="0" step="0.5" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
+        <Field label={tr('babysitters.orEnterExactAmount')}>{(id) => <Input id={id} name="amount" type="number" min="0" step="0.5" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('babysitters.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Recording…' : 'Record Payment'}</Button>
         </div>
       </form>

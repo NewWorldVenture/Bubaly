@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { Brain } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -45,14 +46,13 @@ export default async function GraphPage() {
   );
 }
 
-function GraphContextError() {
+async function GraphContextError() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto mb-4 max-w-5xl px-4">
       <div role="alert" className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm">
-        <p className="text-danger">Could not load the graph summary from Supabase.</p>
-        <a href="/dashboard/graph" className="mt-2 inline-block font-medium text-danger underline">
-          Retry graph summary
-        </a>
+        <p className="text-danger">{t('graph.couldNotLoadTheGraph')}</p>
+        <a href="/dashboard/graph" className="mt-2 inline-block font-medium text-danger underline">{t('graph.retryGraphSummary')}</a>
       </div>
     </div>
   );

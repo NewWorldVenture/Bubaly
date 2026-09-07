@@ -9,11 +9,13 @@ import {
   APP_CATEGORIES, categoryLabel, filterApps, rankApps, recommendedApps, type CatalogApp,
 } from '@/lib/appstore/catalog';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'App Store · Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function AppStorePage({ searchParams }: { searchParams: Promise<{ cat?: string; q?: string }> }) {
+  const t = await getTranslations();
   const { cat = 'all', q = '' } = await searchParams;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -42,14 +44,14 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
-      <PageHeader title="Family App Store" description="One-tap AI extensions that plug into your family workflows. Install what helps; remove anytime." />
+      <PageHeader title={t('dashboardAppStore.familyAppStore')} description="One-tap AI extensions that plug into your family workflows. Install what helps; remove anytime." />
 
       {/* Search */}
       <form action="/dashboard/app-store" className="mb-4 flex items-center gap-2">
         {cat !== 'all' && <input type="hidden" name="cat" value={cat} />}
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input name="q" defaultValue={q} placeholder="Search apps, capabilities…" inputMode="search"
+          <input name="q" defaultValue={q} placeholder={t('dashboardAppStore.searchAppsCapabilities')} inputMode="search"
             className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand" />
         </div>
       </form>
@@ -64,7 +66,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
       {cat === 'all' && !q && recommended.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-            <Sparkles className="h-4 w-4 text-brand-text" /> Recommended for your family
+            <Sparkles className="h-4 w-4 text-brand-text" /> {t('dashboardAppStore.recommendedForYourFamily')}
           </h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {recommended.map((a) => (
@@ -79,7 +81,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
       {/* Installed */}
       {installedApps.length > 0 && cat === 'all' && !q && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold text-fg">Installed ({installedApps.length})</h2>
+          <h2 className="mb-3 text-sm font-semibold text-fg">{t('dashboardAppStore.installed')}{installedApps.length})</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {rankApps(installedApps).map((a) => <AppCard key={a.id} app={a} installed />)}
           </div>
@@ -92,7 +94,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
           {cat === 'all' ? 'Browse all apps' : categoryLabel(cat)}{q ? ` · “${q}”` : ''} <span className="text-muted">({visible.length})</span>
         </h2>
         {visible.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">No apps match.</div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">{t('dashboardAppStore.noAppsMatch')}</div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((a) => <AppCard key={a.id} app={a} installed={installedIds.has(a.id)} />)}
@@ -103,7 +105,8 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
   );
 }
 
-function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
+async function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
+  const t = await getTranslations();
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 p-4">
       <div className="flex items-start gap-3">
@@ -111,7 +114,7 @@ function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-bold text-fg">
             <span className="truncate">{app.name}</span>
-            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label="Official" />}
+            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label={t('appStore.official')} />}
           </p>
           <p className="truncate text-[11px] text-muted">{app.publisher} · {categoryLabel(app.category)}</p>
         </div>

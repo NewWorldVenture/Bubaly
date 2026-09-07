@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -21,13 +24,14 @@ const AI_AUDIT_ACTION = 'relationship_ai_digest';
 // dates + partner preferences + wishlist + recorded gift outcomes, then asks the AI for
 // warm, specific nudges and tailored gift ideas. Returns structured JSON.
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many relationship-helper requests. Please try again shortly.' },
+      { error: t('relationship.tooManyRelationshipHelperRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -54,7 +58,7 @@ export async function POST() {
     ]);
 
     if (datesErr && isMissingRelationError(datesErr)) {
-      return NextResponse.json({ error: 'The Relationship Helper isn’t set up on this database yet.' }, { status: 503 });
+      return NextResponse.json({ error: t('relationship.theRelationshipHelperIsnT') }, { status: 503 });
     }
 
     const dates: RelDate[] = (dateRows ?? []).map((d) => ({
@@ -104,11 +108,25 @@ export async function POST() {
       giftHistory,
     });
 
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 700 });
-    const digest = parseRelationshipDigest(completion.text || '', giftHistory);
-    if (!digest.headline && digest.prompts.length === 0 && digest.giftIdeas.length === 0) {
-      return NextResponse.json({ error: 'Could not generate suggestions right now. Please try again.' }, { status: 502 });
+    // No partner name on the row: who someone is buying a gift for is not
+    // something the request ledger needs to carry.
+    const digest = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'relationship.digest', text: 'Relationship suggestions' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 700 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseRelationshipDigest(completion.text || '', giftHistory);
+        if (!parsed.headline && parsed.prompts.length === 0 && parsed.giftIdeas.length === 0) {
+          obs.failed(new Error('The model returned no headline, prompts or gift ideas.'));
+          return null;
+        }
+        return parsed;
+      },
+    );
+    if (!digest) {
+      return NextResponse.json({ error: t('relationship.couldNotGenerateSuggestionsRight') }, { status: 502 });
     }
     // Best-effort metering record (never blocks the response).
     await logAudit(supabase, { familyId, actorId: ctx.user.id, action: AI_AUDIT_ACTION, resource: 'relationship' });
@@ -119,6 +137,6 @@ export async function POST() {
     return NextResponse.json({ digest, context });
   } catch (err) {
     console.error('Relationship AI error:', err);
-    return NextResponse.json({ error: 'Something went wrong generating suggestions.' }, { status: 500 });
+    return NextResponse.json({ error: t('relationship.somethingWentWrongGeneratingSuggestions') }, { status: 500 });
   }
 }

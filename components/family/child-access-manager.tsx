@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { normalizePin, isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, suggestUsername } from '@/lib/onboarding/child-login';
 import { createChildLoginAction, resetChildPinAction } from '@/app/(app)/family/child-login-actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type AccessMember = {
   id: string; display_name: string; role: string; color: string | null;
@@ -17,6 +18,7 @@ export type AccessMember = {
 };
 
 function CreateRow({ member }: { member: AccessMember }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -40,7 +42,7 @@ function CreateRow({ member }: { member: AccessMember }) {
     return (
       <button onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-brand-text transition hover:bg-brand/10">
-        <KeyRound className="h-3.5 w-3.5" /> Create login
+        <KeyRound className="h-3.5 w-3.5" /> {t('childAccessManager.createLogin')}
       </button>
     );
   }
@@ -59,6 +61,7 @@ function CreateRow({ member }: { member: AccessMember }) {
 }
 
 function ResetRow({ member }: { member: AccessMember }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
@@ -70,7 +73,7 @@ function ResetRow({ member }: { member: AccessMember }) {
     const res = await resetChildPinAction({ memberId: member.id, pin });
     setBusy(false);
     if (!res.ok) { toastError(res.error); return; }
-    success('PIN reset'); setPin(''); setOpen(false);
+    success(t('childAccessManager.pinReset')); setPin(''); setOpen(false);
   }
 
   return (
@@ -78,7 +81,7 @@ function ResetRow({ member }: { member: AccessMember }) {
       <span className="rounded-lg bg-elevated px-2.5 py-1 text-xs font-semibold">@{member.username}</span>
       {open ? (
         <>
-          <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric" placeholder="new PIN"
+          <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric" placeholder={t('childAccessManager.newPin')}
             className="h-9 w-24 rounded-lg border border-border bg-bg px-2.5 text-center text-sm tracking-[0.3em] focus-ring" />
           <Button onClick={reset} disabled={!isValidPin(pin) || busy} className="h-9 px-3 text-xs">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
@@ -87,7 +90,7 @@ function ResetRow({ member }: { member: AccessMember }) {
       ) : (
         <button onClick={() => setOpen(true)}
           className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-brand-text">
-          <RefreshCw className="h-3.5 w-3.5" /> Reset PIN
+          <RefreshCw className="h-3.5 w-3.5" /> {t('childAccessManager.resetPin')}
         </button>
       )}
     </div>
@@ -95,16 +98,17 @@ function ResetRow({ member }: { member: AccessMember }) {
 }
 
 export function ChildAccessManager({ members, configured }: { members: AccessMember[]; configured: boolean }) {
+  const t = useTranslations();
   if (members.length === 0) {
     return <p className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-      No family members to give a login to yet. Add a child from your family settings first.
+      {t('childAccessManager.noFamilyMembersToGiveA')}
     </p>;
   }
   return (
     <div className="space-y-3">
       {!configured && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
-          Kid logins need the <code>CHILD_LOGIN_SECRET</code> server env set before they can be created or used.
+          {t('childAccessManager.kidLoginsNeedThe')} <code>CHILD_LOGIN_SECRET</code> {t('childAccessManager.serverEnvSetBeforeTheyCan')}
         </p>
       )}
       {members.map((m) => (

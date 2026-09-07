@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatCents, type Split } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { saveWalletRuleAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type ChildRuleRow = {
   childWalletId: string; name: string; color: string | null;
@@ -29,14 +30,15 @@ const BUCKETS: { key: keyof Split; label: string; color: string }[] = [
 ];
 
 export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; canManage: boolean }) {
+  const t = useTranslations();
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Set how each child's money is split and when you're asked to approve." />
+      <PageHeader title={t('walletSettings.familyWallet')} description={t('walletSettingsView.setHowEachChildS')} />
       <WalletSubnav />
 
       {rows.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">
-          No child wallets yet. Activate the Family Wallet and add children first.
+          {t('walletSettings.noChildWalletsYetActivateThe')}
         </p>
       ) : (
         <div className="space-y-3">
@@ -48,6 +50,7 @@ export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; 
 }
 
 function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boolean }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [split, setSplit] = useState<Split>(row.split);
@@ -70,7 +73,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
     if (saving) return;
     if (sum !== 100) return toastError(`Split must total 100% (currently ${sum}%).`);
     const requireApprovalOverCents = Math.round(parseFloat(threshold || '0') * 100);
-    if (!Number.isFinite(requireApprovalOverCents) || requireApprovalOverCents < 0) return toastError('Enter a valid approval threshold.');
+    if (!Number.isFinite(requireApprovalOverCents) || requireApprovalOverCents < 0) return toastError(t('walletSettingsView.enterAValidApprovalThreshold'));
     setSaving(true);
     const res = await saveWalletRuleAction({
       childWalletId: row.childWalletId, split, autoAcceptGifts: autoAccept, requireApprovalOverCents,
@@ -87,14 +90,14 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
         <Avatar name={row.name} color={row.color ?? undefined} size={36} />
         <div className="flex-1">
           <div className="text-sm font-semibold">{row.name}</div>
-          <div className="text-[11px] text-muted">Allocation & approval rules</div>
+          <div className="text-[11px] text-muted">{t('walletSettings.allocationApprovalRules')}</div>
         </div>
       </div>
 
       {/* Split bar */}
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs font-semibold"><SlidersHorizontal className="h-3.5 w-3.5" /> Bucket split</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold"><SlidersHorizontal className="h-3.5 w-3.5" /> {t('walletSettings.bucketSplit')}</span>
           <span className={cn('text-xs font-bold', sum === 100 ? 'text-green-400' : 'text-amber-400')}>{sum}%</span>
         </div>
         <div className="flex h-2.5 overflow-hidden rounded-full bg-elevated">
@@ -126,8 +129,8 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
           className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left transition hover:bg-elevated disabled:opacity-60">
           <Gift className="h-4 w-4 flex-shrink-0 text-pink-400" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Auto-accept gifts</div>
-            <div className="text-[11px] text-muted">Gifts apply instantly without parent approval</div>
+            <div className="text-sm font-medium">{t('walletSettings.autoAcceptGifts')}</div>
+            <div className="text-[11px] text-muted">{t('walletSettings.giftsApplyInstantlyWithoutParentApproval')}</div>
           </div>
           <div className={cn('relative h-6 w-11 flex-shrink-0 rounded-full transition', autoAccept ? 'bg-brand' : 'bg-elevated')}>
             <div className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', autoAccept ? 'left-[22px]' : 'left-0.5')} />
@@ -137,8 +140,8 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
         <div className="flex items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5">
           <ShieldCheck className="h-4 w-4 flex-shrink-0 text-amber-400" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Approval threshold</div>
-            <div className="text-[11px] text-muted">Spends above this need a parent&apos;s OK</div>
+            <div className="text-sm font-medium">{t('walletSettings.approvalThreshold')}</div>
+            <div className="text-[11px] text-muted">{t('walletSettings.spendsAboveThisNeedAParent')}</div>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted">$</span>
@@ -151,7 +154,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
 
       {canManage && (
         <div className="mt-4 flex items-center justify-end gap-2">
-          {sum !== 100 && <span className="text-[11px] text-amber-400">Split must total 100%</span>}
+          {sum !== 100 && <span className="text-[11px] text-amber-400">{t('walletSettings.splitMustTotal100')}</span>}
           <Button onClick={save} loading={saving} disabled={!dirty || sum !== 100}>
             <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save'}
           </Button>

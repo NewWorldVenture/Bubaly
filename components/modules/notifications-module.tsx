@@ -17,10 +17,12 @@ import { fmtRelative } from '@/lib/utils/format';
 import { notificationsLine } from '@/lib/tone/partner-phrasing';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Notification = Tables<'notifications'>;
 
 export function NotificationsModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [markingAll, setMarkingAll] = useState(false);
@@ -37,7 +39,7 @@ export function NotificationsModule() {
         : "You're all caught up — nothing new.");
       void refresh();
     } catch {
-      toastError('Network error. Please try again.');
+      toastError(t('notificationsModule.networkErrorPleaseTryAgain'));
     } finally {
       setScanning(false);
     }
@@ -88,17 +90,17 @@ export function NotificationsModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Notifications"
+        title={t('notifications.notifications')}
         description={notificationsLine(unread.length)}
         action={(
           <div className="flex items-center gap-2">
             <AiInsight kind="notifications" />
             <Button variant="ghost" loading={scanning} onClick={scan}>
-              <Radar className="h-4 w-4" /> Scan for updates
+              <Radar className="h-4 w-4" /> {t('notifications.scanForUpdates')}
             </Button>
             {unread.length > 0 && (
               <Button variant="ghost" loading={markingAll} onClick={markAllRead}>
-                <CheckCheck className="h-4 w-4" /> Mark all read
+                <CheckCheck className="h-4 w-4" /> {t('notifications.markAllRead')}
               </Button>
             )}
           </div>
@@ -106,7 +108,7 @@ export function NotificationsModule() {
       />
 
       {data.length === 0 ? (
-        <EmptyState icon={Bell} title="All caught up" description="No notifications at the moment. We'll let you know when something comes up." />
+        <EmptyState icon={Bell} title={t('notifications.allCaughtUp')} description="No notifications at the moment. We'll let you know when something comes up." />
       ) : (
         <Card className="p-3">
           <ul className="divide-y divide-border">
@@ -129,7 +131,7 @@ export function NotificationsModule() {
                 </div>
                 <div className="flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
                   {!n.is_read && <div className="h-2 w-2 rounded-full bg-brand" />}
-                  <button onClick={() => remove(n.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Delete">
+                  <button onClick={() => remove(n.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label={t('notifications.delete')}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

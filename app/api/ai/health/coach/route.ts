@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -16,24 +19,25 @@ export const dynamic = 'force-dynamic';
  * services. Nothing is invented beyond the provided context.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('coach.unauthorized') }, { status: 401 }); }
 
   if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.' }, { status: 503 });
+    return NextResponse.json({ error: t('coach.theAiEngineIsnT') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('coach.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const question = String(body.question ?? '').slice(0, 2000).trim();
   const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
-  if (!question) return NextResponse.json({ error: 'Ask a question first.' }, { status: 400 });
+  if (!question) return NextResponse.json({ error: t('coach.askAQuestionFirst') }, { status: 400 });
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-health-coach:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many health-coach requests. Please try again shortly.' },
+    { error: t('coach.tooManyHealthCoachRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const familyId = ctx.active.familyId;
@@ -80,9 +84,16 @@ export async function POST(req: Request) {
   const userMsg = `Household health context:\n${context}\n\nQuestion: ${question}`;
 
   try {
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 1024 });
-    const text = completion.text.trim() || 'I couldn’t generate guidance just now. Please try again.';
+    const text = (await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'health.coach', text: 'Health coaching' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 1024 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        return completion.text;
+      },
+    )).trim() || 'I couldn’t generate guidance just now. Please try again.';
     return NextResponse.json({ text });
   } catch (err) {
     console.error('AI health coach error:', err);

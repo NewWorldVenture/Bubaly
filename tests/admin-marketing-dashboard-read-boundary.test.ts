@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const customers = readFileSync('lib/marketing/customers.ts', 'utf8');
@@ -16,12 +17,12 @@ describe('admin marketing dashboard read boundaries', () => {
   it('does not turn dashboard metrics into zero-valued data after a read failure', () => {
     expect(dashboard).toContain('customersError');
     expect(dashboard).toContain('activeSegmentsResult.error');
-    expect(dashboard).toContain('Could not load marketing dashboard data from Supabase. Refresh and try again.');
+    expectSays(dashboard, 'marketing.couldNotLoadMarketingDashboard', 'Could not load marketing dashboard data from Supabase. Refresh and try again.');
   });
 
   it('does not turn analytics metrics into empty charts after a read failure', () => {
     expect(analytics).toContain('customersResult.error');
     expect(analytics).toContain('campaignsResult.error');
-    expect(analytics).toContain('Could not load marketing analytics from Supabase. Refresh and try again.');
+    expectSays(analytics, 'analytics.couldNotLoadMarketingAnalytics', 'Could not load marketing analytics from Supabase. Refresh and try again.');
   });
 });

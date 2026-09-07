@@ -8,11 +8,13 @@ import { getPosts } from '@/lib/social/queries';
 import { AI_KIND_LABELS, type AiGenerationKind } from '@/lib/social/ai-kinds';
 import { PostsList } from '@/components/social/posts-list';
 import { Card } from '@/components/ui/card';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Content Studio · Social' };
 export const dynamic = 'force-dynamic';
 
 export default async function ContentStudioPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -27,27 +29,27 @@ export default async function ContentStudioPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Content Studio</h2>
-          <p className="text-xs text-muted">Draft once, generate with AI, tailor per platform, and publish everywhere.</p>
+          <h2 className="text-sm font-semibold">{tr('dashboardSocialContentStudio.contentStudio')}</h2>
+          <p className="text-xs text-muted">{tr('dashboardSocialContentStudio.draftOnceGenerateWithAiTailor')}</p>
         </div>
         <Link href="/dashboard/social/content-studio/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-          <PenSquare className="h-4 w-4" /> New post
+          <PenSquare className="h-4 w-4" /> {tr('dashboardSocialContentStudio.newPost')}
         </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Your drafts</h3>
-            <PostsList posts={drafts} emptyLabel="No drafts yet" />
+            <h3 className="mb-2 text-sm font-semibold">{tr('dashboardSocialContentStudio.yourDrafts')}</h3>
+            <PostsList posts={drafts} emptyLabel={tr('contentStudio.noDraftsYet')} />
           </div>
         </div>
 
         <div className="space-y-4">
           <Card>
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> Recent AI generations</h3>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('dashboardSocialContentStudio.recentAiGenerations')}</h3>
             {(generations ?? []).length === 0 ? (
-              <p className="text-xs text-muted">AI generation history will appear here. Open a new post to generate captions, hashtags, scripts, and more.</p>
+              <p className="text-xs text-muted">{tr('dashboardSocialContentStudio.aiGenerationHistoryWillAppearHere')}</p>
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {(generations ?? []).map((g) => (
@@ -61,9 +63,9 @@ export default async function ContentStudioPage() {
           </Card>
 
           <Card>
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-accent" /> Templates</h3>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-accent" /> {tr('dashboardSocialContentStudio.templates')}</h3>
             {(templates ?? []).length === 0 ? (
-              <p className="text-xs text-muted">No saved templates yet.</p>
+              <p className="text-xs text-muted">{tr('dashboardSocialContentStudio.noSavedTemplatesYet')}</p>
             ) : (
               <ul className="space-y-1 text-sm">
                 {(templates ?? []).map((t) => (

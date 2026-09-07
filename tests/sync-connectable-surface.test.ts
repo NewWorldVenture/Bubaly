@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
-const syncHub = readFileSync('app/(app)/dashboard/sync/page.tsx', 'utf8');
-const accounts = readFileSync('app/(app)/dashboard/sync/accounts/page.tsx', 'utf8');
-const provider = readFileSync('app/(app)/dashboard/sync/accounts/[provider]/page.tsx', 'utf8');
+const syncHub = readUiSource('app/(app)/dashboard/sync/page.tsx');
+const accounts = readUiSource('app/(app)/dashboard/sync/accounts/page.tsx');
+const provider = readUiSource('app/(app)/dashboard/sync/accounts/[provider]/page.tsx');
 
 describe('sync connectable surface', () => {
   it('only exposes providers registered with real account adapters', () => {

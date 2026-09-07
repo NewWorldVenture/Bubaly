@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
@@ -13,6 +14,7 @@ const MAX_SYNC_REQUEST_BYTES = 4_096;
 // account of ANY registered provider by resolving the adapter from the registry and
 // driving the generic engine. New providers plug in with no route changes.
 export async function POST(req: Request) {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const admin = createServiceClient();
 
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
   try {
     body = JSON.parse(rawBody.text);
   } catch {
-    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+    return NextResponse.json({ error: t('run.invalidRequestBody') }, { status: 400 });
   }
   const providerValue = body && typeof body === 'object' && !Array.isArray(body)
     ? (body as { provider?: unknown }).provider
@@ -36,10 +38,10 @@ export async function POST(req: Request) {
   const provider = typeof providerValue === 'string' && providerValue.length <= 32
     ? providerValue as SyncProviderEnum
     : undefined;
-  if (!provider) return NextResponse.json({ error: 'Missing or invalid provider.' }, { status: 400 });
+  if (!provider) return NextResponse.json({ error: t('run.missingOrInvalidProvider') }, { status: 400 });
 
   const adapter = getAdapter(provider);
-  if (!adapter) return NextResponse.json({ error: 'Unsupported sync provider.' }, { status: 400 });
+  if (!adapter) return NextResponse.json({ error: t('run.unsupportedSyncProvider') }, { status: 400 });
   if (!adapter.isConfigured()) {
     return NextResponse.json({ error: `${adapter.label} sync isn’t configured yet.` }, { status: 503 });
   }
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
 
   const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:${provider}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many sync requests. Please try again shortly.' },
+    { error: t('run.tooManySyncRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 

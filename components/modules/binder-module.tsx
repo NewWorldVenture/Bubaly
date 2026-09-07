@@ -14,11 +14,13 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { BINDER_CATEGORIES, binderCategoryLabel, maskValue, groupByCategory, type InfoLike } from '@/lib/home/binder';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Info = Tables<'household_info'>;
 const blank = () => ({ id: '', category: 'wifi', label: '', value: '', note: '', is_sensitive: false });
 
 export function BinderModule() {
+  const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -47,32 +49,32 @@ export function BinderModule() {
     success(form.id ? 'Updated' : 'Saved'); setForm(null);
   }
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('binderModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('household_info').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('binderModule.deleted'));
   }
   function edit(i: Info) {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load household binder data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('binderModule.couldNotLoadHouseholdBinder')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> Household Binder</h3>
-          <p className="text-xs text-muted">Your digital command center — Wi-Fi, codes, shutoffs, policies and key info in one place.</p>
+          <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('binder.householdBinder')}</h3>
+          <p className="text-xs text-muted">{t('binder.yourDigitalCommandCenterWiFi')}</p>
         </div>
         <div className="flex items-center gap-2">
           <AiInsight kind="binder" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add entry</Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('binder.addEntry')}</Button>
         </div>
       </div>
 
       {groups.length === 0 ? (
-        <EmptyState icon={FolderLock} title="Your binder is empty" description="Add the things everyone forgets: Wi-Fi password, alarm code, water shutoff, insurance policy numbers." />
+        <EmptyState icon={FolderLock} title={t('binder.yourBinderIsEmpty')} description={t('binderModule.addTheThingsEveryoneForgets')} />
       ) : groups.map((g) => (
         <div key={g.category}>
           <h4 className="mb-2 text-sm font-semibold">{binderCategoryLabel(g.category)}</h4>
@@ -87,9 +89,9 @@ export function BinderModule() {
                     {i.note && <p className="mt-0.5 text-xs text-muted">{i.note}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {i.is_sensitive && i.value && <button onClick={() => toggleReveal(i.id)} className="text-muted hover:text-fg" aria-label="Reveal">{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>}
-                    <button onClick={() => edit(i)} className="text-muted hover:text-fg" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(i.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                    {i.is_sensitive && i.value && <button onClick={() => toggleReveal(i.id)} className="text-muted hover:text-fg" aria-label={t('binder.reveal')}>{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>}
+                    <button onClick={() => edit(i)} className="text-muted hover:text-fg" aria-label={t('binder.edit')}><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => remove(i.id)} className="text-muted hover:text-danger" aria-label={t('binder.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
               );
@@ -101,13 +103,13 @@ export function BinderModule() {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit entry' : 'Add entry'}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{BINDER_CATEGORIES.map((c) => <option key={c} value={c}>{binderCategoryLabel(c)}</option>)}</Select>}</Field>
-            <Field label="Label">{(id) => <Input id={id} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Wi-Fi password, Alarm code…" />}</Field>
-            <Field label="Value">{(id) => <Input id={id} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />}</Field>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Where, who, how…" />}</Field>
-            <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })} className="h-4 w-4 accent-[var(--brand)]" /> Sensitive — mask by default</label>
+            <Field label={t('binder.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{BINDER_CATEGORIES.map((c) => <option key={c} value={c}>{binderCategoryLabel(c)}</option>)}</Select>}</Field>
+            <Field label={t('binder.label')}>{(id) => <Input id={id} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder={t('binder.wiFiPasswordAlarmCode')} />}</Field>
+            <Field label={t('binder.value')}>{(id) => <Input id={id} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />}</Field>
+            <Field label={t('binder.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={t('binder.whereWhoHow')} />}</Field>
+            <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })} className="h-4 w-4 accent-[var(--brand)]" /> {t('binder.sensitiveMaskByDefault')}</label>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('binder.cancel')}</Button>
               <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>

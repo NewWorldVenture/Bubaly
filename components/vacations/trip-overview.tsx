@@ -17,6 +17,7 @@ import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather'
 import { dateRange, countdownLabel } from '@/lib/vacations/dates';
 import { dollars, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const q = <T,>(table: string, familyId: string, vacationId: string) => ({
   table, familyId, deps: [familyId, vacationId],
@@ -24,6 +25,7 @@ const q = <T,>(table: string, familyId: string, vacationId: string) => ({
 });
 
 export function TripOverview({ vacationId }: { vacationId: string }) {
+  const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -119,7 +121,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'recommendations', vacationId }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed'); else success(`${data.count} recommendations`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(tr('tripOverview.networkError')); }
     setRefreshing(false);
   }
 
@@ -129,7 +131,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load this trip overview. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={tr('tripOverview.couldNotLoadThisTrip')} onRetry={refreshAll} />;
 
   const lvlLabel = { not_started: 'Not started', getting_there: 'Getting there', almost_ready: 'Almost ready', ready: 'Ready to go!' }[readiness.level];
 
@@ -140,7 +142,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
         <div className="flex flex-wrap items-center gap-4">
           <ReadinessRing score={readiness.score} />
           <div className="flex-1">
-            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> Vacation Readiness · {lvlLabel}</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> {tr('tripOverview.vacationReadiness')} {lvlLabel}</h2>
             <p className="text-sm text-muted">{countdownLabel(trip?.start_date)} · {members.length} traveler{members.length === 1 ? '' : 's'}</p>
           </div>
         </div>
@@ -161,20 +163,20 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
 
       {/* quick stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Link href={`/dashboard/vacations/${vacationId}/lodging`}><StatPill label="Lodging" value={<span className="flex items-center gap-1"><BedDouble className="h-4 w-4 text-muted" /> {lodging.length}</span>} /></Link>
-        <Link href={`/dashboard/vacations/${vacationId}/travel`}><StatPill label="Travel" value={<span className="flex items-center gap-1"><Plane className="h-4 w-4 text-muted" /> {transportTotal}</span>} /></Link>
-        <Link href={`/dashboard/vacations/${vacationId}/activities`}><StatPill label="Activities" value={<span className="flex items-center gap-1"><Ticket className="h-4 w-4 text-muted" /> {activities.length}</span>} /></Link>
-        <Link href={`/dashboard/vacations/${vacationId}/documents`}><StatPill label="Documents" value={<span className="flex items-center gap-1"><FolderLock className="h-4 w-4 text-muted" /> {docs.length}</span>} /></Link>
+        <Link href={`/dashboard/vacations/${vacationId}/lodging`}><StatPill label={tr('tripOverview.lodging')} value={<span className="flex items-center gap-1"><BedDouble className="h-4 w-4 text-muted" /> {lodging.length}</span>} /></Link>
+        <Link href={`/dashboard/vacations/${vacationId}/travel`}><StatPill label={tr('tripOverview.travel')} value={<span className="flex items-center gap-1"><Plane className="h-4 w-4 text-muted" /> {transportTotal}</span>} /></Link>
+        <Link href={`/dashboard/vacations/${vacationId}/activities`}><StatPill label={tr('tripOverview.activities')} value={<span className="flex items-center gap-1"><Ticket className="h-4 w-4 text-muted" /> {activities.length}</span>} /></Link>
+        <Link href={`/dashboard/vacations/${vacationId}/documents`}><StatPill label={tr('tripOverview.documents')} value={<span className="flex items-center gap-1"><FolderLock className="h-4 w-4 text-muted" /> {docs.length}</span>} /></Link>
       </div>
 
       {/* recommendations */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> AI recommendations</h2>
-          <Button size="sm" variant="secondary" onClick={refreshRecos} loading={refreshing}><RefreshCw className="h-4 w-4" /> Refresh</Button>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> {tr('tripOverview.aiRecommendations')}</h2>
+          <Button size="sm" variant="secondary" onClick={refreshRecos} loading={refreshing}><RefreshCw className="h-4 w-4" /> {tr('tripOverview.refresh')}</Button>
         </div>
         {openRecos.length === 0 ? (
-          <p className="mt-3 flex items-center gap-2 text-sm text-muted"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> No open recommendations — tap Refresh to scan this trip.</p>
+          <p className="mt-3 flex items-center gap-2 text-sm text-muted"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> {tr('tripOverview.noOpenRecommendationsTapRefreshTo')}</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {openRecos.slice(0, 8).map((r) => {
@@ -183,7 +185,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
               return (
                 <li key={r.id} className={`flex items-start justify-between gap-3 rounded-xl border ${tone} bg-elevated/30 p-3`}>
                   <div><p className="text-sm font-medium">{meta.emoji} {r.title}</p>{r.detail && <p className="mt-0.5 text-xs text-muted">{r.detail}</p>}</div>
-                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">Dismiss</button>
+                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">{tr('tripOverview.dismiss')}</button>
                 </li>
               );
             })}
@@ -194,17 +196,17 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       {/* budget + weather summary */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Link href={`/dashboard/vacations/${vacationId}/budget`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
-          <h3 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> Budget</h3>
+          <h3 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> {tr('tripOverview.budget')}</h3>
           <p className="mt-2 text-2xl font-bold">{dollars(budget.spent_cents)} <span className="text-sm font-normal text-muted">/ {dollars(budget.planned_cents)}</span></p>
           <div className="mt-2"><Progress pct={budget.pct === 999 ? 100 : budget.pct} tone={budget.over ? 'bg-rose-500' : 'bg-brand'} /></div>
-          {budget.over && <p className="mt-1 text-xs text-rose-300">Over budget in {budget.categories.filter((c) => c.over).length} categor{budget.categories.filter((c) => c.over).length === 1 ? 'y' : 'ies'}</p>}
+          {budget.over && <p className="mt-1 text-xs text-rose-300">{tr('tripOverview.overBudgetIn')} {budget.categories.filter((c) => c.over).length} categor{budget.categories.filter((c) => c.over).length === 1 ? 'y' : 'ies'}</p>}
         </Link>
         <Link href={`/dashboard/vacations/${vacationId}/weather`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
-          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> Weather</h3>
-          {weather.length === 0 ? <p className="mt-2 text-sm text-muted">No forecast yet — fetch one on the Weather tab.</p> : (
+          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> {tr('tripOverview.weather')}</h3>
+          {weather.length === 0 ? <p className="mt-2 text-sm text-muted">{tr('tripOverview.noForecastYetFetchOneOn')}</p> : (
             <ul className="mt-2 space-y-1 text-sm">
               {weatherAdvice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}
-              {weatherAdvice.length === 0 && <li className="text-muted">Looks pleasant — no alerts.</li>}
+              {weatherAdvice.length === 0 && <li className="text-muted">{tr('tripOverview.looksPleasantNoAlerts')}</li>}
             </ul>
           )}
         </Link>

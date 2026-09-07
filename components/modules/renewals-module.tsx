@@ -25,6 +25,7 @@ import {
   type RenewalLike, type ExpiryBucket,
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Renewal = Tables<'renewals'>;
 
@@ -49,6 +50,7 @@ const blank = {
 };
 
 export function RenewalsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -82,8 +84,8 @@ export function RenewalsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
-    if (!form.expires_at) { toastError('Expiry date is required'); return; }
+    if (!form.title.trim()) { toastError(t('renewalsModule.titleIsRequired')); return; }
+    if (!form.expires_at) { toastError(t('renewalsModule.expiryDateIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -113,7 +115,7 @@ export function RenewalsModule() {
       expires_at: rollForward(r.expires_at, 12), status: 'active',
     }).eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Renewed for another year');
+    success(t('renewalsModule.renewedForAnotherYear'));
   }
 
   async function remove(r: Renewal) {
@@ -121,7 +123,7 @@ export function RenewalsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('renewals').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Renewal deleted');
+    success(t('renewalsModule.renewalDeleted'));
   }
 
   const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -140,38 +142,38 @@ export function RenewalsModule() {
   return (
     <div>
       <PageHeader
-        title="Renewals & Expirations"
-        description="Track IDs, licenses, registrations, warranties, and subscriptions before they lapse."
-        action={<div className="flex items-center gap-2"><AiInsight kind="renewals" iconOnly />{canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}</div>}
+        title={t('renewals.renewalsExpirations')}
+        description={t('renewalsModule.trackIdsLicensesRegistrationsWarranties')}
+        action={<div className="flex items-center gap-2"><AiInsight kind="renewals" iconOnly />{canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('renewals.addRenewal')}</Button>}</div>}
       />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="rounded-2xl bg-surface/50 border border-border p-4 text-center">
           <div className="text-2xl font-bold text-fg">{stats.active}</div>
-          <div className="text-xs text-muted mt-0.5">Tracked</div>
+          <div className="text-xs text-muted mt-0.5">{t('renewals.tracked')}</div>
         </div>
         <div className={cn('rounded-2xl border p-4 text-center', stats.expiringSoon > 0 ? 'bg-amber-500/5 border-amber-500/30' : 'bg-surface/50 border-border')}>
           <div className={cn('text-2xl font-bold', stats.expiringSoon > 0 ? 'text-amber-400' : 'text-fg')}>{stats.expiringSoon}</div>
-          <div className="text-xs text-muted mt-0.5">Expiring soon</div>
+          <div className="text-xs text-muted mt-0.5">{t('renewals.expiringSoon')}</div>
         </div>
         <div className={cn('rounded-2xl border p-4 text-center', stats.expired > 0 ? 'bg-rose-500/5 border-rose-500/30' : 'bg-surface/50 border-border')}>
           <div className={cn('text-2xl font-bold', stats.expired > 0 ? 'text-rose-400' : 'text-fg')}>{stats.expired}</div>
-          <div className="text-xs text-muted mt-0.5">Expired</div>
+          <div className="text-xs text-muted mt-0.5">{t('renewals.expired')}</div>
         </div>
       </div>
 
       <div className="flex items-center justify-end mb-4">
         <label className="flex items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Show renewed / closed
+          {t('renewals.showRenewedClosed')}
         </label>
       </div>
 
       {(renewals ?? []).length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="Nothing tracked yet"
+        <EmptyState icon={ShieldCheck} title={t('renewals.nothingTrackedYet')}
           description={canEdit ? 'Add the documents, licenses, and warranties you want to be reminded about before they expire.' : 'No renewals have been added yet.'}
-          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>} />
+          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('renewals.addRenewal')}</Button>} />
       ) : (
         <div className="space-y-6">
           {buckets.map((bucket) => {
@@ -198,20 +200,20 @@ export function RenewalsModule() {
                               {r.status !== 'active' && <span className="text-[10px] uppercase tracking-wide rounded border border-border text-muted px-1.5 py-0.5">{RENEWAL_STATUS_LABELS[r.status]}</span>}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-                              <span className={cn('inline-flex items-center gap-1', expired && 'text-rose-400')}><Clock className="h-3.5 w-3.5" />Expires {fmtDate(r.expires_at)} · {countdown(r)}</span>
+                              <span className={cn('inline-flex items-center gap-1', expired && 'text-rose-400')}><Clock className="h-3.5 w-3.5" />{t('renewals.expires')} {fmtDate(r.expires_at)} · {countdown(r)}</span>
                               {r.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(r.member_id) ?? '?'} size={14} />{memberName(r.member_id)}</span>}
                               {r.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{r.cost}</span>}
-                              {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />Renew</a>}
+                              {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('renewals.renew')}</a>}
                             </div>
                             {r.notes && <p className="mt-1.5 text-sm text-fg/80">{r.notes}</p>}
                           </div>
                           {canEdit && (
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {r.status === 'active' && (
-                                <button onClick={() => markRenewed(r)} aria-label="Mark renewed" title="Renew for another year" className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><RotateCw className="h-4 w-4" /></button>
+                                <button onClick={() => markRenewed(r)} aria-label={t('renewals.markRenewed')} title={t('renewals.renewForAnotherYear')} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><RotateCw className="h-4 w-4" /></button>
                               )}
-                              <button onClick={() => openEdit(r)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                              <button onClick={() => remove(r)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                              <button onClick={() => openEdit(r)} aria-label={t('renewals.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                              <button onClick={() => remove(r)} aria-label={t('renewals.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                             </div>
                           )}
                         </div>
@@ -228,11 +230,11 @@ export function RenewalsModule() {
       {/* Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit renewal' : 'Add renewal'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What expires?" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport — Mom" autoFocus />}
+          <Field label={t('renewals.whatExpires')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('renewals.eGPassportMom')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category">
+            <Field label={t('renewals.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
                   {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
@@ -242,25 +244,25 @@ export function RenewalsModule() {
             <Field label="For">
               {(id) => (
                 <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
-                  <option value="">Whole family</option>
+                  <option value="">{t('renewals.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               )}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Expires on" required>
+            <Field label={t('renewals.expiresOn')} required>
               {(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}
             </Field>
-            <Field label="Remind me (days before)">
+            <Field label={t('renewals.remindMeDaysBefore')}>
               {(id) => <Input id={id} type="number" min={0} value={form.reminder_days} onChange={(e) => setForm((f) => ({ ...f, reminder_days: Number(e.target.value) }))} />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Renewal cost ($)">
+            <Field label={t('renewals.renewalCost')}>
               {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={form.cost} onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))} placeholder="0.00" />}
             </Field>
-            <Field label="Status">
+            <Field label={t('renewals.status')}>
               {(id) => (
                 <Select id={id} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as RenewalStatus }))}>
                   {(Object.keys(RENEWAL_STATUS_LABELS) as RenewalStatus[]).map((s) => <option key={s} value={s}>{RENEWAL_STATUS_LABELS[s]}</option>)}
@@ -268,14 +270,14 @@ export function RenewalsModule() {
               )}
             </Field>
           </div>
-          <Field label="Renewal link">
+          <Field label={t('renewals.renewalLink')}>
             {(id) => <Input id={id} type="url" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Policy #, account, where the document lives…" />}
+          <Field label={t('renewals.notes')}>
+            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('renewals.policyAccountWhereTheDocumentLives')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('renewals.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add renewal'}</Button>
           </div>
         </form>

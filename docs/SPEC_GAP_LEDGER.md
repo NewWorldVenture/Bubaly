@@ -26,8 +26,8 @@ family is right.
 
 | § | sev / eff | Section | What a family runs into |
 |---|---|---|---|
-| **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. |
-| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, the raw-insert sites that bypassed it are down to one (`lib/server/notifications.ts`), and `child_channels` IS consulted — at delivery, by both push and email. What remains is that last generator, and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
+| **7** | high / L | DOMAIN SERVICE LAYER | A parent on a patchy phone connection taps Save twice on a school concert and gets two identical events on the family calendar - the same double-tap through Bubaly is deduplicated and produces one. A parent typing "Milk" into the grocery list when milk is already on it gets a second Milk line; Bubaly adding milk skips it. And an event a parent adds by hand never reaches the family activity trail that an event Bubaly adds does, so the household's own record of who changed what has holes in it wherever a person did the work instead of the assistant. (**Calendar tranche landed.** Add Event, Find a time, Edit and Delete now go through `lib/services/calendar` via `app/(app)/dashboard/calendar/actions.ts`, so the module's own Save is deduplicated by the same 0256 index Bubaly's writes use, is validated server-side, and filters `family_id` on update and delete instead of leaving tenancy to RLS. Proofs: `tests/calendar-write-path.test.ts` behaviourally, `tests/calendar-single-write-path.test.ts` structurally; `components/modules/routines-panel.tsx` is the one calendar writer still going to PostgREST from the browser, because it materialises a routine as a BATCH and `createEvent` creates one event. **Groceries tranche landed** (second symptom). The three surfaces a family actually reaches — `shopping-module` (what `/dashboard/grocery` renders), `pantry-module`, `recipes-module` — add through `addItems` via `app/(app)/dashboard/grocery/actions.ts`, so a name already on the list is skipped by `normalizeName` (case, trailing plural 's' and spacing are not differences; checked items are excluded so milk bought last week is addable again). `skipped` is surfaced rather than swallowed: "Milk is already on your list" instead of a silent second line. `components/modules/grocery-module.tsx` is a fourth, UNREACHABLE copy — nothing imports it, no barrel, no dynamic import — and is left alone rather than half-fixed. **Found on the way, now fixed:** `grocery_lists` carries two columns answering "is this archived" — `is_archived` (0002) and `archived_at` (0014) — and NOTHING sets `is_archived`; the only archive writer is the shopping module, which stamps `archived_at`. So a family archived their list, the shopping page hid it, and every `is_archived`-only reader — the service, and therefore Bubaly — kept adding to it. Every open-list lookup now asks both. Consolidating the columns is a migration and a separate decision. `lib/database.types.ts` was also missing all five columns 0014 added to `grocery_lists`, which is why the shopping module carried three `as never` casts; the type now matches the migration and the casts are gone. Proofs: `tests/grocery-write-path.test.ts`, `tests/grocery-single-write-path.test.ts`. **To-dos tranche landed.** `todos-module`'s quick add, edit modal, tick-off and delete go through `app/(app)/dashboard/todos/actions.ts`; `updateTodo` and `deleteTodo` were ADDED to `lib/services/tasks` (it had only `completeTodo`/`assignTodo`, so the edit modal and delete button had nowhere to go and filtered `id` alone). Creates carry a submission id against 0256's index; `created_by` is the `family_members` id, which is the FK the service layer exists to stop getting wrong. The two `todo_lists` inserts are deliberately left: `ensureTodoList` takes no icon or colour, so routing them would change what a new list looks like. Proofs: `tests/todo-write-path.test.ts`, `tests/todo-single-write-path.test.ts`. **Still open: `family_reminders`** (five client insert sites across front-desk, inbox, autopilot and reminders modules — the largest remaining surface), `routines-panel`, and the activity trail. `chore_assignments` and `meal_plans` have no client-side writes at all. **Reminders tranche landed, and it was not just idempotency.** `family_reminders` (0014) constrains `status in ('active','snoozed','completed','dismissed')` and `priority in ('low','medium','high','urgent')`. Four call sites wrote `status: 'pending'` and, off their urgent branch, `priority: 'normal'` — **neither value is in either set, so Postgres rejected the row every time and nothing was ever written**: Front Desk's "turn a call action item into a reminder", the Inbox's one-tap, approving an Autopilot `create_reminder` suggestion, and Paperwork materialising a sign/pay/provide action. Proven against a real Postgres 16, not inferred. All four now go through `createReminder`, which writes a legal status and maps an unrecognised priority onto the column default — the single guard that is why the assistant's reminders always worked while every one-tap button did not. `reminders-module`'s quick-add is converted too. Guard: `tests/reminder-status-constraint.test.ts` reads the allowed values out of the migration rather than restating them. Also `tests/reminder-write-path.test.ts`, `tests/reminder-single-write-path.test.ts`. **`reminders-module`'s editor, recurrence respawn and complete/snooze/delete are NOT converted, and need decisions first:** (a) `CreateReminderInput` cannot express the six columns 0100 added (url, flagged, early_reminder_minutes, image_url, subtasks, list_id), so routing the editor would silently drop what a family typed; (b) the module deliberately retries with those columns stripped when the schema lacks them (`stripNewCols`) and the service has no such tolerance; (c) `completeReminder` rolls a recurring reminder forward IN PLACE while the module spawns a new row and keeps the completed one as history "like iOS" — different data, both defensible, so **today Bubaly completing a recurring reminder loses the history a person completing it creates**. **Chores tranche landed.** The board's status setter, delete and create go through `lib/services/tasks` via `app/(app)/dashboard/chores/actions.ts` — family-scoped where all three filtered `id` alone. The service gained `setChoreProgress` (todo/in_progress only — the vocabulary 0223's trigger calls member-allowed, and it must never grow approved/rejected), `deleteChoreAssignment`, and `icon` on `CreateChoreInput`, which the board sets and the service would otherwise have dropped. **The real fix is not a duplicate:** the board always wrote `submitted`, while `completeChoreAssignment` reads `requires_approval` and settles on `done` when no parent is needed — so a family who turned approval off still had every chore queue for a decision nobody owed them, and the toast said "Submitted for approval!" about it. The action now returns the SETTLED status so the message cannot lie. **Approval is deliberately NOT routed:** `finalizeApproval` (missions) computes the reward, writes points AND cash, calls `applyCompletionRewards` with a rollback, and logs an approval event; the board writes raw points, no cash, no rewards, no event. The same chore approved from two screens pays a child differently — a product decision that moves money, held visible in `tests/chore-single-write-path.test.ts`. **Chore-creation dedup landed, and it is the two-row create keyed as a unit** — the piece of work the previous note said was outstanding. `withIdempotency` wraps `createChore`, not `assignChore`: the probe asks `chore_assignments` (0256-keyed) whether this call already ran and reads the chore behind the assignment it finds, because `chores` carries no key of its own. Keying the assignment alone remains the trap it always was, and is now forbidden by a structural guard rather than only described — a mutation that moves the wrapper onto `assignChore` fails, as does one that keys the assignment without wrapping the pair. **What makes the pair safe to key is the rollback that was already there:** two simultaneous taps both probe empty and both insert a chore, 0256's partial unique index refuses the second assignment, that failure rolls its chore back, and `withIdempotency` re-probes and returns the winner's rows — so the loser leaves nothing behind. `assignChore` gained an optional `idempotencyKey` and writes the column only when one is supplied, which is the difference between "no key" and "a null key" rather than a schema tolerance: the assistant's standalone assign tool passes none and is unaffected. **Honestly bounded:** a chore created with NO assignee has no keyed row to probe and is still not deduplicated. The board refuses to submit without a member, so that gap is `tasks.createChore` with no assignee named, and closing it needs `chores` to carry a key of its own — a migration, not a call-site change. **Deploy coupling, recorded in `docs/PENDING_PROD_MIGRATIONS.md`:** the PROBE half works on either schema, but the RACE half needs 0256's index, so until it is applied two truly simultaneous Adds can still leave an orphan. The board's Add now mints a submission id per open modal (`NewChoreModal` is mounted only while the dialog is open, so a retry after a failed save is the same chore and a reopened dialog is a new one). Proofs: `tests/chore-write-path.test.ts` drives the real service through the in-memory Postgres double with 0256's partial unique index configured — one chore from two taps, no orphan when the assignment loses a staged race, two chores when the family means two, and no dedup without a submission id; `tests/chore-single-write-path.test.ts` holds the structural half. **A claim of mine was wrong, and the reason was structural.** I reported `todo_items` at ZERO browser writes after the to-dos tranche. `components/modules/next-actions-module.tsx` was updating it directly — `is_done` + `completed_at`, filtering `id` alone with no family filter — and had been throughout. The cause is that EVERY §7 structural guard so far is scoped to one file (`const MODULE = '…/todos-module.tsx'`), so it can prove that MODULE is clean and nothing else, while the reports it backed made per-TABLE claims. That write now goes through `completeTodoAction`, which writes the same two columns, adds the family filter, and reports a row it cannot find instead of succeeding silently. **The claim now matches the proof:** `tests/service-layer-forks.test.ts` sweeps all 410 components against the 44 tables `lib/services/**` writes and asserts the overlap is exactly a documented list — converting a fork is deleting a line, adding one fails until it is written down with a reason, and an entry left behind after its conversion fails too. It re-proves the other four zero-claims (`calendar_events`, `meal_plans`, `grocery_items`, plus `agent_activity` and `audit_logs`) over every component rather than over the one module each tranche happened to convert; those four hold. **It also sizes the rest of §7 honestly for the first time: 26 forks remain**, well beyond the six tables this row enumerates — `budgets`, `notes`, `transactions`, `family_facts`, `family_messages`, `goals`, `meals`, `pantry_items`, `savings_goals`, the five vacation tables and more — each listed with its reason, five of them deliberate (the chore approval, the six reminders writes, `grocery_lists`/`todo_lists` icon-and-colour, the RSVP) and the rest simply not yet reached. **Recorded, not half-fixed:** none of `completeTodo`, `assignTodo`, `completeChoreAssignment`, `setChoreProgress` or `deleteChoreAssignment` records any activity, so the household trail from the tranche above carries creates and deletes but NOT THE DOING — "Emma marked her chore done" is the line a family would most want and it does not exist. Three of the five could take a trail line for free; two need an extra read for the chore title, and the same question applies to groceries' `checkItem` and meals' `setSlot`. Doing three of five would be the half-measure this work keeps refusing, so it is the next tranche. **That tranche landed, and the shape of the gap was worse than I described.** Ten of those functions DID record — via the tool executor, which writes a line for any tool not declaring `activityFrom: 'service'`. But the executor only runs on Bubaly's path. So the §7 third symptom had survived one layer down, on exactly the actions a family performs most: Bubaly ticking off a to-do left two rows, a child ticking off the same to-do left none. **The record moved INTO the services, which both actors share** — ten functions a person actually reaches: `completeTodo`, `completeChoreAssignment`, `setChoreProgress`, `deleteChoreAssignment`, `checkItem`, `removeItem`, `clearChecked`, `removeSlot`, `snoozeReminder`, `deleteEvents` (the routine Undo, which the batch create recorded while its Undo did not). Five tools were flipped to `activityFrom: 'service'` in the same change, because moving the record without standing the executor down would give the assistant's path TWO entries for one action — pinned by a case asserting exactly one. **Six functions were deliberately left**: `assignTodo`, `assignChore`, `pantryAdjust`, `completeReminder`, `createRoutine`, `setRoutineEnabled` have NO human caller, so the executor's line is the only one needed and there is no hole to close; adding a service record would double-write them. **Copy is read back, not echoed:** the chore line says "Finished" or "Submitted for approval" from the SETTLED status, so it cannot claim a parent is owed a decision that is not; the meals line names the slot rather than the recipe, because "the dinner planned for Tuesday" is the part a family recognises; a cart clear that removed nothing writes no line at all. Two functions needed one extra primary-key read for the chore title (`setChoreProgress`, `deleteChoreAssignment`); both run it AFTER the write so it cannot delay or fail the change, and fall back to "a chore". Proof: `tests/trail-covers-doing.test.ts` drives every one of these through its real action as a MEMBER — the actor that was invisible — and asserts the line, its wording and its attribution; five mutations, five caught, including the executor double-write. **Still open after this:** the 26 forks in `tests/service-layer-forks.test.ts`, and `notify`/`markRead`/`setActivityStatus`/`updateAISettings`/the approvals plumbing, which are deliberately NOT on the household trail — a notification is the delivery of a change, not a change, and recording each one would bury the changes themselves. **Money tranche landed, and its headline is not tenancy.** `savings-view` computed a goal's new balance in the BROWSER and wrote the absolute back — `current_amount: Number(g.current_amount) + delta`, where `g.current_amount` is whatever that tab last rendered. Two parents each adding £20 to a goal holding £100 both compute £120 and both write £120: the family put in £40, the goal gained £20, and both were told it worked. **A lost update, on money.** Sending the delta is necessary but not sufficient — a read-modify-write in the service races with itself just as happily — so `contributeToSavingsGoal` carries the value it read as a CONDITION (`eq('current_amount', seen)`), and a write matching no row means someone moved it first and is retried rather than clobbering. That is a compare-and-set, correct under concurrency, and it needs no migration; `current_amount = current_amount + delta` in Postgres would be one round trip instead of two and needs one. Bounded at four attempts, because a spin would hold a request open. Proof: `tests/savings-contribution-race.test.ts` stages the race by committing another parent's contribution between our read and our write and asserts the goal reaches 140; the mutation that drops the condition reproduces the original bug exactly (`expected 120 to be 140`). **`budgets`, `savings_goals` and `transactions` are now at ZERO browser writes** — 12 sites across `billing-module`, `finances-module`, `savings-view` and `budgets-view`, every update and delete of which filtered `id` alone. Each delete is family-scoped and leaves a trail line naming what went. `createTransaction` also verifies the account and member belong to THIS family before writing either id, which the raw inserts never did. **One deliberate behaviour change:** the budget forms INSERTED a row every time, so adding a Groceries budget twice left two, each reporting the other's spend as unbudgeted; they now route through `updateBudget`, which matches category case-insensitively and sets the existing row. The fork guard caught the three converted tables unprompted and required them removed from `KNOWN_FORKS`, taking the count 26 → 23. **The same lost-update shape remains in two more places** — `pantry-module` writes `{ quantity: next }` and `goals-module` writes `{ progress: clamped }`, both computed in the browser. `pantryAdjust` already accepts a `delta`; `lib/services/goals` has only `createGoal`. Worth distinguishing before fixing: a savings contribution is genuinely a delta, while goal progress may be a slider set to an absolute, where the right fix is a version check rather than a delta. **Both landed, and the distinction held: they needed OPPOSITE fixes.** `pantry-module`'s +/- is a genuine DELTA — `quantity + delta` from the last render, so two people unpacking the shopping both read 3 and both wrote 4 — so it now sends the delta and `pantryAdjust`'s own read-modify-write gained the same compare-and-set (the mutation removing it reproduces the loss: `expected 4 to be 5`). `goals-module`'s progress is an ABSOLUTE the family chose on a slider: "60%", not "+6". Last writer wins is the honest semantic there, and a delta or a retry would turn "set it to 40" into "add 40 to whatever someone else just set" — so `setGoalProgress` deliberately has no compare-and-set, with a case asserting the later write wins. **The sharper find is in `lib/services/goals` itself.** Its header names two invariants the database does not keep — `progress` is 0..100 with NO CHECK constraint, and `is_complete = progress >= 100` is not derived — and says it enforces them because "a service that lets one caller break an invariant the UI depends on is not a boundary". It could not: only `createGoal` existed, so every EDIT and every progress change went straight from the module to PostgREST, with the clamp and the completion rule living in that component and nowhere else. Three readers filter on `is_complete` — the module's active/completed split, `lib/operating-index/server.ts`, and the digital-twin page — so a caller sending the two out of step desynchronised all three. `is_complete` is now DERIVED by the service and `progress` is REFUSED rather than clamped outside 0..100, matching `createGoal`. **A new service function was needed rather than a reuse:** the pantry editor sets `category`, `low_threshold`, `is_staple` and `notes`, none of which `pantryAdjust` carries, so routing the editor there would have dropped all four silently — the same shape as the chore icon; `savePantryItem` covers them, and `removePantryItem` is family-scoped where the module deleted on `id` alone. `goals` and `pantry_items` are at ZERO browser writes; the fork guard required both removed from `KNOWN_FORKS`, taking the count 23 → 21. **Tick-off tranche landed** (shopping + meals). `shopping-module` and `meals-module` write nothing to `grocery_items` or `meal_plans` directly any more: tick-off through `checkItem`, single remove through a new `removeItem`, cart clear through `clearChecked`, planning through `setSlot`, and clearing a slot through a new `removeSlot` — all family-scoped where every one of them filtered `id` alone. **Two behaviour fixes fell out:** (a) the cart clear sent `.in('id', checkedIds)` from the browser's last render, so an item a partner ticked on another phone between render and tap survived the clear; it now clears by LIST and asks the database what is checked when asked. (b) Dropping a meal into a slot was a raw insert, so planning Tuesday dinner twice left TWO dinners on one Tuesday; `setSlot` replaces. The meals page reuses the shopping page's tick-off action rather than spelling its own — two versions of one operation on one table is how these forks began. Proofs: `tests/grocery-write-path.test.ts`, `tests/meal-plan-write-path.test.ts`, `tests/grocery-single-write-path.test.ts`. **Relationship-dates tranche landed.** `toggleCalendar` (put an anniversary on the family calendar, or take it off) goes through `createEvent`/`deleteEvent` via `app/(app)/dashboard/relationship/actions.ts`, both halves in ONE call. **The bug it closes:** the old code `await`ed the calendar delete and DISCARDED its result, then cleared `calendar_event_id` regardless — so a failed delete left the date saying "not on your calendar" while the event sat on it, with nothing linking them. The link is now cleared only once the event is actually gone; a not-found delete (someone removed the event from the calendar itself, or the id belongs to another family) still clears, because a dangling link is the thing to repair and refusing would leave a toggle that can never be turned off. The action reads the date from the DATABASE — only an id crosses the wire — and reuses `buildCalendarEventForDate`, which owns the domain rules (all-day, noon UTC, birthday category, yearly recurrence) and has its own tests, rather than re-deriving them. Proof: `tests/relationship-calendar-toggle.test.ts`; the failed-delete branch needs a mocked `deleteEvent`, because "already gone" cannot stand in for "the database refused". **Routines tranche landed — no calendar component writes from the browser any more.** `routines-panel`'s "apply this routine to the week" and its Undo go through new `createEvents`/`deleteEvents` in `lib/services/calendar`. A batch, not a loop: N round trips with a failure halfway leaves half a routine on the calendar with nothing to undo it, whereas a single multi-row INSERT is atomic. That atomicity is also what makes the batch deduplicable — each row takes a key derived from the composition and its position, and because the insert is all-or-nothing, "any row present" answers "all". So applying the same routine to the same week twice adds ONE week. Undo drops the composition key, so changing their mind and applying again is a new batch rather than being answered with events that no longer exist. The Undo is family-scoped, where the client deleted on ids alone. `KNOWN_REMAINING` in `tests/calendar-single-write-path.test.ts` is now empty and asserted empty. **Recorded honestly:** the duplicate case asserts the OUTCOME, not the mechanism — the probe is an optimisation whose removal is unobservable, because the 0256 index still refuses the second insert and the recovery returns the same rows. A test claiming to prove the probe would be vacuous, so there is not one. **Reminders delete and snooze landed too — I had over-counted what was blocked.** Neither needs anything the service lacks (`snoozeReminder` computes the same `snoozed_until` and adds a family filter and a length check; a delete needs nothing at all), so both now route through it and `deleteReminder` was added. **Client-write state, verified by sweep rather than asserted:** `calendar_events`, `todo_items`, `meal_plans` and `grocery_items` are at ZERO; `chore_assignments` has one (the approval); `family_reminders` has six, pinned at six in `tests/reminder-single-write-path.test.ts` and each named — editor insert+update and respawn ×2 (need 0100's columns plus the `stripNewCols` tolerance), `toggleSubtask` (writes `subtasks`, a 0100 column), and `complete` (the recurrence question). Every remaining write is blocked by a decision recorded above, not by effort. **Third symptom landed, and my own note about it was wrong.** I had recorded this as needing "a column saying WHICH acted, plus a filter in all six readers... a product decision about what the agent feed is". It needed neither, because it was never `agent_activity`'s job. `public.audit_logs` (0002) already exists, is already rendered at `/family/activity` as "a running log of changes across your household", and is already read by four admin surfaces — and **NO domain service wrote to it at all**, so that page has been empty for every family since it shipped. The trail Bubaly's event reached was the agent feed; the record a HOUSEHOLD keeps had nothing in it from anyone, assistant included. `recordActivity` now appends to `audit_logs` before the actor-kind branch, so every committed write is recorded for a person and for Bubaly alike, tagged with `metadata.actor` — necessary because the assistant runs inside a person's session, so `actor_id` alone cannot tell "Dad added it" from "Bubaly added it". `agent_activity` is untouched in its meaning: still agent-only, so `/dashboard/agents` and the `time-saved` count are unchanged and Bubaly still takes credit for nothing a person did. **`action` is required on `RecordActivityInput`** rather than defaulted — a wrong verb on a page a family reads is worse than a compile error, and all 37 call sites were given the verb their own title already stated. **A read is not a change:** 40 of Bubaly's tools are read-only, so admitting them would bury every real change; `action: null` says "changed nothing" explicitly, and `trailActionFor` derives the verb from the `capability` each tool already declares. `automate` is the one capability that cannot say which (`routines.create` and `routines.pause` share it and mean opposite things), so such a tool must name its own `trailAction` — pinned by a test that fails on any write tool resolving no verb, rather than defaulting to a guess. `/family/activity` now shows WHO: it selected `actor_id` from the start and never rendered it. **Also fixed on the way:** `components/dashboard/ai-home-dashboard.tsx` selected `id, action, entity_type, created_at` from `audit_logs` — there is no `entity_type` column (proven against the replayed schema: `ERROR: column "entity_type" does not exist`), and the result was destructured and never used, so it was a dead query that could only ever fail; it is deleted. `components/modules/agents-module.tsx` wrote `agent_activity` status from the browser filtering `id` alone — the last direct write to either record outside the service layer — and now goes through `setActivityStatus`. `audit_logs` joins the demo reset list, or a "fresh" demo would list every change the previous one made. Proofs: `tests/household-trail.test.ts` (wording, the tool-verb guard, and structurally that there is exactly one trail writer and no browser write to either record), `tests/service-activity.test.ts` (a person's change writes one row, Bubaly's writes two, a read writes none, and a failed trail insert costs neither the agent feed nor the caller), and `docs/audit/household-trail-check.sql` — a real-Postgres boundary probe that any member may APPEND (a child ticking off their own chore is exactly the actor the trail was missing) while only a parent may READ, verified against five policy mutations. **Family-memory tranche landed, and the rule it restores is a privacy rule, not a tenancy one.** `lib/services/memory` already carried the household's rule about who may touch a memory — "Only a parent or adult can change a memory about someone else" — and `forgetFact` refused on it. `components/modules/knowledge-base-module.tsx` and `components/modules/life-events-module.tsx` inserted, updated and DELETED `family_facts` straight from the browser, filtering `id` alone, so that rule was reachable only through Bubaly and every button on the page went around it. **That gap is real at the database, not merely at the service:** migration 0264 gates `family_facts` to `can_manage_family` ONLY for `category in ('medical','account')`, so every other category — preferences, sizes, allergy notes filed as anything else, life events — is open to any family member by RLS. Proven against a real Postgres 16 rather than inferred: a CHILD deleting a sibling's `preference` row reports `1 row(s)`. The service was the only thing standing between a child and a sibling's memories, and the page bypassed it. All three writes now go through `app/(app)/dashboard/knowledge/actions.ts` — `saveFactAction`, `setFactPinnedAction`, `forgetFactAction` — which revalidate BOTH `/dashboard/knowledge` and `/dashboard/life-events`, because the same table is two pages and converting one while the other kept a stale render is how a family stops trusting the screen. **A new service function was needed rather than a reuse, and the reason is data, not style.** `rememberFact` upserts by (member, category, LABEL), so routing an edit through it would key the NEW label, miss the old row, and leave the family with TWO memories where they renamed one — the rename would read as a duplicate. `updateFact` therefore addresses the row by ID and patches only what changed; renaming in place is what a rename means, and there is a case asserting exactly one row survives it. Creates still go through `rememberFact` with `source: 'user'` and `confidence: 100`, which is the distinction §7's third symptom is about: a thing the family stated is not a thing Bubaly inferred, and the trail and the confidence column should both say so. **One deliberate behaviour change, and it tightens rather than loosens:** a child could previously edit or delete a sibling's non-sensitive memory (RLS allowed it and the page asked PostgREST directly); they now cannot, and are told why. A child also cannot re-file a memory INTO `medical` or `account`, because 0264 would then hide from them the row they just wrote — the guard checks the category the edit would PRODUCE, not the one it started from. **Recorded honestly:** the family filter on `updateFact`'s update statement survives mutation — `factForWrite` has already read the row family-scoped and returned not-found for a foreign id, so no test can distinguish it. It stays as defence-in-depth on the table holding the household's private facts, with a comment in the source saying plainly that nothing proves it. Proof: `tests/memory-write-path.test.ts` drives the sibling rule, the rename, the sensitive-category refusal and the cross-household case through the real service. `family_facts` is at ZERO browser writes; the fork sweep required it removed from `KNOWN_FORKS`, taking the count 21 → 20. **Notes tranche landed, and the find under it is a feature that has never worked.** `lib/services/notes` was written for exactly one caller — the AI's `notes.create` tool — and carried only a create. `components/modules/notes-module.tsx` did everything else itself: delete, pin, duplicate, and the editor's insert-or-update, all filtering `id` alone. **Tenancy was not the hole here**, and saying so matters: `notes` is in 0004's generic family-scoped list, so all four policies gate on `is_family_member(family_id)` and a foreign id was refused by the database — verified in 0004 directly, and no later migration alters those policies. What the page went around were the SERVICE's own two rules — the length bounds (a title over 200 or a body over 20,000 characters is a row nothing can render, and the module has no `maxLength` on either field) and the household trail line. So a family deleting a note left no record while Bubaly saving one did: §7's third symptom, on a table a household touches every week. All four writes now go through `app/(app)/dashboard/notes/actions.ts`; `updateNote` and `deleteNote` were ADDED, because the service had neither. **Three deliberate behaviour choices, each the opposite of a silent drop:** (a) `createNote` refused an empty body outright, while the module's own check is `if (!body && !title)` — EITHER is content — so routing the page would have turned "Bins go out Tuesday" with no body into an error; the service now takes a title-only note and still refuses one with nothing in it at all, and `updateNote` applies that rule to what the edit would PRODUCE, so clearing the body of a titled note is fine and clearing both is not. (b) The pin is sent as the VALUE the family chose rather than as `!note.is_pinned` from a stale card, which would unpin a note a partner just pinned on another phone. (c) Duplicate sends only an id: the copy is made from the note as the DATABASE has it, so duplicating a note someone else just edited copies what they wrote, and "Copy of " is trimmed to the 200-character bound rather than making a maximal title un-duplicatable. **The find: the colour picker has never saved anything.** `notes-module` offers nine colours, reads `note.color` through a `Record<string, unknown>` cast, and writes it nowhere — because `public.notes` (0002_tables.sql:357) HAS NO `color` COLUMN and no migration adds one. The cast is why the type checker never said so. A family picks yellow, saves, and gets grey, every time. Wiring it up needs a migration and removing it deletes a visible feature, so both are decisions rather than cleanups: this change makes the deadness loud instead of silent — a comment at each cast site, and a case in `tests/note-write-path.test.ts` that sweeps EVERY migration for a `notes.color` column and fails the day one appears, pointing at the save that still needs to carry it. **Also fixed, quietly:** `tests/notes-module-write-boundary.test.ts` existed to hold one invariant — no success claim and no optimistic state change before the failure guard — and was written against `const { error } = await`. It is rewritten against `res.ok` and WIDENED from two writes to all four, rather than deleted with the shape it was pinning. **Recorded honestly:** the family filter on `updateNote`'s and `deleteNote`'s write statements survives mutation, because `noteForWrite` has already read the row family-scoped — the same unreachable-but-kept clause as `updateFact`, with a comment saying plainly that nothing proves it. Proof: `tests/note-write-path.test.ts` (15 cases; four mutations tried, four caught). `notes` is at ZERO browser writes and the fork sweep required it removed from `KNOWN_FORKS`, taking the count 20 → 19.) |
+| **21** | high / M | NOTIFICATION ORCHESTRATION | A family is woken at 2am by Bubaly's phone push about a chore or a renewal, and there is nowhere in the app to stop it: the quiet-hours setting the database stores is read by no code, and the push channel would ignore it even if it were. Parents who tried to limit what reaches a child's device get the same silence — child_channels is saved and never consulted. (The row is now largely stale: the quiet-hours setting IS read, EVERY site that bypassed it has the window — the batch generator keeps its own insert but takes `deliveryTimeFor` — and `child_channels` IS consulted, at delivery, by both push and email. What remains of this row is the push channel itself and the fact that no UI exists for a parent to set `child_channels` in the first place.) |
 | **25** | high / M | ATTACHMENT-TO-ACTION | A parent photographs the season's soccer schedule. Eight events appear on the family calendar with no name on them, so nobody knows they are Maya's; two of them collide with Ethan's swim meets and Bubaly says nothing; and there is no "pack cleats Tuesday night" reminder — the parent still does the whole coordination by hand and only discovers the double-booking on the day. Photograph a birthday invitation or a school permission slip into the same screen and it answers "No events found on that flyer." |
 | **26** | high / L | RECEIPT-TO-FAMILY-OS | A parent photographs the Target receipt expecting Bubaly to log the $142 against the household budget, notice the dishwasher on it is now under warranty, tick the milk and eggs off the grocery list, and file the receipt against the appliance. Nothing happens — there is nowhere in the app to give Bubaly a receipt, and even by hand Bubaly cannot record a single transaction. Household spending stays a manual data-entry chore, which is the exact drudgery the family bought the product to end. |
 | **30** | high / M | IDEMPOTENCY | A parent types "add soccer practice Saturday at 9" into Bubaly's chat, the phone loses signal mid-answer and the app re-sends — and the family now has two soccer practices on the calendar, the exact duplicate the concierge path is protected against. The same applies to a double-tapped send, a reloaded tab, or Bubaly's own retry of a chat write: nothing can tell an already-succeeded write from a new one, so the family cleans up duplicate chores, duplicate grocery lines and duplicate reminders by hand and stops trusting the assistant with anything that matters. |
@@ -38,7 +38,7 @@ family is right.
 | **3** | medium / M | SUPABASE MUST BE THE SYSTEM OF RECORD | A family in Canada, the UK or the EU sets up Bubaly and every budget, allowance, chore payout and savings goal is printed with a dollar sign and US thousands separators, and Bubaly's own summaries say things like "you are $180 over on groceries" for money that was never dollars. There is no setting anywhere that fixes it, so the numbers are quietly wrong on every finance screen the family opens. |
 | **22** | medium / M | FAMILY ACTIVITY FEED | A parent opens the page called Activity and sees Emma's chores and the photos someone posted, but nothing Bubaly did — no "Bubaly planned next week's dinners", no "Bubaly added milk to Grocery List". To find out what the AI changed they have to know to go to a different page (Agents). And when a change was contentious — a rescheduled Saturday, a cancelled practice — no stream anywhere records that Dad approved it, so the family cannot reconstruct who authorised what. |
 | **32** | medium / M | FAMILY AI SETTINGS | A family that finds Bubaly too chatty has no way to turn it down — the only levers are switching Bubaly off entirely or dropping whole categories to 'Recommend', which also stops it doing the work they wanted. And 'quiet hours' is a promise nobody can keep: a parent cannot tell Bubaly to stop pinging the house after 9pm, so a reminder or a nudge can land at 2am and wake a child's phone, and the only remedy is muting Bubaly's notifications at the operating system, which also silences the ones they needed. |
-| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. |
+| **33** | medium / M | OBSERVABILITY | A family writes in that "Bubaly stopped doing my Sunday meal plan" and nobody can answer them: there is no admin view over runs at all, and for every surface except the concierge planner there is no stored record of which model ran, how long it took, or what error came back — only a console line on a server nobody is reading. The family's own run page is the single diagnostic, and it exists only for concierge runs, so a failure in the chat assistant or the daily brief is invisible after the request ends. (Partly closed: the admin view over runs now exists at `/admin/ai-activity`, and `withAiRequest` exists and the two surfaces this row names by name — the chat assistant and the daily brief — now open an `ai_requests` row with model, tokens, latency and error. 17 other model entrypoints are still silent, counted and capped by `tests/ai-observability-coverage.test.ts` (the count was 32 until the scanner stopped counting files that cannot reach a model). The admin view over runs is untouched.) |
 | **39** | medium / M | PERFORMANCE | A family three months in cannot see what Bubaly did for them last month: the run list stops after eight completed runs and the activity feed after 60 items, with no 'show more' anywhere, so 'did Bubaly ever book that plumber back in June?' is unanswerable from inside the app even though the rows are still in Supabase. At the same time the wallet activity screen downloads up to 2,000 transactions on every visit, which on a phone on cellular data is a slow, expensive screen that gets slower every month the family uses it. |
 | **46** | medium / M | END-TO-END TEST PERSONAS | The catch-all question a stressed parent actually types — "what am I forgetting?" — is the one flow nobody has ever watched complete. It reads nine domains and can create a to-do per gap it finds, so when it misfires a parent gets a fabricated chore list or, worse, silence about the permission slip due Friday. And because the other five flows only ever run against a hand-written fake of PostgREST, a real constraint, RLS policy or column default that would reject the write on a live database is not discovered until a family hits it. |
 | **50** | medium / M | WORLD-CLASS SIGNATURE FEATURE — WEEKLY FAMILY PLAN | A parent opens the weekly plan on Sunday night and gets soccer, the dentist, five dinners and the shopping list — but not the three bills due Thursday or the car payment that lands mid-week, so they still have to open the finance module separately and the "plan our week" run can never move a purchase or a bill off a tight day. On the Plus Weekly AI Briefing the furnace filter and the overdue gutter clean are invisible too, so the one page sold as the week at a glance quietly leaves out two of the eleven things the family was promised it would cover. |
@@ -112,6 +112,347 @@ per-call ordinal, never the natural key — and the duplicate has to be visible 
 the result rather than narrated as a fresh write.
 
 ### Closed since the sweep
+
+- **§21, the last writer that could still wake a house at 2am.**
+  `generateFamilyNotifications` was the final entry on the write-boundary
+  ratchet, carried for tranches with the note "needs its own tranche". It does
+  not route through `notify()` — and now, deliberately, it still does not.
+
+  **The exemption is justified rather than owed.** It assembles up to 150 rows
+  across events, reminders and medications, each type with its own dedupe read,
+  and inserts them in ONE batch. Pushing that through `notify()` would turn one
+  insert into 150 round trips on a cron, to re-solve duplicates the function
+  already handles. What it was actually missing was never dedupe: it was the
+  quiet-hours window.
+
+  So it takes the window and keeps the batch. `deliveryTimeFor` is the decision
+  `notify()` already made, lifted out and exported, and the generator resolves it
+  ONCE for the whole batch — every row belongs to one family, so a per-row lookup
+  would be the same answer fetched 150 times. One definition of "when does this
+  land", because two would eventually disagree and the one that drifts is the one
+  nobody is testing.
+
+  **"Does not call `notify()`" and "ignores quiet hours" turned out to be
+  different claims**, and only the second was ever the problem. The boundary test
+  caught this directly: removing the entry from `ALLOWED` made the list assert
+  something untrue, because the file IS still a raw-insert site. It stays listed,
+  with its reason rewritten from debt to exemption, and its actual behaviour
+  asserted in a block of its own.
+
+  **A family that cannot be read is sent to, not held.** When the scope lookup
+  fails the zone is unknown, and a notice that arrives is recoverable where one
+  held for eight hours against a guessed clock is not.
+
+  Still open in §21: the push channel itself, and the fact that no UI exists for
+  a parent to set `child_channels` — a product decision, not a bug.
+
+- **§33 (in part), the two surfaces a family would actually ask about now leave a
+  record.** The row says a family writes in that "Bubaly stopped doing my Sunday
+  meal plan" and nobody can answer them. The cause was narrower than it looked:
+  `ai_requests` has had `model`, `prompt_tokens`, `completion_tokens`,
+  `latency_ms` and `error` from the start, and `recordModelCall` has always
+  filled them — **but only when handed a `requestId`, and only the concierge
+  planner ever opened a row.** Of ~50 model entrypoints, five carried one.
+
+  **It is a wrapper, not a convention, because the provider records nothing
+  itself.** `complete()` RETURNS usage and discards it, so adopting observability
+  by hand is four separate edits per route — open a row, time the call, record
+  the model and usage, close the row. Four steps by hand in forty places is four
+  steps done wrong in some of them. `withAiRequest(scope, {feature, text}, body)`
+  does all four.
+
+  **The record now says which model ANSWERED.** `AICompletion` carried usage but
+  not the model, so a caller could only report the constant it *intended* to use
+  — exactly the wrong answer after a fallback or a config change. The provider
+  now reports it, because the provider is the only thing that knows.
+
+  **Two surfaces, chosen because the row names them.** The daily brief swallows
+  provider errors by design (they can carry family context), so recording had to
+  happen *inside* the swallow or it would be erased. The chat assistant never
+  throws at all — it catches its own stream errors and falls back — so
+  `obs.failed(err, {partial})` is how a surface that handles its own errors still
+  leaves the evidence, and a stream that broke halfway settles as
+  `partially_completed` rather than as a clean completion.
+
+  **Bookkeeping never fails the family's work**: if the row cannot be opened the
+  body still runs with a null request id. Its own test caught this promise being
+  broken — the `executing` update had no `.catch()`, so a transient failure there
+  would have taken down the brief it was supposed to be observing.
+
+  **Twelve more surfaces followed** — the meal planner, insights, assist, the weekly
+  briefing, the health coach, the habit coach, savings, the journal prompt, and the
+  four home surfaces (repair diagnosis, find-a-pro, the maintenance forecast and
+  utility savings) — each named individually in the coverage test, because "fewer
+  silent surfaces" is not a property anyone can check while "the meal planner
+  records which model produced this week's plan" is.
+
+  **Four more closed a failure mode nothing was recording: the model answered
+  and the surface could not use the answer.** Notes assist, the relationship
+  digest, meal nutrition and the chef each ask for a shape — a summary, a
+  headline, JSON, a parseable plan — and each has a branch for "we got a reply
+  and could not read it". Two answer 502, one 422, and the chef silently keeps
+  its deterministic fallback. In every case the tokens were spent and the row,
+  had there been one, would have read `completed`.
+
+  They now call `obs.used` and THEN `obs.failed`, in that order, so the spend
+  lands on the row even though the turn failed. The coverage test asserts the
+  ordering by source position rather than the presence of both calls: a mutant
+  that charges the tokens only when the answer was usable — the natural way to
+  write it — passes a presence check and fails this one.
+
+  The chef is the sharpest case: `source: 'fallback'` is what a family sees when
+  the provider threw, when the reply would not parse, AND when no API key is
+  configured. Three causes, one indistinguishable outcome.
+
+  **Utility savings is the third surface that does not fit the pattern.** It
+  answers 200 whether or not the model ran: on a provider failure it drops the
+  narrative and returns its deterministic findings alone, flagged `aiUsed:
+  false`. That flag cannot distinguish "the model errored" from "no API key is
+  configured", which is precisely the §33 complaint — so the wrapper has to sit
+  INSIDE the try that swallows, and the test asserts the ordering rather than
+  just the presence of a call. The first version of that assertion sliced from
+  `withAiRequest(` to `obs.used(` and passed against a mutant that wrapped the
+  provider call in its own `try { ... } catch { return null }`, because the
+  swallow lands AFTER `obs.used`. The slice now runs to the `aiUsed = true` that
+  follows the wrapper, and the mutant fails.
+
+  **The ratchet was carrying the exact slack its own comment forbids.** The
+  scanner counted any file importing from `lib/ai/provider`. Nine of the 32 could
+  not obtain a provider at all: six import only a `ToolSpec` or `AIProviderConfig`
+  type (`lib/assistant/tools.ts`, `lib/assistant/trust-wrapper.ts`,
+  `lib/ai/action-tools.ts`, `lib/ai/tools/legacy-adapter.ts`, `lib/ai/settings.ts`,
+  `lib/ai/provider-stub.ts`), and three import only `describeAIError` /
+  `isAIConfigured` (`app/api/ai/route.ts`, `app/api/social/ai/route.ts`,
+  `app/(app)/dashboard/concierge/run-actions.ts`). Nine files' worth of room for a
+  new silent surface to slip in green.
+
+  It also missed a real one. The obvious forward regex —
+  `import\s+(type\s+)?\{[\s\S]*?\}\s+from '…provider'` — starts matching at the
+  FIRST `import {` in a file and lazily extends to the provider specifier,
+  swallowing every import in between. Any file whose first import happens to be
+  `import type {…}` reads as type-only regardless of what it takes from the
+  provider. That is how `lib/ai/assistant-engine.ts` — which imports
+  `resolveProvider` and calls `provider.runTools` in three places — was classified
+  as unable to reach a model. The scanner now finds each provider import by
+  scanning BACK from the specifier to the `import` that opens the statement, and
+  requires a value import of one of the four exports that actually yield a
+  provider (`resolveProvider`, `getProvider`, `providerFromConfig`,
+  `OpenAIProvider`).
+
+  Having been wrong in both directions, the scanner now has fixtures of its own:
+  nine files asserted absent by name with the reason, three asserted present, and
+  six direct unit checks on the classifier including the exact shape the forward
+  regex got wrong.
+
+  **The assistant engine — `/api/ai`, both transports — was the largest, and it
+  did not take the wrap-the-provider-call shape.** `createAssistantStream`
+  returns a `ReadableStream` and `withAiRequest` settles when its body resolves,
+  so a wrapper placed around the call would settle every row `completed` before a
+  single token existed. It has to live INSIDE `start(controller)`, which is how
+  `app/api/ai/chat/route.ts` already does it. A test asserts the ordering by
+  source position, and a mutant that hoists the wrapper to wrap the stream
+  construction — the realistic mistake — fails it.
+
+  The scope came free: `prepareAssistantTurn` already builds a `ServiceScope`
+  with the resolved `family_members.id` from its roster lookup, which the route's
+  own context does not reach. Carrying it on `PreparedAssistantTurn` meant no new
+  route plumbing. Its `actorKind` is `'ai'` (correct for the tool writes) but
+  `createRequest` reads only `familyId`/`userId`/`memberId`, so the row is
+  attributed to the person who typed the message.
+
+  The five outcomes are now distinguishable, which they were not:
+
+  | What happened | Family saw | Row |
+  |---|---|---|
+  | Stream completed | full answer | `completed` |
+  | Stream broke before any text, `runTools` fallback succeeded | full answer | `completed`, two `used` calls |
+  | Stream broke before any text, fallback also threw | nothing | `failed` |
+  | Stream broke mid-answer | partial answer | `partially_completed` |
+  | Answered, then `persistAssistantTurn` failed | full answer, **not saved** | `partially_completed` |
+
+  That last row is a gap nothing else had found: **the assistant can answer
+  correctly and fail to save the turn**, and the family meets it later as a
+  conversation missing its last exchange. The only trace was an SSE `error` event
+  (or a `persistenceError` field) the client may never surface.
+
+  One honest limitation: `runToolsStream` yields deltas and actions but no usage
+  total — only the JSON transport's `ToolRunResult` carries one — so the
+  streaming row records the model and no token counts. A zero would read like a
+  free turn.
+
+  Two test changes worth naming. `tests/assistant-stream.test.ts` needed a scope
+  on its prepared-turn stub, and its stub `db` has no `insert().select()` chain,
+  so the row fails to open and the wrapper carries on with a null request id —
+  the "bookkeeping never fails the family's work" promise being exercised rather
+  than mocked away. And `tests/ai-prompt-injection.test.ts` asserted that a
+  hostile calendar title caused no writes outside `ai_messages`/
+  `ai_conversations`; `ai_requests` is the same class of the assistant's own
+  bookkeeping, so the set was widened deliberately and the assertion strengthened
+  to also name the actual attack (no `calendar_events` write of any kind).
+
+  **The helper/route pairs needed the scope threaded, not the call site
+  wrapped.** `lib/chores/ai.ts` and `lib/social/ai.ts` hold the provider; their
+  single callers hold the scope. Wrapping at the call site would have observed
+  the surface while leaving the helper counted as silent, because the scanner
+  counts the file that OBTAINS a provider. So `validateChoreSubmission`,
+  `generateChorePlan` and `generate` each take a `ServiceScope` as their first
+  argument now and open their own row — one caller each, so a required parameter
+  was cleaner than an optional one that could silently no-op.
+
+  **The chore validator is the richest case so far, and the most child-facing.**
+  It never throws, and ends at `fallbackValidation` four ways: no API key, a
+  photo chore with no photo, a reply that will not parse, and a provider that
+  threw. From the child's side those four are ONE thing — *the chore I did was
+  not auto-approved and now I wait for a grown-up*. Two of them were silent.
+
+  The sharper half of the fix is which paths open NO row. "No key configured" is
+  a setting and "a photo chore with no photo" is a guard that fires before
+  anything is asked of a model; a row for either would inflate the failure count
+  on `/admin/ai-activity`, which is the first number support reads. Six
+  behavioural tests pin all four paths, including that a chore is never
+  `rejected` for an AI outage, and that the verdict still arrives when the
+  request row cannot be opened at all.
+
+  Three signature changes broke no test, because none of these helpers had one.
+  `tests/chores-ai-observed.test.ts` is the first.
+
+  **The ledger is now readable, which is the half the gap row actually names.**
+  §33's complaint is not "the rows are missing" — it is *"a family writes in that
+  'Bubaly stopped doing my Sunday meal plan' and NOBODY CAN ANSWER THEM."* Until
+  `/admin/ai-activity`, no application code selected from `ai_requests` at all
+  except `loadRunDetail`, which needs a run. The twelve feature surfaces have no
+  run, so four tranches of careful recording were **write-only**: everything
+  above this paragraph was invisible to the person answering the ticket.
+
+  The page shows, across all families: surface, status, model, token total,
+  latency, error, and the request text — filterable by status, feature and
+  family, with a 24-hour strip counting failures and in-flight rows. It is behind
+  `app/(app)/admin/layout.tsx`, which redirects a non-super-admin before any
+  child renders.
+
+  Three decisions worth recording:
+
+  - **The query is in `lib/ai/activity.ts`, not in the page.** The runner is
+    `environment: 'node'` and cannot render a server component, so a page that
+    holds its own filtering is a page whose filtering is never tested. Twenty
+    tests pin it; the page has five guard assertions on top.
+  - **PostgreSQL filters and counts, JavaScript does not.** The neighbouring
+    audit-logs page fetches 500 rows and filters in memory. Copied here, "show me
+    every failure" would silently mean "every failure inside the last 500 rows",
+    on a table that grows by a row per AI call. `count: 'exact'` plus `range`
+    instead.
+  - **`request_text` is shown, and only here.** Support answering a ticket needs
+    the message that failed, and the same text already lives in `ai_messages`.
+    Most surfaces store a safe label ("Analyse a note", "Resolve a calendar
+    clash"); the chat assistant and the chef store the person's own words. The
+    search box deliberately does NOT search that column — it is for diagnosing a
+    surface, not for trawling what families typed.
+
+  One real bug came out of writing it: validating the status filter against
+  `RUN_STATES` is wrong. That constant is `AiRunLifecycleState[]` and includes
+  `paused` — a person pausing a RUN, which no request row ever carries — so
+  `?status=paused` would have reached a query that can never match, and the
+  console would have shown an empty table reading as "Bubaly did nothing" rather
+  than "that is not a status". The compiler caught the unsound type predicate;
+  `AI_REQUEST_STATES` is now derived by filtering `paused` out, and a test pins
+  both halves.
+
+  **Server actions, not routes — the same wrapper, a different call shape.**
+  The reconnect-message drafter, the paperwork reply drafter and the marketplace
+  assistant are Server Actions returning result objects rather than HTTP
+  responses. They needed nothing new: `ctx` and the client are already in scope,
+  and the failure modes are the familiar ones (an empty answer returned as an
+  error result; the marketplace one swallowing into its deterministic engine).
+  What each does NOT put on the row is the point — not the contact's name, and
+  nothing at all from the paperwork itself, which is OCR of a letter somebody
+  else wrote and the most literally untrusted text in the product.
+
+  **A second surface that will never adopt, for the same reason as the gift
+  route.** `app/(app)/admin/ai/actions.ts` authenticates with `getUser()` +
+  `isSuperAdmin()` and never resolves a family: it answers "does the configured
+  key work?". There is no `familyId` to build a scope from, and billing a
+  connectivity check to whichever family came first would be worse than not
+  recording it. Named in the coverage test with that reason, so the floor is now
+  2 rather than 1.
+
+  **The subtlest shape: a canned sentence that reads like the real thing.**
+  When the parenting coach at `/api/behavior/insight` replies without JSON, the
+  route answers 200 with *"Keep logging — patterns will sharpen over time."* — a
+  warm, plausible sentence a parent cannot distinguish from coaching. The other
+  empty-200 routes at least LOOK empty; this one looks like an answer. Three
+  paths reach it (no JSON in the reply, `JSON.parse` throwing on malformed
+  braces, the provider throwing) and none recorded anything. The canned line is
+  still what the parent sees — the test asserts the failure is recorded BEFORE
+  it, by source position, so a mutant that drops `obs.failed` fails.
+
+  `auto.accident` went in the same tranche and is worth naming for a different
+  reason: someone has just had a car accident, and a 503 there is the failure on
+  this whole list a family is most likely to write in about.
+
+  **A fourth shape of silence: a 200 carrying an empty answer.** After "throws"
+  (the common case), "never throws" (the chat assistant) and "answers 200 with a
+  flag" (utility savings), `/api/ai/resolve-conflict` splits the model's reply
+  into lines and answers `{ ideas: [] }` when none survive — which is exactly
+  what a working model with nothing to suggest would produce. A parent sees "no
+  suggestions" either way. The response is deliberately unchanged; the row is now
+  the only place that difference lives.
+
+  The two Money Coach routes (`wallet.coach`, `wallet.coach.child`) went with it,
+  both the familiar unparseable-answer 502. Neither puts the child's name on the
+  row: `childId` is already the subject of the `wallet_audit_logs` entry, and the
+  request ledger does not need to repeat which kid is being coached about money.
+
+  **The remaining 19 silent surfaces are counted, not ignored.**
+  `tests/ai-observability-coverage.test.ts` caps them at exactly 17 — not a round
+  number above it, because slack in a ratchet is room for new silent surfaces to
+  slip in green, and the ceiling comes down with every adoption (52 → 48 → 44 → 42 → 40 → 36 → 32, then 23 as a correction rather than nine adoptions, then 22, then 19, then 17, then 14, then 11, then 8, then 6) — and
+  asserts the scanner finds something, so a broken scanner cannot satisfy the cap
+  vacuously. Verified: 22 fails, and adding one new provider-calling route fails it.
+
+  **The floor is 3, and this paragraph used to say 1.** That was wrong twice
+  over. `lib/ai/routing.ts` builds an `OpenAIProvider` and hands it back without
+  ever calling one — no request to observe, no scope to observe it with. But
+  `/api/ai/gift` was documented as deliberately-not-adopted in its own paragraph
+  and never counted toward the floor here, despite obtaining a provider and
+  sitting in the count from the first day. The floor was 2 the day "the floor is
+  1" was written, and `app/(app)/admin/ai/actions.ts` makes it 3. All three are
+  now named in one assertion, which is what stops the arithmetic drifting again.
+
+  None is excluded from the count: excluding any means teaching the scanner a
+  judgement call, and a scanner that makes judgement calls can be argued into
+  excluding a real surface.
+
+  **One surface is deliberately NOT adopted.** `/api/ai/gift` is unauthenticated
+  by design — a giver following a gift link is not signed in — so
+  `scopeFromUserContext` has nothing to build from. It could be given a system
+  scope for the family that owns the link, but that would put a stranger's
+  request on the family's own `ai_requests` ledger, and whose AI budget a
+  gift-link visitor spends is a product decision rather than a mechanical
+  conversion. Recorded in the coverage test with that reason instead of guessed
+  at.
+
+  It is one of three surfaces so far that do not fit the pattern, alongside the
+  chat assistant which never throws and utility savings which answers 200 on
+  failure, and the assistant engine whose stream outlives the call that creates
+  it, and the conflict resolver that answers 200 with an empty list. The
+  remaining 17 should be expected to contain more of them: "wrap the provider
+  call" is the common case, not the whole set.
+
+  **Adopting the wrapper widens what a route reads from its user context.**
+  `scopeFromUserContext` needs `ctx.active.role`, `ctx.active.family.timezone`
+  and `ctx.active.member.id`; a route that previously touched only `user.id` and
+  `active.familyId` now touches all of them. Both are required fields on
+  `FamilyMembership`, so production always has them — but a hand-rolled test stub
+  need not, and `tests/relationship-ai-gift-history.test.ts` had one that did
+  not. It failed seven ways with a `TypeError` on `timezone` swallowed into a
+  500. Expect the same in the remaining 32: the stub is thinner than the type.
+
+  Still open in §33: the other 17 surfaces. The admin view over runs is now
+  built; what it cannot show is a surface that never opened a row, which is what
+  the ceiling counts. Note that `app/api/ai/route.ts` is not among them and is
+  not silent either — it holds the scope, the engine holds the provider, and the
+  scanner counts the file that obtains one. For a route/helper pair like that,
+  adoption in either closes both.
 
 - **§21, "how Bubaly may reach a child directly" was a setting that did
   nothing.** `0257` documents `family_ai_settings.child_channels` as

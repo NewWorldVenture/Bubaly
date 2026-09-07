@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/marketplace/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/marketplace/page.tsx');
 
 describe('marketplace home read boundary', () => {
   it('does not silently convert marketplace read failures into a healthy empty board', () => {

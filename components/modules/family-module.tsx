@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -93,6 +94,7 @@ const ROLE_OPTIONS: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiv
 const MEMBER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 export function FamilyModule() {
+  const t = useTranslations();
   const { familyId, userId, role, members, refreshMembers, planLevel } = useApp();
   const { success, error: toastError } = useToast();
   const canManage = MANAGER_ROLES.includes(role);
@@ -177,8 +179,8 @@ export function FamilyModule() {
 
   async function copyCode() {
     if (!family?.family_code) return;
-    try { await navigator.clipboard.writeText(family.family_code); success('Family code copied'); }
-    catch { toastError('Could not copy the code'); }
+    try { await navigator.clipboard.writeText(family.family_code); success(t('familyModule.familyCodeCopied')); }
+    catch { toastError(t('familyModule.couldNotCopyTheCode')); }
   }
 
   const sharedCards = [
@@ -193,12 +195,12 @@ export function FamilyModule() {
     <div className="module-with-sidebar">
       <div className="module-main space-y-5">
         <PageHeader
-          title="Family"
-          description="Your family hub. Everyone. Everything. In one place."
+          title={t('family.family')}
+          description={t('familyModule.yourFamilyHubEveryoneEverything')}
           action={
             <div className="flex flex-wrap items-center gap-2">
-              {canManage && <Button onClick={() => { setEditMember(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add Member</Button>}
-              <Button variant="secondary" onClick={() => setInviteOpen(true)}><UserPlus className="h-4 w-4" /> Invite Family</Button>
+              {canManage && <Button onClick={() => { setEditMember(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> {t('family.addMember')}</Button>}
+              <Button variant="secondary" onClick={() => setInviteOpen(true)}><UserPlus className="h-4 w-4" /> {t('family.inviteFamily')}</Button>
             </div>
           }
         />
@@ -216,12 +218,12 @@ export function FamilyModule() {
                 )}
               </div>
               <p className="mt-0.5 text-sm text-muted">
-                {activeMembers.length} Member{activeMembers.length === 1 ? '' : 's'}{location ? ` · ${location}` : ''}
+                {activeMembers.length} {t('family.member')}{activeMembers.length === 1 ? '' : 's'}{location ? ` · ${location}` : ''}
               </p>
             </div>
             {canManage && (
               <button onClick={() => setEditOpen(true)} className="flex items-center gap-1 text-sm font-semibold text-brand-text hover:underline">
-                <Edit3 className="h-3.5 w-3.5" /> Edit Family Profile
+                <Edit3 className="h-3.5 w-3.5" /> {t('family.editFamilyProfile')}
               </button>
             )}
           </div>
@@ -240,7 +242,7 @@ export function FamilyModule() {
 
           {/* Members */}
           {activeMembers.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">No members yet. Add your first family member.</p>
+            <p className="py-8 text-center text-sm text-muted">{t('family.noMembersYetAddYourFirst')}</p>
           ) : (
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {visibleMembers.map((m) => {
@@ -257,8 +259,8 @@ export function FamilyModule() {
                           <>
                             <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setMenuId(null)} />
                             <div className="absolute right-0 z-20 mt-1 w-32 overflow-hidden rounded-xl border border-border bg-surface text-left shadow-lg">
-                              <button onClick={() => { setMenuId(null); setEditMember(m); setAddOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Edit3 className="h-3.5 w-3.5" /> Edit</button>
-                              <button onClick={() => { setMenuId(null); setRemoveMember(m); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+                              <button onClick={() => { setMenuId(null); setEditMember(m); setAddOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elevated"><Edit3 className="h-3.5 w-3.5" /> {t('family.edit')}</button>
+                              <button onClick={() => { setMenuId(null); setRemoveMember(m); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-3.5 w-3.5" /> {t('family.remove')}</button>
                             </div>
                           </>
                         )}
@@ -284,7 +286,7 @@ export function FamilyModule() {
           )}
           {canManage && (
             <button onClick={() => { setEditMember(null); setAddOpen(true); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-3 text-sm font-semibold text-muted transition hover:border-brand/50 hover:text-fg">
-              <Plus className="h-4 w-4" /> Add Member
+              <Plus className="h-4 w-4" /> {t('family.addMember')}
             </button>
           )}
         </div>
@@ -293,11 +295,11 @@ export function FamilyModule() {
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Family Calendar</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View Calendar</Link>
+              <h2 className="font-semibold">{t('family.familyCalendar')}</h2>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('family.viewCalendar')}</Link>
             </div>
             {events.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted">Nothing scheduled yet.</p>
+              <p className="py-6 text-center text-sm text-muted">{t('family.nothingScheduledYet')}</p>
             ) : (
               <div className="space-y-2.5">
                 {events.map((e) => {
@@ -315,16 +317,16 @@ export function FamilyModule() {
                 })}
               </div>
             )}
-            <Link href="/dashboard/calendar" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">View Full Calendar</Link>
+            <Link href="/dashboard/calendar" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">{t('family.viewFullCalendar')}</Link>
           </div>
 
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Family Highlights</h2>
-              <Link href="/dashboard/memories" className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></Link>
+              <h2 className="font-semibold">{t('family.familyHighlights')}</h2>
+              <Link href="/dashboard/memories" className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{t('family.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></Link>
             </div>
             {highlights.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted">No highlights yet.</p>
+              <p className="py-6 text-center text-sm text-muted">{t('family.noHighlightsYet')}</p>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {highlights.map((a) => (
@@ -343,13 +345,13 @@ export function FamilyModule() {
                 ))}
               </div>
             )}
-            <Link href="/dashboard/memories/create" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> Add Memory</Link>
+            <Link href="/dashboard/memories/create" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> {t('family.addMemory')}</Link>
           </div>
         </div>
 
         {/* Shared Information */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Shared Information</h2>
+          <h2 className="mb-4 font-semibold">{t('family.sharedInformation')}</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {sharedCards.map((c) => (
               <Link key={c.label} href={c.href} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface/20 p-4 transition hover:bg-elevated">
@@ -358,7 +360,7 @@ export function FamilyModule() {
                   <p className="text-sm font-semibold">{c.label}</p>
                   <p className="text-xs text-muted">{c.count != null ? `${c.count} ${c.unit}` : 'View'}</p>
                 </div>
-                <span className="text-xs font-semibold text-brand-text">View →</span>
+                <span className="text-xs font-semibold text-brand-text">{t('family.view')}</span>
               </Link>
             ))}
           </div>
@@ -370,23 +372,23 @@ export function FamilyModule() {
         {/* Family Info */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Family Info</h2>
-            {canManage && <button onClick={() => setEditOpen(true)} className="text-xs font-semibold text-brand-text hover:underline">Edit</button>}
+            <h2 className="font-semibold">{t('family.familyInfo')}</h2>
+            {canManage && <button onClick={() => setEditOpen(true)} className="text-xs font-semibold text-brand-text hover:underline">{t('family.edit')}</button>}
           </div>
           <div className="space-y-3.5">
-            <InfoRow icon={Users} tint="bg-brand/10 text-brand-text" label="Family Name" value={famName} />
-            <InfoRow icon={Home} tint="bg-blue-500/10 text-blue-400" label="Address" value={family?.address ?? 'Not set'} />
-            <InfoRow icon={Clock} tint="bg-emerald-500/10 text-emerald-400" label="Time Zone" value={family?.timezone ?? 'UTC'} />
-            <InfoRow icon={CreditCard} tint="bg-orange-500/10 text-orange-400" label="Subscription"
+            <InfoRow icon={Users} tint="bg-brand/10 text-brand-text" label={t('family.familyName')} value={famName} />
+            <InfoRow icon={Home} tint="bg-blue-500/10 text-blue-400" label={t('family.address')} value={family?.address ?? 'Not set'} />
+            <InfoRow icon={Clock} tint="bg-emerald-500/10 text-emerald-400" label={t('family.timeZone')} value={family?.timezone ?? 'UTC'} />
+            <InfoRow icon={CreditCard} tint="bg-orange-500/10 text-orange-400" label={t('family.subscription')}
               value={`${planName} Plan`} sub={sub?.current_period_end ? `Renews ${fmtDate(sub.current_period_end)}` : undefined} />
             <div className="flex items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-500/10 text-rose-400"><CreditCard className="h-4 w-4" /></span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted">Family Code</p>
+                <p className="text-xs text-muted">{t('family.familyCode')}</p>
                 <p className="truncate text-sm font-semibold">{family?.family_code ?? '—'}</p>
               </div>
               {family?.family_code && (
-                <button onClick={copyCode} aria-label="Copy family code" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg"><Copy className="h-4 w-4" /></button>
+                <button onClick={copyCode} aria-label={t('family.copyFamilyCode')} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg"><Copy className="h-4 w-4" /></button>
               )}
             </div>
           </div>
@@ -395,11 +397,11 @@ export function FamilyModule() {
         {/* Upcoming Birthdays */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Upcoming Birthdays</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
+            <h2 className="font-semibold">{t('family.upcomingBirthdays')}</h2>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('family.viewAll')}</Link>
           </div>
           {birthdays.length === 0 ? (
-            <p className="py-2 text-center text-sm text-muted">No birthdays on file.</p>
+            <p className="py-2 text-center text-sm text-muted">{t('family.noBirthdaysOnFile')}</p>
           ) : (
             <div className="space-y-3">
               {birthdays.map(({ m, nb }) => (
@@ -407,25 +409,25 @@ export function FamilyModule() {
                   <Avatar name={m.display_name} src={m.avatar_url} color={m.color} size={36} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{m.display_name}</p>
-                    <p className="truncate text-xs text-muted">Turns {nb.turning} {inLabel(nb.inDays)}</p>
+                    <p className="truncate text-xs text-muted">{t('family.turns')} {nb.turning} {inLabel(nb.inDays)}</p>
                   </div>
                   <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                 </div>
               ))}
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-text hover:underline"><Cake className="h-3.5 w-3.5" /> Add to Calendar</Link>
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-text hover:underline"><Cake className="h-3.5 w-3.5" /> {t('family.addToCalendar')}</Link>
         </div>
 
         {/* Quick Actions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Quick Actions</h2>
+          <h2 className="mb-4 font-semibold">{t('family.quickActions')}</h2>
           <div className="space-y-1.5">
-            <button onClick={() => setInviteOpen(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-elevated"><UserPlus className="h-4 w-4 text-muted" /> Invite Family Member</button>
-            <QuickLink href="/family/permissions" icon={ShieldCheck} label="Manage Permissions" />
-            <QuickLink href="/dashboard/settings" icon={SettingsIcon} label="Family Settings" />
-            <QuickLink href="/family/activity" icon={Activity} label="View Family Activity" />
-            <QuickLink href="/dashboard/contacts" icon={PhoneIcon} label="Emergency Contacts" />
+            <button onClick={() => setInviteOpen(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-elevated"><UserPlus className="h-4 w-4 text-muted" /> {t('family.inviteFamilyMember')}</button>
+            <QuickLink href="/family/permissions" icon={ShieldCheck} label={t('family.managePermissions')} />
+            <QuickLink href="/dashboard/settings" icon={SettingsIcon} label={t('family.familySettings')} />
+            <QuickLink href="/family/activity" icon={Activity} label={t('family.viewFamilyActivity')} />
+            <QuickLink href="/dashboard/contacts" icon={PhoneIcon} label={t('family.emergencyContacts')} />
           </div>
         </div>
       </aside>
@@ -443,19 +445,19 @@ export function FamilyModule() {
       {inviteOpen && (
         <InviteModal code={family?.family_code ?? null} onClose={() => setInviteOpen(false)} onCopy={copyCode} />
       )}
-      <Modal open={!!removeMember} title="Remove member?" onClose={() => setRemoveMember(null)}>
+      <Modal open={!!removeMember} title={t('family.removeMember')} onClose={() => setRemoveMember(null)}>
         <div className="space-y-4">
-          <p className="text-sm text-muted">Remove <span className="font-semibold text-fg">{removeMember?.display_name}</span> from the family? They can be re-added later.</p>
+          <p className="text-sm text-muted">{t('family.remove')} <span className="font-semibold text-fg">{removeMember?.display_name}</span> {t('family.fromTheFamilyTheyCanBe')}</p>
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setRemoveMember(null)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setRemoveMember(null)}>{t('family.cancel')}</Button>
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
               const sb = createClient();
               const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
-              success('Member removed'); void refreshMembers();
-            }}>Remove</Button>
+              success(t('familyModule.memberRemoved')); void refreshMembers();
+            }}>{t('family.remove')}</Button>
           </div>
         </div>
       </Modal>
@@ -496,6 +498,7 @@ function QuickLink({ href, icon: Icon, label }: { href: string; icon: typeof Use
 function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
   familyId: string; createdBy: string; member: Member | null; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(member?.display_name ?? '');
@@ -528,15 +531,15 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
   return (
     <Modal open title={member ? 'Edit Member' : 'Add Member'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ella Parker" required />}</Field>
-        <Field label="Role">{(id) => (
+        <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
+        <Field label={t('family.role')}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
             {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </Select>
         )}</Field>
-        <Field label="Birthday">{(id) => <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />}</Field>
-        <Field label="Email">{(id) => <Input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />}</Field>
-        <Field label="Phone">{(id) => <Input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-1234" />}</Field>
+        <Field label={t('family.birthday')}>{(id) => <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />}</Field>
+        <Field label={t('family.email')}>{(id) => <Input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />}</Field>
+        <Field label={t('family.phone')}>{(id) => <Input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-1234" />}</Field>
         <Button type="submit" className="w-full" loading={saving} disabled={saving || !name.trim()}>{member ? 'Save Changes' : 'Add Member'}</Button>
       </form>
     </Modal>
@@ -545,6 +548,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
 
 // ── Edit family profile modal ───────────────────────────────────────────────
 function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose: () => void; onSaved: (f: Family) => void }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(family.name);
@@ -562,18 +566,18 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
       .eq('id', family.id).select('*').maybeSingle();
     setSaving(false);
     if (err || !data) { toastError(err ? describeDbError(err) : 'Could not save'); return; }
-    success('Family profile updated');
+    success(t('familyModule.familyProfileUpdated'));
     onSaved(data as Family);
   }
 
   return (
-    <Modal open title="Edit Family Profile" onClose={onClose}>
+    <Modal open title={t('family.editFamilyProfile')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Family Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required />}</Field>
-        <Field label="Address">{(id) => <Input id={id} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Family Way, Austin, TX 78701" />}</Field>
-        <Field label="Time Zone">{(id) => <Input id={id} value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Chicago" />}</Field>
-        <Field label="Cover Photo URL" hint="Paste an image URL for your family cover.">{(id) => <Input id={id} value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…" />}</Field>
-        <Button type="submit" className="w-full" loading={saving} disabled={saving || !name.trim()}>Save Changes</Button>
+        <Field label={t('family.familyName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required />}</Field>
+        <Field label={t('family.address')}>{(id) => <Input id={id} value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('family.123FamilyWayAustinTx78701')} />}</Field>
+        <Field label={t('family.timeZone')}>{(id) => <Input id={id} value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Chicago" />}</Field>
+        <Field label={t('family.coverPhotoUrl')} hint={t('familyModule.pasteAnImageUrlFor')}>{(id) => <Input id={id} value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…" />}</Field>
+        <Button type="submit" className="w-full" loading={saving} disabled={saving || !name.trim()}>{t('family.saveChanges')}</Button>
       </form>
     </Modal>
   );
@@ -581,15 +585,16 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
 
 // ── Invite modal ────────────────────────────────────────────────────────────
 function InviteModal({ code, onClose, onCopy }: { code: string | null; onClose: () => void; onCopy: () => void }) {
+  const t = useTranslations();
   return (
-    <Modal open title="Invite Family" onClose={onClose}>
+    <Modal open title={t('family.inviteFamily')} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">Share your family code so a new member can join, or manage invites in Members.</p>
+        <p className="text-sm text-muted">{t('family.shareYourFamilyCodeSoA')}</p>
         <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-4 py-3">
           <span className="font-mono text-lg font-bold tracking-widest">{code ?? '—'}</span>
-          {code && <Button size="sm" variant="secondary" onClick={onCopy}><Copy className="h-4 w-4" /> Copy</Button>}
+          {code && <Button size="sm" variant="secondary" onClick={onCopy}><Copy className="h-4 w-4" /> {t('family.copy')}</Button>}
         </div>
-        <Link href="/family/members" className="btn-cta inline-flex w-full items-center justify-center" onClick={onClose}>Manage Members & Invites</Link>
+        <Link href="/family/members" className="btn-cta inline-flex w-full items-center justify-center" onClick={onClose}>{t('family.manageMembersInvites')}</Link>
       </div>
     </Modal>
   );

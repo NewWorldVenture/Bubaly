@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const audit = readFileSync('app/(app)/admin/audit/page.tsx', 'utf8');
@@ -9,12 +10,12 @@ describe('admin audit read boundaries', () => {
     expect(audit).toContain('error: logsError');
     expect(audit).toContain('error: familiesError');
     expect(audit).toContain('error: actorsError');
-    expect(audit).toContain('Could not load audit logs from Supabase. Refresh and try again.');
+    expectSays(audit, 'audit.couldNotLoadAuditLogs', 'Could not load audit logs from Supabase. Refresh and try again.');
   });
 
   it('surfaces audit-log failures on the complete history view', () => {
     expect(auditLogs).toContain('error: logsError');
     expect(auditLogs).toContain('if (logsError)');
-    expect(auditLogs).toContain('Could not load audit logs from Supabase. Refresh and try again.');
+    expectSays(auditLogs, 'auditLogs.couldNotLoadAuditLogs', 'Could not load audit logs from Supabase. Refresh and try again.');
   });
 });

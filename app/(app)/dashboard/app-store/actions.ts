@@ -3,6 +3,7 @@
 // Family App Store install lifecycle. Family-scoped via RLS — an install always
 // carries the caller's family + acting member.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 
@@ -10,7 +11,8 @@ type Result = { ok: true } | { ok: false; error: string };
 const PATH = '/dashboard/app-store';
 
 export async function installAppAction(appId: string): Promise<Result> {
-  if (!appId) return { ok: false, error: 'Invalid app' };
+  const t = await getTranslations();
+  if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.from('family_app_installs').upsert({
@@ -23,7 +25,8 @@ export async function installAppAction(appId: string): Promise<Result> {
 }
 
 export async function uninstallAppAction(appId: string): Promise<Result> {
-  if (!appId) return { ok: false, error: 'Invalid app' };
+  const t = await getTranslations();
+  if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.from('family_app_installs').delete()
@@ -34,7 +37,8 @@ export async function uninstallAppAction(appId: string): Promise<Result> {
 }
 
 export async function toggleAppAction(appId: string, enabled: boolean): Promise<Result> {
-  if (!appId) return { ok: false, error: 'Invalid app' };
+  const t = await getTranslations();
+  if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.from('family_app_installs').update({ enabled })

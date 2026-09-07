@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Sports' };
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 const RESULT_STYLE: Record<string, string> = { win: 'text-emerald-300', loss: 'text-rose-300', tie: 'text-amber-300' };
 
 export default async function FamilySportsPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -37,7 +39,7 @@ export default async function FamilySportsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (sportsError) {
     console.error('[dashboard/family-sports] sports read failed', sportsError);
-    return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('familySports.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -51,17 +53,17 @@ export default async function FamilySportsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Family Sports Hub" description="Practices, games, teams and logistics for every athlete in the house." />
+      <PageHeader title={tr('dashboardFamilySports.familySportsHub')} description={tr('familySports.practicesGamesTeamsAndLogistics')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile href="/dashboard/sports" label="Active teams" value={teams?.length ?? 0} icon={Users} accent="bg-teal-600" sublabel="Teams" />
-        <StatTile href="/dashboard/sports" label="Upcoming (14d)" value={events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Schedule" />
-        <StatTile label="Record" value={`${record.win ?? 0}-${record.loss ?? 0}-${record.tie ?? 0}`} icon={Trophy} accent="bg-amber-500" />
-        <StatTile href="/dashboard/sports" label="Recent games" value={games?.length ?? 0} icon={Flag} accent="bg-rose-500" sublabel="Results" />
+        <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.activeTeams')} value={teams?.length ?? 0} icon={Users} accent="bg-teal-600" sublabel="Teams" />
+        <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.upcoming14d')} value={events?.length ?? 0} icon={CalendarClock} accent="bg-violet-600" sublabel="Schedule" />
+        <StatTile label={tr('dashboardFamilySports.record')} value={`${record.win ?? 0}-${record.loss ?? 0}-${record.tie ?? 0}`} icon={Trophy} accent="bg-amber-500" />
+        <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.recentGames')} value={games?.length ?? 0} icon={Flag} accent="bg-rose-500" sublabel="Results" />
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title="Practices & Games" description="Next 14 days" viewAllHref="/dashboard/sports">
+        <SectionCard title={tr('dashboardFamilySports.practicesGames')} description={tr('familySports.next14Days')} viewAllHref="/dashboard/sports">
           {events && events.length > 0 ? (
             <ul className="divide-y divide-border">
               {events.map((e) => (
@@ -78,10 +80,10 @@ export default async function FamilySportsPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarClock} text="No practices or games scheduled." />}
+          ) : <MiniEmpty icon={CalendarClock} text={tr('familySports.noPracticesOrGamesScheduled')} />}
         </SectionCard>
 
-        <SectionCard title="Recent Results" viewAllHref="/dashboard/sports">
+        <SectionCard title={tr('dashboardFamilySports.recentResults')} viewAllHref="/dashboard/sports">
           {games && games.length > 0 ? (
             <ul className="divide-y divide-border">
               {games.map((g) => (
@@ -95,11 +97,11 @@ export default async function FamilySportsPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Flag} text="No game results logged yet." />}
+          ) : <MiniEmpty icon={Flag} text={tr('familySports.noGameResultsLoggedYet')} />}
         </SectionCard>
       </div>
 
-      <SectionCard title="Teams" viewAllHref="/dashboard/sports">
+      <SectionCard title={tr('dashboardFamilySports.teams')} viewAllHref="/dashboard/sports">
         {teams && teams.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {teams.map((t) => (
@@ -110,7 +112,7 @@ export default async function FamilySportsPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={Users} text="No teams added yet." />}
+        ) : <MiniEmpty icon={Users} text={tr('familySports.noTeamsAddedYet')} />}
       </SectionCard>
     </div>
   );

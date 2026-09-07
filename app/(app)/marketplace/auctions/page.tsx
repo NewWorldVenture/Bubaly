@@ -7,18 +7,20 @@ import { ListingImage } from '@/components/marketplace/listing-image';
 import { ErrorState } from '@/components/ui/states';
 import { auctionStatus, timeLeft, reserveMet, type AuctionListing } from '@/lib/marketplace/auction';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" /> Live Auctions</h1>
-      <ErrorState message="Could not load live auctions from Supabase. Refresh and try again." />
-      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">Refresh auctions</Link>
+      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" />{' '}{t('auctions.liveAuctions')}</h1>
+      <ErrorState message={t('auctions.couldNotLoadLiveAuctions')} />
+      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">{t('auctions.refreshAuctions')}</Link>
     </div>
   );
 }
@@ -33,6 +35,7 @@ type Row = {
 /** Live auctions board — the eBay-beating surface: ending-soon first, with live
  *  countdowns, bid counts, reserve state, and Buy-It-Now flags. */
 export default async function AuctionsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const now = new Date();
@@ -65,12 +68,12 @@ export default async function AuctionsPage() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-            <Gavel className="h-6 w-6 text-brand-text" /> Live Auctions
+            <Gavel className="h-6 w-6 text-brand-text" /> {t('marketplaceAuctions.liveAuctions')}
           </h1>
-          <p className="mt-1 text-sm text-muted">Bid on what your community is selling — proxy bids keep you in front, and last-second bids extend the clock.</p>
+          <p className="mt-1 text-sm text-muted">{t('marketplaceAuctions.bidOnWhatYourCommunityIs')}</p>
         </div>
         <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 self-start rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 sm:self-auto">
-          <TrendingUp className="h-4 w-4" /> Sell at auction
+          <TrendingUp className="h-4 w-4" /> {t('marketplaceAuctions.sellAtAuction')}
         </Link>
       </div>
 
@@ -91,8 +94,8 @@ export default async function AuctionsPage() {
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Gavel className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-3 text-sm font-semibold">No live auctions right now</p>
-          <p className="mt-1 text-sm text-muted">Be the first — list an item at auction and let your community bid it up.</p>
+          <p className="mt-3 text-sm font-semibold">{t('marketplaceAuctions.noLiveAuctionsRightNow')}</p>
+          <p className="mt-1 text-sm text-muted">{t('marketplaceAuctions.beTheFirstListAnItem')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

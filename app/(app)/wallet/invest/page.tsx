@@ -8,11 +8,13 @@ import {
   InvestView, type InvestAsset, type InvestChild, type Holding, type PendingOrder,
 } from '@/components/wallet/invest-view';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Wallet Invest' };
 export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -21,7 +23,7 @@ export default async function WalletInvestPage() {
   const { data: wallet, error: walletError } = await supabase.from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
   if (walletError) {
     console.error('[wallet-invest] Wallet read failed', walletError);
-    return <ErrorState message="Could not load the family wallet. Refresh and try again." />;
+    return <ErrorState message={tr('invest.couldNotLoadTheFamily')} />;
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
@@ -33,11 +35,11 @@ export default async function WalletInvestPage() {
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId).eq('kind', 'invest'),
     supabase.from('invest_orders').select('id, child_wallet_id, asset_id, side, shares, amount_cents, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),
   ]);
-  if (assetsError) { console.error('[wallet-invest] Asset read failed', assetsError); return <ErrorState message="Could not load investments. Refresh and try again." />; }
+  if (assetsError) { console.error('[wallet-invest] Asset read failed', assetsError); return <ErrorState message={tr('invest.couldNotLoadInvestmentsRefresh')} />; }
   if (childWalletsError) { console.error('[wallet-invest] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
   if (membersError) { console.error('[wallet-invest] Family members read failed', membersError); dataWarnings.push('Family members'); }
-  if (holdingsError) { console.error('[wallet-invest] Holdings read failed', holdingsError); return <ErrorState message="Could not load investment holdings. Refresh and try again." />; }
-  if (bucketsError) { console.error('[wallet-invest] Investment buckets read failed', bucketsError); return <ErrorState message="Could not load investment cash. Refresh and try again." />; }
+  if (holdingsError) { console.error('[wallet-invest] Holdings read failed', holdingsError); return <ErrorState message={tr('invest.couldNotLoadInvestmentHoldings')} />; }
+  if (bucketsError) { console.error('[wallet-invest] Investment buckets read failed', bucketsError); return <ErrorState message={tr('invest.couldNotLoadInvestmentCash')} />; }
   if (ordersError) { console.error('[wallet-invest] Pending orders read failed', ordersError); dataWarnings.push('Pending orders'); }
 
   // Invest-bucket cash per child (from the immutable ledger).
@@ -49,7 +51,7 @@ export default async function WalletInvestPage() {
       .eq('family_id', familyId).in('bucket_id', Array.from(investBucketIds.keys())).in('status', ['completed', 'processing']);
     if (txnsError) {
       console.error('[wallet-invest] Investment transactions read failed', txnsError);
-      return <ErrorState message="Could not load investment cash activity. Refresh and try again." />;
+      return <ErrorState message={tr('invest.couldNotLoadInvestmentCash2')} />;
     }
     for (const t of txns ?? []) {
       const child = t.bucket_id ? investBucketIds.get(t.bucket_id) : null;
@@ -77,9 +79,9 @@ export default async function WalletInvestPage() {
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Investment data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={tr('walletInvest.investmentDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some investment details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{tr('walletInvest.someInvestmentDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={isManager(ctx.active.role)} />

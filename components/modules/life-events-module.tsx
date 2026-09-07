@@ -15,6 +15,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Fact = Tables<'family_facts'>;
 type Plan = Tables<'life_event_plans'>;
@@ -42,6 +44,7 @@ const LEARNED_CATEGORIES = ['preference', 'about', 'important'] as const;
 const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
 
 export function LifeEventsModule() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -83,7 +86,7 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success('Playbook started — your checklist is ready');
+    success(tr('lifeEventsModule.playbookStartedYourChecklistIs'));
     setStartTemplate(null);
   }
 
@@ -96,33 +99,33 @@ export function LifeEventsModule() {
     if (!res.ok) toastError(res.error ?? 'Could not update'); else success(status === 'archived' ? 'Archived' : status === 'completed' ? 'Marked complete' : 'Reopened');
   }
   async function togglePin(f: Fact) {
-    const { error } = await createClient().from('family_facts').update({ is_pinned: !f.is_pinned }).eq('id', f.id);
-    if (error) toastError(describeDbError(error));
+    const res = await setFactPinnedAction(f.id, !f.is_pinned);
+    if (!res.ok) toastError(res.error);
   }
   async function removeFact(f: Fact) {
-    if (!confirm('Remove this?')) return;
-    const { error } = await createClient().from('family_facts').delete().eq('id', f.id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (!confirm(tr('lifeEventsModule.removeThis'))) return;
+    const res = await forgetFactAction(f.id);
+    if (!res.ok) toastError(res.error); else success(tr('lifeEventsModule.removed'));
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message="Could not load life and milestones data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('lifeEventsModule.couldNotLoadLifeAnd')} onRetry={refresh} />;
 
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Life & Milestones"
-        description="What Bubaly has learned about your family — and one-tap playbooks for the big moments."
+        title={tr('lifeEvents.lifeMilestones')}
+        description={tr('lifeEventsModule.whatBubalyHasLearnedAbout')}
       />
 
       {/* ── What Bubaly has learned ─────────────────────────────────────────── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> What Bubaly has learned</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {tr('lifeEvents.whatBubalyHasLearned')}</h2>
           <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {learned.length === 0 ? (
-          <EmptyState icon={Sparkles} title="Bubaly is still getting to know you" description="Preferences, routines and traditions you save here show up across the app — add the first thing your family always does." />
+          <EmptyState icon={Sparkles} title={tr('lifeEvents.bubalyIsStillGettingToKnow')} description={tr('lifeEventsModule.preferencesRoutinesAndTraditionsYou')} />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {learned.map((f) => (
@@ -135,8 +138,8 @@ export function LifeEventsModule() {
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                     <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
-                    <button onClick={() => setFactModal({ open: true, editing: f })} aria-label="Edit" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => removeFact(f)} aria-label="Remove" className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setFactModal({ open: true, editing: f })} aria-label={tr('lifeEvents.edit')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => removeFact(f)} aria-label={tr('lifeEvents.remove')} className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -152,7 +155,7 @@ export function LifeEventsModule() {
                     </span>
                   )}
                   {f.expires_at && new Date(f.expires_at) <= new Date() && (
-                    <span className="inline-block rounded-full border border-warning/40 bg-warning/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-warning">Out of date</span>
+                    <span className="inline-block rounded-full border border-warning/40 bg-warning/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-warning">{tr('lifeEvents.outOfDate')}</span>
                   )}
                 </div>
               </div>
@@ -163,7 +166,7 @@ export function LifeEventsModule() {
 
       {/* ── Life-event playbooks ────────────────────────────────────────────── */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Start a life-event playbook</h2>
+        <h2 className="text-sm font-semibold">{tr('lifeEvents.startALifeEventPlaybook')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {LIFE_EVENT_TEMPLATES.map((t) => {
             const Icon = TEMPLATE_ICON[t.icon] ?? Sparkles;
@@ -176,7 +179,7 @@ export function LifeEventsModule() {
                   <ChevronRight className="ml-auto h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
                 </div>
                 <p className="mt-2 text-xs text-muted">{t.description}</p>
-                <p className="mt-2 text-[11px] text-muted/70">{t.items.length} guided steps</p>
+                <p className="mt-2 text-[11px] text-muted/70">{t.items.length} {tr('lifeEvents.guidedSteps')}</p>
               </button>
             );
           })}
@@ -186,7 +189,7 @@ export function LifeEventsModule() {
       {/* ── Active plans ────────────────────────────────────────────────────── */}
       {activePlans.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold">Your playbooks</h2>
+          <h2 className="text-sm font-semibold">{tr('lifeEvents.yourPlaybooks')}</h2>
           <div className="space-y-4">
             {activePlans.map((p) => {
               const pItems = itemsByPlan.get(p.id) ?? [];
@@ -205,9 +208,9 @@ export function LifeEventsModule() {
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-xs">
                       {p.status !== 'completed'
-                        ? <button onClick={() => setPlanStatus(p.id, 'completed')} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-muted hover:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> Complete</button>
-                        : <button onClick={() => setPlanStatus(p.id, 'active')} className="rounded-lg border border-border px-2 py-1 text-muted hover:text-fg">Reopen</button>}
-                      <button onClick={() => setPlanStatus(p.id, 'archived')} aria-label="Archive" className="rounded-lg border border-border p-1.5 text-muted hover:text-fg"><Archive className="h-3.5 w-3.5" /></button>
+                        ? <button onClick={() => setPlanStatus(p.id, 'completed')} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-muted hover:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> {tr('lifeEvents.complete')}</button>
+                        : <button onClick={() => setPlanStatus(p.id, 'active')} className="rounded-lg border border-border px-2 py-1 text-muted hover:text-fg">{tr('lifeEvents.reopen')}</button>}
+                      <button onClick={() => setPlanStatus(p.id, 'archived')} aria-label={tr('lifeEvents.archive')} className="rounded-lg border border-border p-1.5 text-muted hover:text-fg"><Archive className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted/10">
@@ -263,6 +266,7 @@ export function LifeEventsModule() {
 function StartModal({ template, launching, onClose, onLaunch }: {
   template: (typeof LIFE_EVENT_TEMPLATES)[number]; launching: boolean; onClose: () => void; onLaunch: (date: string | null) => void;
 }) {
+  const tr = useTranslations();
   const defaultDate = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + template.defaultLeadDays);
@@ -272,13 +276,13 @@ function StartModal({ template, launching, onClose, onLaunch }: {
   return (
     <Modal open onClose={onClose} title={`Start: ${template.title}`} description={template.description}>
       <div className="space-y-4">
-        <Field label="When is it? (the checklist schedules around this)">
+        <Field label={tr('lifeEvents.whenIsItTheChecklistSchedules')}>
           {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
         </Field>
-        <p className="text-xs text-muted">Creates {template.items.length} scheduled steps you can check off. You can adjust dates anytime.</p>
+        <p className="text-xs text-muted">{tr('lifeEvents.creates')} {template.items.length} {tr('lifeEvents.scheduledStepsYouCanCheckOff')}</p>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onLaunch(date || null)} disabled={launching} loading={launching}>Start playbook</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('lifeEvents.cancel')}</Button>
+          <Button onClick={() => onLaunch(date || null)} disabled={launching} loading={launching}>{tr('lifeEvents.startPlaybook')}</Button>
         </div>
       </div>
     </Modal>
@@ -288,6 +292,7 @@ function StartModal({ template, launching, onClose, onLaunch }: {
 function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; editing: Fact | null; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
+  const tr = useTranslations();
   const [label, setLabel] = useState(editing?.label ?? '');
   const [value, setValue] = useState(editing?.value ?? '');
   const [category, setCategory] = useState(editing?.category ?? 'preference');
@@ -295,15 +300,13 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
   const [saving, setSaving] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!label.trim() || !value.trim()) { onError('Add a label and a value'); return; }
+    if (!label.trim() || !value.trim()) { onError(tr('lifeEventsModule.addALabelAndA')); return; }
     setSaving(true);
-    const sb = createClient();
-    const payload = { label: label.trim(), value: value.trim(), category, notes: notes.trim() || null };
-    const { error } = editing
-      ? await sb.from('family_facts').update(payload).eq('id', editing.id)
-      : await sb.from('family_facts').insert({ family_id: familyId, ...payload, created_by: userId });
+    const res = await saveFactAction(editing?.id ?? null, {
+      label: label.trim(), value: value.trim(), category, notes: notes.trim() || null,
+    });
     setSaving(false);
-    if (error) { onError(describeDbError(error)); return; }
+    if (!res.ok) { onError(res.error); return; }
     onSaved();
   }
   return (
@@ -312,18 +315,18 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
     // sentence on this screen the data disagreed with.
     <Modal open onClose={onClose} title={editing ? 'Edit' : 'Tell Bubaly something'}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Label">{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Friday tradition" autoFocus />}</Field>
-        <Field label="Value">{(id) => <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Pizza & movie night" />}</Field>
-        <Field label="Kind">{(id) => (
+        <Field label={tr('lifeEvents.label')}>{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder={tr('lifeEvents.fridayTradition')} autoFocus />}</Field>
+        <Field label={tr('lifeEvents.value')}>{(id) => <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder={tr('lifeEvents.pizzaMovieNight')} />}</Field>
+        <Field label={tr('lifeEvents.kind')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="preference">Preference</option>
-            <option value="about">About us</option>
-            <option value="important">Important</option>
+            <option value="preference">{tr('lifeEvents.preference')}</option>
+            <option value="about">{tr('lifeEvents.aboutUs')}</option>
+            <option value="important">{tr('lifeEvents.important')}</option>
           </Select>
         )}</Field>
-        <Field label="Notes (optional)">{(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
+        <Field label={tr('lifeEvents.notesOptional')}>{(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('lifeEvents.cancel')}</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Add'}</Button>
         </div>
       </form>

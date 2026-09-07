@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
@@ -6,10 +7,11 @@ import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     if (!isAdmin(ctx.active.role)) {
-      return NextResponse.json({ error: 'Only a parent can open the billing portal.' }, { status: 403 });
+      return NextResponse.json({ error: t('portal.onlyAParentCanOpen') }, { status: 403 });
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
@@ -22,16 +24,16 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (billingCustomerError) {
       console.error('[billing-portal] Billing customer read failed', billingCustomerError);
-      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('portal.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
 
     if (!data?.customer_ref) {
-      return NextResponse.json({ error: 'No billing account found' }, { status: 404 });
+      return NextResponse.json({ error: t('portal.noBillingAccountFound') }, { status: 404 });
     }
 
     const limited = await enforceRequestRateLimit(supabase, `billing:portal:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many billing requests. Please try again shortly.' },
+      { error: t('portal.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -46,6 +48,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url });
   } catch (err) {
     console.error('Portal error:', err);
-    return NextResponse.json({ error: 'Could not open billing portal' }, { status: 500 });
+    return NextResponse.json({ error: t('portal.couldNotOpenBillingPortal') }, { status: 500 });
   }
 }

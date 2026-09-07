@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ITEMS = [
   { href: '/dashboard/auto', label: 'Overview' },
@@ -16,9 +17,10 @@ const ITEMS = [
 ];
 
 export function AutoSubnav() {
+  const t = useTranslations();
   const pathname = usePathname();
   return (
-    <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1" aria-label="Auto sections">
+    <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1" aria-label={t('autoSubnav.autoSections')}>
       {ITEMS.map((item) => {
         const active = item.href === '/dashboard/auto' ? pathname === item.href : pathname.startsWith(item.href);
         return (

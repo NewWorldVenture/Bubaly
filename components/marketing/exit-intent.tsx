@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Offer = {
   id: string;
@@ -30,6 +31,7 @@ function recentlySeen(): boolean {
  * via /api/exit-intent/track.
  */
 export function ExitIntent() {
+  const t = useTranslations();
   const [offer, setOffer] = useState<Offer | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -117,7 +119,7 @@ export function ExitIntent() {
         className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={() => setOpen(false)} aria-label="Close" className="absolute right-3 top-3 text-muted hover:text-fg">
+        <button onClick={() => setOpen(false)} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />
         </button>
         <h2 id="exit-intent-title" className="text-2xl font-bold">{offer.headline}</h2>

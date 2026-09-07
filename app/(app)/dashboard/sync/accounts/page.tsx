@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/ui/states';
 import {
   CAPABILITIES, PROVIDER_LABELS, isSupported, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync accounts' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const PROVIDERS: SyncProvider[] = ['google', 'microsoft', 'apple'];
 const KINDS: SyncItemKind[] = ['calendar', 'reminder', 'note'];
 
 export default async function SyncAccountsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -29,9 +31,9 @@ export default async function SyncAccountsPage() {
     console.error('[sync-accounts] connected-account read failed', error);
     return (
       <div className="module-page">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Connected accounts</h1>
-        <ErrorState message="Could not load your connected accounts from Supabase. Refresh and try again." />
-        <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">Refresh connected accounts</Link>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
+        <ErrorState message={t('accounts.couldNotLoadYourConnected')} />
+        <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshConnectedAccounts')}</Link>
       </div>
     );
   }
@@ -41,8 +43,8 @@ export default async function SyncAccountsPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Connected accounts</h1>
-        <p className="mt-1 text-sm text-muted">Link a provider to start syncing. Each card shows exactly what that provider can do.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('dashboardSyncAccounts.linkAProviderToStartSyncing')}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -57,13 +59,13 @@ export default async function SyncAccountsPage() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{PROVIDER_LABELS[p]}</p>
                     {account
-                      ? <Badge tone="success">Connected</Badge>
-                      : <Badge tone="neutral">Not connected</Badge>}
+                      ? <Badge tone="success">{t('accounts.connected')}</Badge>
+                      : <Badge tone="neutral">{t('accounts.notConnected')}</Badge>}
                   </div>
                   {account?.external_id && <p className="mt-0.5 truncate text-xs text-muted">{account.external_id}</p>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {supportedKinds.length === 0
-                      ? <span className="text-xs text-muted">No supported item types</span>
+                      ? <span className="text-xs text-muted">{t('accounts.noSupportedItemTypes')}</span>
                       : supportedKinds.map((k) => (
                           <Badge key={k} tone="brand" title={CAPABILITIES[p][k].limitation}>{k}</Badge>
                         ))}

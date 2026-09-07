@@ -8,11 +8,13 @@ import { StoreForm } from '@/components/marketplace/store-form';
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceStorePage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -41,8 +43,8 @@ export default async function MarketplaceStorePage() {
   return (
     <div>
       <PageHeader
-        title="My Store"
-        description="Your storefront on the family marketplace — brand your listings and build a following."
+        title={t('marketplaceStore.myStore')}
+        description={t('store.yourStorefrontOnTheFamily')}
       />
 
       {store && (
@@ -64,12 +66,12 @@ export default async function MarketplaceStorePage() {
 
       <section id="listings" className="mt-6">
         <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> My Listings</h2>
-          <Link href="/marketplace/browse?post=1" className="text-xs text-brand-text hover:underline">Post an item</Link>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> {t('marketplaceStore.myListings')}</h2>
+          <Link href="/marketplace/browse?post=1" className="text-xs text-brand-text hover:underline">{t('marketplaceStore.postAnItem')}</Link>
         </div>
         {(myListings ?? []).length === 0 ? (
           <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">
-            Nothing listed yet — your items appear here once you post.
+            {t('marketplaceStore.nothingListedYetYourItemsAppear')}
           </p>
         ) : (
           <ul className="space-y-1.5">

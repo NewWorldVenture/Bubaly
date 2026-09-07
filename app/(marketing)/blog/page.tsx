@@ -12,6 +12,7 @@ import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
+import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return resolveMarketingMetadata('/blog', {
@@ -97,6 +98,7 @@ type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string;
 const PAGE_SIZE = 24; // cards per page — keeps the grid + image requests light
 
 export default async function BlogPage({ searchParams }: Props) {
+  const t = await getTranslations();
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
   const activeTag = params.tag ? toHashtag(params.tag) : null;
@@ -140,7 +142,7 @@ export default async function BlogPage({ searchParams }: Props) {
   return (
     <PageWrap>
       <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
-      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description="Practical advice, real stories, and smart tips for modern families." />
+      <MarketingPageStructuredData path="/blog" name="The Bubaly Blog" description={t('blog.practicalAdviceRealStoriesAnd')} />
 
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
       {unsubscribed && (
@@ -162,13 +164,13 @@ export default async function BlogPage({ searchParams }: Props) {
       <Container className="pb-0 pt-8 lg:pt-10">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('blog.theFamilyLifeSimplified')}</p>
             <h1 className="text-4xl font-black leading-[1.06] sm:text-5xl">
-              Tips, stories &amp; insights<br />
-              <GradientText>for modern families.</GradientText>
+              {t('blog.tipsStoriesAmpInsights')}<br />
+              <GradientText>{t('blog.forModernFamilies')}</GradientText>
             </h1>
             <p className="mt-3 text-base leading-7 text-white/60">
-              Practical advice, real stories, and smart tips to help you stay organized and enjoy more time together.
+              {t('blog.practicalAdviceRealStoriesAndSmart')}
             </p>
             <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt.slice(0, 90), category: p.category }))} />
           </div>
@@ -188,7 +190,7 @@ export default async function BlogPage({ searchParams }: Props) {
                 : 'text-white/55 hover:text-white',
             )}
           >
-            All Articles
+            {t('blog.allArticles')}
             <span className="ml-1.5 text-xs text-white/30">({totalCount})</span>
           </Link>
           {ALL_CATEGORIES.map((cat) => (
@@ -227,7 +229,7 @@ export default async function BlogPage({ searchParams }: Props) {
                   </div>
                 </div>
                 <Link href="/blog" className="text-sm font-semibold text-violet-300 hover:text-violet-200">
-                  View all &rarr;
+                  {t('blog.viewAllRarr')}
                 </Link>
               </div>
             )}
@@ -235,12 +237,12 @@ export default async function BlogPage({ searchParams }: Props) {
             {/* Featured */}
             {featured && !activeCategory && (
               <div className="mb-10">
-                <h2 className="mb-5 text-lg font-bold">Featured</h2>
+                <h2 className="mb-5 text-lg font-bold">{t('blog.featured')}</h2>
                 <Link href={`/blog/${featured.slug}`} className="group block overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30">
                   <div className="relative h-56 sm:h-72">
                     <PostImage post={featured} sizes="(min-width: 1024px) 640px, 100vw" className="absolute inset-0" priority />
                     <div className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/30 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-100 backdrop-blur">
-                      Featured
+                      {t('blog.featured')}
                     </div>
                   </div>
                   <div className="p-6">
@@ -254,7 +256,7 @@ export default async function BlogPage({ searchParams }: Props) {
                     <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
                       <span className="flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5" />{featured.author}</span>
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{fmtDate(featured.date)}</span>
-                      <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{featured.readingMinutes} min read</span>
+                      <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{featured.readingMinutes} {t('blog.minRead')}</span>
                     </div>
                   </div>
                 </Link>
@@ -267,9 +269,9 @@ export default async function BlogPage({ searchParams }: Props) {
             </h2>
             {postsForGrid.length === 0 ? (
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-10 text-center">
-                <p className="text-white/50">No articles found in this category yet.</p>
+                <p className="text-white/50">{t('blog.noArticlesFoundInThisCategory')}</p>
                 <Link href="/blog" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
-                  View all articles <ArrowRight className="h-3.5 w-3.5" />
+                  {t('blog.viewAllArticles')} <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             ) : (
@@ -299,16 +301,16 @@ export default async function BlogPage({ searchParams }: Props) {
 
             {/* Pagination — keeps each page light instead of one giant grid. */}
             {totalPages > 1 && (
-              <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Blog pagination">
+              <nav className="mt-8 flex items-center justify-between gap-4" aria-label={t('blog.blogPagination')}>
                 {currentPage > 1 ? (
                   <Link href={pageHref(currentPage - 1)} rel="prev" className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:border-violet-400/30 hover:text-white">
-                    &larr; Previous
+                    {t('blog.larrPrevious')}
                   </Link>
                 ) : <span />}
-                <span className="text-xs text-white/40">Page {currentPage} of {totalPages}</span>
+                <span className="text-xs text-white/40">{t('blog.page')} {currentPage} of {totalPages}</span>
                 {currentPage < totalPages ? (
                   <Link href={pageHref(currentPage + 1)} rel="next" className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:border-violet-400/30 hover:text-white">
-                    Next &rarr;
+                    {t('blog.nextRarr')}
                   </Link>
                 ) : <span />}
               </nav>
@@ -319,7 +321,7 @@ export default async function BlogPage({ searchParams }: Props) {
           <aside className="space-y-6">
             {/* Recent posts (dynamic from DB) */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-4 font-bold">Recent Posts</h3>
+              <h3 className="mb-4 font-bold">{t('blog.recentPosts')}</h3>
               <ul className="space-y-4">
                 {recentPosts.map((post) => (
                   <li key={post.slug}>
@@ -337,14 +339,14 @@ export default async function BlogPage({ searchParams }: Props) {
 
             {/* Subscribe */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-1 font-bold">Subscribe to Our Blog</h3>
-              <p className="mb-4 text-xs leading-5 text-white/55">Get the latest tips and insights delivered to your inbox.</p>
+              <h3 className="mb-1 font-bold">{t('blog.subscribeToOurBlog')}</h3>
+              <p className="mb-4 text-xs leading-5 text-white/55">{t('blog.getTheLatestTipsAndInsights')}</p>
               <SubscribeForm source="blog-sidebar" variant="card" />
             </div>
 
             {/* Topics with counts */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-4 font-bold">Browse Topics</h3>
+              <h3 className="mb-4 font-bold">{t('blog.browseTopics')}</h3>
               <ul className="space-y-2.5">
                 {ALL_CATEGORIES.map((cat) => (
                   <li key={cat}>
@@ -368,7 +370,7 @@ export default async function BlogPage({ searchParams }: Props) {
 
             {/* Tags from all posts */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-4 font-bold">Popular Tags</h3>
+              <h3 className="mb-4 font-bold">{t('blog.popularTags')}</h3>
               <div className="flex flex-wrap gap-2">
                 {Array.from(new Set(allPosts.flatMap((p) => articleHashtags(p.tags, 6)))).slice(0, 14).map((tag) => (
                   <Link
@@ -394,8 +396,8 @@ export default async function BlogPage({ searchParams }: Props) {
                 <Mail className="h-7 w-7 text-violet-300" />
               </div>
               <div>
-                <h2 className="text-lg font-bold">Stay in the Loop</h2>
-                <p className="text-sm text-white/55">New tips, real stories, and helpful resources — straight to your inbox.</p>
+                <h2 className="text-lg font-bold">{t('blog.stayInTheLoop')}</h2>
+                <p className="text-sm text-white/55">{t('blog.newTipsRealStoriesAndHelpful')}</p>
               </div>
             </div>
             <SubscribeForm source="blog-footer" variant="inline" />

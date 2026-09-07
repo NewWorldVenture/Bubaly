@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { sendMoneyAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type SendChild = {
   id: string;
@@ -21,6 +22,7 @@ export type SendChild = {
 type Step = 'from' | 'to' | 'amount' | 'confirm';
 
 export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; canManage: boolean }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [step, setStep] = useState<Step>('from');
@@ -75,16 +77,16 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
         <Link href="/wallet" className="rounded-xl p-2 hover:bg-elevated transition">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-lg font-bold">Send Money</h1>
+        <h1 className="text-lg font-bold">{t('sendMoney.sendMoney')}</h1>
       </div>
 
       {/* Step: Pick sender */}
       {step === 'from' && (
         <div className="space-y-3 px-4">
-          <p className="text-sm font-semibold text-muted">From which wallet?</p>
+          <p className="text-sm font-semibold text-muted">{t('sendMoney.fromWhichWallet')}</p>
           {wallets.length < 2 ? (
             <div className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-              Need at least 2 child wallets to send money between them.
+              {t('sendMoney.needAtLeast2ChildWallets')}
             </div>
           ) : (
             <div className="space-y-2">
@@ -109,13 +111,13 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {step === 'to' && fromChild && (
         <div className="space-y-3 px-4">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setStep('from')} className="text-sm text-brand-text hover:underline">← Back</button>
-            <p className="text-sm font-semibold text-muted">Send to…</p>
+            <button type="button" onClick={() => setStep('from')} className="text-sm text-brand-text hover:underline">{t('sendMoney.back')}</button>
+            <p className="text-sm font-semibold text-muted">{t('sendMoney.sendTo')}</p>
           </div>
           <div className="mb-2 flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 px-4 py-2.5">
             <Avatar name={fromChild.name} color={fromChild.color ?? undefined} size={32} className="rounded-full" />
             <div>
-              <p className="text-xs text-muted">From</p>
+              <p className="text-xs text-muted">{t('sendMoney.from')}</p>
               <p className="text-sm font-semibold">{fromChild.name} · {formatCents(fromChild.spendBalance > 0 ? fromChild.spendBalance : fromChild.total)}</p>
             </div>
           </div>
@@ -139,7 +141,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {/* Step: Amount */}
       {step === 'amount' && fromChild && toChild && (
         <div className="flex flex-col items-center px-4">
-          <button type="button" onClick={() => setStep('to')} className="mb-4 self-start text-sm text-brand-text hover:underline">← Back</button>
+          <button type="button" onClick={() => setStep('to')} className="mb-4 self-start text-sm text-brand-text hover:underline">{t('sendMoney.back')}</button>
 
           {/* Sender → recipient header */}
           <div className="mb-6 flex items-center gap-3">
@@ -160,7 +162,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
               <span className="text-3xl text-muted">$</span>{amountDisplay}
             </p>
             {fromChild.spendBalance > 0 && (
-              <p className="mt-1 text-xs text-muted">{formatCents(fromChild.spendBalance)} in Spend bucket</p>
+              <p className="mt-1 text-xs text-muted">{formatCents(fromChild.spendBalance)} {t('sendMoney.inSpendBucket')}</p>
             )}
           </div>
 
@@ -189,7 +191,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
           {/* Note */}
           <div className="mb-4 w-full max-w-xs">
             <input
-              type="text" placeholder="Add a note (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80}
+              type="text" placeholder={t('sendMoney.addANoteOptional')} value={note} onChange={(e) => setNote(e.target.value)} maxLength={80}
               className="h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring"
             />
           </div>
@@ -197,10 +199,10 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
           <button type="button" onClick={() => setStep('confirm')}
             disabled={!isValidAmount}
             className="w-full max-w-xs rounded-2xl bg-brand py-3.5 text-base font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50">
-            Continue
+            {t('sendMoney.continue')}
           </button>
           {amountCents > 0 && !isValidAmount && (
-            <p className="mt-2 text-center text-xs text-danger">Insufficient balance</p>
+            <p className="mt-2 text-center text-xs text-danger">{t('sendMoney.insufficientBalance')}</p>
           )}
         </div>
       )}
@@ -208,10 +210,10 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {/* Step: Confirm */}
       {step === 'confirm' && fromChild && toChild && (
         <div className="flex flex-col items-center px-4">
-          <button type="button" onClick={() => setStep('amount')} className="mb-6 self-start text-sm text-brand-text hover:underline">← Back</button>
+          <button type="button" onClick={() => setStep('amount')} className="mb-6 self-start text-sm text-brand-text hover:underline">{t('sendMoney.back')}</button>
 
           <div className="mb-6 w-full rounded-2xl border border-border bg-surface/40 p-5">
-            <p className="mb-4 text-center text-sm font-semibold text-muted">Review transfer</p>
+            <p className="mb-4 text-center text-sm font-semibold text-muted">{t('sendMoney.reviewTransfer')}</p>
             <div className="flex items-center justify-between gap-4">
               <div className="flex flex-col items-center gap-2">
                 <Avatar name={fromChild.name} color={fromChild.color ?? undefined} size={52} className="rounded-full" />
@@ -230,7 +232,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
               <p className="mt-4 text-center text-sm text-muted">&ldquo;{note}&rdquo;</p>
             )}
             <p className="mt-4 text-center text-[11px] text-muted">
-              Debits {fromChild.name}&apos;s Spend bucket · allocated across {toChild.name}&apos;s buckets
+              {t('sendMoney.debits')} {fromChild.name}{t('sendMoney.aposSSpendBucketAllocatedAcross')} {toChild.name}{t('sendMoney.aposSBuckets')}
             </p>
           </div>
 
@@ -240,7 +242,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
           </button>
           <button type="button" onClick={() => router.push('/wallet')}
             className="mt-3 w-full rounded-2xl border border-border py-3 text-sm font-semibold transition hover:bg-elevated">
-            Cancel
+            {t('sendMoney.cancel')}
           </button>
         </div>
       )}

@@ -5,6 +5,7 @@ import { Camera, CalendarPlus, Clock, Check, AlertTriangle, ShoppingCart, Sparkl
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Recipe = {
   title: string;
@@ -30,6 +31,7 @@ function readAsBase64(file: File): Promise<{ data: string; mediaType: string }> 
 }
 
 export function FridgeChef() {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -42,8 +44,8 @@ export function FridgeChef() {
 
   async function onFile(file: File | null) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) { toastError('Please choose a photo (JPG/PNG/WebP).'); return; }
-    if (file.size > MAX_BYTES) { toastError('Photo is too large (5 MB max).'); return; }
+    if (!file.type.startsWith('image/')) { toastError(t('fridgeChef.pleaseChooseAPhotoJpg')); return; }
+    if (file.size > MAX_BYTES) { toastError(t('fridgeChef.photoIsTooLarge5')); return; }
     setRecipes(null);
     setAdded(new Set());
     setPlanned(new Set());
@@ -60,9 +62,9 @@ export function FridgeChef() {
       if (!res.ok) { toastError(json.error ?? 'Could not read that photo.'); return; }
       const found: Recipe[] = json.recipes ?? [];
       setRecipes(found);
-      if (found.length === 0) toastError('No food spotted — try a clearer, well-lit photo.');
+      if (found.length === 0) toastError(t('fridgeChef.noFoodSpottedTryA'));
     } catch {
-      toastError('Something went wrong reading the photo.');
+      toastError(t('fridgeChef.somethingWentWrongReadingThe'));
     } finally {
       setScanning(false);
     }
@@ -78,11 +80,11 @@ export function FridgeChef() {
         body: JSON.stringify({ addToGrocery: recipe.need }),
       });
       const json = await res.json();
-      if (!res.ok) { toastError(json.error ?? 'Could not update your grocery list.'); return; }
+      if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
       success(`Added ${json.added ?? recipe.need.length} item${(json.added ?? 0) === 1 ? '' : 's'} to your grocery list.`);
     } catch {
-      toastError('Could not update your grocery list.');
+      toastError(t('fridgeChef.couldNotUpdateYourGrocery'));
     } finally {
       setAddingIndex(null);
     }
@@ -98,11 +100,11 @@ export function FridgeChef() {
         body: JSON.stringify({ addToPlan: { title: recipe.title, steps: recipe.steps, have: recipe.have, need: recipe.need } }),
       });
       const json = await res.json();
-      if (!res.ok) { toastError(json.error ?? 'Could not add that to your meal plan.'); return; }
+      if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotAddThatTo')); return; }
       setPlanned((prev) => new Set(prev).add(index));
       success(`“${recipe.title}” planned for tonight's dinner.`);
     } catch {
-      toastError('Could not add that to your meal plan.');
+      toastError(t('fridgeChef.couldNotAddThatTo'));
     } finally {
       setPlanningIndex(null);
     }
@@ -112,7 +114,7 @@ export function FridgeChef() {
     <div className="space-y-5">
       <div className="rounded-3xl border border-border bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6 text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15"><Utensils className="h-7 w-7 text-brand-text" /></div>
-        <h2 className="mt-3 text-lg font-bold">What can I make for dinner?</h2>
+        <h2 className="mt-3 text-lg font-bold">{t('fridgeChef.whatCanIMakeForDinner')}</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted">
           Snap a photo of your fridge or pantry. Bubaly spots what you have, suggests dinners that fit your family&apos;s allergies, and adds anything missing to your grocery list.
         </p>
@@ -130,13 +132,13 @@ export function FridgeChef() {
 
         {preview && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Your fridge" className="mx-auto mt-4 max-h-48 rounded-2xl border border-border object-cover" />
+          <img src={preview} alt={t('fridgeChef.yourFridge')} className="mx-auto mt-4 max-h-48 rounded-2xl border border-border object-cover" />
         )}
       </div>
 
       {scanning && (
         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted">
-          <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> Cooking up ideas from your photo…
+          <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> {t('fridgeChef.cookingUpIdeasFromYourPhoto')}
         </div>
       )}
 
@@ -161,7 +163,7 @@ export function FridgeChef() {
 
               {recipe.have.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">You have</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">{t('fridgeChef.youHave')}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {recipe.have.map((h) => <span key={h} className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">{h}</span>)}
                   </div>
@@ -170,7 +172,7 @@ export function FridgeChef() {
 
               {recipe.need.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">Need to buy</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">{t('fridgeChef.needToBuy')}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {recipe.need.map((n) => <span key={n} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200">{n}</span>)}
                   </div>
@@ -185,7 +187,7 @@ export function FridgeChef() {
                 >
                   {planned.has(i)
                     ? <><Check className="h-4 w-4" /> On tonight&apos;s plan</>
-                    : <><CalendarPlus className="h-4 w-4" /> Plan for dinner</>}
+                    : <><CalendarPlus className="h-4 w-4" />{' '}{t('fridgeChef.planForDinner')}</>}
                 </Button>
                 {recipe.need.length > 0 ? (
                   <Button
@@ -195,11 +197,11 @@ export function FridgeChef() {
                     disabled={addingIndex !== null}
                   >
                     {added.has(i)
-                      ? <><Check className="h-4 w-4" /> Added to grocery</>
+                      ? <><Check className="h-4 w-4" />{' '}{t('fridgeChef.addedToGrocery')}</>
                       : <><ShoppingCart className="h-4 w-4" /> Add {recipe.need.length} to grocery</>}
                   </Button>
                 ) : (
-                  <p className="text-center text-xs text-emerald-300">You have everything for this!</p>
+                  <p className="text-center text-xs text-emerald-300">{t('fridgeChef.youHaveEverythingForThis')}</p>
                 )}
               </div>
             </div>

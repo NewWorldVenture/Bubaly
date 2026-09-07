@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
@@ -22,29 +25,30 @@ function logDatabaseFailure(operation: string, error: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('ai.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-vacations:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many trip AI requests. Please try again shortly.' },
+    { error: t('ai.tooManyTripAiRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('ai.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Body;
   const { action, vacationId } = body;
-  if (!vacationId) return NextResponse.json({ error: 'Missing vacationId' }, { status: 400 });
+  if (!vacationId) return NextResponse.json({ error: t('ai.missingVacationid') }, { status: 400 });
 
   const familyId = ctx.active.familyId;
   const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', vacationId).eq('family_id', familyId).maybeSingle();
   if (tripError) {
     logDatabaseFailure('trip context read', tripError);
-    return databaseUnavailable('Trip data is temporarily unavailable.');
+    return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
   }
-  if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+  if (!trip) return NextResponse.json({ error: t('ai.tripNotFound') }, { status: 404 });
 
   // Gather trip context (all RLS-scoped).
   const contextResults = await Promise.all([
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
   const contextError = contextResults.find((result) => result.error)?.error;
   if (contextError) {
     logDatabaseFailure('trip context read', contextError);
-    return databaseUnavailable('Trip data is temporarily unavailable.');
+    return databaseUnavailable(t('ai.tripDataIsTemporarilyUnavailable'));
   }
   const [members, lodging, flights, transport, activities, reservations, budgets, expenses, packing, docs, emergency, days, items, weather] = contextResults;
 
@@ -97,13 +101,13 @@ export async function POST(req: NextRequest) {
     const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
     if (deleteError) {
       logDatabaseFailure('recommendation cleanup', deleteError);
-      return databaseUnavailable('Recommendations are temporarily unavailable.');
+      return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
     }
     if (recos.length) {
       const { error: insertError } = await supabase.from('vacation_ai_recommendations').insert(recos.map((x) => ({ family_id: familyId, vacation_id: vacationId, kind: x.kind as never, title: x.title, detail: x.detail, severity: x.severity, source: 'rules', created_by: ctx!.user.id })));
       if (insertError) {
         logDatabaseFailure('recommendation write', insertError);
-        return databaseUnavailable('Recommendations are temporarily unavailable.');
+        return databaseUnavailable(t('ai.recommendationsAreTemporarilyUnavailable'));
       }
     }
     return NextResponse.json({ count: recos.length });
@@ -121,14 +125,23 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
 
     let plan: VacationAIPlan;
     try {
-      const provider = await resolveProvider();
-      const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
-      const validated = parseVacationAIOutput(completion.text, range.length);
-      if (!validated) return NextResponse.json({ error: 'AI builder returned an invalid trip plan. Please try again.' }, { status: 502 });
-      plan = validated;
+      const built = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'vacations.build', text: `Build a plan for ${nights} nights` },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
+          obs.used(provider.model, completion.usage);
+          const validated = parseVacationAIOutput(completion.text, range.length);
+          if (!validated) obs.failed(new Error('The trip plan did not validate against the requested day count.'));
+          return validated;
+        },
+      );
+      if (!built) return NextResponse.json({ error: t('ai.aiBuilderReturnedAnInvalid') }, { status: 502 });
+      plan = built;
     } catch (err) {
       console.error('Vacation build error:', err);
-      return NextResponse.json({ error: 'AI builder is temporarily unavailable.' }, { status: 502 });
+      return NextResponse.json({ error: t('ai.aiBuilderIsTemporarilyUnavailable') }, { status: 502 });
     }
 
     let added = { activities: 0, items: 0, budget: 0, packing: 0 };
@@ -181,7 +194,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       const rows = plan.activities.map((x) => ({ family_id: familyId, vacation_id: vacationId, name: x.name, category: x.category ?? null, location: x.location ?? null, family_friendly: x.family_friendly ?? true, cost_cents: x.cost == null ? null : Math.round(x.cost * 100), created_by: ctx!.user.id }));
       const { data, error } = await supabase.from('vacation_activities').insert(rows).select('id');
       if (data) createdActivityIds.push(...data.map((row) => row.id));
-      if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Activity insert returned an incomplete result.'));
+      if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Activity insert returned an incomplete result.'));
       added.activities = rows.length;
     }
     // itinerary — ensure days exist, map day number -> day_id
@@ -191,13 +204,13 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (toCreate.length) {
         const { data: created, error } = await supabase.from('vacation_itinerary_days').insert(toCreate).select('id, day_date');
         if (created) createdDayIds.push(...created.map((day) => day.id));
-        if (error || !created || created.length !== toCreate.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary day insert returned an incomplete result.'));
+        if (error || !created || created.length !== toCreate.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary day insert returned an incomplete result.'));
         for (const d of created) {
           existing.set(d.day_date, d.id);
         }
       }
       const dayIds = range.map((d) => existing.get(d)).filter(Boolean) as string[];
-      if (dayIds.length !== range.length) return buildFailure('Could not save the generated trip plan.', new Error('Itinerary days could not be resolved.'));
+      if (dayIds.length !== range.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), new Error('Itinerary days could not be resolved.'));
       const rows = plan.itinerary.map((x) => ({
         family_id: familyId, vacation_id: vacationId,
         day_id: dayIds[x.day - 1],
@@ -208,7 +221,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_itinerary_items').insert(rows).select('id');
         if (data) createdItemIds.push(...data.map((row) => row.id));
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Itinerary item insert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Itinerary item insert returned an incomplete result.'));
         added.items = rows.length;
       }
     }
@@ -221,7 +234,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
           if (originalBudgets.has(row.category)) changedBudgetCategories.push(row.category);
           else createdBudgetIds.push(row.id);
         }
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Budget upsert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Budget upsert returned an incomplete result.'));
         added.budget = rows.length;
       }
     }
@@ -229,14 +242,14 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     const master = (packing.data ?? []).length ? null : await supabase.from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: ctx!.user.id }).select('id').single();
     const listId = master?.data?.id;
     if (listId) createdPackingListId = listId;
-    if (master?.error) return buildFailure('Could not save the generated trip plan.', master.error);
+    if (master?.error) return buildFailure(t('ai.couldNotSaveTheGenerated'), master.error);
     if (listId) {
       const sugg = suggestPacking({ kind: trip.kind, nights: nights || 5, isInternational: trip.is_international, hasChildren, hasBaby: false, activities: a.map((x) => x.name) });
       const rows = sugg.map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category as never, quantity: s.quantity, ai_suggested: true, created_by: ctx!.user.id }));
       if (rows.length) {
         const { data, error } = await supabase.from('vacation_packing_items').insert(rows).select('id');
         if (data) createdPackingItemIds.push(...data.map((row) => row.id));
-        if (error || !data || data.length !== rows.length) return buildFailure('Could not save the generated trip plan.', error ?? new Error('Packing insert returned an incomplete result.'));
+        if (error || !data || data.length !== rows.length) return buildFailure(t('ai.couldNotSaveTheGenerated'), error ?? new Error('Packing insert returned an incomplete result.'));
         added.packing = rows.length;
       }
     }
@@ -247,34 +260,34 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
   // ---------- CONCIERGE (chat) ----------
   if (action === 'concierge') {
     const message = body.message?.trim();
-    if (!message) return NextResponse.json({ error: 'Empty message' }, { status: 400 });
+    if (!message) return NextResponse.json({ error: t('ai.emptyMessage') }, { status: 400 });
 
     let conversationId = body.conversationId;
     if (!conversationId) {
       const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
       if (error) {
         console.error('Vacation AI conversation write failed:', error);
-        return databaseUnavailable('Could not start the trip conversation.');
+        return databaseUnavailable(t('ai.couldNotStartTheTrip'));
       }
       conversationId = convo.id;
     } else {
       const { data: conversation, error } = await supabase.from('vacation_ai_conversations').select('id').eq('id', conversationId).eq('family_id', familyId).eq('vacation_id', vacationId).maybeSingle();
       if (error) {
         logDatabaseFailure('conversation ownership read', error);
-        return databaseUnavailable('Trip conversation is temporarily unavailable.');
+        return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
       }
-      if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      if (!conversation) return NextResponse.json({ error: t('ai.conversationNotFound') }, { status: 404 });
     }
     const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
     if (userMessageError) {
       logDatabaseFailure('user message write', userMessageError);
-      return databaseUnavailable('Could not save your message.');
+      return databaseUnavailable(t('ai.couldNotSaveYourMessage'));
     }
 
     const { data: history, error: historyError } = await supabase.from('vacation_ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(20);
     if (historyError) {
       logDatabaseFailure('conversation history read', historyError);
-      return databaseUnavailable('Trip conversation is temporarily unavailable.');
+      return databaseUnavailable(t('ai.tripConversationIsTemporarilyUnavailable'));
     }
 
     const budgetSummary = summarizeBudget(budgets.data ?? [], expenses.data ?? []);
@@ -290,25 +303,36 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
 
     let reply: string;
     try {
-      const provider = await resolveProvider();
-      const completion = await provider.complete({
-        system,
-        messages: (history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-        tools: [], maxTokens: 1000,
-      });
-      reply = completion.text || 'Sorry, I could not generate a reply.';
+      reply = await withAiRequest(
+        scopeFromUserContext(ctx, supabase),
+        { feature: 'vacations.concierge', text: 'Vacation concierge reply' },
+        async (obs) => {
+          const provider = await resolveProvider();
+          const completion = await provider.complete({
+            system,
+            messages: (history ?? []).filter((h) => h.role === 'user' || h.role === 'assistant').map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+            tools: [], maxTokens: 1000,
+          });
+          obs.used(provider.model, completion.usage);
+          // The apology is persisted to vacation_ai_messages as if it were an
+          // answer, so without a row the conversation keeps a polite non-reply
+          // and nothing says why.
+          if (!completion.text) obs.failed(new Error('The concierge returned no text; the apology was stored instead.'));
+          return completion.text || 'Sorry, I could not generate a reply.';
+        },
+      );
     } catch (err) {
       console.error('Concierge error:', err);
-      return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });
+      return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
     }
 
     const { error: assistantMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id }).select('id').single();
     if (assistantMessageError) {
       logDatabaseFailure('assistant message write', assistantMessageError);
-      return databaseUnavailable('Could not save the concierge reply.');
+      return databaseUnavailable(t('ai.couldNotSaveTheConcierge'));
     }
     return NextResponse.json({ conversationId, reply });
   }
 
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  return NextResponse.json({ error: t('ai.unknownAction') }, { status: 400 });
 }

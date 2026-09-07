@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import {
   Activity, ArrowRight, ClipboardList, KeyRound, Plus,
@@ -18,20 +19,21 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 12;
 
-function ReadFailure() {
+async function ReadFailure() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin</h1>
-      <ErrorState message="Could not load administrators from Supabase. Refresh and try again." />
-      <Link href="/admin/admins" className="text-sm font-medium text-brand-text underline">Refresh administrators</Link>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admins.admin')}</h1>
+      <ErrorState message={tr('admins.couldNotLoadAdministratorsFrom')} />
+      <Link href="/admin/admins" className="text-sm font-medium text-brand-text underline">{tr('admins.refreshAdministrators')}</Link>
     </div>
   );
 }
 
 const TABS = [
   { key: 'users',    label: 'Admin Users' },
-  { key: 'roles',    label: 'Roles & Permissions' },
-  { key: 'requests', label: 'Access Requests' },
+  { key: 'roles',    label: 'admins.rolesPermissions' },
+  { key: 'requests', label: 'admins.accessRequests' },
   { key: 'activity', label: 'Admin Activity' },
   { key: 'settings', label: 'Settings' },
 ] as const;
@@ -85,6 +87,7 @@ type Params = {
 };
 
 export default async function AdminManagementPage({ searchParams }: Params) {
+  const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'users';
   const supabase = createServiceClient();
@@ -141,12 +144,11 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin</h1>
-          <p className="mt-1 text-sm text-muted">Manage administrators and system access.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admins.admin')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('admins.manageAdministratorsAndSystemAccess')}</p>
         </div>
         <button className="flex h-9 items-center gap-1.5 self-start rounded-lg bg-brand px-4 text-sm font-semibold text-brand-fg hover:brightness-110 sm:self-auto">
-          <Plus className="h-4 w-4" /> Invite Admin
-        </button>
+          <Plus className="h-4 w-4" />{' '}{tr('admins.inviteAdmin')}</button>
       </div>
 
       {/* Tabs */}
@@ -166,15 +168,15 @@ export default async function AdminManagementPage({ searchParams }: Params) {
           <div className="space-y-5">
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <AdminStatCard icon={Users}     label="Total Admins"         sub="Active administrators"  value={total}          color="text-brand-text     bg-brand/10" />
-              <AdminStatCard icon={ShieldCheck} label="Super Admins"       sub="Full system access"     value={superAdmins}    color="text-emerald-400 bg-emerald-500/10" />
-              <AdminStatCard icon={UserCog}   label="Admins"               sub="Standard access"        value={administrators} color="text-blue-400  bg-blue-500/10" />
-              <AdminStatCard icon={UserPlus}  label="Pending Invitations"  sub="Awaiting acceptance"    value={pendingInvites} color="text-yellow-400 bg-yellow-500/10" />
+              <AdminStatCard icon={Users}     label={tr('admins.totalAdmins')}         sub="Active administrators"  value={total}          color="text-brand-text     bg-brand/10" />
+              <AdminStatCard icon={ShieldCheck} label={tr('admins.superAdmins')}       sub="Full system access"     value={superAdmins}    color="text-emerald-400 bg-emerald-500/10" />
+              <AdminStatCard icon={UserCog}   label={tr('admins.admins')}               sub="Standard access"        value={administrators} color="text-blue-400  bg-blue-500/10" />
+              <AdminStatCard icon={UserPlus}  label={tr('admins.pendingInvitations')}  sub="Awaiting acceptance"    value={pendingInvites} color="text-yellow-400 bg-yellow-500/10" />
             </div>
 
             <Card>
               <FilterForm action="/admin/admins" hidden={{ tab: 'users' }}>
-                <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search admins..." />
+                <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('admins.searchAdmins')} />
                 <FilterSelect name="role" defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
                   ...Object.entries(ROLE_META).map(([v, m]) => ({ value: v, label: m.label })),
@@ -188,19 +190,19 @@ export default async function AdminManagementPage({ searchParams }: Params) {
               </FilterForm>
 
               {pageRows.length === 0 ? (
-                <div className="mt-6"><EmptyState icon={UserCog} title="No admins match these filters" /></div>
+                <div className="mt-6"><EmptyState icon={UserCog} title={tr('admins.noAdminsMatchTheseFilters')} /></div>
               ) : (
                 <div className="table-responsive mt-4">
                   <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
-                        <th className="px-3 py-2 font-medium">Admin</th>
-                        <th className="px-3 py-2 font-medium">Role</th>
-                        <th className="px-3 py-2 font-medium">Permissions</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium">Last Active</th>
-                        <th className="px-3 py-2 font-medium">Joined On</th>
-                        <th className="px-3 py-2 font-medium">Actions</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.admin')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.role')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.permissions')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.status')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.lastActive')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.joinedOn')}</th>
+                        <th className="px-3 py-2 font-medium">{tr('admins.actions')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
@@ -287,13 +289,13 @@ export default async function AdminManagementPage({ searchParams }: Params) {
           <div className="space-y-5">
             {/* Role Distribution donut */}
             <Card>
-              <h2 className="mb-4 text-base font-semibold">Role Distribution</h2>
+              <h2 className="mb-4 text-base font-semibold">{tr('admins.roleDistribution')}</h2>
               <StatusDonut segments={donutSegments} total={total} centerLabel="Total" />
             </Card>
 
             {/* Recent Admin Activity */}
             <Card>
-              <h2 className="mb-3 text-base font-semibold">Recent Admin Activity</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('admins.recentAdminActivity')}</h2>
               <ul className="space-y-4">
                 {[
                   { icon: UserPlus,    color: 'text-brand-text     bg-brand/10',   title: 'New admin invited',   sub: 'Brian White was invited',            date: 'May 14, 2024', time: '08:10 AM' },
@@ -319,20 +321,18 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   );
                 })}
               </ul>
-              <a href="/admin/admins?tab=activity" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
-                View all activity →
-              </a>
+              <a href="/admin/admins?tab=activity" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">{tr('admins.viewAllActivity')}</a>
             </Card>
 
             {/* Quick Actions */}
             <Card>
-              <h2 className="mb-3 text-base font-semibold">Quick Actions</h2>
+              <h2 className="mb-3 text-base font-semibold">{tr('admins.quickActions')}</h2>
               <ul className="space-y-1">
                 {[
                   [UserPlus,     'Invite New Admin',         '/admin/admins'],
                   [KeyRound,     'Manage Roles & Permissions', '/admin/admins?tab=roles'],
                   [ClipboardList, 'View Access Requests',    '/admin/admins?tab=requests'],
-                  [Activity,     'Admin Settings',           '/admin/admins?tab=settings'],
+                  [Activity,     tr('admins.adminSettings'),           '/admin/admins?tab=settings'],
                 ].map(([Icon, label, href]) => (
                   <li key={label as string}>
                     <a href={href as string}
@@ -354,8 +354,8 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {/* Roles & Permissions tab */}
       {tab === 'roles' && (
         <Card>
-          <h2 className="mb-1 text-base font-semibold">Roles & Permissions</h2>
-          <p className="mb-5 text-sm text-muted">Define what each admin role can access and modify in the system.</p>
+          <h2 className="mb-1 text-base font-semibold">{tr('admins.rolesPermissions')}</h2>
+          <p className="mb-5 text-sm text-muted">{tr('admins.defineWhatEachAdminRole')}</p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Object.entries(ROLE_META).map(([role, meta]) => {
               const perms = ROLE_PERMISSIONS[role] ?? [];
@@ -364,7 +364,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${meta.color}`}>
                     {meta.label}
                   </span>
-                  <p className="mt-3 mb-2 text-xs font-medium text-muted">Permissions</p>
+                  <p className="mt-3 mb-2 text-xs font-medium text-muted">{tr('admins.permissions')}</p>
                   <ul className="space-y-1.5">
                     {perms.map(({ resource, read, write, delete: del }) => (
                       <li key={resource} className="flex items-center justify-between text-xs">
@@ -388,8 +388,8 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {/* Access Requests tab */}
       {tab === 'requests' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Access Requests</h2>
-          <EmptyState icon={ClipboardList} title="No pending access requests" description="Access requests from users who need admin privileges will appear here." />
+          <h2 className="mb-4 text-base font-semibold">{tr('admins.accessRequests')}</h2>
+          <EmptyState icon={ClipboardList} title={tr('admins.noPendingAccessRequests')} description={tr('admins.accessRequestsFromUsersWho')} />
           {/* placeholder */}
         </Card>
       )}
@@ -397,14 +397,14 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {/* Admin Activity tab */}
       {tab === 'activity' && (
         <Card>
-          <h2 className="mb-4 text-base font-semibold">Admin Activity Log</h2>
+          <h2 className="mb-4 text-base font-semibold">{tr('admins.adminActivityLog')}</h2>
           <div className="table-responsive">
             <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">Event</th>
-                  <th className="px-3 py-2 font-medium">Details</th>
-                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">{tr('admins.event')}</th>
+                  <th className="px-3 py-2 font-medium">{tr('admins.details')}</th>
+                  <th className="px-3 py-2 font-medium">{tr('admins.date')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -434,8 +434,8 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {/* Settings tab */}
       {tab === 'settings' && (
         <Card>
-          <h2 className="mb-1 text-base font-semibold">Admin Settings</h2>
-          <p className="mb-5 text-sm text-muted">Configure global admin access policies.</p>
+          <h2 className="mb-1 text-base font-semibold">{tr('admins.adminSettings')}</h2>
+          <p className="mb-5 text-sm text-muted">{tr('admins.configureGlobalAdminAccessPolicies')}</p>
           <div className="space-y-4 max-w-lg">
             {[
               { label: 'Require 2FA for all admins', desc: 'All administrators must use two-factor authentication', enabled: true },

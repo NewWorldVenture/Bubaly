@@ -12,6 +12,7 @@ import { type NavItem, isNavItemVisibleToRole } from '@/lib/constants/navigation
 import { featureAccessByTier } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function isActive(pathname: string, href: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
@@ -24,6 +25,7 @@ export function isActive(pathname: string, href: string): boolean {
  * layer is always one tap away regardless of plan.
  */
 export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }) {
+  const t = useTranslations();
   const pathname = usePathname() ?? '';
   const active = isActive(pathname, '/dashboard/assistant');
   return (
@@ -39,7 +41,7 @@ export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }
       )}
     >
       <Sparkles className={cn('h-5 w-5 shrink-0', active ? 'text-brand-text' : 'text-brand-text/90')} />
-      AI Assistant
+      {t('navShared.aiAssistant')}
     </Link>
   );
 }

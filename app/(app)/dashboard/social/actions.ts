@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { requireSocialPermission } from '@/lib/social/access';
@@ -39,8 +40,9 @@ async function familyId() {
  * present but the OAuth redirect handler isn't implemented yet.
  */
 export async function connectAccountAction(formData: FormData) {
+  const tr = await getTranslations();
   const platform = String(formData.get('platform') ?? '');
-  if (!isPlatform(platform)) return { ok: false, error: 'Unknown platform' };
+  if (!isPlatform(platform)) return { ok: false, error: tr('actions.unknownPlatform') };
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'connect_accounts');
 
@@ -61,15 +63,16 @@ export async function connectAccountAction(formData: FormData) {
     created_by: userId,
     metadata: { needs_app_review: def.needsAppReview },
   });
-  if (error) return { ok: false, error: describeActionError(error, 'Could not start the account connection.') };
+  if (error) return { ok: false, error: describeActionError(error, tr('actions.couldNotStartTheAccount')) };
   revalidatePath('/dashboard/social/accounts');
   return { ok: true, requiresSetup: !configured };
 }
 
 export async function disconnectAccountAction(accountId: string) {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'connect_accounts');
-  if (!accountId.trim()) return { ok: false, error: 'Choose an account to disconnect.' };
+  if (!accountId.trim()) return { ok: false, error: tr('actions.chooseAnAccountToDisconnect') };
   const supabase = await createServer();
   const { data, error } = await supabase
     .from('social_accounts')
@@ -78,7 +81,7 @@ export async function disconnectAccountAction(accountId: string) {
     .eq('family_id', fid)
     .select('id')
     .single();
-  if (error || !data) return { ok: false, error: describeActionError(error, 'Could not disconnect that account.') };
+  if (error || !data) return { ok: false, error: describeActionError(error, tr('actions.couldNotDisconnectThatAccount')) };
   revalidatePath('/dashboard/social/accounts');
   return { ok: true };
 }
@@ -97,6 +100,7 @@ export type CreatePostResult = {
  * the selected accounts, then either saves as draft, schedules, or publishes now.
  */
 export async function createPostAction(formData: FormData): Promise<CreatePostResult> {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
 
   const intent = (String(formData.get('intent') ?? 'draft') as 'draft' | 'schedule' | 'publish');
@@ -115,16 +119,16 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   let scheduledFor: string | null = null;
   if (intent === 'schedule' && scheduledForRaw) {
     const parsedDate = new Date(scheduledForRaw);
-    if (Number.isNaN(parsedDate.getTime())) return { ok: false, error: 'Pick a valid date and time to schedule.' };
+    if (Number.isNaN(parsedDate.getTime())) return { ok: false, error: tr('actions.pickAValidDateAnd') };
     scheduledFor = parsedDate.toISOString();
   }
 
   const platforms = formData.getAll('platforms').map(String).filter(isPlatform) as SocialPlatform[];
   const accountIds = Array.from(new Set(formData.getAll('account_ids').map(String).filter(Boolean)));
 
-  if (!body && !title) return { ok: false, error: 'Add a title or body before saving.' };
-  if (intent === 'schedule' && !scheduledFor) return { ok: false, error: 'Pick a date and time to schedule.' };
-  if (intent !== 'draft' && accountIds.length === 0) return { ok: false, error: 'Select at least one social account before publishing or scheduling.' };
+  if (!body && !title) return { ok: false, error: tr('actions.addATitleOrBody') };
+  if (intent === 'schedule' && !scheduledFor) return { ok: false, error: tr('actions.pickADateAndTime') };
+  if (intent !== 'draft' && accountIds.length === 0) return { ok: false, error: tr('actions.selectAtLeastOneSocial') };
 
   const supabase = await createServer();
   let postId: string | null = null;
@@ -146,7 +150,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       .select('id')
       .single();
     if (postErr || !post) {
-      return { ok: false, error: describeActionError(postErr, 'Could not create this social post.') };
+      return { ok: false, error: describeActionError(postErr, tr('actions.couldNotCreateThisSocial')) };
     }
     postId = post.id;
 
@@ -168,7 +172,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 
     // Publish targets from selected connected accounts.
     const targetCount = await createTargets(supabase, fid, post.id, accountIds, scheduledFor);
-    if (intent !== 'draft' && targetCount === 0) throw new Error('Select at least one social account before publishing or scheduling.');
+    if (intent !== 'draft' && targetCount === 0) throw new Error(tr('actions.selectAtLeastOneSocial'));
 
     if (intent === 'schedule' && scheduledFor) {
       const { error: scheduleError } = await supabase.from('social_schedules').insert({
@@ -210,11 +214,12 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 
 /** Re-run publishing for failed/pending targets on an existing post. */
 export async function retryPublishAction(postId: string): Promise<CreatePostResult> {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   try {
     await requireSocialPermission(fid, 'publish_posts');
   } catch {
-    return { ok: false, error: 'You do not have permission to publish posts.' };
+    return { ok: false, error: tr('actions.youDoNotHavePermission') };
   }
   const supabase = await createServer();
   try {
@@ -229,6 +234,7 @@ export async function retryPublishAction(postId: string): Promise<CreatePostResu
 }
 
 export async function resolveCommentAction(id: string) {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'view_feed');
   if (!id.trim()) throw new Error('Choose a comment to resolve.');
@@ -240,11 +246,12 @@ export async function resolveCommentAction(id: string) {
     .eq('family_id', fid)
     .select('id')
     .single();
-  if (error || !data) throw new Error(describeActionError(error, 'Could not resolve that comment.'));
+  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotResolveThatComment')));
   revalidatePath('/dashboard/social/inbox');
 }
 
 export async function createMediaAction(formData: FormData) {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'upload_media');
   const supabase = await createServer();
@@ -271,11 +278,12 @@ export async function createMediaAction(formData: FormData) {
     family_id: fid, user_id: userId, kind, title, url, alt_text: alt, tags,
     source: url ? 'upload' : 'prompt', status: url ? 'ready' : 'prompt_only', created_by: userId,
   }).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, 'Could not save that media asset.'));
+  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatMedia')));
   revalidatePath('/dashboard/social/media-library');
 }
 
 export async function updateSettingsAction(formData: FormData) {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'manage_settings');
   const supabase = await createServer();
@@ -292,11 +300,12 @@ export async function updateSettingsAction(formData: FormData) {
     { family_id: fid, default_timezone, require_approval, auto_hashtags, signature, ai_tone, default_platforms, updated_by: userId },
     { onConflict: 'family_id' },
   ).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, 'Could not save social settings.'));
+  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotSaveSocialSettings')));
   revalidatePath('/dashboard/social/settings');
 }
 
 export async function grantAccessAction(formData: FormData) {
+  const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'manage_access');
   const supabase = await createServer();
@@ -311,11 +320,11 @@ export async function grantAccessAction(formData: FormData) {
     .eq('user_id', targetUserId)
     .eq('is_active', true)
     .maybeSingle();
-  if (memberError || !member) throw new Error(describeActionError(memberError, 'That user is not an active family member.'));
+  if (memberError || !member) throw new Error(describeActionError(memberError, tr('actions.thatUserIsNotAn')));
   const { data, error } = await supabase.from('social_access_permissions').upsert(
     { family_id: fid, user_id: targetUserId, social_role: role as never, granted_by: userId, created_by: userId, status: 'active' },
     { onConflict: 'family_id,user_id' },
   ).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, 'Could not update social access.'));
+  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotUpdateSocialAccess')));
   revalidatePath('/dashboard/social/settings');
 }

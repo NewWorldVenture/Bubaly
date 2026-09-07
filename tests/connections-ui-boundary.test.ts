@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync('components/modules/connections-module.tsx', 'utf8');
+const source = readUiSource('components/modules/connections-module.tsx');
 
 describe('connections UI integration boundary', () => {
   it('does not mark a provider connected from an account label alone', () => {

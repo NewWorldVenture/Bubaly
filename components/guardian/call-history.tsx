@@ -7,6 +7,7 @@ import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/
 import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { SCAM_TYPE_LABELS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Communication = {
   id: string;
@@ -56,6 +57,7 @@ function formatDuration(secs: number): string {
 }
 
 export function CallHistory({ communications }: { communications: Communication[] }) {
+  const t = useTranslations();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'calls' | 'sms' | 'scams' | 'blocked'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function CallHistory({ communications }: { communications: Communication[
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search history…"
+            placeholder={t('callHistory.searchHistory')}
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
@@ -113,7 +115,7 @@ export function CallHistory({ communications }: { communications: Communication[
       {/* Grouped list */}
       {groups.size === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 py-12 text-center text-sm text-muted">
-          No communications match your filter.
+          {t('callHistory.noCommunicationsMatchYourFilter')}
         </div>
       ) : (
         Array.from(groups.entries()).map(([date, comms]) => (
@@ -167,27 +169,27 @@ export function CallHistory({ communications }: { communications: Communication[
                   {/* Expanded detail */}
                   {expanded === comm.id && (
                     <div className="border-t border-border bg-elevated/50 px-4 py-3 space-y-2.5">
-                      <DetailRow label="Type" value={COMM_LABELS[comm.comm_type] ?? comm.comm_type} />
+                      <DetailRow label={t('callHistory.type')} value={COMM_LABELS[comm.comm_type] ?? comm.comm_type} />
                       {comm.trust_level_at_time && (
-                        <DetailRow label="Trust" value={`${TRUST_ICONS[comm.trust_level_at_time]} ${TRUST_LABELS[comm.trust_level_at_time]}`} />
+                        <DetailRow label={t('callHistory.trust')} value={`${TRUST_ICONS[comm.trust_level_at_time]} ${TRUST_LABELS[comm.trust_level_at_time]}`} />
                       )}
                       {comm.routing_mode_used && (
-                        <DetailRow label="Handling" value={ROUTING_MODE_LABELS[comm.routing_mode_used]} />
+                        <DetailRow label={t('callHistory.handling')} value={ROUTING_MODE_LABELS[comm.routing_mode_used]} />
                       )}
                       {comm.ai_decision_reason && (
-                        <DetailRow label="AI Reasoning" value={comm.ai_decision_reason} />
+                        <DetailRow label={t('callHistory.aiReasoning')} value={comm.ai_decision_reason} />
                       )}
                       {comm.scam_detected && (
                         <DetailRow
-                          label="Scam Type"
+                          label={t('callHistory.scamType')}
                           value={`${SCAM_TYPE_LABELS[comm.scam_type ?? ''] ?? comm.scam_type} (${comm.scam_confidence}% confidence)`}
                           danger
                         />
                       )}
-                      {comm.summary && <DetailRow label="Summary" value={comm.summary} />}
+                      {comm.summary && <DetailRow label={t('callHistory.summary')} value={comm.summary} />}
                       {comm.body && !comm.summary && (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">Message</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{t('callHistory.message')}</p>
                           <p className="text-xs text-fg bg-surface rounded-lg p-2">{comm.body}</p>
                         </div>
                       )}
@@ -198,8 +200,7 @@ export function CallHistory({ communications }: { communications: Communication[
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-text hover:bg-brand/20 transition w-fit"
                         >
-                          <Play className="h-3.5 w-3.5" /> Play Recording
-                        </a>
+                          <Play className="h-3.5 w-3.5" />{' '}{t('callHistory.playRecording')}</a>
                       )}
                     </div>
                   )}

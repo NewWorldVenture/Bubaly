@@ -9,18 +9,20 @@ import { Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { closeAccountAction } from '@/app/(app)/account/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function CloseAccountCard() {
+  const t = useTranslations();
   const [busy, setBusy] = useState(false);
   const { error: toastError, success } = useToast();
 
   async function close() {
     if (busy) return;
-    if (!window.confirm('Close your account? Nothing is deleted — you can reopen anytime and everything will be exactly where you left it.')) return;
+    if (!window.confirm(t('closeAccountCard.closeYourAccountNothingIs'))) return;
     setBusy(true);
     const res = await closeAccountAction();
     setBusy(false);
-    if (res.ok) { success('Your account is closed. Your data is safe.'); window.location.reload(); }
+    if (res.ok) { success(t('closeAccountCard.yourAccountIsClosedYour')); window.location.reload(); }
     else toastError(res.error);
   }
 
@@ -31,10 +33,9 @@ export function CloseAccountCard() {
           <Archive className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-bold text-fg">Close account</h3>
+          <h3 className="text-sm font-bold text-fg">{t('closeAccount.closeAccount')}</h3>
           <p className="mt-1 text-xs leading-5 text-muted">
-            Take a break anytime. Closing locks your account but <strong>keeps all your data</strong> — reopen
-            whenever you like and pick up right where you left off. Only a parent can close the account.
+            {t('closeAccount.takeABreakAnytimeClosingLocks')} <strong>{t('closeAccount.keepsAllYourData')}</strong> {t('closeAccount.reopenWheneverYouLikeAndPick')}
           </p>
           <Button variant="outline" size="sm" onClick={close} disabled={busy} aria-busy={busy}
             className="mt-3 border-danger/40 text-danger hover:bg-danger/10">

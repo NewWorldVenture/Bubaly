@@ -3,8 +3,10 @@
 import { useState, useTransition } from 'react';
 import { RefreshCw, Loader2 } from 'lucide-react';
 import { retryPublishAction } from '@/app/(app)/dashboard/social/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function RetryPublishButton({ postId }: { postId: string }) {
+  const t = useTranslations();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState('');
   return (
@@ -18,7 +20,7 @@ export function RetryPublishButton({ postId }: { postId: string }) {
         })}
         className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60"
       >
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Retry publish
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {t('retryButton.retryPublish')}
       </button>
       {msg && <span className="text-xs text-muted">{msg}</span>}
     </div>

@@ -26,6 +26,7 @@ import {
   candidateAlreadyTracked, subscriptionCandidateDraft, subscriptionReviewContextKey,
   type SubscriptionCandidate, type SubscriptionCandidateResponse, type SubscriptionReviewContext, type TrackedCandidateMatch,
 } from '@/lib/finance/subscription-candidates';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Sub = Tables<'subscriptions_tracked'>;
 
@@ -42,6 +43,7 @@ export function SubscriptionsModule() {
 }
 
 export function SubscriptionsWorkspace({ context }: { context: SubscriptionReviewContext }) {
+  const t = useTranslations();
   const { familyId, userId } = context;
   const { success, error: toastError } = useToast();
 
@@ -82,16 +84,16 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
   async function markUsed(id: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ last_used: new Date().toISOString().slice(0, 10) }).eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Marked used today');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this subscription?')) return;
+    if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
     const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);
@@ -100,23 +102,23 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load subscriptions. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('subscriptionsModule.couldNotLoadSubscriptionsRefresh')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> Subscription Tracking</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> {t('subscriptions.subscriptionTracking')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="subscriptions" />
-          <Button onClick={() => { setCandidateDraft(false); setPriceHistoryDraft(null); setForm(blank()); }}><Plus className="h-4 w-4" /> Add subscription</Button>
+          <Button onClick={() => { setCandidateDraft(false); setPriceHistoryDraft(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('subscriptions.addSubscription')}</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Active</p><p className="text-xl font-bold">{stats.active}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Monthly</p><p className="text-xl font-bold">{usd(stats.monthlyCents)}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Annual</p><p className="text-xl font-bold">{usd(stats.annualCents)}</p></div>
-        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Usage review / mo</p><p className={`text-xl font-bold ${reviewMonthly > 0 ? 'text-amber-500' : ''}`}>{usd(reviewMonthly)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{t('subscriptions.active')}</p><p className="text-xl font-bold">{stats.active}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{t('subscriptions.monthly')}</p><p className="text-xl font-bold">{usd(stats.monthlyCents)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{t('subscriptions.annual')}</p><p className="text-xl font-bold">{usd(stats.annualCents)}</p></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">{t('subscriptions.usageReviewMo')}</p><p className={`text-xl font-bold ${reviewMonthly > 0 ? 'text-amber-500' : ''}`}>{usd(reviewMonthly)}</p></div>
       </div>
 
       <SavingsCoachCard />
@@ -130,13 +132,13 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
       {reviewMonthly > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p>Subscriptions totaling <strong>{usd(reviewMonthly)}/mo</strong> have recorded use more than 60 days ago. Confirm current household use before deciding what to keep. This amount is not confirmed savings.</p>
+          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong>{' '}{t('subscriptionsModule.haveRecordedUseMoreThan')}</p>
         </div>
       )}
 
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={RefreshCw} title="No subscriptions tracked" description="Add streaming, apps and memberships to see your true recurring spend." />
+          <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description={t('subscriptionsModule.addStreamingAppsAndMemberships')} />
         ) : all.map((s) => {
           const usage = subscriptionUsage(s, usageNow);
           const stale = isStale(s as SubLike, 60, usageNow);
@@ -146,7 +148,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
               <div className="min-w-0 w-full">
                 <p className={`font-medium ${canceled ? 'text-muted line-through' : ''}`}>
                   {s.name} <span className="text-muted">· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
-                  {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> review usage</span>}
+                  {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> {t('subscriptions.reviewUsage')}</span>}
                   {s.status === 'trial' && <span className="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">trial</span>}
                 </p>
                 <p className="text-xs text-muted">
@@ -165,10 +167,10 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
                 />
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
-                {!canceled && <button onClick={() => markUsed(s.id)} className="inline-flex items-center gap-1 text-muted hover:text-success" title="Mark used today"><CheckCircle2 className="h-4 w-4" /></button>}
+                {!canceled && <button onClick={() => markUsed(s.id)} className="inline-flex items-center gap-1 text-muted hover:text-success" title={t('subscriptions.markUsedToday')}><CheckCircle2 className="h-4 w-4" /></button>}
                 <button onClick={() => setStatus(s.id, canceled ? 'active' : 'canceled')} className="text-muted hover:text-fg hover:underline">{canceled ? 'Reactivate' : 'Cancel'}</button>
-                <button onClick={() => edit(s)} className="text-muted hover:text-fg hover:underline">Edit</button>
-                <button onClick={() => remove(s.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => edit(s)} className="text-muted hover:text-fg hover:underline">{t('subscriptions.edit')}</button>
+                <button onClick={() => remove(s.id)} className="text-muted hover:text-danger" aria-label={t('subscriptions.delete')}><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           );
@@ -179,22 +181,22 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit subscription' : 'Add subscription'}
           description={candidateDraft ? 'This draft comes from recorded expenses. Confirm the name, USD cost, cadence and status, then Save. Usage and the next charge are still unknown.' : priceHistoryDraft ?? undefined}>
           <form onSubmit={save} className="space-y-3">
-            <Field label="Name">{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Netflix, Spotify…" />}</Field>
+            <Field label={t('subscriptions.name')}>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('subscriptions.netflixSpotify')} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Cost ($)">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
-              <Field label="Billing">{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+              <Field label={t('subscriptions.billing')}>{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-              <Field label="Status">{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{SUB_STATUSES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.status')}>{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{SUB_STATUSES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Next charge">{(id) => <Input id={id} type="date" value={form.next_charge} onChange={(e) => setForm({ ...form, next_charge: e.target.value })} />}</Field>
-              <Field label="Last used" hint="Leave blank if usage is unknown; record only actual use.">{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
+              <Field label={t('subscriptions.nextCharge')}>{(id) => <Input id={id} type="date" value={form.next_charge} onChange={(e) => setForm({ ...form, next_charge: e.target.value })} />}</Field>
+              <Field label={t('subscriptions.lastUsed')} hint="Leave blank if usage is unknown; record only actual use.">{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
             </div>
-            <Field label="Note">{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
+            <Field label={t('subscriptions.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('subscriptions.cancel')}</Button>
               <Button type="submit">{candidateDraft ? 'Save subscription' : form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
@@ -207,6 +209,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
   context: SubscriptionReviewContext; tracked: readonly TrackedCandidateMatch[]; onPrefill: (candidate: SubscriptionCandidate) => void;
 }) {
+  const t = useTranslations();
   const contextKey = subscriptionReviewContextKey(context);
   const canReview = !!context.userId && !!context.memberId && context.active && isManager(context.role);
   const [review, setReview] = useState<{ contextKey: string; generation: number; loading: boolean; result: SubscriptionCandidateResponse | null; error: string | null }>({ contextKey, generation: 0, loading: false, result: null, error: null });
@@ -247,37 +250,37 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
 
   const candidates = canReview ? visibleReview.result?.candidates.filter((candidate) => !candidateAlreadyTracked(candidate, tracked)) ?? [] : [];
   return (
-    <section aria-label="Recurring expense candidates" className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+    <section aria-label={t('subscriptions.recurringExpenseCandidates')} className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h4 className="font-semibold">Review recurring expenses</h4>
-          <p className="text-sm text-muted">Look for three or more matching recorded expenses. A repeated expense is a candidate, not proof of a subscription.</p>
-          <p className="mt-1 text-xs text-muted">Only expenses linked to accessible USD accounts can pre-fill this USD form. Unlinked or other-currency expenses are excluded without conversion.</p>
+          <h4 className="font-semibold">{t('subscriptions.reviewRecurringExpenses')}</h4>
+          <p className="text-sm text-muted">{t('subscriptions.lookForThreeOrMoreMatching')}</p>
+          <p className="mt-1 text-xs text-muted">{t('subscriptionsModule.onlyExpensesLinkedToAccessible')}</p>
         </div>
         <Button type="button" disabled={!canReview || visibleReview.loading} onClick={() => { void load(); }}>{visibleReview.loading ? 'Reviewing...' : visibleReview.result || visibleReview.error ? 'Refresh candidates' : 'Find candidates'}</Button>
       </div>
-      {!canReview && <p className="text-sm text-muted">A current parent or adult membership is required to review recorded expenses.</p>}
-      {visibleReview.loading && <p role="status" className="text-sm text-muted">Reading authorized recorded expenses...</p>}
+      {!canReview && <p className="text-sm text-muted">{t('subscriptions.aCurrentParentOrAdultMembership')}</p>}
+      {visibleReview.loading && <p role="status" className="text-sm text-muted">{t('subscriptions.readingAuthorizedRecordedExpenses')}</p>}
       {visibleReview.error && <p role="alert" className="text-sm text-danger">{visibleReview.error}</p>}
       {canReview && visibleReview.result && (
         <div className="space-y-3">
-          <p role="status" className="text-xs text-muted">Reviewed {visibleReview.result.recordsRead} recorded expenses from {visibleReview.result.window.from} to {visibleReview.result.window.to}.
+          <p role="status" className="text-xs text-muted">{t('subscriptions.reviewed')} {visibleReview.result.recordsRead} {t('subscriptions.recordedExpensesFrom')} {visibleReview.result.window.from} to {visibleReview.result.window.to}.
             {visibleReview.result.limited ? ' History was limited to the 500 most recent records; this is a partial review.' : ''}
             {visibleReview.result.unsupportedCurrencyRecords > 0 ? ` ${visibleReview.result.unsupportedCurrencyRecords} records were excluded because their currency is unknown or unsupported.` : ''}
           </p>
-          {candidates.length === 0 ? <p className="text-sm text-muted">No new candidates meet these conservative rules within the reviewed records. You can still add a subscription manually.</p> : candidates.map((candidate) => (
+          {candidates.length === 0 ? <p className="text-sm text-muted">{t('subscriptions.noNewCandidatesMeetTheseConservative')}</p> : candidates.map((candidate) => (
             <details key={candidate.id} className="rounded-xl border border-border p-3">
-              <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2">Review evidence: {candidate.name} - USD {(candidate.amountCents / 100).toFixed(2)}, approximately {candidate.cadence}</summary>
+              <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2">{t('subscriptions.reviewEvidence')} {candidate.name} - USD {(candidate.amountCents / 100).toFixed(2)}{t('subscriptions.approximately')} {candidate.cadence}</summary>
               <div className="mt-3 space-y-3 text-sm">
                 <p>{candidate.explanation}</p>
-                <p className="text-muted">Observed window: {candidate.observed.from} to {candidate.observed.to}.</p>
+                <p className="text-muted">{t('subscriptions.observedWindow')} {candidate.observed.from} to {candidate.observed.to}.</p>
                 <ul aria-label={`Recorded expense evidence for ${candidate.name}`} className="space-y-2">
                   {candidate.evidence.map((item) => <li key={item.recordId} className="break-words text-xs text-muted"><time dateTime={item.date}>{item.date}</time> - USD {(item.amountCents / 100).toFixed(2)} - <code className="break-all">transactions/{item.recordId}</code></li>)}
                 </ul>
-                <p className="text-xs text-muted">Use this evidence to pre-fill an editable Add form. Nothing is saved until you review and choose Save subscription.</p>
+                <p className="text-xs text-muted">{t('subscriptions.useThisEvidenceToPreFill')}</p>
                 <Button type="button" onClick={() => {
                   if (currentContext.current === contextKey && generation.current === visibleReview.generation && request.current?.signal.aborted !== true) onPrefill(candidate);
-                }}>Use in Add form</Button>
+                }}>{t('subscriptions.useInAddForm')}</Button>
               </div>
             </details>
           ))}

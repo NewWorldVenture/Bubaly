@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getProvider } from '@/lib/recipes/providers';
@@ -16,14 +17,15 @@ type SaveResult = { ok: true; id: string; already?: boolean } | { ok: false; err
  * (family, provider, source id) so it survives provider outages thereafter.
  */
 export async function saveDiscoveredRecipe(input: { provider: string; sourceRecipeId: string }): Promise<SaveResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
 
   const provider = getProvider(input.provider);
-  if (!provider?.lookup) return { ok: false, error: 'That recipe source is unavailable.' };
+  if (!provider?.lookup) return { ok: false, error: t('actions.thatRecipeSourceIsUnavailable') };
 
   const recipe = await provider.lookup(input.sourceRecipeId).catch(() => null);
-  if (!recipe) return { ok: false, error: 'Could not load that recipe.' };
+  if (!recipe) return { ok: false, error: t('actions.couldNotLoadThatRecipe') };
 
   const supabase = await createServer();
 

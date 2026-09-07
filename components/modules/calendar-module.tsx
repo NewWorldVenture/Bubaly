@@ -6,8 +6,9 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { expandEvents } from '@/lib/calendar/recurrence';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
-import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
@@ -22,6 +23,7 @@ import { FindTimeModal } from './find-time-modal';
 import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -179,6 +181,7 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
 }
 
 export function CalendarModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -224,8 +227,8 @@ export function CalendarModule() {
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
     const params = new URLSearchParams(window.location.search);
-    if (params.get('gcal') === 'connected') { success('Google Calendar connected!'); window.history.replaceState({}, '', window.location.pathname); }
-    else if (params.get('gcal') === 'error') { toastError('Google Calendar connection failed.'); window.history.replaceState({}, '', window.location.pathname); }
+    if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
+    else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount
@@ -327,7 +330,7 @@ export function CalendarModule() {
       const json = await res.json() as { synced?: number; error?: string };
       if (json.error) throw new Error(json.error);
       success(`Synced ${json.synced} events`); void refresh();
-    } catch (err) { toastError(describeDbError(err, 'Sync failed')); }
+    } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }
 
@@ -423,13 +426,13 @@ export function CalendarModule() {
         {/* Top bar */}
         <div className="module-page flex-shrink-0 border-b border-border">
           <PageHeader
-            title="Calendar"
-            description="Stay on top of your family's schedule."
+            title={tr('calendar.calendar')}
+            description={tr('calendarModule.stayOnTopOfYour')}
             action={
               <div className="flex items-center gap-2">
                 {gcalConnected === false && (
                   <a href="/api/google/calendar/auth" className="btn-inline">
-                    <GoogleGlyph /> Connect Google
+                    <GoogleGlyph /> {tr('calendar.connectGoogle')}
                   </a>
                 )}
                 {gcalConnected && (
@@ -440,10 +443,10 @@ export function CalendarModule() {
                 )}
                 <AiInsight kind="calendar" />
                 <button onClick={() => setFindOpen(true)} className="btn-inline">
-                  <Sparkles className="h-3.5 w-3.5" /> Find a time
+                  <Sparkles className="h-3.5 w-3.5" /> {tr('calendar.findATime')}
                 </button>
                 <Button size="sm" onClick={() => setOpen(true)}>
-                  <Plus className="h-4 w-4" /> Add Event
+                  <Plus className="h-4 w-4" /> {tr('calendar.addEvent')}
                 </Button>
               </div>
             }
@@ -452,10 +455,10 @@ export function CalendarModule() {
           {/* Nav + view switcher row */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <button onClick={goToday} className="btn-inline">Today</button>
+              <button onClick={goToday} className="btn-inline">{tr('calendar.today')}</button>
               <div className="flex items-center gap-1">
-                <button onClick={() => navStep(-1)} aria-label="Previous" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
-                <button onClick={() => navStep(1)} aria-label="Next" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => navStep(-1)} aria-label={tr('calendar.previous')} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={() => navStep(1)} aria-label={tr('calendar.next')} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
               </div>
               <span className="text-sm font-semibold">{dateLabel}</span>
             </div>
@@ -494,7 +497,7 @@ export function CalendarModule() {
 
               {/* People / member-visibility popover (works on every screen size). */}
               <div className="relative">
-                <button onClick={() => setMemberMenu(v => !v)} aria-label="Member calendars"
+                <button onClick={() => setMemberMenu(v => !v)} aria-label={tr('calendar.memberCalendars')}
                   className={cn('grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-elevated', hiddenMembers.size > 0 && 'text-brand-text')}>
                   <Users className="h-4 w-4" />
                 </button>
@@ -502,7 +505,7 @@ export function CalendarModule() {
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
                     <div className="absolute right-0 z-20 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-border bg-elevated p-1.5 shadow-lg">
-                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Calendars</p>
+                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('calendar.calendars')}</p>
                       {calendarRows.map((row) => {
                         const visible = !hiddenMembers.has(row.key);
                         return (
@@ -547,7 +550,7 @@ export function CalendarModule() {
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
               <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
-                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">All Day</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
@@ -560,7 +563,7 @@ export function CalendarModule() {
 
             {/* Timed events */}
             {mobileDayTimed.length === 0 && mobileDayAllDay.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted">No events this day</p>
+              <p className="py-8 text-center text-sm text-muted">{tr('calendar.noEventsThisDay')}</p>
             )}
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
@@ -685,7 +688,7 @@ export function CalendarModule() {
         <div className="flex-shrink-0 border-t border-border px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
             <div className="min-w-0">
-              <div className="font-semibold">Sync &amp; Connect</div>
+              <div className="font-semibold">{tr('calendar.syncAmpConnect')}</div>
               <div className="text-muted">
                 {gcalConnected ? 'Your calendar is connected and up to date.' : 'Connect a calendar to keep everything in sync.'}
               </div>
@@ -693,18 +696,18 @@ export function CalendarModule() {
             <div className="flex items-center gap-2">
               <GoogleGlyph size={15} />
               <div className="leading-tight">
-                <div className="font-medium">Google Calendar</div>
+                <div className="font-medium">{tr('calendar.googleCalendar')}</div>
                 <div className={cn('text-[11px]', gcalConnected ? 'text-green-400' : 'text-muted')}>{gcalConnected ? 'Connected' : 'Not connected'}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4 text-brand-text" />
               <div className="leading-tight">
-                <div className="font-medium">Family Sync</div>
-                <div className="text-[11px] text-green-400">Up to date</div>
+                <div className="font-medium">{tr('calendar.familySync')}</div>
+                <div className="text-[11px] text-green-400">{tr('calendar.upToDate')}</div>
               </div>
             </div>
-            <a href="/dashboard/sync" className="ml-auto font-medium text-brand-text hover:underline">Manage Connections →</a>
+            <a href="/dashboard/sync" className="ml-auto font-medium text-brand-text hover:underline">{tr('calendar.manageConnections')}</a>
           </div>
         </div>
 
@@ -726,11 +729,11 @@ export function CalendarModule() {
 
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted uppercase tracking-wide">Upcoming</span>
-            <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand-text hover:underline">View all</button>
+            <span className="text-xs font-semibold text-muted uppercase tracking-wide">{tr('calendar.upcoming')}</span>
+            <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand-text hover:underline">{tr('calendar.viewAll')}</button>
           </div>
           {upcomingByDay.length === 0 ? (
-            <p className="text-xs text-muted">Nothing coming up</p>
+            <p className="text-xs text-muted">{tr('calendar.nothingComingUp')}</p>
           ) : upcomingByDay.map(([day, events]) => {
             const d = new Date(day);
             const isToday2 = day === todayStr;
@@ -765,19 +768,19 @@ export function CalendarModule() {
         {/* Calendars — per-member visibility toggles */}
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted uppercase tracking-wide">Calendars</span>
-            <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand-text hover:underline">Manage</a>
+            <span className="text-xs font-semibold text-muted uppercase tracking-wide">{tr('calendar.calendars')}</span>
+            <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand-text hover:underline">{tr('calendar.manage')}</a>
           </div>
           {/* Side-by-side per-member day view */}
           <label className="mb-1.5 flex cursor-pointer items-center gap-2 rounded-lg border border-border px-2 py-1.5 transition hover:bg-elevated">
             <input type="checkbox" checked={splitByMember} onChange={(e) => setSplitByMember(e.target.checked)}
               className="h-4 w-4 shrink-0 accent-brand" />
-            <span className="flex-1 text-xs font-medium">Side-by-side view</span>
+            <span className="flex-1 text-xs font-medium">{tr('calendar.sideBySideView')}</span>
             <Columns className="h-3.5 w-3.5 text-muted" />
           </label>
           {splitByMember && (
             <p className="mb-1.5 px-1 text-[10px] leading-4 text-muted">
-              Each visible member gets a column for {mobileDay.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}. Toggle members below to show or hide their column.
+              {tr('calendar.eachVisibleMemberGetsAColumn')} {mobileDay.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}{tr('calendar.toggleMembersBelowToShowOr')}
             </p>
           )}
           <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
@@ -797,7 +800,7 @@ export function CalendarModule() {
 
         {/* Show — category visibility toggles */}
         <div className="sidebar-card">
-          <div className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Show</div>
+          <div className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">{tr('calendar.show')}</div>
           <div className="space-y-0.5">
             {SHOW_TOGGLES.map((t) => {
               const visible = !hiddenCategories.has(t.key);
@@ -818,16 +821,16 @@ export function CalendarModule() {
 
         {/* Share Calendar */}
         <div className="sidebar-card">
-          <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wide">Share Calendar</div>
-          <p className="mb-2 text-xs text-muted">Keep everyone in the loop.</p>
+          <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wide">{tr('calendar.shareCalendar')}</div>
+          <p className="mb-2 text-xs text-muted">{tr('calendar.keepEveryoneInTheLoop')}</p>
           <a href="/dashboard/settings#members" className="flex items-center gap-2 text-xs font-medium text-brand-text hover:underline">
-            <Users className="h-4 w-4" /> Invite People
+            <Users className="h-4 w-4" /> {tr('calendar.invitePeople')}
           </a>
         </div>
       </div>
 
-      {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
-      {editing && <NewEventModal familyId={familyId} userId={userId} existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
+      {open && <NewEventModal onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {editing && <NewEventModal existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
       {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && (
         <EventDetailModal
@@ -850,12 +853,23 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
-  familyId: string; userId: string; existing?: Event | null; onClose: () => void; onSaved: () => void;
+function NewEventModal({ existing, onClose, onSaved }: {
+  existing?: Event | null; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // One id for this composition, held across every retry of it. The modal
+  // unmounts on save and on close, so the next Add Event mints a new one and two
+  // deliberately identical events both get created; a Save pressed again after a
+  // response that never arrived reuses this one and gets the first event back.
+  //
+  // Deliberately NOT reset when a save fails. The failure a parent retries is
+  // usually a lost response, not a rejected write, and re-minting on failure is
+  // exactly what turns that retry into the duplicate this is here to prevent.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -878,14 +892,22 @@ function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
     setErrors({});
     setLoading(true);
     try {
-      const supabase = createClient();
-      const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-      const { error } = existing
-        ? await supabase.from('calendar_events')
-            .update({ ...parsed.data, recurrence, ends_at: parsed.data.ends_at ?? null, location: parsed.data.location ?? null, description: parsed.data.description ?? null })
-            .eq('id', existing.id)
-        : await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
-      if (error) { toastError(describeDbError(error)); return; }
+      const recurrence = String(form.get('recurrence') ?? 'none');
+      const fields = {
+        title: parsed.data.title,
+        startsAt: parsed.data.starts_at,
+        endsAt: parsed.data.ends_at ?? null,
+        category: parsed.data.category,
+        location: parsed.data.location ?? null,
+        description: parsed.data.description ?? null,
+        recurrence,
+      };
+      // No family_id and no created_by: the action reads both from the session,
+      // so this component can no longer name the household it writes into.
+      const result = existing
+        ? await updateCalendarEventAction(existing.id, fields)
+        : await createCalendarEventAction({ ...fields, submissionId: submissionId.current });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));
@@ -897,10 +919,10 @@ function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
   return (
     <Modal open title={existing ? 'Edit Event' : 'Add Event'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Title" error={errors.title} required>
-          {(id) => <Input id={id} name="title" autoFocus placeholder="Team dinner" defaultValue={existing?.title ?? ''} />}
+        <Field label={tr('calendar.title')} error={errors.title} required>
+          {(id) => <Input id={id} name="title" autoFocus placeholder={tr('calendar.teamDinner')} defaultValue={existing?.title ?? ''} />}
         </Field>
-        <Field label="Category">
+        <Field label={tr('calendar.category')}>
           {(id) => (
             <Select id={id} name="category" defaultValue={existing?.category ?? 'general'}>
               {['general','school','sports','appointment','birthday','holiday','other'].map(c => (
@@ -910,32 +932,32 @@ function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
           )}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Starts" error={errors.starts_at} required>
+          <Field label={tr('calendar.starts')} error={errors.starts_at} required>
             {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null)} />}
           </Field>
-          <Field label="Ends" error={errors.ends_at}>
+          <Field label={tr('calendar.ends')} error={errors.ends_at}>
             {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null)} />}
           </Field>
         </div>
-        <Field label="Location">
-          {(id) => <Input id={id} name="location" placeholder="Home, School..." defaultValue={existing?.location ?? ''} />}
+        <Field label={tr('calendar.location')}>
+          {(id) => <Input id={id} name="location" placeholder={tr('calendar.homeSchool')} defaultValue={existing?.location ?? ''} />}
         </Field>
-        <Field label="Repeat">
+        <Field label={tr('calendar.repeat')}>
           {(id) => (
             <Select id={id} name="recurrence" defaultValue={existing?.recurrence ?? 'none'}>
-              <option value="none">No repeat</option>
-              <option value="daily">Every day</option>
-              <option value="weekly">Every week</option>
-              <option value="monthly">Every month</option>
-              <option value="yearly">Every year</option>
+              <option value="none">{tr('calendar.noRepeat')}</option>
+              <option value="daily">{tr('calendar.everyDay')}</option>
+              <option value="weekly">{tr('calendar.everyWeek')}</option>
+              <option value="monthly">{tr('calendar.everyMonth')}</option>
+              <option value="yearly">{tr('calendar.everyYear')}</option>
             </Select>
           )}
         </Field>
-        <Field label="Notes">
-          {(id) => <Textarea id={id} name="description" placeholder="Optional details..." defaultValue={existing?.description ?? ''} />}
+        <Field label={tr('calendar.notes')}>
+          {(id) => <Textarea id={id} name="description" placeholder={tr('calendar.optionalDetails')} defaultValue={existing?.description ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>{tr('calendar.cancel')}</Button>
           <Button type="submit" size="sm" loading={loading}>
             {loading ? 'Saving...' : existing ? 'Save Changes' : 'Add Event'}
           </Button>

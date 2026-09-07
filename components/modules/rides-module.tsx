@@ -24,6 +24,7 @@ import {
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Ride = Tables<'rides'>;
 
@@ -46,6 +47,8 @@ const blankRide = {
 };
 
 export function RidesModule() {
+  const tr = useTranslations();
+  const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -96,7 +99,7 @@ export function RidesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(tr('ridesModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -125,7 +128,7 @@ export function RidesModule() {
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Ride deleted');
+    success(tr('ridesModule.rideDeleted'));
   }
 
   async function setStatus(r: Ride, status: RideStatus) {
@@ -147,12 +150,12 @@ export function RidesModule() {
   return (
     <div>
       <PageHeader
-        title="Rides & Carpool"
-        description="Coordinate who's driving whom, when, and where — with conflict detection."
+        title={t('rides.ridesCarpool')}
+        description={tr('ridesModule.coordinateWhoSDrivingWhom')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rides" iconOnly />
-            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>}
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rides.addRide')}</Button>}
           </div>
         }
       />
@@ -162,42 +165,39 @@ export function RidesModule() {
         <div className="flex flex-wrap gap-3 mb-5">
           {conflicts.size > 0 && (
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-300">
-              <AlertTriangle className="h-4 w-4" /> {conflicts.size} ride{conflicts.size > 1 ? 's have' : ' has'} a driver double-booked
+              <AlertTriangle className="h-4 w-4" /> {conflicts.size} ride{conflicts.size > 1 ? 's have' : ' has'} {t('rides.aDriverDoubleBooked')}
             </div>
           )}
           {needsDriver > 0 && (
             <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-sm text-rose-300">
-              <UserX className="h-4 w-4" /> {needsDriver} ride{needsDriver > 1 ? 's need' : ' needs'} a driver
+              <UserX className="h-4 w-4" /> {needsDriver} ride{needsDriver > 1 ? 's need' : ' needs'} {t('rides.aDriver')}
             </div>
           )}
           {timing.incompleteTiming.size > 0 && (
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-300">
-              <Clock className="h-4 w-4" /> {timing.incompleteTiming.size} ride{timing.incompleteTiming.size > 1 ? 's have' : ' has'} incomplete timing. Review pickup and same-day drop-off times.
+              <Clock className="h-4 w-4" /> {timing.incompleteTiming.size} ride{timing.incompleteTiming.size > 1 ? 's have' : ' has'} {t('rides.incompleteTimingReviewPickupAndSame')}
             </div>
           )}
         </div>
       )}
 
-      <p className="mb-4 text-xs text-muted">
-        Checks compare recorded pickup and drop-off times only. Travel between rides is not assessed.
-        Missing, invalid, or overnight times cannot establish a clear schedule.
-      </p>
+      <p className="mb-4 text-xs text-muted">{tr('ridesModule.checksCompareRecordedPickupAnd')}</p>
 
       <div className="flex items-center gap-1.5 mb-4">
         <button onClick={() => setShowPast(false)}
           className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', !showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
-          Upcoming
+          {t('rides.upcoming')}
         </button>
         <button onClick={() => setShowPast(true)}
           className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
-          All rides
+          {t('rides.allRides')}
         </button>
       </div>
 
       {grouped.length === 0 ? (
         <EmptyState icon={Car} title={showPast ? 'No rides yet' : 'No upcoming rides'}
           description={canEdit ? 'Add a ride to coordinate pickups, drop-offs, and drivers across the family.' : 'No rides are scheduled.'}
-          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>} />
+          action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rides.addRide')}</Button>} />
       ) : (
         <div className="space-y-6">
           {grouped.map(([date, dayRides]) => (
@@ -220,8 +220,8 @@ export function RidesModule() {
                               <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5', STATUS_STYLES[r.status])}>
                                 {RIDE_STATUS_LABELS[r.status]}
                               </span>
-                              {conflicted && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">Conflict</span>}
-                              {timing.incompleteTiming.has(r.id) && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">Timing incomplete</span>}
+                              {conflicted && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">{t('rides.conflict')}</span>}
+                              {timing.incompleteTiming.has(r.id) && <span className="text-[10px] uppercase tracking-wide rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 px-1.5 py-0.5">{t('rides.timingIncomplete')}</span>}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                               {r.pickup_time && <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{shortTime(r.pickup_time)}{r.dropoff_time ? `–${shortTime(r.dropoff_time)}` : ''}</span>}
@@ -232,7 +232,7 @@ export function RidesModule() {
                                 <span className="text-muted">Driver:</span>
                                 {r.driver_id ? (
                                   <span className="inline-flex items-center gap-1 text-fg"><Avatar name={memberName(r.driver_id) ?? '?'} size={16} />{memberName(r.driver_id)}</span>
-                                ) : <span className="text-rose-400">Unassigned</span>}
+                                ) : <span className="text-rose-400">{t('rides.unassigned')}</span>}
                               </span>
                               {r.rider_ids.length > 0 && (
                                 <span className="inline-flex items-center gap-1.5 text-xs text-muted">
@@ -247,10 +247,10 @@ export function RidesModule() {
                         {canEdit && (
                           <div className="flex items-center gap-1 flex-shrink-0">
                             {r.status !== 'completed' && r.status !== 'cancelled' && (
-                              <button onClick={() => setStatus(r, 'completed')} aria-label="Mark completed" className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><CheckCircle2 className="h-4 w-4" /></button>
+                              <button onClick={() => setStatus(r, 'completed')} aria-label={t('rides.markCompleted')} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-elevated"><CheckCircle2 className="h-4 w-4" /></button>
                             )}
-                            <button onClick={() => openEdit(r)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                            <button onClick={() => remove(r)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                            <button onClick={() => openEdit(r)} aria-label={t('rides.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => remove(r)} aria-label={t('rides.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                           </div>
                         )}
                       </div>
@@ -266,14 +266,14 @@ export function RidesModule() {
       {/* Ride modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit ride' : 'Add ride'}>
         <form onSubmit={save} className="space-y-4">
-          <Field label="What's the ride for?" required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Soccer practice drop-off" autoFocus />}
+          <Field label={tr('rides.whatsTheRideFor')} required>
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rides.eGSoccerPracticeDropOff')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Date" required>
+            <Field label={t('rides.date')} required>
               {(id) => <Input id={id} type="date" value={form.ride_date} onChange={(e) => setForm((f) => ({ ...f, ride_date: e.target.value }))} />}
             </Field>
-            <Field label="Status">
+            <Field label={t('rides.status')}>
               {(id) => (
                 <Select id={id} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as RideStatus }))}>
                   {(Object.keys(RIDE_STATUS_LABELS) as RideStatus[]).map((s) => <option key={s} value={s}>{RIDE_STATUS_LABELS[s]}</option>)}
@@ -282,31 +282,31 @@ export function RidesModule() {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Pickup time">
+            <Field label={t('rides.pickupTime')}>
               {(id) => <Input id={id} type="time" value={form.pickup_time} onChange={(e) => setForm((f) => ({ ...f, pickup_time: e.target.value }))} />}
             </Field>
-            <Field label="Drop-off time">
+            <Field label={t('rides.dropOffTime')}>
               {(id) => <Input id={id} type="time" value={form.dropoff_time} onChange={(e) => setForm((f) => ({ ...f, dropoff_time: e.target.value }))} />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Pickup location">
-              {(id) => <Input id={id} value={form.pickup_location} onChange={(e) => setForm((f) => ({ ...f, pickup_location: e.target.value }))} placeholder="Home" />}
+            <Field label={t('rides.pickupLocation')}>
+              {(id) => <Input id={id} value={form.pickup_location} onChange={(e) => setForm((f) => ({ ...f, pickup_location: e.target.value }))} placeholder={t('rides.home')} />}
             </Field>
-            <Field label="Drop-off location">
-              {(id) => <Input id={id} value={form.dropoff_location} onChange={(e) => setForm((f) => ({ ...f, dropoff_location: e.target.value }))} placeholder="Field #3" />}
+            <Field label={t('rides.dropOffLocation')}>
+              {(id) => <Input id={id} value={form.dropoff_location} onChange={(e) => setForm((f) => ({ ...f, dropoff_location: e.target.value }))} placeholder={t('rides.field3')} />}
             </Field>
           </div>
-          <Field label="Driver">
+          <Field label={t('rides.driver')}>
             {(id) => (
               <Select id={id} value={form.driver_id} onChange={(e) => setForm((f) => ({ ...f, driver_id: e.target.value }))}>
-                <option value="">Needs a driver</option>
+                <option value="">{t('rides.needsADriver')}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </Select>
             )}
           </Field>
           <div>
-            <span className="block text-sm font-medium text-fg mb-1.5">Riders</span>
+            <span className="block text-sm font-medium text-fg mb-1.5">{t('rides.riders')}</span>
             <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
               {members.map((m) => (
                 <button key={m.id} type="button" onClick={() => toggleRider(m.id)}
@@ -317,11 +317,11 @@ export function RidesModule() {
               ))}
             </div>
           </div>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Car seat needed, bring cleats…" />}
+          <Field label={t('rides.notes')}>
+            {(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('rides.carSeatNeededBringCleats')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('rides.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add ride'}</Button>
           </div>
         </form>

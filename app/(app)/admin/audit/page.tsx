@@ -7,14 +7,16 @@ import { Avatar } from '@/components/ui/avatar';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Audit Logs', robots: { index: false } };
+export const metadata: Metadata = { title: 'audit.auditLogs', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 40;
 type Params = { searchParams: Promise<{ q?: string; action?: string; resource?: string; scope?: string; page?: string }> };
 
 export default async function AdminAuditPage({ searchParams }: Params) {
+  const t = await getTranslations();
   const sp = await searchParams;
   const supabase = createServiceClient();
 
@@ -72,20 +74,20 @@ export default async function AdminAuditPage({ searchParams }: Params) {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted">An append-only record of sensitive actions across every family and the site admin.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminAudit.auditLogs')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminAudit.anAppendOnlyRecordOfSensitive')}</p>
       </div>
 
       <div className="grid-stats">
-        <StatCard icon={ScrollText} label="Logged events" value={rows.length} tone="bg-brand/10 text-brand-text" />
-        <StatCard icon={ShieldAlert} label="Site-admin actions" value={adminActions} tone="bg-danger/10 text-danger" />
-        <StatCard icon={Activity} label="Action types" value={actionOptions.length} tone="bg-accent/10 text-accent" />
-        <StatCard icon={Building2} label="Families touched" value={new Set(rows.map((l) => l.family_id).filter(Boolean)).size} tone="bg-success/10 text-success" />
+        <StatCard icon={ScrollText} label={t('adminAudit.loggedEvents')} value={rows.length} tone="bg-brand/10 text-brand-text" />
+        <StatCard icon={ShieldAlert} label={t('adminAudit.siteAdminActions')} value={adminActions} tone="bg-danger/10 text-danger" />
+        <StatCard icon={Activity} label={t('adminAudit.actionTypes')} value={actionOptions.length} tone="bg-accent/10 text-accent" />
+        <StatCard icon={Building2} label={t('adminAudit.familiesTouched')} value={new Set(rows.map((l) => l.family_id).filter(Boolean)).size} tone="bg-success/10 text-success" />
       </div>
 
       <Card>
         <FilterForm action="/admin/audit">
-          <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search by actor, family, action, or resource..." />
+          <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('adminAudit.searchByActorFamilyActionOr')} />
           <FilterSelect name="action" defaultValue={actionFilter} options={[{ value: '', label: 'All Actions' }, ...actionOptions.map((a) => ({ value: a, label: a }))]} />
           <FilterSelect name="resource" defaultValue={resourceFilter} options={[{ value: '', label: 'All Resources' }, ...resourceOptions.map((r) => ({ value: r, label: r }))]} />
           <FilterSelect name="scope" defaultValue={scopeFilter} options={[{ value: '', label: 'All Sources' }, { value: 'admin', label: 'Site admin only' }, { value: 'family', label: 'In-family only' }]} />
@@ -98,12 +100,12 @@ export default async function AdminAuditPage({ searchParams }: Params) {
             <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">Action</th>
-                  <th className="px-3 py-2 font-medium">Resource</th>
-                  <th className="px-3 py-2 font-medium">Family</th>
-                  <th className="px-3 py-2 font-medium">Actor</th>
-                  <th className="px-3 py-2 font-medium">Source</th>
-                  <th className="px-3 py-2 font-medium">When</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.action')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.resource')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.family')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.actor')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.source')}</th>
+                  <th className="px-3 py-2 font-medium">{t('adminAudit.when')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -121,9 +123,9 @@ export default async function AdminAuditPage({ searchParams }: Params) {
                             <Avatar name={actor.full_name || actor.email || '?'} size={22} />
                             <span className="text-muted">{actor.full_name || actor.email}</span>
                           </div>
-                        ) : <span className="text-muted">System</span>}
+                        ) : <span className="text-muted">{t('audit.system')}</span>}
                       </td>
-                      <td className="px-3 py-2.5">{viaAdmin ? <Badge tone="brand">Site Admin</Badge> : <span className="text-xs text-muted">In-family</span>}</td>
+                      <td className="px-3 py-2.5">{viaAdmin ? <Badge tone="brand">{t('audit.siteAdmin')}</Badge> : <span className="text-xs text-muted">In-family</span>}</td>
                       <td className="px-3 py-2.5 text-muted">{fmtDate(l.created_at, 'MMM d, h:mm a')}</td>
                     </tr>
                   );
@@ -134,7 +136,7 @@ export default async function AdminAuditPage({ searchParams }: Params) {
         )}
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-          <span>Showing {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} events</span>
+          <span>{t('adminAudit.showing')} {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} events</span>
           {totalPages > 1 && (
             <div className="flex gap-1">
               {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 10).map((p) => (
@@ -151,15 +153,16 @@ export default async function AdminAuditPage({ searchParams }: Params) {
   );
 }
 
-function AdminAuditReadError() {
+async function AdminAuditReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted">An append-only record of sensitive actions across every family and the site admin.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('audit.auditLogs')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('audit.anAppendOnlyRecordOf')}</p>
       </div>
-      <ErrorState message="Could not load audit logs from Supabase. Refresh and try again." />
-      <a href="/admin/audit" className="text-sm font-medium text-brand-text underline">Refresh audit logs</a>
+      <ErrorState message={t('audit.couldNotLoadAuditLogs')} />
+      <a href="/admin/audit" className="text-sm font-medium text-brand-text underline">{t('audit.refreshAuditLogs')}</a>
     </div>
   );
 }

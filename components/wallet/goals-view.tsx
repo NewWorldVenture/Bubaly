@@ -17,6 +17,7 @@ import { progressBarA11y } from '@/lib/ui/a11y';
 import { formatCents, goalProgress } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGoalAction, fundGoalAction } from '@/app/(app)/wallet/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const GOAL_KIND_META: Record<string, { emoji: string; label: string }> = {
   bike:       { emoji: '🚲', label: 'Bike' },
@@ -44,6 +45,7 @@ export type ChildOption = { id: string; name: string };
 export function GoalsView({ goals, childOptions, canManage }: {
   goals: GoalView[]; childOptions: ChildOption[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const [creating, setCreating] = useState(false);
   const [fundFor, setFundFor] = useState<GoalView | null>(null);
 
@@ -52,21 +54,21 @@ export function GoalsView({ goals, childOptions, canManage }: {
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Save toward what matters — together."
-        action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New Goal</Button> : undefined} />
+      <PageHeader title={t('goals.familyWallet')} description={t('goalsView.saveTowardWhatMattersTogether')}
+        action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       <WalletSubnav />
 
       {goals.length === 0 ? (
-        <EmptyState icon={Target} title="No goals yet"
-          description="Set a savings goal — a bike, a trip, a giving target — and watch it grow."
-          action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New Goal</Button> : undefined} />
+        <EmptyState icon={Target} title={t('goals.noGoalsYet')}
+          description={t('goalsView.setASavingsGoalA')}
+          action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       ) : (
         <div className="space-y-5">
           {/* Active goals */}
           {active.length > 0 && (
             <div>
               <h2 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
-                <TrendingUp className="h-3.5 w-3.5" /> In progress ({active.length})
+                <TrendingUp className="h-3.5 w-3.5" /> {t('goals.inProgress')}{active.length})
               </h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {active.map((g) => (
@@ -80,7 +82,7 @@ export function GoalsView({ goals, childOptions, canManage }: {
           {reached.length > 0 && (
             <div>
               <h2 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
-                <Trophy className="h-3.5 w-3.5" /> Reached 🎉 ({reached.length})
+                <Trophy className="h-3.5 w-3.5" /> {t('goals.reached')}{reached.length})
               </h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {reached.map((g) => (
@@ -99,6 +101,7 @@ export function GoalsView({ goals, childOptions, canManage }: {
 }
 
 function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: boolean; onFund: () => void }) {
+  const t = useTranslations();
   const pct = Math.round(goalProgress(goal.savedCents, goal.targetCents) * 100);
   const reached = goal.status === 'reached' || goal.savedCents >= goal.targetCents;
   const kindMeta = GOAL_KIND_META[goal.kind] ?? GOAL_KIND_META.custom;
@@ -146,7 +149,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
         {canManage && goal.isChildGoal && !reached && (
           <button onClick={onFund}
             className="flex-shrink-0 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-            Fund
+            {t('goals.fund')}
           </button>
         )}
       </div>
@@ -168,7 +171,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
             {reached ? '🎉 Goal reached!' : `${pct}% there`}
           </p>
           {!reached && remaining > 0 && (
-            <p className="text-[11px] text-muted">{formatCents(remaining)} to go</p>
+            <p className="text-[11px] text-muted">{formatCents(remaining)} {t('goals.toGo')}</p>
           )}
         </div>
       </div>
@@ -177,6 +180,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
 }
 
 function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[]; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -189,8 +193,8 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     const title = String(form.get('title') ?? '').trim();
     const target = Number(form.get('target'));
     const targetDate = String(form.get('targetDate') ?? '').trim() || null;
-    if (!title) return toastError('Give the goal a name.');
-    if (!Number.isFinite(target) || target <= 0) return toastError('Set a target greater than $0.');
+    if (!title) return toastError(t('goalsView.giveTheGoalAName'));
+    if (!Number.isFinite(target) || target <= 0) return toastError(t('goalsView.setATargetGreaterThan'));
     setLoading(true);
     const res = await createGoalAction({
       title, kind, targetCents: Math.round(target * 100),
@@ -198,21 +202,21 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not create goal');
-    success('Goal created');
+    success(t('goalsView.goalCreated'));
     onClose();
     router.refresh();
   }
 
   return (
-    <Modal open onClose={onClose} title="New Savings Goal">
+    <Modal open onClose={onClose} title={t('goals.newSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="What are you saving for?">
-          {(id) => <Input id={id} name="title" placeholder="New bike, vacation fund…" autoFocus />}
+        <Field label={t('goals.whatAreYouSavingFor')}>
+          {(id) => <Input id={id} name="title" placeholder={t('goalsView.newBikeVacationFund')} autoFocus />}
         </Field>
-        <Field label="Target amount (USD)">
+        <Field label={t('goals.targetAmountUsd')}>
           {(id) => <Input id={id} name="target" type="number" min="0" step="0.01" inputMode="decimal" placeholder="100.00" />}
         </Field>
-        <Field label="Category">
+        <Field label={t('goals.category')}>
           {(id) => (
             <div className="grid grid-cols-4 gap-1.5">
               {GOAL_KINDS.map((k) => (
@@ -226,21 +230,21 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
             </div>
           )}
         </Field>
-        <Field label="Target date (optional)">
+        <Field label={t('goals.targetDateOptional')}>
           {(id) => <Input id={id} name="targetDate" type="date" />}
         </Field>
-        <Field label="Whose goal?">
+        <Field label={t('goals.whoseGoal')}>
           {(id) => (
             <select id={id} value={childId} onChange={(e) => setChildId(e.target.value)}
               className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand/40 focus:outline-none">
-              <option value="">Family goal</option>
+              <option value="">{t('goalsView.familyGoal')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><Target className="h-4 w-4" /> Create Goal</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('goals.cancel')}</Button>
+          <Button type="submit" loading={loading}><Target className="h-4 w-4" /> {t('goals.createGoal')}</Button>
         </div>
       </form>
     </Modal>
@@ -248,6 +252,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
 }
 
 function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -258,7 +263,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('goalsView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await fundGoalAction({ goalId: goal.id, amountCents: Math.round(dollars * 100) });
     setLoading(false);
@@ -279,7 +284,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
             <span className="text-xl">{kindMeta.emoji}</span>
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-semibold">{goal.title}</p>
-              <p className="text-xs text-muted">{pct}% · {formatCents(remaining)} to go</p>
+              <p className="text-xs text-muted">{pct}% · {formatCents(remaining)} {t('goals.toGo')}</p>
             </div>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/40" {...progressBarA11y(pct, `${goal.title}: ${pct}% of goal`)}>
@@ -289,10 +294,10 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
 
         <p className="text-xs text-muted">
           <PiggyBank className="inline h-3.5 w-3.5 mr-0.5 text-emerald-400" />
-          Moves money from {goal.childName}&apos;s Save bucket into this goal.
+          {t('goals.movesMoneyFrom')} {goal.childName}{t('goals.aposSSaveBucketIntoThis')}
         </p>
 
-        <Field label="Amount (USD)">
+        <Field label={t('goals.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
         </Field>
 
@@ -307,14 +312,14 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
           {remaining > 0 && (
             <button type="button" onClick={() => setAmount((remaining / 100).toFixed(2))}
               className="rounded-lg border border-brand/40 px-3 py-1.5 text-sm text-brand-text hover:bg-brand/5 transition">
-              Full remaining
+              {t('goals.fullRemaining')}
             </button>
           )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><PiggyBank className="h-4 w-4" /> Move to goal</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('goals.cancel')}</Button>
+          <Button type="submit" loading={loading}><PiggyBank className="h-4 w-4" /> {t('goals.moveToGoal')}</Button>
         </div>
       </form>
     </Modal>

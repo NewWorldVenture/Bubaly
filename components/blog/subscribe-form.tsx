@@ -9,10 +9,12 @@ import { useState } from 'react';
 import { CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { getAnonymousId, trackConversion } from '@/lib/marketing/visitor';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Props = { source: string; variant?: 'card' | 'inline'; className?: string };
 
 export function SubscribeForm({ source, variant = 'card', className }: Props) {
+  const t = useTranslations();
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState(''); // honeypot — humans never see it
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
@@ -62,8 +64,8 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
       required
       value={email}
       onChange={(e) => { setEmail(e.target.value); if (state === 'error') setState('idle'); }}
-      placeholder="Enter your email"
-      aria-label="Email address"
+      placeholder={t('subscribe.enterYourEmail')}
+      aria-label={t('subscribe.emailAddress')}
       className={cn(
         'rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm outline-none placeholder:text-white/35 focus:border-violet-400/50 sm:text-base',
         variant === 'card' ? 'w-full py-2.5' : 'min-w-0 flex-1 py-3',
@@ -95,7 +97,7 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
         variant === 'card' ? 'mt-3 w-full py-2.5' : 'shrink-0 px-5 py-3',
       )}
     >
-      {state === 'busy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Subscribe
+      {state === 'busy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} {t('subscribe.subscribe')}
     </button>
   );
 

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import type { ABVariant } from '@/lib/marketing/ab';
 import { hasConfiguredVariant } from '@/lib/marketing/ab';
@@ -11,9 +12,10 @@ function slugify(s: string): string {
 }
 
 export async function createExperiment(formData: FormData) {
+  const t = await getTranslations();
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const name = String(formData.get('name') || '').trim();
-  if (!name) return { ok: false, error: 'Name is required' };
+  if (!name) return { ok: false, error: t('actions.nameIsRequired') };
   const hypothesis = String(formData.get('hypothesis') || '').trim() || null;
   const metric = String(formData.get('metric') || 'conversion').trim() || 'conversion';
 
@@ -27,7 +29,7 @@ export async function createExperiment(formData: FormData) {
     seen.add(key);
     return { key, label };
   });
-  if (variants.length < 2) return { ok: false, error: 'Add at least two variants' };
+  if (variants.length < 2) return { ok: false, error: t('actions.addAtLeastTwoVariants') };
 
   const key = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
   const { data, error } = await supabase.from('ab_experiments').insert({
@@ -52,12 +54,13 @@ export async function setExperimentStatus(id: string, status: 'draft' | 'running
 }
 
 export async function setExperimentWinner(id: string, winner: string) {
+  const t = await getTranslations();
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const { data: experiment, error: readError } = await supabase.from('ab_experiments')
     .select('variants').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError) marketingActionFailure('load the A/B experiment variants', readError);
   if (!experiment) marketingActionFailure('set the A/B experiment winner', new Error('Experiment not found.'));
-  if (!hasConfiguredVariant(experiment.variants, winner)) return { ok: false, error: 'Choose a configured experiment variant.' };
+  if (!hasConfiguredVariant(experiment.variants, winner)) return { ok: false, error: t('actions.chooseAConfiguredExperimentVariant') };
   const { data, error } = await supabase.from('ab_experiments').update({ winner, status: 'completed', updated_by: actorId })
     .eq('id', id).eq('status', 'running').is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('set the A/B experiment winner', error ?? new Error('Experiment is not running or was not found.'));

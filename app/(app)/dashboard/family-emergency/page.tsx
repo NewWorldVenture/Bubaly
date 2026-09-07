@@ -9,11 +9,13 @@ import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Emergency' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyEmergencyPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -37,7 +39,7 @@ export default async function FamilyEmergencyPage() {
     .find((e) => e && !isMissingTableError(e));
   if (emergencyError) {
     console.error('[dashboard/family-emergency] emergency read failed', emergencyError);
-    return <ErrorState message="Could not load your family emergency hub from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyEmergency.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -50,12 +52,12 @@ export default async function FamilyEmergencyPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Emergency Hub"
-        description="Everything a caregiver needs in a crisis — contacts, plans and medical summaries."
+        title={t('dashboardFamilyEmergency.familyEmergencyHub')}
+        description={t('familyEmergency.everythingACaregiverNeedsIn')}
         action={manager ? (
           <QuickAdd
             table="family_emergency_contacts"
-            title="Add contact"
+            title={t('dashboardFamilyEmergency.addContact')}
             members={members ?? []}
             fields={[
               { name: 'name', label: 'Name', type: 'text', required: true },
@@ -69,7 +71,7 @@ export default async function FamilyEmergencyPage() {
         ) : undefined}
       />
 
-      <SectionCard title="Emergency Contacts" description="Ordered by priority">
+      <SectionCard title={t('dashboardFamilyEmergency.emergencyContacts')} description={t('familyEmergency.orderedByPriority')}>
         {contacts && contacts.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-2">
             {contacts.map((c) => (
@@ -79,7 +81,7 @@ export default async function FamilyEmergencyPage() {
                   <p className="flex items-center gap-2 text-sm font-semibold">{c.name}{c.is_primary && <span className="rounded bg-rose-500/20 px-1.5 text-[10px] font-bold text-rose-300">PRIMARY</span>}</p>
                   <p className="text-xs text-muted">{[c.relationship, c.member_id ? `for ${nameById.get(c.member_id)}` : null].filter(Boolean).join(' · ')}</p>
                   <a href={`tel:${c.phone}`} className="mt-1 inline-block text-sm font-semibold text-brand-text">{c.phone}</a>
-                  {c.can_pickup && <p className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-300"><UserCheck className="h-3 w-3" /> Pickup approved</p>}
+                  {c.can_pickup && <p className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-300"><UserCheck className="h-3 w-3" />{' '}{t('familyEmergency.pickupApproved')}</p>}
                 </div>
                 {manager && <DeleteButton table="family_emergency_contacts" id={c.id} />}
               </li>
@@ -90,10 +92,10 @@ export default async function FamilyEmergencyPage() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <SectionCard
-          title="Emergency Plans"
+          title={t('dashboardFamilyEmergency.emergencyPlans')}
           action={manager ? (
             <QuickAdd
-              table="family_emergency_plans" title="Add plan"
+              table="family_emergency_plans" title={t('dashboardFamilyEmergency.addPlan')}
               fields={[
                 { name: 'title', label: 'Title', type: 'text', required: true, placeholder: 'Fire / evacuation' },
                 { name: 'plan_type', label: 'Type', type: 'text', placeholder: 'fire, medical, weather' },
@@ -113,11 +115,11 @@ export default async function FamilyEmergencyPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={FileText} text="No emergency plans yet." />}
+          ) : <MiniEmpty icon={FileText} text={t('familyEmergency.noEmergencyPlansYet')} />}
         </SectionCard>
 
         {manager && (
-          <SectionCard title="Medical Summary" description="One-tap card for first responders">
+          <SectionCard title={t('dashboardFamilyEmergency.medicalSummary')} description={t('familyEmergency.oneTapCardForFirst')}>
             {profiles && profiles.length > 0 ? (
               <ul className="space-y-2.5">
                 {profiles.map((p) => (
@@ -132,7 +134,7 @@ export default async function FamilyEmergencyPage() {
                   </li>
                 ))}
               </ul>
-            ) : <MiniEmpty icon={HeartPulse} text="No medical profiles recorded." />}
+            ) : <MiniEmpty icon={HeartPulse} text={t('familyEmergency.noMedicalProfilesRecorded')} />}
           </SectionCard>
         )}
       </div>

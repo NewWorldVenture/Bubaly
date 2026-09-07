@@ -247,6 +247,34 @@ describe('allowed writes', () => {
   });
 
   it('writes the activity line itself for services that record none', async () => {
+    // `routines.pause` is one of the tools whose service records nothing, so the
+    // executor is the only thing standing between it and an unrecorded change.
+    // `groceries.checkItem` used to be the example here and no longer is: its
+    // service records now, which is what the case below asserts.
+    const family = makeFamilyDb({
+      domain: (call) => (call.table === 'family_automation_rules'
+        ? {
+          data: {
+            id: 'rule-1', family_id: 'fam-1', name: 'Sunday meal plan', said: 'every Sunday plan our meals',
+            action_config: { prompt: 'plan our meals' }, is_enabled: false, next_run_at: null,
+            schedule_kind: 'cron', schedule_expr: '0 17 * * 0', anchor_key: null, offset_days: null, at_hour: null,
+          },
+          error: null,
+        }
+        : null),
+    });
+
+    const outcome = await executeTool(scopeWith(family.db), 'routines.pause', { routine_id: 'rule-1', enabled: false });
+
+    expect(outcome).toMatchObject({ status: 'ok' });
+    const activity = family.calls.find((c) => c.table === 'agent_activity');
+    expect(activity?.payload).toMatchObject({ family_id: 'fam-1', agent: 'scheduling' });
+  });
+
+  it('leaves the line to the service for a tick-off, and writes exactly one', async () => {
+    // The tick-off verbs moved their record INTO the service so a person doing
+    // it is on the household trail too. The executor must then stand down, or
+    // the assistant's path would get two entries for one action.
     const family = makeFamilyDb({
       domain: (call) => (call.table === 'grocery_items'
         ? { data: { id: 'item-1', name: 'Milk', quantity: null, category: 'Dairy', is_checked: true }, error: null }
@@ -256,8 +284,12 @@ describe('allowed writes', () => {
     const outcome = await executeTool(scopeWith(family.db), 'groceries.checkItem', { item_id: 'item-1' });
 
     expect(outcome).toMatchObject({ status: 'ok', summary: 'Ticked Milk off the list' });
+    expect(family.calls.filter((c) => c.table === 'agent_activity')).toHaveLength(1);
+    // The service's own copy, not the executor's generic summary.
     const activity = family.calls.find((c) => c.table === 'agent_activity');
-    expect(activity?.payload).toMatchObject({ family_id: 'fam-1', agent: 'shopping', title: 'Ticked Milk off the list' });
+    expect(activity?.payload).toMatchObject({
+      family_id: 'fam-1', agent: 'groceries', title: 'Ticked Milk off the shopping list',
+    });
   });
 
   it('evaluates a cron actor as an adult rather than a guest, so routine work still runs', async () => {

@@ -14,11 +14,13 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SECURITY_KINDS, SECURITY_SEVERITIES, severityMeta, sortEvents, summarizeSecurity, type EventLike } from '@/lib/home/security';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'home_security_events'>;
 const blank = () => ({ kind: 'alert', severity: 'info', title: '', detail: '', occurred_at: new Date().toISOString().slice(0, 16) });
 
 export function SecurityModule() {
+  const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -72,33 +74,33 @@ export function SecurityModule() {
     const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
     const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
     if (error) return toastError(describeDbError(error));
-    success('Logged'); setForm(null);
+    success(tr('securityModule.logged')); setForm(null);
   }
   async function toggleResolved(ev: Event) {
     const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this event?')) return;
+    if (!confirm(tr('securityModule.deleteThisEvent'))) return;
     const { error } = await createClient().from('home_security_events').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('securityModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load security events. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('securityModule.couldNotLoadSecurityEvents')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> Security Alerts</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log event</Button>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> {tr('security.securityAlerts')}</h3>
+        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('security.logEvent')}</Button>
       </div>
 
       <div className={`flex items-center gap-3 rounded-2xl border p-4 ${stats.allClear ? 'border-success/30 bg-success/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
         {stats.allClear ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-amber-500" />}
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{stats.allClear ? 'All clear' : `${stats.open} open alert${stats.open === 1 ? '' : 's'}`}</p>
-          <p className="text-xs text-muted">{stats.openCritical} critical · {stats.openWarning} warning · {stats.total} total logged</p>
+          <p className="text-xs text-muted">{stats.openCritical} {tr('security.critical')} {stats.openWarning} {tr('security.warning')} {stats.total} {tr('security.totalLogged')}</p>
         </div>
         {/* 14-day activity strip */}
         <div className="hidden items-end gap-0.5 sm:flex" aria-hidden>
@@ -139,7 +141,7 @@ export function SecurityModule() {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No security events" description="Log alarm triggers, camera events, sensor alerts and tests to keep a clear safety record." />
+        <EmptyState icon={ShieldCheck} title={tr('security.noSecurityEvents')} description={tr('securityModule.logAlarmTriggersCameraEvents')} />
       ) : (
         <div className="space-y-2">
           {visible.map((ev) => {
@@ -154,7 +156,7 @@ export function SecurityModule() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button onClick={() => toggleResolved(ev)} className="text-muted hover:text-fg" title={ev.resolved ? 'Reopen' : 'Resolve'}>{ev.resolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
-                  <button onClick={() => remove(ev.id)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(ev.id)} className="text-muted hover:text-danger" aria-label={tr('security.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             );
@@ -163,18 +165,18 @@ export function SecurityModule() {
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title="Log security event">
+        <Modal open onClose={() => setForm(null)} title={tr('security.logSecurityEvent')}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Type">{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{SECURITY_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</Select>}</Field>
-              <Field label="Severity">{(id) => <Select id={id} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>{SECURITY_SEVERITIES.map((s) => <option key={s} value={s}>{severityMeta(s).label}</option>)}</Select>}</Field>
+              <Field label={tr('security.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{SECURITY_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</Select>}</Field>
+              <Field label={tr('security.severity')}>{(id) => <Select id={id} value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>{SECURITY_SEVERITIES.map((s) => <option key={s} value={s}>{severityMeta(s).label}</option>)}</Select>}</Field>
             </div>
-            <Field label="Title">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Front door opened at 2am" />}</Field>
-            <Field label="When">{(id) => <Input id={id} type="datetime-local" value={form.occurred_at} onChange={(e) => setForm({ ...form, occurred_at: e.target.value })} />}</Field>
-            <Field label="Detail">{(id) => <Textarea id={id} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />}</Field>
+            <Field label={tr('security.title')}>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={tr('security.frontDoorOpenedAt2am')} />}</Field>
+            <Field label={tr('security.when')}>{(id) => <Input id={id} type="datetime-local" value={form.occurred_at} onChange={(e) => setForm({ ...form, occurred_at: e.target.value })} />}</Field>
+            <Field label={tr('security.detail')}>{(id) => <Textarea id={id} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit">Log it</Button>
+              <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('security.cancel')}</Button>
+              <Button type="submit">{tr('security.logIt')}</Button>
             </div>
           </form>
         </Modal>

@@ -13,6 +13,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
@@ -42,6 +43,7 @@ function StatCard({ href, label, value, icon: Icon, bg }: {
 }
 
 export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
+  const tr = await getTranslations();
   const familyId = ctx.active.familyId;
   const role = ctx.active.role;
   const me = ctx.active.member;
@@ -162,29 +164,29 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             href="/dashboard?view=family"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg"
           >
-            <LayoutDashboard className="h-4 w-4" /> Family Dashboard
+            <LayoutDashboard className="h-4 w-4" /> {tr('personalDashboard.familyDashboard')}
           </Link>
         </div>
       </div>
 
       {/* Stat cards — role aware */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard href="/dashboard/chores" label="My Open Tasks" value={openCount} icon={ListChecks} bg="bg-violet-600" />
-        <StatCard href="/dashboard/calendar" label="My Events Today" value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-blue-600" />
+        <StatCard href="/dashboard/chores" label={tr('personalDashboard.myOpenTasks')} value={openCount} icon={ListChecks} bg="bg-violet-600" />
+        <StatCard href="/dashboard/calendar" label={tr('personalDashboard.myEventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-blue-600" />
         {isKid ? (
           <>
-            <StatCard href="/dashboard/chores" label="Points Earned" value={myPoints} icon={Star} bg="bg-amber-500" />
-            <StatCard href="/dashboard/chores" label="Tasks Done" value={doneCount} icon={Trophy} bg="bg-emerald-600" />
+            <StatCard href="/dashboard/chores" label={tr('personalDashboard.pointsEarned')} value={myPoints} icon={Star} bg="bg-amber-500" />
+            <StatCard href="/dashboard/chores" label={tr('personalDashboard.tasksDone')} value={doneCount} icon={Trophy} bg="bg-emerald-600" />
           </>
         ) : manager ? (
           <>
-            <StatCard href="/dashboard/chores" label="Needs Approval" value={pendingApprovals?.length ?? 0} icon={ClipboardCheck} bg="bg-amber-500" />
-            <StatCard href="/dashboard/settings#members" label="Family Members" value={members?.length ?? 0} icon={Users} bg="bg-emerald-600" />
+            <StatCard href="/dashboard/chores" label={tr('personalDashboard.needsApproval')} value={pendingApprovals?.length ?? 0} icon={ClipboardCheck} bg="bg-amber-500" />
+            <StatCard href="/dashboard/settings#members" label={tr('personalDashboard.familyMembers')} value={members?.length ?? 0} icon={Users} bg="bg-emerald-600" />
           </>
         ) : (
           <>
-            <StatCard href="/dashboard/chores" label="Tasks Done" value={doneCount} icon={CheckCircle2} bg="bg-emerald-600" />
-            <StatCard href="/dashboard/calendar" label="Coming Up" value={upcomingEvents?.length ?? 0} icon={Bell} bg="bg-amber-500" />
+            <StatCard href="/dashboard/chores" label={tr('personalDashboard.tasksDone')} value={doneCount} icon={CheckCircle2} bg="bg-emerald-600" />
+            <StatCard href="/dashboard/calendar" label={tr('personalDashboard.comingUp')} value={upcomingEvents?.length ?? 0} icon={Bell} bg="bg-amber-500" />
           </>
         )}
       </div>
@@ -194,8 +196,8 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         {/* My Day */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">My Day</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">Calendar</Link>
+            <h2 className="font-semibold">{tr('personalDashboard.myDay')}</h2>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.calendar')}</Link>
           </div>
           {todayEvents && todayEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -210,7 +212,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                     {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
                   </div>
                   {e.assignee_id === myMemberId && (
-                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand-text">Mine</span>
+                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand-text">{tr('personalDashboard.mine')}</span>
                   )}
                 </li>
               ))}
@@ -218,7 +220,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">Nothing on your schedule today</p>
+              <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingOnYourScheduleToday')}</p>
             </div>
           )}
         </div>
@@ -227,7 +229,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{isKid ? 'My Chores' : 'My Tasks'}</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.viewAll')}</Link>
           </div>
           {myChores && myChores.length > 0 ? (
             <ul className="space-y-3">
@@ -265,9 +267,9 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           <div className="rounded-2xl border border-amber-400/25 bg-amber-500/5 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-semibold">
-                <ClipboardCheck className="h-4 w-4 text-amber-400" /> Needs Your Approval
+                <ClipboardCheck className="h-4 w-4 text-amber-400" /> {tr('personalDashboard.needsYourApproval')}
               </h2>
-              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">Review</Link>
+              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.review')}</Link>
             </div>
             {pendingApprovals && pendingApprovals.length > 0 ? (
               <ul className="space-y-3">
@@ -281,7 +283,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                         <p className="truncate text-sm font-medium">{chore?.title ?? 'Task'}</p>
                         <p className="truncate text-xs text-muted">{member?.display_name ?? 'Member'} submitted</p>
                       </div>
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">Review</span>
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">{tr('personalDashboard.review')}</span>
                     </li>
                   );
                 })}
@@ -289,7 +291,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-                <p className="mt-2 text-sm text-muted/60">Nothing waiting on you</p>
+                <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingWaitingOnYou')}</p>
               </div>
             )}
           </div>
@@ -297,13 +299,13 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-semibold">
-                <Gift className="h-4 w-4 text-brand-text" /> My Rewards
+                <Gift className="h-4 w-4 text-brand-text" /> {tr('personalDashboard.myRewards')}
               </h2>
-              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">Chores</Link>
+              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.chores')}</Link>
             </div>
             <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface/40 p-3">
               <Award className="h-5 w-5 text-amber-400" />
-              <p className="text-sm">You have <span className="font-bold text-amber-400">{myPoints}</span> points to spend</p>
+              <p className="text-sm">{tr('personalDashboard.youHave')} <span className="font-bold text-amber-400">{myPoints}</span> {tr('personalDashboard.pointsToSpend')}</p>
             </div>
             {rewards && rewards.length > 0 ? (
               <ul className="space-y-2.5">
@@ -321,14 +323,14 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                 })}
               </ul>
             ) : (
-              <p className="py-6 text-center text-sm text-muted/60">No rewards set up yet</p>
+              <p className="py-6 text-center text-sm text-muted/60">{tr('personalDashboard.noRewardsSetUpYet')}</p>
             )}
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Coming Up</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View all</Link>
+              <h2 className="font-semibold">{tr('personalDashboard.comingUp')}</h2>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('personalDashboard.viewAll')}</Link>
             </div>
             {upcomingEvents && upcomingEvents.length > 0 ? (
               <ul className="space-y-3">
@@ -353,7 +355,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Calendar className="h-8 w-8 text-muted/30" />
-                <p className="mt-2 text-sm text-muted/60">Nothing coming up</p>
+                <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingComingUp')}</p>
               </div>
             )}
           </div>

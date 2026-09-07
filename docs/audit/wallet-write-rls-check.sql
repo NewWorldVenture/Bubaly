@@ -141,4 +141,254 @@ begin
   perform set_config('role','postgres', true);
 end $$;
 
-select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only): ALL INVARIANTS PASSED' as result;
+-- ── Invariant 5: the mint-lock survives a PERMISSIVE POLICY THAT DRIFTED IN ──
+--
+-- Everything above proves the migrations are right. This proves the lock holds
+-- when the database is NOT what the migrations say — which is the situation a
+-- production metadata audit reported: `wallet_transactions` carrying a
+-- permissive INSERT policy alongside the manager-only one, of the shape that
+-- lets any family member (a child included) submit a completed credit and
+-- create spendable funds.
+--
+-- Permissive policies OR together, so on their own that finding is exactly as
+-- bad as it sounds. What closes it is 0254's RESTRICTIVE guards: a restrictive
+-- policy ANDs with the union of the permissive ones, so no permissive policy —
+-- whatever it is called, whoever it is granted to — can grant past it.
+--
+-- That is a claim about Postgres semantics, and a claim about money deserves a
+-- test rather than a reading. So this injects the drift and asserts the child
+-- still cannot mint. Two shapes, the second deliberately the worst case that
+-- could exist:
+--   a) `to authenticated with check (is_family_member(family_id))` — the shape
+--      the audit describes.
+--   b) `to public with check (true)` — no role limit, no condition at all.
+-- The guards in 0254 are `to authenticated`, so (b) also checks that a policy
+-- reaching roles the guard does not name still cannot be used by a member.
+do $$
+declare blocked boolean; st text; landed int; shape text;
+begin
+  foreach shape in array array[
+    'to authenticated with check (public.is_family_member(family_id))',
+    'to public with check (true)'
+  ] loop
+    execute 'drop policy if exists wallet_transactions_drift_probe on public.wallet_transactions';
+    execute format(
+      'create policy wallet_transactions_drift_probe on public.wallet_transactions for insert %s', shape);
+
+    blocked := false; st := null;
+    perform set_config('role','authenticated', true);
+    perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);  -- the child
+    perform set_config('request.jwt.claim.role','authenticated', true);
+    begin
+      insert into public.wallet_transactions
+        (family_id, type, status, direction, amount_cents, currency, metadata)
+      values ('00000000-0000-4000-8000-0000000000f1','parent_top_up','completed','credit',
+              424242,'usd','{"probe":"drift"}'::jsonb);
+    exception when others then blocked := true; st := SQLSTATE;
+    end;
+    perform set_config('role','postgres', true);
+
+    select count(*) into landed from public.wallet_transactions where amount_cents = 424242;
+    -- Clean up before asserting, so a failure does not leave the drift policy
+    -- or a minted row behind for the next probe in the run.
+    delete from public.wallet_transactions where amount_cents = 424242;
+    execute 'drop policy if exists wallet_transactions_drift_probe on public.wallet_transactions';
+
+    if not blocked or landed <> 0 then
+      raise exception 'A-08 FAIL: a child MINTED money past the restrictive guard with a permissive policy % (blocked=%, rows=%)',
+        shape, blocked, landed;
+    end if;
+    raise notice 'A-08 OK: child mint still blocked (%) with permissive policy %', st, shape;
+  end loop;
+end $$;
+
+-- ── Invariant 6: `anon` cannot reach the money ledger at all ────────────────
+-- The guards above are `to authenticated`, so a permissive policy `to public`
+-- would not be ANDed with them for an anonymous request. The grant layer is
+-- what closes that: anon holds no INSERT privilege, so the question never
+-- reaches RLS. Asserted rather than assumed, because it is the one path the
+-- restrictive guards do not cover.
+do $$
+declare has_priv boolean;
+begin
+  select has_table_privilege('anon','public.wallet_transactions','INSERT') into has_priv;
+  if has_priv then
+    raise exception 'A-08 FAIL: anon holds INSERT on wallet_transactions — the restrictive guards are `to authenticated` and would not apply';
+  end if;
+  raise notice 'A-08 OK: anon holds no INSERT privilege on wallet_transactions';
+end $$;
+
+-- ── Invariant 7: no stray permissive WRITE policy is left to report ─────────
+--
+-- Invariant 5 proves a stray policy cannot mint. This one proves there is no
+-- stray policy, which is a different and — by this point — equally expensive
+-- problem. The production metadata audit reads pg_policy and reports what it
+-- finds; while a permissive INSERT policy sits on wallet_transactions it will
+-- keep reporting one, every reviewer has to re-derive invariant 5 from
+-- scratch, and the release stops. That happened three times before 0275.
+--
+-- 0217, 0254 and 0267 each dropped policies by hardcoded NAME, so a policy
+-- nobody had named survived all three. 0275 sweeps by shape. This asserts the
+-- result, so the sweep cannot quietly regress the next time someone adds a
+-- policy to a money table.
+do $$
+declare
+  offender record;
+  n int := 0;
+  -- Spelled out rather than pattern-matched on the name. The same two groups as
+  -- 0275, in the same order: a `like 'wallet%'` shortcut would silently put a
+  -- future table in the wrong group and check it against the wrong policy names.
+  wallet_tables  text[] := array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules'];
+  finance_tables text[] := array['financial_accounts','transactions','budgets','bills','savings_goals'];
+begin
+  for offender in
+    select c.relname as tbl, p.polname as pol,
+           case p.polcmd when 'a' then 'INSERT' when 'w' then 'UPDATE'
+                         when 'd' then 'DELETE' when '*' then 'ALL' end as cmd
+    from pg_policy p
+    join pg_class c on c.oid = p.polrelid
+    join pg_namespace ns on ns.oid = c.relnamespace
+    where ns.nspname = 'public'
+      and c.relname = any (wallet_tables || finance_tables)
+      and p.polpermissive
+      and p.polcmd in ('a','w','d','*')
+      and p.polname not in (
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_insert' else c.relname || '_insert' end,
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_update' else c.relname || '_update' end,
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_delete' else c.relname || '_delete' end)
+  loop
+    n := n + 1;
+    raise warning 'A-08 stray permissive % policy: %.%', offender.cmd, offender.tbl, offender.pol;
+  end loop;
+
+  if n <> 0 then
+    raise exception 'A-08 FAIL: % stray permissive write policy(ies) on the money tables — 0275 has not been applied, or something re-added one', n;
+  end if;
+  raise notice 'A-08 OK: no stray permissive write policy on any money table';
+end $$;
+
+-- ── Invariant 8: the sweep actually sweeps ──────────────────────────────────
+--
+-- Invariant 7 asserts the end state, but in a freshly replayed database there
+-- was never any drift to remove — so on its own it proves the migration set is
+-- self-consistent, not that 0275 does its job. Production is the case that
+-- matters, and CI cannot reproduce production's drift.
+--
+-- So: inject the drift, then re-run THE REAL MIGRATION FILE (via \ir, not a
+-- copy pasted in here — a copy would drift from the original and start proving
+-- the wrong thing) and assert the stray is gone and the intended policies
+-- survived. 0275 is idempotent by construction, which is what makes this safe
+-- to do against an already-migrated database.
+--
+-- Two shapes again, matching invariant 5: the one the production audit
+-- describes, and the worst case that could exist.
+do $$
+begin
+  drop policy if exists wallet_transactions_sweep_probe_a on public.wallet_transactions;
+  drop policy if exists wallet_transactions_sweep_probe_b on public.wallet_transactions;
+  create policy wallet_transactions_sweep_probe_a on public.wallet_transactions
+    for insert to authenticated with check (public.is_family_member(family_id));
+  create policy wallet_transactions_sweep_probe_b on public.wallet_transactions
+    for all to public using (true) with check (true);
+
+  if (select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
+      where c.relname = 'wallet_transactions'
+        and p.polname in ('wallet_transactions_sweep_probe_a','wallet_transactions_sweep_probe_b')) <> 2 then
+    raise exception 'A-08 FAIL: could not inject the drift the sweep is meant to remove';
+  end if;
+  raise notice 'A-08: injected 2 stray permissive write policies on wallet_transactions';
+end $$;
+
+\ir ../../supabase/migrations/0275_money_permissive_write_sweep.sql
+
+do $$
+declare strays int; intended int;
+begin
+  select count(*) into strays
+  from pg_policy p join pg_class c on c.oid = p.polrelid
+  where c.relname = 'wallet_transactions'
+    and p.polname in ('wallet_transactions_sweep_probe_a','wallet_transactions_sweep_probe_b');
+
+  -- Belt and braces: if the sweep did not remove them, this probe must not
+  -- leave a `to public using (true)` policy behind on a money table.
+  drop policy if exists wallet_transactions_sweep_probe_a on public.wallet_transactions;
+  drop policy if exists wallet_transactions_sweep_probe_b on public.wallet_transactions;
+
+  if strays <> 0 then
+    raise exception 'A-08 FAIL: 0275 left % injected stray policy(ies) on wallet_transactions', strays;
+  end if;
+
+  -- The sweep must not have taken the intended policies or the guards with it.
+  select count(*) into intended
+  from pg_policy p join pg_class c on c.oid = p.polrelid
+  where c.relname = 'wallet_transactions'
+    and p.polname in ('wallet_transactions_select',
+                      'wallet_transactions_mng_insert','wallet_transactions_mng_update','wallet_transactions_mng_delete',
+                      'wallet_transactions_manager_insert_guard','wallet_transactions_manager_update_guard',
+                      'wallet_transactions_manager_delete_guard');
+  if intended <> 7 then
+    raise exception 'A-08 FAIL: after the sweep only %/7 intended wallet_transactions policies remain', intended;
+  end if;
+
+  raise notice 'A-08 OK: 0275 removed both injected strays and kept all 7 intended policies';
+end $$;
+
+-- ── Invariant 9: the guards are real, not merely counted ────────────────────
+--
+-- This asserts, in CI, the same three conditions docs/audit/money-policy-diagnostic.sql
+-- reports to an operator. It exists because that diagnostic is named
+-- *-diagnostic.sql rather than *-check.sql, so run-probes.sh does not glob it —
+-- and its first version shipped with a bug that would have reported a FALSE
+-- ALL-CLEAR, with nothing in CI able to catch it. Encoding the logic here means
+-- the shape the operator query relies on is exercised against a real Postgres on
+-- every PR.
+--
+-- Three conditions, because counting restrictive policies proves none of them:
+--   * RLS ENABLED. Three immaculate restrictive policies on a table with row
+--     security switched off are inert, and the table is wide open.
+--   * The guard REQUIRES MANAGER ROLE. A restrictive policy with a permissive
+--     rule takes nothing away.
+--   * All THREE COMMANDS covered. Three insert guards and no delete guard is
+--     not a backstop; distinct polcmd, not a count of policies.
+--
+-- Tables absent from this database are skipped rather than failed: 0275 itself
+-- skips a finance table that does not exist or carries no family_id.
+do $$
+declare
+  t         text;
+  rls       boolean;
+  commands  int;
+  offenders text[] := '{}';
+begin
+  foreach t in array array[
+    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+    'financial_accounts','transactions','budgets','bills','savings_goals']
+  loop
+    if to_regclass('public.' || t) is null then continue; end if;
+
+    select c.relrowsecurity into rls from pg_class c where c.oid = to_regclass('public.' || t);
+    if not coalesce(rls, false) then
+      offenders := offenders || (t || ' (RLS DISABLED - its policies are inert)');
+      continue;
+    end if;
+
+    select count(distinct p.polcmd) into commands
+    from pg_policy p
+    where p.polrelid = to_regclass('public.' || t)
+      and not p.polpermissive
+      and p.polcmd in ('a','w','d')
+      and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+          coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%can_manage_family%';
+
+    if commands <> 3 then
+      offenders := offenders || (t || ' (' || commands || '/3 manager-gated restrictive write guards)');
+    end if;
+  end loop;
+
+  if array_length(offenders, 1) is not null then
+    raise exception 'A-08 FAIL: money tables without a real write backstop: %', array_to_string(offenders, ', ');
+  end if;
+  raise notice 'A-08 OK: every money table has RLS on and three manager-gated restrictive write guards';
+end $$;
+
+select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;

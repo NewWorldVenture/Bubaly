@@ -10,6 +10,7 @@ import {
 import { upsertContactAction, deleteContactAction, updateContactTrustAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import { formatPhone } from '@/lib/guardian/phone';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Contact = {
   id: string;
@@ -28,6 +29,7 @@ type Contact = {
 type Member = { id: string; display_name: string };
 
 export function ContactList({ contacts: initial, members }: { contacts: Contact[]; members: Member[] }) {
+  const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contacts, setContacts] = useState(initial);
   const [search, setSearch] = useState('');
@@ -88,7 +90,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
   async function handleDelete(id: string) {
     const res = await deleteContactAction(id);
     if (!res.ok) { toastError(res.error); return; }
-    toastSuccess('Contact removed');
+    toastSuccess(tr('contactList.contactRemoved'));
     setContacts(prev => prev.filter(c => c.id !== id));
   }
 
@@ -96,7 +98,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
     const res = await updateContactTrustAction(id, trust);
     if (!res.ok) { toastError(res.error); return; }
     setContacts(prev => prev.map(c => c.id === id ? { ...c, trust_level: trust, trust_override: true } : c));
-    toastSuccess('Trust updated');
+    toastSuccess(tr('contactList.trustUpdated'));
   }
 
   return (
@@ -108,7 +110,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search contacts…"
+            placeholder={tr('contactList.searchContacts')}
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
@@ -117,7 +119,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
           onChange={(e) => setFilterTrust(e.target.value as TrustLevel | 'all')}
           className="h-10 rounded-xl border border-border bg-bg px-3 text-sm"
         >
-          <option value="all">All trust levels</option>
+          <option value="all">{tr('contactList.allTrustLevels')}</option>
           {TRUST_LEVELS.map((lvl) => (
             <option key={lvl} value={lvl}>{TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}</option>
           ))}
@@ -126,7 +128,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
           onClick={() => setEditing('new')}
           className="flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90 transition shrink-0"
         >
-          <Plus className="h-4 w-4" /> Add Contact
+          <Plus className="h-4 w-4" /> {tr('contactList.addContact')}
         </button>
       </div>
 
@@ -158,8 +160,8 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
 
       {filtered.length === 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 py-10 text-center text-sm text-muted">
-          No contacts found.{' '}
-          <button className="text-brand-text underline" onClick={() => setEditing('new')}>Add one</button>.
+          {tr('contactList.noContactsFound')}{' '}
+          <button className="text-brand-text underline" onClick={() => setEditing('new')}>{tr('contactList.addOne')}</button>.
         </div>
       )}
 
@@ -256,6 +258,7 @@ function ContactModal({
   onSave: (form: { name: string; phone: string; email: string; notes: string; trust_level: TrustLevel; member_id: string }) => void;
   onClose: () => void;
 }) {
+  const tr = useTranslations();
   const [form, setForm] = useState({
     name: contact?.name ?? '',
     phone: contact?.phone ?? '',
@@ -278,11 +281,11 @@ function ContactModal({
       >
         <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">
-          <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Name *" autoCapitalize="words" autoComplete="name" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
-          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="Phone (e.g. +15551234567)" type="tel" inputMode="tel" autoComplete="tel" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
-          <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="Email (optional)" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.name} onChange={e => set('name', e.target.value)} placeholder={tr('contactList.name')} autoCapitalize="words" autoComplete="name" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder={tr('contactList.phoneEG15551234567')} type="tel" inputMode="tel" autoComplete="tel" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
+          <input value={form.email} onChange={e => set('email', e.target.value)} placeholder={tr('contactList.emailOptional')} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Trust Level</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{tr('contactList.trustLevel')}</label>
             <div className="grid grid-cols-2 gap-1.5">
               {TRUST_LEVELS.map((lvl) => (
                 <button
@@ -299,10 +302,10 @@ function ContactModal({
               ))}
             </div>
           </div>
-          <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Notes (optional)" className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm min-h-[60px]" />
+          <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder={tr('contactList.notesOptional')} className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm min-h-[60px]" />
         </div>
         <div className="flex gap-2 pt-1">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-surface transition">Cancel</button>
+          <button onClick={onClose} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-surface transition">{tr('contactList.cancel')}</button>
           <button
             onClick={() => { if (form.name.trim()) onSave(form); }}
             disabled={saving || !form.name.trim()}

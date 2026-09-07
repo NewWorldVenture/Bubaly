@@ -1,20 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard } from 'lucide-react';
+import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard, Share2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAIConfigView } from '@/lib/ai/settings';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-      <ErrorState message="Could not load administrator settings from Supabase. Refresh and try again." />
-      <Link href="/admin/settings" className="text-sm font-medium text-brand-text underline">Refresh settings</Link>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('settings.settings')}</h1>
+      <ErrorState message={t('settings.couldNotLoadAdministratorSettings')} />
+      <Link href="/admin/settings" className="text-sm font-medium text-brand-text underline">{t('settings.refreshSettings')}</Link>
     </div>
   );
 }
@@ -25,6 +27,7 @@ function host(url: string | undefined): string {
 }
 
 export default async function AdminSettingsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const { count: superAdmins, error } = await supabase.from('super_admins').select('email', { count: 'exact', head: true });
   if (error) {
@@ -72,18 +75,19 @@ export default async function AdminSettingsPage() {
     { href: '/admin/integrations', label: 'Integrations', desc: 'Connected services & keys', icon: Plug },
     { href: '/admin/security', label: 'Security', desc: 'Access & audit controls', icon: ShieldCheck },
     { href: '/admin/backup', label: 'Data & Storage', desc: 'Row counts, storage, backups', icon: Database },
+    { href: '/admin/settings/social-links', label: 'Social links', desc: 'Bubaly’s own profiles, shown in the marketing footer', icon: Share2 },
   ];
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-        <p className="mt-1 text-sm text-muted">Live system configuration and connected services. Status reflects the real server environment.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSettings.settings')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminSettings.liveSystemConfigurationAndConnectedServices')}</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <div className="mb-4 flex items-center gap-2"><Plug className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">Connected services</h2></div>
+          <div className="mb-4 flex items-center gap-2"><Plug className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">{t('adminSettings.connectedServices')}</h2></div>
           <ul className="space-y-2">
             {providers.map((p) => (
               <li key={p.name} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm">
@@ -92,8 +96,8 @@ export default async function AdminSettingsPage() {
                   <p className="truncate text-xs text-muted">{p.detail}</p>
                 </div>
                 {p.ready
-                  ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" /> Connected</span>
-                  : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Not set</span>}
+                  ? <span className="inline-flex shrink-0 items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
+                  : <span className="inline-flex shrink-0 items-center gap-1 text-muted"><XCircle className="h-4 w-4" />{' '}{t('settings.notSet')}</span>}
               </li>
             ))}
           </ul>
@@ -101,7 +105,7 @@ export default async function AdminSettingsPage() {
 
         <div className="space-y-4">
           <Card>
-            <div className="mb-4 flex items-center gap-2"><Server className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">System</h2></div>
+            <div className="mb-4 flex items-center gap-2"><Server className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">{t('adminSettings.system')}</h2></div>
             <div className="space-y-2 text-sm">
               {system.map((r) => (
                 <div key={r.label} className="flex justify-between gap-3">
@@ -113,7 +117,7 @@ export default async function AdminSettingsPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 font-semibold">Configuration</h2>
+            <h2 className="mb-3 font-semibold">{t('adminSettings.configuration')}</h2>
             <div className="space-y-1">
               {links.map((l) => (
                 <Link key={l.href} href={l.href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-elevated">

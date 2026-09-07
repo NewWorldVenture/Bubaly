@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // Brand glyphs (inline SVG — lucide dropped brand icons). Paths are the official
 // simple-icons marks. Note X uses the X logo, NOT the legacy Twitter bird.
@@ -44,6 +45,7 @@ const TelegramIcon = ({ className }: IconProps) => (
 );
 
 export function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const tr = useTranslations();
   const [copied, setCopied] = useState(false);
 
   const url = typeof window !== 'undefined'
@@ -109,8 +111,8 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
 
       <a
         href={`mailto:?subject=${t}&body=${t}%20${u}`}
-        aria-label="Share by email"
-        title="Share by email"
+        aria-label={tr('blogShareButtons.shareByEmail')}
+        title={tr('blogShareButtons.shareByEmail')}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 transition coarse:min-h-11 coarse:min-w-11 hover:border-white/40 hover:text-white"
       >
         <Mail className="h-3.5 w-3.5" />

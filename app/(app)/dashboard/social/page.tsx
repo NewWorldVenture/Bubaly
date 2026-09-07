@@ -12,11 +12,13 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Command Center' };
 export const dynamic = 'force-dynamic';
 
 export default async function SocialOverviewPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const [overview, access] = await Promise.all([
@@ -60,7 +62,7 @@ export default async function SocialOverviewPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-3 text-sm font-semibold">Quick actions</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocial.quickActions')}</h2>
           <div className="grid grid-cols-2 gap-2">
             {quickLinks.map((q) => (
               <Link
@@ -75,61 +77,56 @@ export default async function SocialOverviewPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-sm font-semibold">Your role &amp; access</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocial.yourRoleAmpAccess')}</h2>
           {access ? (
             <div className="space-y-2 text-sm">
               <p>
-                You are signed in as <Badge tone="brand">{access.role.replace(/_/g, ' ')}</Badge>
+                {t('dashboardSocial.youAreSignedInAs')} <Badge tone="brand">{access.role.replace(/_/g, ' ')}</Badge>
               </p>
               <p className="text-muted">
                 {access.permissions.length} permission{access.permissions.length === 1 ? '' : 's'}:{' '}
                 {access.permissions.map((p) => p.replace(/_/g, ' ')).join(', ')}
               </p>
               <Link href="/dashboard/social/settings" className="inline-block text-sm font-medium text-brand-text underline">
-                Manage access &amp; settings
+                {t('dashboardSocial.manageAccessAmpSettings')}
               </Link>
             </div>
           ) : (
-            <p className="text-sm text-muted">No social access resolved for this family.</p>
+            <p className="text-sm text-muted">{t('dashboardSocial.noSocialAccessResolvedForThis')}</p>
           )}
         </Card>
       </div>
 
       <Card>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Platform readiness</h2>
-          <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand-text underline">Manage accounts</Link>
+          <h2 className="text-sm font-semibold">{t('dashboardSocial.platformReadiness')}</h2>
+          <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSocial.manageAccounts')}</Link>
         </div>
         <p className="mb-3 text-xs text-muted">
-          A platform is <strong>ready</strong> only when its app credentials are configured in this environment. Others show
-          a clear setup requirement instead of pretending to connect.
-        </p>
+          {t('dashboardSocial.aPlatformIs')} <strong>ready</strong>{' '}{t('social.onlyWhenItsAppCredentials')}</p>
         <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
               <PlatformDot platform={p} />
               {isProviderConfigured(p)
-                ? <Badge tone="success">Ready</Badge>
-                : <Badge tone="neutral">Requires setup</Badge>}
+                ? <Badge tone="success">{t('social.ready')}</Badge>
+                : <Badge tone="neutral">{t('social.requiresSetup')}</Badge>}
             </span>
           ))}
         </div>
         {configured.length === 0 && (
-          <p className="mt-3 text-xs text-warning">
-            No platform credentials are configured yet, so live connecting and publishing are disabled. The full workflow
-            (drafts, AI, variants, scheduling, publish jobs) still records honestly and is ready the moment credentials are added.
-          </p>
+          <p className="mt-3 text-xs text-warning">{t('social.noPlatformCredentialsAreConfigured')}</p>
         )}
       </Card>
 
       {overview.connectedCount === 0 && (
         <EmptyState
           icon={Plug}
-          title="No accounts connected yet"
-          description="Connect a social account to start pulling a unified feed and publishing across platforms."
+          title={t('dashboardSocial.noAccountsConnectedYet')}
+          description={t('social.connectASocialAccountTo')}
           action={
             <Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">
-              <Plug className="h-4 w-4" /> Connect an account
+              <Plug className="h-4 w-4" /> {t('dashboardSocial.connectAnAccount')}
             </Link>
           }
         />

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -12,6 +15,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
 // forecasts from the immutable ledger, then asks the configured AI provider.
 export async function POST() {
+  const tr = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -19,11 +23,11 @@ export async function POST() {
 
     const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
     if (aiCoachLevel(tier) === 'none') {
-      return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
+      return NextResponse.json({ error: tr('wallet.theAiMoneyCoachIs') }, { status: 403 });
     }
     const limited = await enforceAIRateLimit(supabase, `ai-wallet:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many AI Money Coach requests. Please try again shortly.' },
+      { error: tr('wallet.tooManyAiMoneyCoach') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -84,11 +88,23 @@ export async function POST() {
     });
 
     const { system, user } = buildWalletCoachPrompt({ children, goals: coachGoals, familyName: ctx.active.family.name });
-    const provider = await resolveProvider();
-    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 600 });
-    const coaching = parseWalletCoach(completion.text || '');
-    if (!coaching.headline && coaching.insights.length === 0) {
-      return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
+    const coaching = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'wallet.coach', text: 'Money coaching for the family' },
+      async (obs) => {
+        const provider = await resolveProvider();
+        const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 600 });
+        obs.used(completion.model ?? 'unknown', completion.usage);
+        const parsed = parseWalletCoach(completion.text || '');
+        if (!parsed.headline && parsed.insights.length === 0) {
+          obs.failed(new Error('The coaching reply had no headline or insights.'));
+          return null;
+        }
+        return parsed;
+      },
+    );
+    if (!coaching) {
+      return NextResponse.json({ error: tr('wallet.couldNotGenerateCoachingRight') }, { status: 502 });
     }
 
     // Record this call for per-day metering (only matters for the metered tier,
@@ -101,6 +117,6 @@ export async function POST() {
     return NextResponse.json({ coaching, tier });
   } catch (err) {
     console.error('Wallet coach error:', err);
-    return NextResponse.json({ error: 'Failed to generate coaching' }, { status: 500 });
+    return NextResponse.json({ error: tr('wallet.failedToGenerateCoaching') }, { status: 500 });
   }
 }

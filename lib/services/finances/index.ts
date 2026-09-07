@@ -697,6 +697,7 @@ export async function updateBudget(
     }
     await recordActivitySafely(scope, {
       agent: 'finances',
+      action: 'update',
       title: `Set the ${data.category} budget to ${formatDollars(toCents(data.amount))} ${data.period}`,
       detail: `Was ${formatDollars(toCents(existing.amount))}`,
       href: '/dashboard/finances',
@@ -715,6 +716,7 @@ export async function updateBudget(
   }
   await recordActivitySafely(scope, {
     agent: 'finances',
+    action: 'create',
     title: `Created a ${formatDollars(toCents(data.amount))} ${data.period} budget for ${data.category}`,
     href: '/dashboard/finances',
   });
@@ -931,9 +933,12 @@ export async function createTransaction(
     data = inserted;
   }
 
+  // Both halves are needed: this branch's replay guard (a retried operation
+  // must not write a second activity row) and main's explicit `action`.
   if (!operationMetadata?.replayed) {
     await recordActivitySafely(scope, {
       agent: 'finances',
+      action: 'create',
       title: `Recorded ${formatDollars(toCents(data.amount))}${data.merchant ? ` at ${data.merchant}` : ''}`,
       href: '/dashboard/finances',
     });
@@ -1005,10 +1010,180 @@ export async function createSavingsGoal(scope: ServiceScope, input: CreateSaving
       }
       await recordActivitySafely(scope, {
         agent: 'finances',
+        action: 'create',
         title: `Started a savings goal: ${data.name} (${formatDollars(toCents(data.target_amount))})`,
         href: '/dashboard/finances',
       });
       return ok(data);
     },
   );
+}
+
+// ── The money tables the browser was writing around ─────────────────────────
+// Every one of these was a client write filtering `id` alone. On money that is
+// worth naming precisely: the family's own record of who deleted a transaction
+// had nothing in it, and tenancy rested entirely on RLS.
+
+/**
+ * Move a savings goal's balance by `delta`, correctly under concurrency.
+ *
+ * THE BUG THIS REPLACES. `savings-view` computed the new total in the browser:
+ *
+ *   const next = Math.max(0, Number(g.current_amount) + delta);
+ *   await sb.from('savings_goals').update({ current_amount: next }).eq('id', g.id);
+ *
+ * `g.current_amount` is whatever that tab last rendered. Two parents each adding
+ * £20 to a goal holding £100 both compute £120 and both write £120 — the family
+ * put in £40 and the goal gained £20. A LOST UPDATE, on money, reported as
+ * success to both of them.
+ *
+ * Sending the DELTA instead is necessary but not sufficient: a read-modify-write
+ * in the service races with itself just as happily. So the update carries the
+ * value it read as a condition — `eq('current_amount', seen)` — and a write that
+ * matches no row means someone moved it first, which is a re-read and a retry
+ * rather than a clobber. That is a compare-and-set, and it is correct without a
+ * migration; `current_amount = current_amount + delta` in Postgres would be one
+ * round trip instead of two, and needs one.
+ */
+export async function contributeToSavingsGoal(
+  scope: ServiceScope,
+  goalId: string,
+  delta: number,
+): Promise<ServiceResult<SavingsGoalRow>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
+  if (!Number.isFinite(delta) || delta === 0) {
+    return fail('A contribution needs an amount.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  // Bounded: four losses in a row is contention no retry will clear, and a
+  // spin here would hold a request open indefinitely.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const { data: goal, error: readError } = await scope.db
+      .from('savings_goals')
+      .select('id, name, current_amount')
+      .eq('id', goalId)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (readError) {
+      console.error('[service:finances] savings goal read failed', readError);
+      return fail(describeDbError(readError, 'Could not load that savings goal.'), { code: SERVICE_CODES.db });
+    }
+    if (!goal) return fail('That savings goal could not be found.', { code: SERVICE_CODES.notFound });
+
+    const seen = Number(goal.current_amount);
+    const next = Math.max(0, seen + delta);
+    const { data, error } = await scope.db
+      .from('savings_goals')
+      .update({ current_amount: next })
+      .eq('id', goalId)
+      .eq('family_id', scope.familyId)
+      .eq('current_amount', seen)
+      .select('*')
+      .maybeSingle();
+    if (error) {
+      console.error('[service:finances] savings contribution failed', error);
+      return fail(describeDbError(error, 'Could not update that savings goal.'), { code: SERVICE_CODES.db });
+    }
+    if (data) {
+      await recordActivitySafely(scope, {
+        agent: 'finances',
+        action: 'update',
+        title: delta > 0
+          ? `Put ${formatDollars(toCents(delta))} toward ${goal.name}`
+          : `Took ${formatDollars(toCents(Math.abs(delta)))} back out of ${goal.name}`,
+        href: '/dashboard/savings',
+        resourceId: data.id,
+      });
+      return ok(data);
+    }
+    // No row matched the value we read: someone else contributed between our
+    // read and our write. Their amount is not ours to overwrite — read again.
+  }
+
+  return fail('That goal is being updated by someone else. Try again.', { code: SERVICE_CODES.db });
+}
+
+/** Remove a savings goal. Family-scoped, where the client filtered `id` alone. */
+export async function deleteSavingsGoal(scope: ServiceScope, goalId: string): Promise<ServiceResult<{ id: string }>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
+
+  const { data, error } = await scope.db
+    .from('savings_goals')
+    .delete()
+    .eq('id', goalId)
+    .eq('family_id', scope.familyId)
+    .select('id, name')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:finances] savings goal delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that savings goal.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That savings goal could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'finances',
+    action: 'delete',
+    title: `Removed the savings goal ${data.name}`,
+    href: '/dashboard/savings',
+    resourceId: data.id,
+  });
+  return ok({ id: data.id });
+}
+
+/** Remove a budget. Family-scoped, where the client filtered `id` alone. */
+export async function deleteBudget(scope: ServiceScope, budgetId: string): Promise<ServiceResult<{ id: string }>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
+
+  const { data, error } = await scope.db
+    .from('budgets')
+    .delete()
+    .eq('id', budgetId)
+    .eq('family_id', scope.familyId)
+    .select('id, category, period')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:finances] budget delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that budget.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That budget could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'finances',
+    action: 'delete',
+    title: `Removed the ${data.category} ${data.period} budget`,
+    href: '/dashboard/budgets',
+    resourceId: data.id,
+  });
+  return ok({ id: data.id });
+}
+
+/** Remove a transaction. Family-scoped, where the client filtered `id` alone. */
+export async function deleteTransaction(scope: ServiceScope, transactionId: string): Promise<ServiceResult<{ id: string }>> {
+  const allowed = assertFinanceWriter(scope);
+  if (!allowed.ok) return allowed;
+
+  const { data, error } = await scope.db
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .eq('family_id', scope.familyId)
+    .select('id, name, amount')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:finances] transaction delete failed', error);
+    return fail(describeDbError(error, 'Could not remove that transaction.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That transaction could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'finances',
+    action: 'delete',
+    title: `Deleted ${formatDollars(toCents(Number(data.amount)))}${data.name ? ` — ${data.name}` : ''}`,
+    href: '/dashboard/billing',
+    resourceId: data.id,
+  });
+  return ok({ id: data.id });
 }

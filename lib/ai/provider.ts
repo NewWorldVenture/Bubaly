@@ -32,6 +32,13 @@ export type AICompletion = {
   toolCalls: { name: string; args: Record<string, unknown> }[];
   /** Token counts reported by the provider, or null when it sent none. */
   usage?: TokenUsage | null;
+  /**
+   * Which model actually answered. §33 asks a record to say which model ran, and
+   * only the provider knows: a caller naming its own constant records the model
+   * it INTENDED, which is exactly the wrong answer after a fallback or a config
+   * change. Optional so a stub provider need not invent one.
+   */
+  model?: string;
 };
 
 type OpenAIChatResponse = {
@@ -286,7 +293,7 @@ export class OpenAIProvider implements AIProvider {
       try { args = JSON.parse(c.function.arguments || '{}'); } catch { /* ignore */ }
       return { name: c.function.name, args };
     });
-    return { text, toolCalls, usage: usageFromOpenAI(data.usage) };
+    return { text, toolCalls, usage: usageFromOpenAI(data.usage), model: this.model };
   }
 
   async structuredCompletion({ system, messages, schemaName, jsonSchema, maxTokens = 1024, signal }: AIStructuredInput): Promise<AIStructuredCompletion> {

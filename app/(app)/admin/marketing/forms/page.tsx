@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createForm, setFormStatus } from '../actions';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Forms', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';
 
 export default async function FormsPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [formsResult, submissionsResult] = await Promise.all([
     supabase.from('marketing_forms').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
@@ -31,7 +33,7 @@ export default async function FormsPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(forms ?? []).length === 0 ? (
-          <EmptyState icon={ClipboardList} title="No forms yet" description="Build a lead-capture form on the right." />
+          <EmptyState icon={ClipboardList} title={t('adminMarketingForms.noFormsYet')} description={t('forms.buildALeadCaptureForm')} />
         ) : (
           (forms ?? []).map((f) => {
             const fields = Array.isArray(f.fields) ? f.fields as { label: string }[] : [];
@@ -49,8 +51,7 @@ export default async function FormsPage() {
                   <div className="mt-2 flex items-center gap-3 text-xs">
                     {active && (
                       <a href={`/f/${f.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">
-                        <ExternalLink className="h-3 w-3" /> View public form
-                      </a>
+                        <ExternalLink className="h-3 w-3" />{' '}{t('forms.viewPublicForm')}</a>
                     )}
                     <form action={setFormStatus}>
                       <input type="hidden" name="id" value={f.id} />
@@ -68,31 +69,32 @@ export default async function FormsPage() {
           })
         )}
         <p className="text-xs text-muted">
-          Active forms are live at <code>/f/&lt;id&gt;</code>. Submissions write to{' '}
-          <code>marketing_form_submissions</code> and fire any <code>form_submitted</code> automation.
+          {t('adminMarketingForms.activeFormsAreLiveAt')} <code>/f/&lt;id&gt;</code>{t('adminMarketingForms.submissionsWriteTo')}{' '}
+          <code>marketing_form_submissions</code> {t('adminMarketingForms.andFireAny')} <code>form_submitted</code> automation.
         </p>
       </div>
       <Card className="h-fit">
-        <h2 className="mb-3 font-semibold">New form</h2>
+        <h2 className="mb-3 font-semibold">{t('adminMarketingForms.newForm')}</h2>
         <form action={createForm} className="space-y-3 text-sm">
-          <input name="name" required placeholder="Form name" className={inputCls} />
-          <input name="fields" placeholder="Fields, comma-separated (e.g. Name, Email, Phone)" className={inputCls} />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create form</button>
+          <input name="name" required placeholder={t('adminMarketingForms.formName')} className={inputCls} />
+          <input name="fields" placeholder={t('adminMarketingForms.fieldsCommaSeparatedEGName')} className={inputCls} />
+          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingForms.createForm')}</button>
         </form>
       </Card>
     </div>
   );
 }
 
-function AdminFormsReadError() {
+async function AdminFormsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Forms</h1>
-        <p className="mt-1 text-sm text-muted">Create and monitor public lead-capture forms.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('forms.marketingForms')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('forms.createAndMonitorPublicLead')}</p>
       </div>
-      <ErrorState message="Could not load marketing forms from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/forms" className="text-sm font-medium text-brand-text underline">Refresh forms</Link>
+      <ErrorState message={t('forms.couldNotLoadMarketingForms')} />
+      <Link href="/admin/marketing/forms" className="text-sm font-medium text-brand-text underline">{t('forms.refreshForms')}</Link>
     </div>
   );
 }

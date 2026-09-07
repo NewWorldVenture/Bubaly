@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { WifiOff, Wifi } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 /**
  * Global connectivity banner (offline mode v1, gap #13). Shows while offline —
@@ -11,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
  * hooks refetch themselves on the same event).
  */
 export function OfflineBanner() {
+  const t = useTranslations();
   const [offline, setOffline] = useState(false);
   const [justReconnected, setJustReconnected] = useState(false);
 
@@ -47,12 +49,12 @@ export function OfflineBanner() {
       {offline ? (
         <>
           <WifiOff className="h-3.5 w-3.5" />
-          You&apos;re offline — showing your last-synced data. Changes will sync when you&apos;re back.
+          {t('offlineBanner.youAposReOfflineShowingYour')}
         </>
       ) : (
         <>
           <Wifi className="h-3.5 w-3.5" />
-          Back online — syncing…
+          {t('offlineBanner.backOnlineSyncing')}
         </>
       )}
     </div>

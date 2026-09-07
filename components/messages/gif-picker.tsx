@@ -6,10 +6,12 @@
 // Honest key-gating: a 503 from the route renders a "not configured" note.
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, SearchX } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Gif = { id: string; title: string; previewUrl: string; url: string };
 
 export function GifPicker({ onPick, onClose }: { onPick: (url: string, title: string) => void; onClose: () => void }) {
+  const tr = useTranslations();
   const [q, setQ] = useState('');
   const [gifs, setGifs] = useState<Gif[] | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'unconfigured' | 'error'>('loading');
@@ -44,15 +46,15 @@ export function GifPicker({ onPick, onClose }: { onPick: (url: string, title: st
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search GIFs…"
+        placeholder={tr('gifPicker.searchGifs')}
         autoFocus
-        aria-label="Search GIFs"
+        aria-label={tr('gifPicker.searchGifs')}
         className="mb-2 h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-brand"
       />
       {state === 'unconfigured' && (
-        <p className="px-1 pb-1 text-xs text-muted">GIF search isn’t configured yet — ask your admin to add a Giphy key.</p>
+        <p className="px-1 pb-1 text-xs text-muted">{tr('gifPicker.gifSearchIsntConfiguredYetAsk')}</p>
       )}
-      {state === 'error' && <p className="px-1 pb-1 text-xs text-danger">Couldn’t load GIFs — try again.</p>}
+      {state === 'error' && <p className="px-1 pb-1 text-xs text-danger">{tr('gifPicker.couldntLoadGifsTryAgain')}</p>}
       {state === 'loading' && (
         <div className="grid h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-muted" /></div>
       )}
@@ -73,7 +75,7 @@ export function GifPicker({ onPick, onClose }: { onPick: (url: string, title: st
           <div className="grid h-24 place-items-center text-muted"><SearchX className="h-5 w-5" /></div>
         )
       )}
-      <p className="mt-1.5 px-1 text-right text-[10px] text-muted">Powered by GIPHY</p>
+      <p className="mt-1.5 px-1 text-right text-[10px] text-muted">{tr('gifPicker.poweredByGiphy')}</p>
     </div>
   );
 }

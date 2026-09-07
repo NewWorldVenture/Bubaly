@@ -323,10 +323,14 @@ export interface Database {
         { id?: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice?: string },
         Partial<{ choice: string }>
       >;
+      // 0014 added store / list_icon / list_color / sort_order / archived_at when the
+      // table grew multi-store lists; this entry never caught up, which is why the
+      // shopping module carries `as never` on every write that names one of them and
+      // why nothing could read `archived_at` without a cast.
       grocery_lists: T<
-        { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name?: string; is_archived?: boolean; created_by?: string | null },
-        Partial<{ name: string; is_archived: boolean }>
+        { id: string; family_id: string; name: string; is_archived: boolean; store: string | null; list_icon: string | null; list_color: string | null; sort_order: number | null; archived_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name?: string; is_archived?: boolean; store?: string | null; list_icon?: string | null; list_color?: string | null; sort_order?: number | null; archived_at?: string | null; created_by?: string | null },
+        Partial<{ name: string; is_archived: boolean; store: string | null; list_icon: string | null; list_color: string | null; sort_order: number | null; archived_at: string | null }>
       >;
       grocery_items: T<
         { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; idempotency_key: string | null; created_by: string | null } & Stamps,

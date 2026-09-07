@@ -90,6 +90,45 @@ function quietHoursEnd(at: Date, quiet: QuietHours, tz: string): string {
  * identity — that is what makes "Dinner is at 6" idempotent across a retried
  * cron run.
  */
+/**
+ * When a notification should actually land, after the family's quiet hours.
+ *
+ * Exported because `notify()` is not the only writer: `generateFamilyNotifications`
+ * builds up to 150 rows and inserts them in ONE batch, with its own per-type
+ * dedupe. Routing that through `notify()` would mean 150 separate dedupe reads on
+ * a cron — it already solves duplicates; the only thing it lacked was this
+ * window. Two implementations of "when does this land" would eventually disagree,
+ * and the one that drifts is the one nobody is testing.
+ *
+ * The window comes from `family_ai_settings` (0257), which is family-scoped and
+ * therefore readable for EVERY recipient on every path — including the
+ * service-role cron that sends most notifications. It used to come from
+ * `user_preferences.notification_prefs.quietHours`, and that could never have
+ * worked: `0004` makes `user_preferences` own-row-only, so a lookup of the
+ * RECIPIENTS' rows returns at most the SENDER's.
+ */
+export async function deliveryTimeFor(
+  scope: ServiceScope,
+  opts: { sendAt?: string | null; urgent?: boolean } = {},
+): Promise<{ sendAt: string; deferred: boolean }> {
+  const now = scopeNow(scope);
+  const explicit = opts.sendAt && Number.isFinite(Date.parse(opts.sendAt));
+  const base = explicit ? new Date(Date.parse(opts.sendAt as string)) : now;
+  // A caller who NAMED a time has already decided when this should land —
+  // "remind me at 10:30pm to put the bins out" is not a courtesy notice to hold
+  // until morning, it is the whole point. Quiet hours move the default, never a
+  // deliberate instant.
+  const quiet = opts.urgent || explicit ? null : await familyQuietHours(scope);
+  // An hour we cannot compute is not an hour inside the window: a failed or
+  // unset timezone must not silently hold a notification for eight hours. When
+  // the local hour is unknown, send now and let the family see it.
+  const localHour = quiet ? hourInTz(base, scope.tz) : null;
+  const holdable = quiet !== null && Number.isInteger(localHour) && inQuietHours(localHour as number, quiet);
+  return holdable && quiet
+    ? { sendAt: quietHoursEnd(base, quiet, scope.tz), deferred: true }
+    : { sendAt: base.toISOString(), deferred: false };
+}
+
 export async function notify(scope: ServiceScope, input: NotifyInput): Promise<ServiceResult<NotifyResult>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A notification needs a title.', { code: SERVICE_CODES.invalidInput });
@@ -133,27 +172,12 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
   // notifying a teen read the parent's preference and applied it to the teen,
   // or more often read nothing at all. One family window is a weaker promise
   // than a per-person one, and it is a promise the database can actually keep.
-  const now = scopeNow(scope);
-  const explicit = input.sendAt && Number.isFinite(Date.parse(input.sendAt));
-  const baseSendAt = explicit ? new Date(Date.parse(input.sendAt as string)) : now;
-  // A caller who NAMED a time has already decided when this should land —
-  // "remind me at 10:30pm to put the bins out" is not a courtesy notice to hold
-  // until morning, it is the whole point. Quiet hours move the default, never a
-  // deliberate instant.
-  const quiet = input.urgent || explicit ? null : await familyQuietHours(scope);
-  // An hour we cannot compute is not an hour inside the window: a failed or
-  // unset timezone must not silently hold a notification for eight hours. When
-  // the local hour is unknown, send now and let the family see it.
-  const localHour = quiet ? hourInTz(baseSendAt, scope.tz) : null;
-  const holdable = quiet !== null && Number.isInteger(localHour) && inQuietHours(localHour as number, quiet);
+  const { sendAt: resolvedSendAt, deferred: wasDeferred } =
+    await deliveryTimeFor(scope, { sendAt: input.sendAt, urgent: input.urgent });
 
   let deferred = 0;
   const rows = targets.map((userId) => {
-    let sendAt = baseSendAt.toISOString();
-    if (holdable && quiet) {
-      sendAt = quietHoursEnd(baseSendAt, quiet, scope.tz);
-      deferred += 1;
-    }
+    if (wasDeferred) deferred += 1;
     return {
       family_id: scope.familyId,
       user_id: userId,
@@ -162,7 +186,7 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
       body: input.body?.trim() || null,
       related_type: input.relatedType ?? null,
       related_id: input.relatedId ?? null,
-      send_at: sendAt,
+      send_at: resolvedSendAt,
     };
   });
 

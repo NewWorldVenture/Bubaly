@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { resolveActiveExitIntent } from '@/lib/marketing/exit-intent-server';
 import type { VisitorContext } from '@/lib/marketing/personalization';
@@ -10,11 +11,12 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(
 
 /** Public: resolve the best exit-intent offer for this visitor's context. */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const limit = rateLimit(`ei-resolve:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limit.ok) return NextResponse.json({ offer: null }, { status: 429 });
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('resolve.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
 
   const ctx: VisitorContext = {

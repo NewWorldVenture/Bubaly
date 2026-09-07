@@ -35,6 +35,9 @@ export const routineTools: ToolDefinition[] = [
     capability: 'automate',
     risk: 'medium',
     readOnly: false,
+    // `automate` covers both setting a routine up and switching one off, so it
+    // cannot say which happened; the household trail needs the difference.
+    trailAction: 'create',
     input: z.object({
       when: z.string().describe('When it should run, in the family\'s words: "every Sunday at 5pm", "two days before every trip"'),
       prompt: z.string().describe('What Bubaly should do each time — the request it will make'),
@@ -84,6 +87,8 @@ export const routineTools: ToolDefinition[] = [
     capability: 'automate',
     risk: 'low',
     readOnly: false,
+    // Pausing and resuming are both edits to a routine the family already has.
+    trailAction: 'update',
     input: z.object({
       routine_id: z.string(),
       enabled: z.boolean().nullish().describe('False (the default) pauses it; true resumes it'),

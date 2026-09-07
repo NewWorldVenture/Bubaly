@@ -5,10 +5,12 @@ import { Check, KeyRound, Sparkles, Plug, Loader2, CircleCheck, CircleAlert } fr
 import { useToast } from '@/components/ui/toast';
 import { AI_MODELS, type AIConfigView } from '@/lib/ai/models';
 import { saveAIConfigAction, testAIConnectionAction, type TestAIResult } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // OpenAI-only deployment: every AI route uses ChatGPT (OpenAI). The engine is
 // fixed; this form configures the OpenAI model + API key.
 export function AIEngineForm({ view }: { view: AIConfigView }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [model, setModel] = useState(view.model && AI_MODELS.openai.includes(view.model) ? view.model : AI_MODELS.openai[0]);
   const [saving, setSaving] = useState(false);
@@ -19,7 +21,7 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
     setSaving(true);
     const res = await saveAIConfigAction(formData);
     setSaving(false);
-    if (res.ok) success('AI engine updated'); else toastError(res.error ?? 'Could not save');
+    if (res.ok) success(t('aiEngineForm.aiEngineUpdated')); else toastError(res.error ?? 'Could not save');
   }
 
   async function onTest() {
@@ -37,20 +39,20 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
   return (
     <form action={onSubmit} className="space-y-5">
       <div>
-        <label className="mb-2 block text-sm font-semibold">AI engine</label>
+        <label className="mb-2 block text-sm font-semibold">{t('adminAiAiEngineForm.aiEngine')}</label>
         <div className="rounded-2xl border border-brand bg-brand/10 p-4 text-left">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand-text" />
-            <span className="font-semibold">ChatGPT (OpenAI)</span>
+            <span className="font-semibold">{t('adminAiAiEngineForm.chatgptOpenai')}</span>
             <Check className="ml-auto h-4 w-4 text-brand-text" />
           </div>
-          <p className="mt-1 text-xs text-muted">All AI features run on the GPT-4o family.</p>
+          <p className="mt-1 text-xs text-muted">{t('adminAiAiEngineForm.allAiFeaturesRunOnThe')}</p>
         </div>
         <input type="hidden" name="provider" value="openai" />
       </div>
 
       <label className="block">
-        <span className="text-sm font-semibold">Model</span>
+        <span className="text-sm font-semibold">{t('adminAiAiEngineForm.model')}</span>
         <select name="model" value={model} onChange={(e) => setModel(e.target.value)}
           className="mt-1 h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm">
           {AI_MODELS.openai.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -58,14 +60,14 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
       </label>
 
       <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-brand-text" /> API key</div>
+        <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-brand-text" /> {t('adminAiAiEngineForm.apiKey')}</div>
         <p className="text-xs text-muted">
-          The key is stored server-side and never shown again. Leave it blank to keep the existing key.
-          {view.openaiKeySet ? <span className="ml-1 text-emerald-400">OpenAI key is set{view.openaiFromEnv ? ' (from environment)' : ''}.</span>
-            : <span className="ml-1 text-amber-400">No OpenAI key configured yet.</span>}
+          {t('adminAiAiEngineForm.theKeyIsStoredServerSide')}
+          {view.openaiKeySet ? <span className="ml-1 text-emerald-400">{t('adminAiAiEngineForm.openaiKeyIsSet')}{view.openaiFromEnv ? ' (from environment)' : ''}.</span>
+            : <span className="ml-1 text-amber-400">{t('adminAiAiEngineForm.noOpenaiKeyConfiguredYet')}</span>}
         </p>
         <label className="block">
-          <span className="text-xs text-muted">OpenAI API key (sk-…)</span>
+          <span className="text-xs text-muted">{t('adminAiAiEngineForm.openaiApiKeySk')}</span>
           <input type="password" name="openaiKey" autoComplete="off" placeholder={view.openaiKeySet ? '•••••••• (set)' : 'sk-…'}
             className="mt-1 h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm" />
         </label>
@@ -86,12 +88,11 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
         testResult.ok ? (
           <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm">
             <p className="flex items-center gap-2 font-semibold text-emerald-300">
-              <CircleCheck className="h-4 w-4" /> Connection OK
+              <CircleCheck className="h-4 w-4" /> {t('adminAiAiEngineForm.connectionOk')}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Model <span className="font-mono text-fg">{testResult.model}</span> replied
-              <span className="text-fg"> “{testResult.reply}”</span> in {testResult.latencyMs}&nbsp;ms.
-              Your AI features are live.
+              {t('adminAiAiEngineForm.model')} <span className="font-mono text-fg">{testResult.model}</span> replied
+              <span className="text-fg"> “{testResult.reply}”</span> in {testResult.latencyMs}{t('adminAiAiEngineForm.nbspMsYourAiFeaturesAre')}
             </p>
           </div>
         ) : (

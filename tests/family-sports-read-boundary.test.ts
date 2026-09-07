@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-sports/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('family-sports page read boundary', () => {
   it('logs and returns an ErrorState on a sports read failure', () => {
     expect(page).toContain('if (sportsError) {');
     expect(page).toContain("console.error('[dashboard/family-sports] sports read failed', sportsError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familySports.couldNotLoadYourFamily', "Could not load your family sports hub from Supabase. Refresh and try again.");
   });
 
   it('derives the sports data only after the fail-closed guard', () => {

@@ -12,10 +12,12 @@ import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
+  const t = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -63,29 +65,29 @@ export function CalendarSyncPanel() {
     if (!confirm(`Remove "${feed.name}" and its imported events?`)) return;
     const res = await removeCalendarFeed(feed.id);
     if (!res.ok) { toastError(res.error); return; }
-    success('Calendar removed');
+    success(t('calendarSyncPanel.calendarRemoved'));
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold">Calendar Sync</h3>
-          <p className="text-xs text-muted">Subscribe to Google, Apple, Outlook, or any public ICS feed — synced across your devices and refreshed nightly.</p>
+          <h3 className="text-base font-semibold">{t('calendarSync.calendarSync')}</h3>
+          <p className="text-xs text-muted">{t('calendarSync.subscribeToGoogleAppleOutlookOr')}</p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" /> Add Calendar
+          <Plus className="h-4 w-4" /> {t('calendarSync.addCalendar')}
         </Button>
       </div>
 
       {loading ? (
-        <div className="rounded-xl border border-border p-6 text-center text-sm text-muted">Loading calendars…</div>
+        <div className="rounded-xl border border-border p-6 text-center text-sm text-muted">{t('calendarSync.loadingCalendars')}</div>
       ) : (feeds ?? []).length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
           <Link2 className="mx-auto h-8 w-8 text-muted/40" />
-          <p className="mt-2 text-sm text-muted">No calendars subscribed yet.</p>
+          <p className="mt-2 text-sm text-muted">{t('calendarSync.noCalendarsSubscribedYet')}</p>
           <button onClick={() => setOpen(true)} className="mt-1 text-xs font-semibold text-brand-text hover:underline">
-            Subscribe to your first calendar
+            {t('calendarSync.subscribeToYourFirstCalendar')}
           </button>
         </div>
       ) : (
@@ -105,7 +107,7 @@ export function CalendarSyncPanel() {
                       <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {new Date(feed.last_synced_at).toLocaleDateString()}
                     </p>
                   ) : (
-                    <p className="text-[10px] text-muted mt-0.5">Not synced yet</p>
+                    <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -127,7 +129,7 @@ export function CalendarSyncPanel() {
         <Modal open onClose={closeModal} title={provider ? `Connect ${provider.label}` : 'Connect a calendar'}>
           {!provider ? (
             <div>
-              <p className="mb-3 text-sm text-muted">Pick where your events live — we&apos;ll show you exactly how to connect it.</p>
+              <p className="mb-3 text-sm text-muted">{t('calendarSync.pickWhereYourEventsLiveWe')}</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {CALENDAR_PROVIDERS.map((p) => (
                   <button key={p.id} type="button" onClick={() => pick(p)}
@@ -140,12 +142,12 @@ export function CalendarSyncPanel() {
             </div>
           ) : (
             <form onSubmit={add} className="space-y-4">
-              <button type="button" onClick={() => setProviderId(null)} className="text-xs font-semibold text-muted hover:text-fg">← All calendars</button>
+              <button type="button" onClick={() => setProviderId(null)} className="text-xs font-semibold text-muted hover:text-fg">{t('calendarSync.allCalendars')}</button>
 
               {provider.connect === 'oauth' && provider.connectUrl && (
                 <a href={provider.connectUrl}
                   className="flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand/90">
-                  <Check className="h-4 w-4" /> Connect {provider.label} — two-way
+                  <Check className="h-4 w-4" /> {t('calendarSync.connect')} {provider.label} {t('calendarSync.twoWay')}
                 </a>
               )}
 
@@ -156,15 +158,15 @@ export function CalendarSyncPanel() {
                 </ol>
               </div>
 
-              <Field label="Calendar name">
-                {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, School, Soccer…" />}
+              <Field label={t('calendarSync.calendarName')}>
+                {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('calendarSyncPanel.workSchoolSoccer')} />}
               </Field>
-              <Field label="ICS / webcal URL" required>
+              <Field label={t('calendarSync.icsWebcalUrl')} required>
                 {(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={provider.placeholder} autoFocus />}
               </Field>
-              <p className="text-xs text-muted">Events import into your Bubaly calendar and refresh nightly. <strong className="text-fg">webcal://</strong> links work too.</p>
+              <p className="text-xs text-muted">{t('calendarSync.eventsImportIntoYourBubalyCalendar')} <strong className="text-fg">webcal://</strong> {t('calendarSync.linksWorkToo')}</p>
               <div className="flex justify-end gap-2 pt-1">
-                <Button type="button" variant="ghost" onClick={closeModal} disabled={adding}>Cancel</Button>
+                <Button type="button" variant="ghost" onClick={closeModal} disabled={adding}>{t('calendarSync.cancel')}</Button>
                 <Button type="submit" disabled={adding}>{adding ? 'Adding…' : 'Add & Sync Now'}</Button>
               </div>
             </form>
