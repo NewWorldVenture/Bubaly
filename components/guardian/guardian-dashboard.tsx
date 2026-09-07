@@ -167,9 +167,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
               <button
                 onClick={() => handleAcknowledge(esc.id)}
                 className="shrink-0 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600 transition"
-              >
-                Acknowledge
-              </button>
+              >{t('guardianDashboard.acknowledge')}</button>
             </div>
           ))}
         </div>
@@ -237,10 +235,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
             {scanning ? 'Scanning…' : 'Scan for tips'}
           </button>
         </div>
-        <p className="text-xs text-muted">
-          Bubaly learns from your call patterns and proposes changes — you decide what to apply. Nothing
-          changes until you approve it.
-        </p>
+        <p className="text-xs text-muted">{t('guardianDashboard.bubalyLearnsFromYourCall')}</p>
         {pendingSuggestions.length === 0 ? (
           <p className="rounded-xl border border-border bg-elevated px-3 py-4 text-center text-xs text-muted">
             {t('guardianDashboard.noSuggestionsRightNowTap')} <span className="font-medium text-purple-300">{t('guardianDashboard.scanForTips')}</span> {t('guardianDashboard.toCheckYourRecentActivity')}
@@ -263,16 +258,12 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                     onClick={() => handleSuggestion(s.id, 'approved')}
                     disabled={suggestionLoading === s.id}
                     className="rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-50"
-                  >
-                    Apply
-                  </button>
+                  >{t('guardianDashboard.apply')}</button>
                   <button
                     onClick={() => handleSuggestion(s.id, 'dismissed')}
                     disabled={suggestionLoading === s.id}
                     className="rounded-lg bg-surface px-2.5 py-1.5 text-xs font-medium text-muted hover:text-fg transition disabled:opacity-50"
-                  >
-                    Skip
-                  </button>
+                  >{t('guardianDashboard.skip')}</button>
                 </div>
               </div>
             ))}

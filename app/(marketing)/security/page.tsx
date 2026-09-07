@@ -151,19 +151,14 @@ export default async function SecurityPage() {
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300">
-              <Shield className="h-4 w-4" /> Enterprise-Grade Security
-            </div>
+              <Shield className="h-4 w-4" />{' '}{t('security.enterpriseGradeSecurity')}</div>
             <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
               Your family&apos;s privacy<br />
               <span className="gradient-text-violet">{t('security.isOurTopPriority')}</span>
             </h1>
-            <p className="mt-6 text-lg leading-8 text-white/65">
-              Bubaly is built with the same security standards used by leading banks and healthcare
-              providers — because your family deserves nothing less.
-            </p>
+            <p className="mt-6 text-lg leading-8 text-white/65">{t('security.builtWithSameStandards')}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="#architecture" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow transition hover:-translate-y-0.5">
-                Explore Our Security <ArrowRight className="h-4 w-4" />
+              <Link href="#architecture" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow transition hover:-translate-y-0.5">{t('security.exploreOurSecurity')}{' '}<ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="#faq" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">
                 Security FAQ
@@ -272,10 +267,7 @@ export default async function SecurityPage() {
           <div className="mb-10 text-center">
             <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.trustCenter')}</p>
             <h2 className="text-3xl font-black sm:text-4xl">{t('security.certifiedCompliantTrusted')}</h2>
-            <p className="mx-auto mt-4 max-w-2xl text-white/55">
-              Bubaly meets and exceeds the highest industry standards. Our compliance posture is independently
-              verified and continuously maintained.
-            </p>
+            <p className="mx-auto mt-4 max-w-2xl text-white/55">{t('security.meetsAndExceeds')}</p>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {COMPLIANCE_BADGES.map(({ label, sub, badge, desc }) => (
@@ -382,10 +374,7 @@ export default async function SecurityPage() {
           <div className="mb-10 text-center">
             <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.incidentResponse')}</p>
             <h2 className="text-3xl font-black sm:text-4xl">{t('security.whenItMattersMost')}</h2>
-            <p className="mx-auto mt-4 max-w-2xl text-white/55">
-              Our incident response protocol is battle-tested and designed for speed,
-              transparency, and accountability.
-            </p>
+            <p className="mx-auto mt-4 max-w-2xl text-white/55">{t('security.incidentProtocol')}</p>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {INCIDENT_TIMELINE.map(({ phase, time, desc, icon: Icon }, i) => (
@@ -418,11 +407,7 @@ export default async function SecurityPage() {
           <div>
             <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">{t('security.responsibleDisclosure')}</p>
             <h2 className="text-3xl font-black sm:text-4xl">{t('security.foundAVulnerability')}</h2>
-            <p className="mt-4 text-white/55">
-              We take security vulnerabilities seriously and appreciate the work of security researchers
-              who help us keep families safe. Our responsible disclosure program rewards researchers
-              who follow coordinated disclosure practices.
-            </p>
+            <p className="mt-4 text-white/55">{t('security.disclosureIntro')}</p>
             <div className="mt-6 space-y-4">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
@@ -478,9 +463,7 @@ export default async function SecurityPage() {
                 </div>
               </div>
             </div>
-            <p className="mt-4 text-xs text-white/40">
-              Please do not report security issues via GitHub issues or public channels.
-            </p>
+            <p className="mt-4 text-xs text-white/40">{t('security.doNotReportPublicly')}</p>
           </div>
         </div>
       </Container>
@@ -500,8 +483,7 @@ export default async function SecurityPage() {
                 hiring, prioritizes your family&apos;s safety.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/privacy" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">
-                  Read Our Privacy Policy <ExternalLink className="h-4 w-4" />
+                <Link href="/privacy" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">{t('security.readOurPrivacyPolicy')}{' '}<ExternalLink className="h-4 w-4" />
                 </Link>
                 <Link href="/terms" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-bold transition hover:bg-white/[0.06]">
                   Terms of Service
@@ -545,14 +527,11 @@ export default async function SecurityPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-bold">{t('security.haveASecurityQuestion')}</h2>
-              <p className="mt-1 text-sm text-white/55">
-                Our security team is here to help. Reach out anytime — we respond within 24 hours.
-              </p>
+              <p className="mt-1 text-sm text-white/55">{t('security.teamIsHereToHelp')}</p>
             </div>
             <div className="flex gap-3">
               <a href="mailto:security@bubaly.com" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow">
-                <Mail className="h-4 w-4" /> Contact Security Team
-              </a>
+                <Mail className="h-4 w-4" />{' '}{t('security.contactSecurityTeam')}</a>
             </div>
           </div>
         </Container>

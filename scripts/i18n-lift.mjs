@@ -156,18 +156,60 @@ for (const { text } of result.findings) {
   // — where rewriting it produces a syntax error rather than a translation.
   // Punctuation that belongs to code and not to a sentence rules it out.
   const looksLikeCode = /[{}|;=<>]|=>|:\s*[A-Za-z]/.test(text);
-  if (!form && !looksLikeCode && src.includes(`>${text}<`)) form = { from: `>${text}<`, kind: 'jsxText' };
-  if (!form) continue; // JSX prose split across lines — leave it for a person.
+  // `>text<` is a JSX text node only if that `>` really closes a tag. In
+  // `(fn: () => Promise<{ ok: boolean }>)` the `>` belongs to an ARROW, and the
+  // scanner reports `Promise` as prose — so the naive check rewrote a type
+  // annotation into JSX. A closing tag's `>` is never preceded by `=`.
+  const literal = `>${text}<`;
+  const litAt = src.indexOf(literal);
+  if (!form && !looksLikeCode && litAt > 0 && src[litAt - 1] !== '=' && src[litAt - 1] !== '-') {
+    form = { from: literal, kind: 'jsxText' };
+  }
+
+  // JSX prose is usually WRAPPED, so the sentence the scanner reports on one
+  // line sits across several in the source with arbitrary indentation. Matching
+  // it needs every run of whitespace to be flexible; matching it literally is
+  // why this tool used to leave the longest, most visible copy on the page
+  // behind and lift only the short labels around it.
+  // The wrapped-prose path is deliberately narrow: it may only fire for text
+  // that unmistakably reads as a SENTENCE. A looser rule matched a lint
+  // directive (`eslint-disable-next-line @next/next/no-img-element`) and a set
+  // of object keys, and rewrote both into JSX — because the scanner reports
+  // those as prose and a whitespace-flexible pattern is happy to span them.
+  const readsAsSentence = /^[A-Z]/.test(text)
+    && text.split(/\s+/).length >= 3
+    && !/[_@\\/]|--|\bnext\b/.test(text);
+  if (!form && !looksLikeCode && readsAsSentence) {
+    // The whitespace around the sentence is CAPTURED rather than swallowed. In
+    // JSX a run of whitespace that contains a newline is stripped by the
+    // compiler, but a plain space is a rendered word gap — and `The magic is in
+    // the <GradientText>AI</GradientText>` loses its only space if the match
+    // eats it, so the heading renders "The magic is in theAI".
+    const loose = new RegExp(
+      `>([^\\S\\n]*\\s*)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(\\s*)<`,
+    );
+    if (loose.test(src)) form = { from: loose, kind: 'jsxText' };
+  }
+  if (!form) continue; // nothing that can be placed safely — leave it.
 
   let key = `${ns}.${slugFor(text)}`;
   let n = 2;
   while ([...seen.values()].includes(key)) key = `${ns}.${slugFor(text)}${n++}`;
   seen.set(text, key);
-  plan.push({ text, key, ...form, moduleScope: atModuleScope(src.indexOf(form.from)) });
+  const at = form.from instanceof RegExp ? src.search(form.from) : src.indexOf(form.from);
+  plan.push({ text, key, ...form, moduleScope: atModuleScope(at) });
 }
 
 let out = src;
 for (const p of plan) {
+  if (p.from instanceof RegExp) {
+    // Re-emit a `{' '}` for whatever significant whitespace the match consumed:
+    // significant means "a space with no newline in it", which is exactly the
+    // whitespace JSX would have rendered.
+    const gap = (ws) => (ws && !ws.includes('\n') ? "{' '}" : '');
+    out = out.replace(p.from, (_m, lead, trail) => `>${gap(lead)}{${T}('${p.key}')}${gap(trail)}<`);
+    continue;
+  }
   const to = p.moduleScope
     ? `'${p.key}'`
     : p.kind === 'attr'

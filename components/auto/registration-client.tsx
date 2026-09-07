@@ -55,8 +55,8 @@ export function RegistrationClient({
                     <Badge tone={s.tone}>{s.label}</Badge>
                   </div>
                   <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                    <button onClick={() => { setRegEdit(r); setRegOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                    <button onClick={() => start(async () => { await deleteRegistrationAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                    <button onClick={() => { setRegEdit(r); setRegOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{tr('registrationClient.edit')}</button>
+                    <button onClick={() => start(async () => { await deleteRegistrationAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{tr('registrationClient.delete')}</button>
                   </div>
                 </Card>
               );

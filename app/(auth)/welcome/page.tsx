@@ -16,30 +16,20 @@ export default async function WelcomePage() {
         <Sparkles className="h-7 w-7 text-brand-text" />
       </span>
 
-      <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">
-        Welcome to Bubaly
-      </h1>
-      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-muted">
-        The AI operating system for family life. One calm home for your calendar,
-        lists, meals, money and memories.
-      </p>
-      <p className="mt-4 text-sm font-semibold text-brand-text">
-        Less Managing Life. More Living It.
-      </p>
+      <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">{t('welcome.welcomeToBubaly')}</h1>
+      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-muted">{t('welcome.theAiOperatingSystemFor')}</p>
+      <p className="mt-4 text-sm font-semibold text-brand-text">{t('welcome.lessManagingLifeMoreLiving')}</p>
 
       <div className="mt-8 space-y-3">
         <Link
           href="/signup"
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-3.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110"
-        >
-          Get started <ArrowRight className="h-4 w-4" />
+        >{t('welcome.getStarted')}{' '}<ArrowRight className="h-4 w-4" />
         </Link>
         <Link
           href="/login"
           className="flex w-full items-center justify-center rounded-xl border border-border bg-transparent px-4 py-3.5 text-sm font-semibold text-fg transition hover:bg-elevated"
-        >
-          I already have an account
-        </Link>
+        >{t('welcome.iAlreadyHaveAnAccount')}</Link>
       </div>
 
       <p className="mt-6 text-xs text-muted">{t('welcome.freeToStartNoCredit')}</p>

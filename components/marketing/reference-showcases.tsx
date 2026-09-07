@@ -277,7 +277,7 @@ export async function FeaturesReferencePage() {
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
               <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{t('referenceShowcases.oneAppEveryPartOf')}</h2>
-              <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, Bubaly brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
+              <p className="mt-1 text-[13px] leading-5 text-white/68">{t('referenceShowcases.fromDailyRoutinesToLifes')}<br className="hidden xl:block" />{' '}{t('referenceShowcases.soYouCanFocusOn')}</p>
             </div>
           </div>
           <PrimaryButton>{t('referenceShowcases.getStartedFree')}</PrimaryButton>
@@ -347,7 +347,7 @@ async function GroceryList() {
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
       <p className="mb-2.5 text-[10px] font-semibold">{t('referenceShowcases.myGroceryList')}</p>
       <div className="flex-1 space-y-2.5">{items.map((item) => <p key={item} className="flex items-center gap-2 text-[9px]"><Circle className="h-[13px] w-[13px] text-white/55" />{item}</p>)}</div>
-      <div className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] text-white/55"><Plus className="mr-1 inline h-3 w-3" /> Add item</div>
+      <div className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] text-white/55"><Plus className="mr-1 inline h-3 w-3" />{' '}{t('referenceShowcases.addItem')}</div>
     </div>
   );
 }
@@ -540,7 +540,7 @@ async function MagicPanel() {
   return (
     <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
-        <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">The magic is in the <GradientText>AI</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
+        <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">{t('referenceShowcases.theMagicIsInThe')}{' '}<GradientText>{t('referenceShowcases.ai')}</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
         <p className="mt-2 text-[14px] leading-6 text-white/68">{t('referenceShowcases.bubalyTurnsScatteredInformationInto')}<br />{t('referenceShowcases.organizedActionAutomatically')}</p>
         <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/73"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
       </div>
@@ -591,7 +591,7 @@ async function FamilyWorkflowPanel() {
   ];
   return (
     <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
-      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]">One place for <GradientText>{t('referenceShowcases.realFamilyWorkflows')}</GradientText></h2>
+      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]">{t('referenceShowcases.onePlaceFor')}{' '}<GradientText>{t('referenceShowcases.realFamilyWorkflows')}</GradientText></h2>
       <div className="mt-3 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">{workflows.map(([title,body]) => <article key={title} className="min-h-[142px] rounded-[10px] border border-white/[0.07] bg-white/[0.035] p-3"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="mt-3 text-[9px] font-semibold">{title}</h3><p className="mt-2 text-[8.5px] leading-[13px] text-white/70">{body}</p></article>)}</div>
     </section>
   );

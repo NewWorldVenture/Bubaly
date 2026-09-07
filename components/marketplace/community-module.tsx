@@ -69,10 +69,7 @@ export function CommunityModule({
         <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
           <Users className="h-6 w-6 text-brand-text" /> {t('community.communityCircles')}
         </h1>
-        <p className="mt-1 max-w-xl text-sm text-muted">
-          Share listings beyond your household — the class, the team, the street.
-          Only what a family chooses to share is visible, and only inside that circle.
-        </p>
+        <p className="mt-1 max-w-xl text-sm text-muted">{t('communityModule.shareListingsBeyondYourHousehold')}</p>
       </header>
 
       {readWarnings.length > 0 && (
