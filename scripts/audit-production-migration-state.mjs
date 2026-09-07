@@ -45,6 +45,37 @@ select pg_catalog.jsonb_build_object(
     from pg_catalog.pg_constraint k join pg_catalog.pg_class c on c.oid = k.conrelid
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'), '[]'::jsonb),
+  -- Money write policies, resolved rather than hashed.
+  --
+  -- Every other policy in this snapshot is reported as md5(qual) / md5(with_check):
+  -- catalog metadata only, no expressions. That is the right default, but on the
+  -- money tables it produced a loop. A reader could see "wallet_transactions has a
+  -- permissive INSERT policy" and could NOT see whether it required manager role,
+  -- because a hash of can_manage_family(family_id) and a hash of
+  -- is_family_member(family_id) are equally opaque. Those two differ by whether a
+  -- child can mint money, so the only safe response was to escalate — which is
+  -- exactly what happened, three releases running.
+  --
+  -- This resolves the one bit that decides it, and only that bit: a boolean for
+  -- whether the policy mentions can_manage_family. No expression text leaves the
+  -- database, so the hashing posture above is unchanged. See docs/runbooks/LB-016.
+  'moneyWritePolicies', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'table', c.relname, 'name', p.polname,
+    'command', case p.polcmd when 'a' then 'INSERT' when 'w' then 'UPDATE'
+                             when 'd' then 'DELETE' when '*' then 'ALL' end,
+    'permissive', p.polpermissive,
+    'managerGated', coalesce(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+                    coalesce(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid), '')
+                    like '%can_manage_family%')
+    order by c.relname, p.polname)
+    from pg_catalog.pg_policy p
+    join pg_catalog.pg_class c on c.oid = p.polrelid
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and p.polcmd in ('a','w','d','*')
+      and c.relname = any (array[
+        'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+        'financial_accounts','transactions','budgets','bills','savings_goals'])), '[]'::jsonb),
   'coreFunctions', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
     'name', p.proname, 'definition', pg_catalog.pg_get_functiondef(p.oid)) order by p.proname)
     from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
@@ -90,6 +121,39 @@ export async function readProductionMigrationState({ projectRef, token, fetchImp
   return { ...snapshot, migrations };
 }
 
+/**
+ * Does a non-manager currently have a write into the household's money?
+ *
+ * Answers the question the hashes could not, in the two halves that actually
+ * decide it:
+ *
+ *   openWrites  — a PERMISSIVE write policy that does not require manager role.
+ *                 Permissive policies OR together, so one of these is enough to
+ *                 grant the write on its own.
+ *   unguarded   — a money table with no RESTRICTIVE write guard. Restrictive
+ *                 policies AND, so a guarded table survives a stray permissive
+ *                 policy; an unguarded one does not.
+ *
+ * `exploitable` is the conjunction, and it is the only line a responder needs:
+ * an open write on a table with no backstop is a child able to move money.
+ * An open write on a guarded table is reportable but not exploitable — that is
+ * the wallet finding, and LB-016 explains why halting on it adds nothing.
+ */
+export function moneyWriteVerdict(snapshot) {
+  const rows = snapshot.moneyWritePolicies ?? [];
+  const openWrites = rows
+    .filter((r) => r.permissive && !r.managerGated)
+    .map((r) => `${r.table}.${r.name} (${r.command})`);
+  const guarded = new Set(rows.filter((r) => !r.permissive).map((r) => r.table));
+  const unguarded = [...new Set(rows.map((r) => r.table))].filter((t) => !guarded.has(t)).sort();
+  return {
+    openWrites,
+    unguarded,
+    exploitable: openWrites.some((w) => unguarded.includes(w.split('.')[0])),
+    runbook: 'docs/runbooks/LB-016-wallet-permissive-policy-finding.md',
+  };
+}
+
 export function hasUnrecordedBaseline(snapshot) {
   return snapshot.policies.some((policy) => policy.table === 'profiles' && policy.name === 'profiles_insert_self')
     && !snapshot.migrations.some((migration) => migration.version === '0004');
@@ -103,11 +167,13 @@ export async function runProductionMigrationAudit() {
   mkdirSync('.next', { recursive: true });
   writeFileSync('.next/production-schema-audit.json', JSON.stringify(snapshot, null, 2));
   const requiresBaselineReview = hasUnrecordedBaseline(snapshot);
+  const moneyWrites = moneyWriteVerdict(snapshot);
   console.log(JSON.stringify({
     migrationVersions: snapshot.migrations.map(({ version }) => version),
     tableCount: snapshot.tables.length,
     policyCount: snapshot.policies.length,
     requiresBaselineReview,
+    moneyWrites,
   }));
   if (process.argv.includes('--enforce-history') && requiresBaselineReview) {
     throw new Error('Existing production policies have no recorded baseline migration 0004. Historical replay is blocked; review the schema audit before repairing migration history.');
