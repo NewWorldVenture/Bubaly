@@ -333,4 +333,62 @@ begin
   raise notice 'A-08 OK: 0275 removed both injected strays and kept all 7 intended policies';
 end $$;
 
+-- ── Invariant 9: the guards are real, not merely counted ────────────────────
+--
+-- This asserts, in CI, the same three conditions docs/audit/money-policy-diagnostic.sql
+-- reports to an operator. It exists because that diagnostic is named
+-- *-diagnostic.sql rather than *-check.sql, so run-probes.sh does not glob it —
+-- and its first version shipped with a bug that would have reported a FALSE
+-- ALL-CLEAR, with nothing in CI able to catch it. Encoding the logic here means
+-- the shape the operator query relies on is exercised against a real Postgres on
+-- every PR.
+--
+-- Three conditions, because counting restrictive policies proves none of them:
+--   * RLS ENABLED. Three immaculate restrictive policies on a table with row
+--     security switched off are inert, and the table is wide open.
+--   * The guard REQUIRES MANAGER ROLE. A restrictive policy with a permissive
+--     rule takes nothing away.
+--   * All THREE COMMANDS covered. Three insert guards and no delete guard is
+--     not a backstop; distinct polcmd, not a count of policies.
+--
+-- Tables absent from this database are skipped rather than failed: 0275 itself
+-- skips a finance table that does not exist or carries no family_id.
+do $$
+declare
+  t         text;
+  rls       boolean;
+  commands  int;
+  offenders text[] := '{}';
+begin
+  foreach t in array array[
+    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+    'financial_accounts','transactions','budgets','bills','savings_goals']
+  loop
+    if to_regclass('public.' || t) is null then continue; end if;
+
+    select c.relrowsecurity into rls from pg_class c where c.oid = to_regclass('public.' || t);
+    if not coalesce(rls, false) then
+      offenders := offenders || (t || ' (RLS DISABLED - its policies are inert)');
+      continue;
+    end if;
+
+    select count(distinct p.polcmd) into commands
+    from pg_policy p
+    where p.polrelid = to_regclass('public.' || t)
+      and not p.polpermissive
+      and p.polcmd in ('a','w','d')
+      and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+          coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%can_manage_family%';
+
+    if commands <> 3 then
+      offenders := offenders || (t || ' (' || commands || '/3 manager-gated restrictive write guards)');
+    end if;
+  end loop;
+
+  if array_length(offenders, 1) is not null then
+    raise exception 'A-08 FAIL: money tables without a real write backstop: %', array_to_string(offenders, ', ');
+  end if;
+  raise notice 'A-08 OK: every money table has RLS on and three manager-gated restrictive write guards';
+end $$;
+
 select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;
