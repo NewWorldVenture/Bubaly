@@ -10,7 +10,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
-import { setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
+import { addMealPlanToGroceryListAction, setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
+import type { Substitution } from '@/lib/meals/substitutions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -35,6 +36,20 @@ type Ballot = Pick<Tables<'meal_vote_ballots'>, 'option_id' | 'member_id' | 'cho
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_LABELS: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 const MEAL_ICONS: Record<MealType, string> = { breakfast: '🌅', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
+
+/**
+ * The five sentences a substitution can carry, by the key the pure helper
+ * returns. The helper's own `reason` string is English and belongs to logs and
+ * model output; what a family reads comes from the catalogue, with the
+ * household's own word for the allergy or the food as the only placeholder.
+ */
+const SUBSTITUTION_REASON_KEYS: Record<Substitution['reasonKey'], string> = {
+  allergySwap: 'mealsModule.swappedBecauseTheFamilyRecords',
+  allergyDropped: 'mealsModule.leftOffTheFamilyRecords',
+  dislikeSwap: 'mealsModule.swappedBecauseNobodyInThe',
+  dislikeDropped: 'mealsModule.leftOffNobodyInThe',
+  pantrySwap: 'mealsModule.youAlreadyHaveThisIn',
+};
 
 const TABS = [
   { id: 'plan' as const, label: 'Meal Plan' },
@@ -84,6 +99,11 @@ export function MealsModule() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState('');
   const [dinnerIdx, setDinnerIdx] = useState(0);
+  const [addingPlan, setAddingPlan] = useState(false);
+  // The receipt of the add that just happened, not a standing claim: the rows
+  // it describes are the `grocery_items` the service wrote a moment ago, and it
+  // clears when the week changes.
+  const [lastAdd, setLastAdd] = useState<{ added: number; skipped: string[]; inPantry: string[]; substitutions: Substitution[] } | null>(null);
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
@@ -163,7 +183,44 @@ export function MealsModule() {
     () => days.map((d) => planMap.get(cellKey(d.toISOString().slice(0, 10), 'dinner'))).filter((p): p is Plan => !!p?.meal),
     [days, planMap],
   );
-  useEffect(() => { setDinnerIdx(0); }, [weekOffset]);
+  useEffect(() => { setDinnerIdx(0); setLastAdd(null); }, [weekOffset]);
+
+  /**
+   * "Add this week's plan to the list" — the button M10 never had.
+   *
+   * The subtraction (every ingredient of every planned dish, minus what the
+   * pantry has in stock, minus what is already unbought on the list) and the
+   * allergy/preference/pantry swaps both live in the groceries service. This
+   * only reports what it did: how many lines were written, how many were
+   * already there, how many the cupboard covered, and every swap with its
+   * reason. Each of those is a fact about rows the service just wrote.
+   */
+  async function addWeekToGroceryList() {
+    if (addingPlan) return;
+    setAddingPlan(true);
+    try {
+      const result = await addMealPlanToGroceryListAction({
+        from: days[0].toISOString().slice(0, 10),
+        to: days[6].toISOString().slice(0, 10),
+      });
+      if (!result.ok) { toastError(result.error); return; }
+      setLastAdd({
+        added: result.added,
+        skipped: result.skipped,
+        inPantry: result.inPantry,
+        substitutions: result.substitutions,
+      });
+      setTab('groceries');
+      success(result.added > 0
+        ? tr('mealsModule.addedItemsToYourGrocery', { count: result.added })
+        : tr('mealsModule.nothingNewToBuyEverything'));
+      void refreshGrocery();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setAddingPlan(false);
+    }
+  }
 
   const recentlyCooked = useMemo(() => recipes.filter((r) => r.last_made_at).slice(0, 8), [recipes]);
   const favorites = useMemo(() => recipes.filter((r) => r.is_favorite), [recipes]);
@@ -273,6 +330,9 @@ export function MealsModule() {
               <button onClick={() => setWeekOffset(w => w + 1)} aria-label={tr('meals.nextWeek')} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
               <span className="flex items-center gap-2 text-sm font-semibold">📅 {dateRange}</span>
               <Button variant="outline" size="sm" className="ml-auto" onClick={() => setWeekOffset(0)}>{tr('meals.thisWeek')}</Button>
+              <Button size="sm" onClick={addWeekToGroceryList} loading={addingPlan} disabled={plans.length === 0}>
+                <Utensils className="h-4 w-4" /> {tr('mealsModule.addThisWeekToThe')}
+              </Button>
             </div>
 
             {/* Week grid — desktop */}
@@ -411,10 +471,39 @@ export function MealsModule() {
         {/* ── GROCERIES TAB ─────────────────────────────────────── */}
         {tab === 'groceries' && (
           <div className="py-3">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold">{tr('meals.groceryList')}</h2>
-              <Link href="/dashboard/grocery" className="text-xs text-brand-text hover:underline">{tr('meals.openFullList')}</Link>
+              <Button size="sm" variant="outline" onClick={addWeekToGroceryList} loading={addingPlan} disabled={plans.length === 0}>
+                <Utensils className="h-4 w-4" /> {tr('mealsModule.addThisWeekToThe')}
+              </Button>
+              <Link href="/dashboard/grocery" className="ml-auto text-xs text-brand-text hover:underline">{tr('meals.openFullList')}</Link>
             </div>
+
+            {/* What the last add actually did. Every line here describes rows the
+                groceries service wrote or skipped a moment ago — the swaps are
+                the names now ON the list, not a suggestion about them. */}
+            {lastAdd && (
+              <div className="mb-3 rounded-2xl border border-border bg-surface/30 p-3">
+                <p className="text-xs font-semibold">{tr('mealsModule.whatChangedOnYourList')}</p>
+                <ul className="mt-1.5 space-y-1 text-xs text-muted">
+                  <li>{tr('mealsModule.addedItemsToYourGrocery', { count: lastAdd.added })}</li>
+                  {lastAdd.skipped.length > 0 && <li>{tr('mealsModule.alreadyOnTheListItems', { count: lastAdd.skipped.length })}</li>}
+                  {lastAdd.inPantry.length > 0 && <li>{tr('mealsModule.alreadyInThePantryItems', { count: lastAdd.inPantry.length })}</li>}
+                </ul>
+                {lastAdd.substitutions.length > 0 && (
+                  <ul className="mt-2 space-y-1 border-t border-border/60 pt-2 text-xs">
+                    {lastAdd.substitutions.map((s) => (
+                      <li key={`${s.from}-${s.to ?? 'dropped'}`} className="flex flex-wrap items-baseline gap-1">
+                        <span className="font-medium">{s.from}</span>
+                        <span aria-hidden>→</span>
+                        <span className="font-medium">{s.to ?? tr('mealsModule.leftOffTheList')}</span>
+                        <span className="text-muted">— {tr(SUBSTITUTION_REASON_KEYS[s.reasonKey], { trigger: s.trigger })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {groceryItems.length === 0 ? (
               <EmptyState icon={Check} title={tr('meals.yourListIsEmpty')} description={tr('mealsModule.addItemsFromTheGrocery')} />
             ) : (

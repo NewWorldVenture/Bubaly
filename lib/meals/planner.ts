@@ -5,6 +5,7 @@
 
 import type { MealType } from '@/lib/database.types';
 import { parseModelJSON } from '@/lib/meals/nutrition';
+import { quickMealHint, type BusyNight } from '@/lib/meals/week-context';
 
 export const PLAN_MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -44,6 +45,13 @@ export interface PlannerRequest {
   candidates: Candidate[];
   dietary?: string[];           // household dietary constraints
   expiring?: string[];          // pantry items to use up
+  /**
+   * Nights the family's own calendar says they will not be cooking from
+   * scratch, with the events that made them busy. Built by
+   * `lib/meals/week-context.ts` from `calendar_events`, so it is a fact read
+   * from rows rather than a guess about a Tuesday.
+   */
+  busyNights?: BusyNight[];
   avoidRepeats?: boolean;
   notes?: string;
 }
@@ -54,6 +62,7 @@ export function buildPlannerSystem(): string {
     'Prefer dishes from the provided CANDIDATES list (reference them by their exact ref id).',
     'You may also invent a small number of new, simple dishes when variety helps — mark those with ref "new".',
     'Honor every dietary constraint strictly. When pantry items are expiring, prefer dishes that use them and say so.',
+    'On any night listed as busy, choose something that is ready in about 20 minutes, cooks in one pan, or can be made ahead — and say which in the reason.',
     'Avoid repeating the same dish twice in the week unless told otherwise.',
     'Respond with ONLY a JSON object of this exact shape (no prose, no markdown fences):',
     '{ "assignments": [ { "date": "YYYY-MM-DD", "meal_type": "dinner", "ref": "recipe:<id>" | "meal:<id>" | "new", "name": "Dish name", "reason": "short why" } ] }',
@@ -68,6 +77,11 @@ export function buildPlannerUser(req: PlannerRequest): string {
   lines.push(`Fill these meal slots each day: ${req.mealTypes.join(', ')}.`);
   if (req.dietary?.length) lines.push(`Dietary constraints (strict): ${req.dietary.join(', ')}.`);
   if (req.expiring?.length) lines.push(`Use up these expiring pantry items if you can: ${req.expiring.join(', ')}.`);
+  // The calendar's own answer to "which nights are we not cooking?". Absent
+  // when the week is clear, so the model reads a constraint or nothing at all
+  // rather than a negation it has to parse.
+  const busy = quickMealHint(req.busyNights ?? []);
+  if (busy) lines.push(busy);
   lines.push(`Avoid repeats: ${req.avoidRepeats === false ? 'no' : 'yes'}.`);
   if (req.notes) lines.push(`Family notes: ${req.notes}`);
   lines.push('');

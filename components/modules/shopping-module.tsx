@@ -4,16 +4,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
-  ShoppingCart, Pencil, Archive, Loader2,
+  ShoppingCart, Pencil, Archive, Loader2, Copy, ExternalLink, PackageCheck,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import {
-  addGroceryItemsAction, clearCheckedGroceriesAction, removeGroceryItemAction, setGroceryItemCheckedAction,
+  addGroceryItemsAction, clearCheckedGroceriesAction, recordShoppingTripAction,
+  removeGroceryItemAction, setGroceryItemCheckedAction,
 } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
+import { RETAILERS, buildShoppingText, itemSearchUrl, retailerById } from '@/lib/grocery/retailers';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -56,6 +58,8 @@ export function ShoppingModule() {
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingList, setEditingList] = useState<GroceryList | null>(null);
+  const [retailerId, setRetailerId] = useState<string | null>(null);
+  const [boughtOpen, setBoughtOpen] = useState(false);
 
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<GroceryList>({
     table: 'grocery_lists', familyId, deps: [familyId],
@@ -99,8 +103,33 @@ export function ShoppingModule() {
     return [...map.entries()].filter(([, items]) => items.length > 0);
   }, [filtered]);
 
-  const checkedCount = items.filter((i) => i.is_checked).length;
+  // The hand-off is built from what is STILL TO BUY. An item already in the
+  // trolley has no business in a search link or in the pasted list.
+  const openItems = useMemo(() => items.filter((i) => !i.is_checked), [items]);
+  const checkedItems = useMemo(() => items.filter((i) => i.is_checked), [items]);
+  const checkedCount = checkedItems.length;
   const totalCount = items.length;
+  const retailer = retailerId ? retailerById(retailerId) : undefined;
+
+  /**
+   * Copy-paste hand-off. Bubaly holds no retailer ordering credentials, so it
+   * does not pretend to place an order: this puts the outstanding lines on the
+   * clipboard for the store's own bulk-add box, and the family completes the
+   * order in the retailer's cart.
+   */
+  function copyList() {
+    return run('copy-list', async () => {
+      const text = buildShoppingText(openItems.map((i) => ({ name: i.name, quantity: i.quantity })));
+      if (!text) { toastError(t('shoppingModule.thereIsNothingLeftTo')); return; }
+      if (!navigator?.clipboard?.writeText) { toastError(t('shoppingModule.thisBrowserWouldNotLet')); return; }
+      try {
+        await navigator.clipboard.writeText(text);
+        success(t('shoppingModule.listCopied', { count: openItems.length }));
+      } catch {
+        toastError(t('shoppingModule.thisBrowserWouldNotLet'));
+      }
+    });
+  }
 
   function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -233,6 +262,11 @@ export function ShoppingModule() {
               <div className="ml-auto flex items-center gap-2">
                 <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => setBoughtOpen(true)}>
+                    <PackageCheck className="h-3.5 w-3.5 text-success" /> {t('shoppingModule.bought')}
+                  </Button>
+                )}
+                {checkedCount > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearChecked} disabled={isPending('clear-checked')}>
                     <Check className="h-3.5 w-3.5 text-success" /> {t('shopping.clear')} {checkedCount} done
                   </Button>
@@ -254,6 +288,58 @@ export function ShoppingModule() {
                     style={{ width: `${(checkedCount / totalCount) * 100}%` }} />
                 </div>
                 <span className="text-xs text-muted">{checkedCount}/{totalCount}</span>
+              </div>
+            )}
+
+            {/* ── Purchase hand-off ─────────────────────────────────────
+                Links, not orders. Bubaly holds no retailer ordering
+                credentials, so there is no "order placed" state to fake: each
+                chip opens that store's own grocery search for an item still on
+                the list, and "copy list" puts the outstanding lines on the
+                clipboard for the store's bulk-add box.
+
+                NO PAID RELATIONSHIP EXISTS WITH ANY OF THESE STORES. The set
+                and its order are fixed in lib/grocery/retailers.ts, there are
+                no affiliate tags, referral parameters or commission links in
+                the URLs, and nothing here is ranked or promoted by payment. If
+                that ever changes it must be disclosed on this surface, not
+                buried in a URL. */}
+            {openItems.length > 0 && (
+              <div className="rounded-2xl border border-border bg-surface/30 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold">{t('shoppingModule.shopThisList')}</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {RETAILERS.map((r) => (
+                      <button key={r.id} type="button"
+                        onClick={() => setRetailerId((current) => (current === r.id ? null : r.id))}
+                        aria-pressed={retailerId === r.id}
+                        className={cn(
+                          'flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition',
+                          retailerId === r.id ? 'border-brand/60 bg-brand/10 font-semibold' : 'border-border hover:bg-elevated/40',
+                        )}>
+                        <span aria-hidden>{r.emoji}</span> {r.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={copyList} disabled={isPending('copy-list')}>
+                      <Copy className="h-3.5 w-3.5" /> {t('shoppingModule.copyList')}
+                    </Button>
+                    {retailer && (
+                      <a href={retailer.storeUrl} target="_blank" rel="noreferrer noopener"
+                        className="inline-flex items-center gap-1 rounded-xl border border-border px-2.5 py-1.5 text-xs hover:bg-elevated/40 transition">
+                        <ExternalLink className="h-3.5 w-3.5" /> {t('shoppingModule.openStore', { store: retailer.name })}
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] text-muted">
+                  {retailer
+                    ? t('shoppingModule.tapAnItemAposSStore', { store: retailer.name })
+                    : t('shoppingModule.pickAStoreToGet')}
+                  {' '}
+                  {t('shoppingModule.bubalyIsNotPaidBy')}
+                </p>
               </div>
             )}
 
@@ -299,6 +385,13 @@ export function ShoppingModule() {
                               {(item as Record<string, unknown>).note ? (
                                 <span className="text-xs text-muted">{String((item as Record<string, unknown>).note)}</span>
                               ) : null}
+                              {retailer && !item.is_checked && (
+                                <a href={itemSearchUrl(retailer.id, item.name)} target="_blank" rel="noreferrer noopener"
+                                  aria-label={t('shoppingModule.searchStoreForItem', { store: retailer.name, item: item.name })}
+                                  className="rounded p-1 text-muted transition hover:text-brand-text">
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
                               <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={t('shopping.deleteItem')}
                                 className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
                                 {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -333,6 +426,13 @@ export function ShoppingModule() {
         <NewListModal familyId={familyId} userId={userId}
           onClose={() => setNewListOpen(false)}
           onCreated={(id) => { setActiveListId(id); setNewListOpen(false); void refreshLists(); }} />
+      )}
+
+      {/* Bought → pantry (+ the purchase, only when someone typed an amount) */}
+      {boughtOpen && activeListId && (
+        <BoughtModal listId={activeListId} items={checkedItems}
+          onClose={() => setBoughtOpen(false)}
+          onDone={() => { setBoughtOpen(false); void refreshItems(); }} />
       )}
 
       {/* Edit list modal */}
@@ -480,6 +580,104 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
             <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
             <Button type="submit" loading={loading}>{t('shopping.save')}</Button>
           </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * The end of a shop.
+ *
+ * Two things happen here and the copy says exactly which: everything ticked off
+ * goes into the pantry and comes off the list, and — ONLY if someone types a
+ * total — the charge is recorded on the household books. There is no default
+ * amount and no estimate: Bubaly has no receipt, so it does not put a number on
+ * a family's books that nobody gave it. The confirmation afterwards reports the
+ * two halves separately, because "in the pantry" and "on the books" are
+ * different facts and a shop can produce one without the other.
+ */
+function BoughtModal({ listId, items, onClose, onDone }: {
+  listId: string;
+  items: GroceryItem[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const t = useTranslations();
+  const { success, error: toastError } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [merchant, setMerchant] = useState('');
+
+  async function confirm(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    const typed = amount.trim();
+    const parsed = typed ? Number(typed.replace(',', '.')) : null;
+    if (typed && (!Number.isFinite(parsed) || (parsed as number) <= 0)) {
+      toastError(t('shoppingModule.enterATotalAboveZero'));
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await recordShoppingTripAction({
+        listId,
+        amount: parsed,
+        merchant: merchant.trim() || null,
+      });
+      if (!result.ok) { toastError(result.error); return; }
+      if (result.pantryFailed.length > 0) {
+        // The list is deliberately left alone when a pantry write fails, so
+        // the retry does the same thing rather than something new.
+        toastError(t('shoppingModule.couldNotPutTheseIn', {
+          names: result.pantryFailed.map((f) => f.name).join(', '),
+        }));
+        return;
+      }
+      const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
+      if (result.purchaseError) toastError(`${stocked} ${t('shoppingModule.thePurchaseWasNotRecorded', { reason: result.purchaseError })}`);
+      else if (result.purchaseRecorded) success(`${stocked} ${t('shoppingModule.purchaseRecordedOnTheHousehold')}`);
+      else success(stocked);
+      onDone();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={t('shoppingModule.bought')}>
+      <form onSubmit={confirm} className="space-y-4">
+        <div>
+          <p className="mb-2 text-sm font-medium">{t('shoppingModule.whatYouBought')}</p>
+          <ul className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-border bg-surface/30 p-3">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-center gap-2 text-sm">
+                <Check className="h-3.5 w-3.5 shrink-0 text-success" />
+                <span className="flex-1 truncate">{item.name}</span>
+                {item.quantity && <span className="text-xs text-muted">{item.quantity}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-muted">{t('shoppingModule.theseGoIntoYourPantry')}</p>
+        </div>
+        <Field label={t('shoppingModule.totalSpent')}>
+          {(id) => (
+            <Input id={id} value={amount} inputMode="decimal" placeholder={t('shoppingModule.optional')}
+              onChange={(e) => setAmount(e.target.value)} />
+          )}
+        </Field>
+        <Field label={t('shoppingModule.store')}>
+          {(id) => (
+            <Input id={id} value={merchant} placeholder={t('shoppingModule.optional')}
+              onChange={(e) => setMerchant(e.target.value)} />
+          )}
+        </Field>
+        <p className="text-[11px] text-muted">{t('shoppingModule.leaveTheTotalBlankIf')}</p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+          <Button type="submit" loading={saving}>{t('shoppingModule.putItInThePantry')}</Button>
         </div>
       </form>
     </Modal>
