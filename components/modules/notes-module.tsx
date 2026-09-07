@@ -9,6 +9,9 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import {
+  deleteNoteAction, duplicateNoteAction, saveNoteAction, setNotePinnedAction,
+} from '@/app/(app)/dashboard/notes/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -83,7 +86,7 @@ function renderChecklist(body: string) {
 
 export function NotesModule() {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
@@ -116,30 +119,26 @@ export function NotesModule() {
   const rest = filtered.filter((n) => !n.is_pinned);
 
   async function remove(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteNoteAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Note deleted');
     void refresh();
     if (viewing?.id === id) setViewing(null);
   }
 
   async function togglePin(note: Note) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').update({ is_pinned: !note.is_pinned }).eq('id', note.id);
-    if (error) return toastError(describeDbError(error));
+    // The VALUE, not a toggle of what this tab last rendered.
+    const next = !note.is_pinned;
+    const res = await setNotePinnedAction(note.id, next);
+    if (!res.ok) return toastError(res.error);
     void refresh();
-    if (viewing?.id === note.id) setViewing({ ...note, is_pinned: !note.is_pinned });
+    if (viewing?.id === note.id) setViewing({ ...note, is_pinned: next });
   }
 
   async function duplicate(note: Note) {
-    const supabase = createClient();
-    const { error } = await supabase.from('notes').insert({
-      family_id: familyId, created_by: userId,
-      title: note.title ? `Copy of ${note.title}` : null,
-      body: note.body,
-    });
-    if (error) return toastError(describeDbError(error));
+    // Only the id: the copy is made from the note as the database has it.
+    const res = await duplicateNoteAction(note.id);
+    if (!res.ok) return toastError(res.error);
     success('Note duplicated');
     void refresh();
   }
@@ -242,8 +241,6 @@ export function NotesModule() {
       {(addOpen || editing) && (
         <NoteModal
           note={editing}
-          familyId={familyId}
-          userId={userId}
           onClose={() => { setAddOpen(false); setEditing(null); }}
           onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
         />
@@ -298,6 +295,13 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {notes.map((note) => {
+        // NOTHING EVER SETS THIS. `public.notes` (0002_tables.sql:357) has no
+        // `color` column and no migration adds one, so this cast reads
+        // `undefined` on every note and `noteColor` falls back to 'default'.
+        // The cast is why the type checker never said so. The picker below is
+        // therefore decorative: a family picks yellow, saves, and gets grey.
+        // Wiring it up needs a migration, which is a decision, not a cleanup —
+        // recorded in docs/SPEC_GAP_LEDGER.md §7 rather than half-fixed here.
         const color = noteColor((note as Record<string, unknown>).color as string);
         const checklist = note.body && isChecklist(note.body);
         const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
@@ -353,13 +357,15 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   );
 }
 
-function NoteModal({ note, familyId, userId, onClose, onSaved }: {
-  note: Note | null; familyId: string; userId: string;
+function NoteModal({ note, onClose, onSaved }: {
+  note: Note | null;
   onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // Local only, and it stays local: there is no `notes.color` column for the
+  // save below to write it to. See the note on `noteColor` above.
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
@@ -405,12 +411,9 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
     const body = bodyValue.trim() || null;
     if (!body && !title) return toastError('Note must have content');
     setLoading(true);
-    const supabase = createClient();
-    const { error } = note
-      ? await supabase.from('notes').update({ title, body: body ?? '' }).eq('id', note.id)
-      : await supabase.from('notes').insert({ family_id: familyId, created_by: userId, title, body: body ?? '' });
+    const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
     setLoading(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success(note ? 'Note saved' : 'Note created');
     onSaved();
   }
