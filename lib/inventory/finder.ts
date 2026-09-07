@@ -183,3 +183,53 @@ export function inventorySummary(items: ItemLike[], locations: LocationLike[], t
   const text = owned.length === 0 ? 'Nothing catalogued yet' : `${owned.length} items · ${located} placed${loans.length ? ` · ${loans.length} lent out` : ''}`;
   return { items: owned.length, located, unlocated: owned.length - located, rooms, lent: loans.length, overdueLoans: loans.filter((l) => l.overdue).length, text };
 }
+
+// ── "Is it still there?" — the confirmation signal ─────────────────────────
+// A catalogue is only as good as its last check. A move row whose from and to
+// are the same place, tagged with `CONFIRM_REASON`, is the family saying "yes,
+// it is still here" without pretending anything moved; the item card reads the
+// latest such row back as "last confirmed", and never claims a check that was
+// not recorded.
+
+/** The `inventory_moves.reason` a confirmation is written with. */
+export const CONFIRM_REASON = 'confirmed';
+
+export type MoveLike = { id: string; item_id: string; from_location_id: string | null; to_location_id: string | null; moved_at: string; reason: string | null };
+
+export type Confirmation = { moveId: string; at: string; locationId: string | null };
+
+/** True for a move row that records a confirmation rather than a relocation. */
+export function isConfirmation(move: Pick<MoveLike, 'from_location_id' | 'to_location_id' | 'reason'>): boolean {
+  return move.reason === CONFIRM_REASON && move.from_location_id === move.to_location_id;
+}
+
+/**
+ * The newest row of a kind for one item. A row whose `moved_at` cannot be
+ * parsed is skipped rather than compared: `NaN` loses every comparison, so an
+ * unreadable timestamp arriving first would otherwise be reported as the
+ * latest and date a check that never happened.
+ */
+function latestFor(moves: MoveLike[], itemId: string, want: (move: MoveLike) => boolean): MoveLike | null {
+  let latest: MoveLike | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const move of moves) {
+    if (move.item_id !== itemId || !want(move)) continue;
+    const ms = Date.parse(move.moved_at);
+    if (!Number.isFinite(ms) || ms <= latestMs) continue;
+    latest = move;
+    latestMs = ms;
+  }
+  return latest;
+}
+
+/** The latest confirmation on file for an item, or null when nobody has confirmed it yet. */
+export function lastConfirmed(moves: MoveLike[], itemId: string): Confirmation | null {
+  const latest = latestFor(moves, itemId, isConfirmation);
+  return latest ? { moveId: latest.id, at: latest.moved_at, locationId: latest.to_location_id } : null;
+}
+
+/** The latest relocation (not a confirmation) for an item, or null. */
+export function lastMoved(moves: MoveLike[], itemId: string): { moveId: string; at: string; fromLocationId: string | null; toLocationId: string | null } | null {
+  const latest = latestFor(moves, itemId, (move) => !isConfirmation(move));
+  return latest ? { moveId: latest.id, at: latest.moved_at, fromLocationId: latest.from_location_id, toLocationId: latest.to_location_id } : null;
+}

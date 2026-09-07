@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, ChevronRight, DoorOpen,
+  PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -18,8 +18,8 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Database, Tables, HomeLocationKind, InventoryCategory, InventoryStatus } from '@/lib/database.types';
 import {
-  LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
-  searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary,
+  LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
+  searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -54,7 +54,8 @@ export function InventoryModule() {
   });
   const moves = useRealtimeQuery<Move>({
     table: 'inventory_moves', familyId,
-    fetcher: (s) => s.from('inventory_moves').select('*').eq('family_id', familyId).order('moved_at', { ascending: false }).limit(40),
+    // Wide enough that an item's last confirmation is still in the window after a busy month of moves.
+    fetcher: (s) => s.from('inventory_moves').select('*').eq('family_id', familyId).order('moved_at', { ascending: false }).limit(400),
     deps: [familyId],
   });
 
@@ -100,6 +101,18 @@ export function InventoryModule() {
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
+  // "Yes, it is still here": a move with from = to and reason 'confirmed'.
+  // The card reads "last confirmed" from that row, so nothing is shown that
+  // was not recorded — and the insert is guarded like every other write here.
+  async function confirmHere(item: Item) {
+    const { error } = await createClient().from('inventory_moves').insert({
+      family_id: familyId, item_id: item.id, from_location_id: item.location_id, to_location_id: item.location_id,
+      moved_by: selfMember?.id ?? null, reason: CONFIRM_REASON, created_by: userId,
+    });
+    if (error) return toastError(describeDbError(error));
+    success(tr('inventoryModule.confirmedHere', { name: item.name }));
+  }
+
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
     if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
@@ -141,16 +154,20 @@ export function InventoryModule() {
         {query.trim() && (
           <ul className="mt-3 space-y-1.5">
             {hits.length === 0 ? <li className="text-sm text-muted">{tr('inventory.nothingMatches')}{query}{tr('inventory.tryABrandTagSerialOr')}</li> : null}
-            {hits.slice(0, 6).map((h) => (
-              <li key={h.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
-                <span className="text-xl">{categoryMeta(h.item.category).emoji}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{h.item.name}{h.item.quantity > 1 ? ` ×${h.item.quantity}` : ''}</p>
-                  <p className="truncate text-xs text-muted"><MapPin className="mr-1 inline h-3 w-3" />{h.where}{h.item.status !== 'in_place' ? ` · ${statusMeta(h.item.status).label}${h.item.lent_to ? ` to ${h.item.lent_to}` : ''}` : ''}</p>
-                </div>
-                <Button size="sm" variant="secondary" onClick={() => setMoveFor(h.item)}><ArrowRightLeft className="h-3.5 w-3.5" /> {tr('inventory.moved')}</Button>
-              </li>
-            ))}
+            {hits.slice(0, 6).map((h) => {
+              const confirmed = lastConfirmed(moves.data, h.item.id);
+              return (
+                <li key={h.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
+                  <span className="text-xl">{categoryMeta(h.item.category).emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{h.item.name}{h.item.quantity > 1 ? ` ×${h.item.quantity}` : ''}</p>
+                    <p className="truncate text-xs text-muted"><MapPin className="mr-1 inline h-3 w-3" />{h.where}{h.item.status !== 'in_place' ? ` · ${statusMeta(h.item.status).label}${h.item.lent_to ? ` to ${h.item.lent_to}` : ''}` : ''}{confirmed ? ` · ${tr('inventory.lastConfirmed')} ${fmtDate(confirmed.at)}` : ''}</p>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => confirmHere(h.item)} title={tr('inventory.confirmItsHere')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('inventory.confirmItsHere')}</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setMoveFor(h.item)}><ArrowRightLeft className="h-3.5 w-3.5" /> {tr('inventory.moved')}</Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -237,6 +254,7 @@ export function InventoryModule() {
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
                 const url = photoUrl(item.photo_path);
+                const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
                     {url ? (
@@ -247,8 +265,10 @@ export function InventoryModule() {
                       <p className="truncate text-sm font-medium">{item.name}{item.quantity > 1 ? <span className="text-muted"> ×{item.quantity}</span> : null}</p>
                       <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
                       {item.status !== 'in_place' && <p className="text-[11px] text-amber-300">{statusMeta(item.status).emoji} {statusMeta(item.status).label}{item.lent_to ? ` to ${item.lent_to}` : ''}{item.lent_on ? ` since ${fmtDate(item.lent_on)}` : ''}</p>}
+                      {confirmed && <p className="text-[11px] text-muted"><CheckCircle2 className="mr-0.5 inline h-3 w-3" />{tr('inventory.lastConfirmed')} {fmtDate(confirmed.at)}</p>}
                     </div>
                     <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
+                      <button onClick={() => confirmHere(item)} aria-label={`${tr('inventory.confirmItsHere')}: ${item.name}`} title={tr('inventory.confirmItsHere')} className="rounded-lg p-1.5 text-muted hover:text-fg"><CheckCircle2 className="h-4 w-4" /></button>
                       <button onClick={() => setMoveFor(item)} aria-label={`Move ${item.name}`} title={tr('inventory.movedTo')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ArrowRightLeft className="h-4 w-4" /></button>
                       {item.status === 'lent'
                         ? <button onClick={() => setStatus(item, 'in_place')} aria-label={`${item.name} returned`} title={tr('inventory.returned')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>
@@ -273,8 +293,10 @@ export function InventoryModule() {
               return (
                 <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm">
                   <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(m.moved_at)}</span>
-                  <span className="min-w-0 flex-1 truncate">{item?.name ?? 'Item'}: {locationLabel(locations.data, m.from_location_id)} → {locationLabel(locations.data, m.to_location_id)}</span>
-                  <span className="shrink-0 text-xs text-muted">{memberName(m.moved_by) ?? ''}{m.reason ? ` · ${m.reason.replace(' [seed:inventory]', '')}` : ''}</span>
+                  {m.reason === CONFIRM_REASON && m.from_location_id === m.to_location_id
+                    ? <span className="min-w-0 flex-1 truncate"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-emerald-400" />{item?.name ?? 'Item'}: {tr('inventory.lastConfirmed').toLowerCase()} · {locationLabel(locations.data, m.to_location_id)}</span>
+                    : <span className="min-w-0 flex-1 truncate">{item?.name ?? 'Item'}: {locationLabel(locations.data, m.from_location_id)} → {locationLabel(locations.data, m.to_location_id)}</span>}
+                  <span className="shrink-0 text-xs text-muted">{memberName(m.moved_by) ?? ''}{m.reason && m.reason !== CONFIRM_REASON ? ` · ${m.reason.replace(' [seed:inventory]', '')}` : ''}</span>
                 </li>
               );
             })}

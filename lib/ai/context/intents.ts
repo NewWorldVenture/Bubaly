@@ -26,12 +26,12 @@ import type { ServiceScope } from '@/lib/services/types';
 
 export type IntentKey =
   | 'plan_meals' | 'plan_week' | 'organize_weekend' | 'remind_everyone' | 'prepare_vacation'
-  | 'spending_review' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief'
+  | 'spending_review' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief' | 'plan_move'
   | 'answer_question' | 'capture' | 'navigate' | 'chief_of_staff' | 'other';
 
 export const INTENT_KEYS: readonly [IntentKey, ...IntentKey[]] = [
   'plan_meals', 'plan_week', 'organize_weekend', 'remind_everyone', 'prepare_vacation',
-  'spending_review', 'find_vendor', 'what_am_i_forgetting', 'daily_brief',
+  'spending_review', 'find_vendor', 'what_am_i_forgetting', 'daily_brief', 'plan_move',
   'answer_question', 'capture', 'navigate', 'chief_of_staff', 'other',
 ];
 
@@ -41,11 +41,11 @@ export function isIntentKey(value: unknown): value is IntentKey {
 
 export type SliceName =
   | 'people' | 'schedule' | 'activities' | 'food' | 'shopping' | 'tasks' | 'money'
-  | 'home' | 'vendors' | 'travel' | 'documents' | 'memory' | 'proactive';
+  | 'home' | 'vendors' | 'travel' | 'documents' | 'memory' | 'proactive' | 'moving';
 
 export const SLICE_NAMES: readonly SliceName[] = [
   'people', 'schedule', 'activities', 'food', 'shopping', 'tasks', 'money',
-  'home', 'vendors', 'travel', 'documents', 'memory', 'proactive',
+  'home', 'vendors', 'travel', 'documents', 'memory', 'proactive', 'moving',
 ];
 
 export function isSliceName(value: unknown): value is SliceName {
@@ -70,6 +70,7 @@ export const INTENT_SLICES: Record<IntentKey, SliceName[]> = {
   find_vendor: ['people', 'vendors', 'home', 'memory'],
   what_am_i_forgetting: ['people', 'proactive', 'schedule', 'tasks', 'activities', 'documents', 'home', 'money', 'memory'],
   daily_brief: ['people', 'schedule', 'tasks', 'activities', 'food', 'proactive', 'memory'],
+  plan_move: ['people', 'moving', 'home', 'tasks', 'schedule', 'activities', 'memory'],
   answer_question: ['people', 'schedule', 'tasks', 'memory', 'food', 'activities', 'proactive'],
   capture: ['people', 'schedule', 'tasks', 'shopping'],
   navigate: ['people'],
@@ -107,6 +108,8 @@ export type ClassifyOptions = {
  * and "get us ready for the trip" is a vacation, not a general sweep.
  */
 const CONCIERGE_RULES: { intent: IntentKey; re: RegExp; confidence: number }[] = [
+  // "Plan our move" / "we're moving in October" — the move planner, not "move the dentist to Friday".
+  { intent: 'plan_move', confidence: 0.95, re: /\b(plan (our |the |my |a |this )?(house |home )?move\b|(we'?re|we are|i'?m|i am) moving (house|home|to|in|next|this|out|soon|on)\b|moving (house|home|day|checklist|plan|planner)\b|(help|get) (us|me) (move|ready (for|to) (the |our )?move)\b|(prepare|prep|get ready) for (the |our )?move\b|move (checklist|planner|timeline)\b|(our |the |a )?house move\b|new (house|home|apartment|flat) checklist)\b/i },
   { intent: 'daily_brief', confidence: 0.95, re: /\b(daily brief|morning brief|brief me|what'?s (on|happening|up) today|what does (today|my day|the day) look like|today'?s (plan|summary|agenda|brief)|how does (today|the day) look)\b/i },
   { intent: 'what_am_i_forgetting', confidence: 0.95, re: /\b(what am i forgetting|what are we forgetting|am i forgetting|anything (i'?m|we'?re|i am|we are) (forgetting|missing)|what did (i|we) miss|what'?s (falling through|slipping)|anything (i|we) (missed|overlooked)|what (have|did) (i|we) (forgotten|overlooked))\b/i },
   { intent: 'spending_review', confidence: 0.9, re: /\b(why did we spend|why are we spending|spending (review|report|this month|last month|summary)|where (did|does|is) (our|the) money (go|going)|over budget|how much (did|have|are) we spen[dt]|budget (review|check|status)|spen[dt] too much|too much (money|on))\b/i },
@@ -121,6 +124,13 @@ const CONCIERGE_RULES: { intent: IntentKey; re: RegExp; confidence: number }[] =
   // a request that spans several areas without saying so.
   { intent: 'chief_of_staff', confidence: 0.7, re: /\b((handle|take care of) (it|this|everything|all of (it|this)|the rest)( for (me|us))?|sort (it|this|everything|it all|all of it) out|deal with (it|this|everything|all of (it|this))|get (us|everything|the house|the family|the kids) (ready|sorted|organi[sz]ed|on track)|run (the|our) house(hold)?|keep (us|everything|the family) on track)\b/i },
 ];
+
+/**
+ * "Where's the passport?" / "where do we keep the spare key" — a question the
+ * home inventory answers (`inventory.find`), so it is routed as a question
+ * with the item named, whether or not the person typed a question mark.
+ */
+const WHERE_IS_RE = /^(?:where(?:'s|\u2019s|'re| is| are| was| were)|where (?:can|could|do|did) (?:i|we) (?:find|keep|put|store|leave))\s+(?:(?:the|my|our|a|an)\s+)?(.+?)[?.!\s]*$/i;
 
 const NAVIGATE_RE = /^(open|go to|goto|show me|take me to|navigate to|show|bring up|pull up)\s+(the |my |our )?(calendar|meals?|meal plan|groceries|grocery list|shopping list|pantry|tasks|to-?dos?|chores|budget|budgets|finances|money|documents|vault|settings|home|dashboard|trips?|vacations?|travel|inbox|messages|school|sports|pets|vehicles|cars|reminders|knowledge|memory|memories|contacts|routines|health)\b/i;
 
@@ -149,12 +159,19 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
   const concierge = firstMatch(q);
   if (concierge) return concierge;
 
-  // 2. Family goals the command bar already recognises.
+  // 2. "Where is the …?" — answered from the home inventory.
+  const whereIs = WHERE_IS_RE.exec(q);
+  if (whereIs && whereIs[1].trim().length >= 2) {
+    return { intent: 'answer_question', confidence: 0.9, entities: { topic: 'inventory', item: whereIs[1].trim().slice(0, 80) }, source: 'fast_path' };
+  }
+
+  // 3. Family goals the command bar already recognises.
   const goal = detectIntent(q);
   if (goal) {
     const entities = { goal: goal.intent, href: goal.href };
     switch (goal.intent) {
       case 'plan_meals': return { intent: 'plan_meals', confidence: 0.9, entities, source: 'fast_path' };
+      case 'plan_move': return { intent: 'plan_move', confidence: 0.9, entities, source: 'fast_path' };
       case 'plan_trip': return { intent: 'prepare_vacation', confidence: 0.85, entities, source: 'fast_path' };
       case 'prep_for':
         return /\b(trip|vacation|holiday|flight|travel|getaway)\b/i.test(q)
@@ -169,11 +186,11 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
     }
   }
 
-  // 3. Navigation — no household context needed at all.
+  // 4. Navigation — no household context needed at all.
   const nav = NAVIGATE_RE.exec(q);
   if (nav) return { intent: 'navigate', confidence: 0.95, entities: { target: nav[3].toLowerCase() }, source: 'fast_path' };
 
-  // 4. Captures: the voice router applies the explicit "remind me to…" /
+  // 5. Captures: the voice router applies the explicit "remind me to…" /
   //    "add … to the grocery list" rules and the capture heuristics; a concrete
   //    date+time is treated as an event even without a verb.
   const voice = classifyVoiceCommand(q, now);
@@ -192,7 +209,7 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
     return { intent: 'capture', confidence: voice.explicit ? 0.9 : 0.75, entities, source: 'fast_path' };
   }
 
-  // 5. Inbound messages pasted from the inbox / front desk: an appointment
+  // 6. Inbound messages pasted from the inbox / front desk: an appointment
   //    confirmation or a delivery notice is something to capture, not to plan.
   if (opts.pageContext?.module && INBOUND_MODULE_RE.test(opts.pageContext.module)) {
     const inbound = classifyInbound(q);
@@ -201,7 +218,7 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
     if (inbound === 'urgent') return { intent: 'remind_everyone', confidence: 0.6, entities: { inbound }, source: 'fast_path' };
   }
 
-  // 6. A plain question. Only with a question mark: "how much did we spend"
+  // 7. A plain question. Only with a question mark: "how much did we spend"
   //    without one already matched above, and an unpunctuated "what about
   //    Friday" is too ambiguous to settle without the model.
   if (QUESTION_RE.test(q) && /\?\s*$/.test(q)) {
@@ -229,6 +246,7 @@ const INTENT_DESCRIPTIONS: Record<IntentKey, string> = {
   find_vendor: 'find or contact a service provider for a home problem',
   what_am_i_forgetting: 'check readiness or what might have been missed',
   daily_brief: 'a summary of today',
+  plan_move: 'plan a house move: the dated checklist, address changes, school and vet records, utilities',
   answer_question: 'a question answerable from household data with nothing to change',
   capture: 'a single item to save: a task, event, note or shopping item',
   navigate: 'open a page or module',

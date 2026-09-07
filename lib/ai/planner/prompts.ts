@@ -45,6 +45,7 @@ export const INTENT_TOOL_DOMAINS: Record<IntentKey, TrustDomain[]> = {
   find_vendor: ['home_maintenance', 'tasks', 'scheduling', 'calendar', 'messaging'],
   what_am_i_forgetting: ['calendar', 'education', 'tasks', 'chores', 'scheduling', 'documents', 'home_maintenance', 'finances', 'travel', 'messaging'],
   daily_brief: ['calendar', 'education', 'tasks', 'chores', 'scheduling', 'meal_planning', 'messaging'],
+  plan_move: ['home_maintenance', 'tasks', 'scheduling', 'calendar', 'education', 'messaging'],
   answer_question: ['calendar', 'education', 'tasks', 'chores', 'scheduling', 'meal_planning', 'shopping', 'travel', 'home_maintenance', 'documents', 'finances', 'messaging'],
   capture: ['calendar', 'tasks', 'chores', 'scheduling', 'shopping', 'messaging'],
   navigate: [],
