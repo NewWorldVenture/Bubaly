@@ -2,7 +2,7 @@ import * as React from 'react';
 import { APP_URL } from '@/lib/email';
 
 export function WeeklyDigestEmail({
-  familyName, adminName, events, openChores, mealsPlanned, memberCount,
+  familyName, adminName, events, openChores, mealsPlanned, memberCount, compareLine = null,
 }: {
   familyName: string;
   adminName: string;
@@ -10,6 +10,8 @@ export function WeeklyDigestEmail({
   openChores: number;
   mealsPlanned: number;
   memberCount: number;
+  /** "Families like yours …" — present only for benchmark-consenting families whose cohort cleared the floor. */
+  compareLine?: string | null;
 }) {
   const today = new Date();
   const weekLabel = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -51,6 +53,15 @@ export function WeeklyDigestEmail({
                 <p style={{ margin: 0, fontSize: 12, color: '#94a0b8' }}>{new Date(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {compareLine && (
+          <div style={{ background: '#091019', border: '1px solid #23364e', borderRadius: 16, padding: '14px 20px', marginBottom: 24 }}>
+            <p style={{ margin: 0, fontSize: 14, color: '#edf0f7' }}>{compareLine}</p>
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a0b8' }}>
+              Aggregated from consenting families; no family is identifiable. Counts are rounded and noised on purpose.
+            </p>
           </div>
         )}
 

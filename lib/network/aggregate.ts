@@ -12,7 +12,7 @@
 // The cron feeds it real consenting-family contributions; every rule is here so
 // it can't be bypassed downstream.
 
-import type { ContributionFeatures } from './contribution';
+import { bandLabel, type ContributionFeatures } from './contribution';
 import { K_ANONYMITY_FLOOR, type ConsentScope, type InsightCandidate } from './insights';
 
 /** Approved defaults (owner sign-off 2026-07-06). */
@@ -26,7 +26,7 @@ export const AGG_DEFAULTS = {
 export type Contribution = {
   familyId: string;
   features: ContributionFeatures;
-  /** metric key → banded value, e.g. { dinner_habit: 'often (4–5)' }. Benchmarks only for v1. */
+  /** metric key → banded value, e.g. { dinner_habit: 'often (4–5)' }. See BENCHMARK_METRICS. */
   metrics: Record<string, string>;
 };
 
@@ -45,13 +45,48 @@ export type NetworkAggregate = {
   cohortSize: number;     // true distinct families in the cohort (always >= minCohort)
 };
 
-/** Which scope a metric belongs to. v1 metrics are all benchmark-style. */
-const METRIC_SCOPE: Record<string, ConsentScope> = {
-  dinner_habit: 'benchmarks',
-  activities: 'benchmarks',
-};
+/**
+ * The benchmark metric catalogue — every metric the network publishes, with the
+ * consent scope it belongs to and how it is named to a person. Module-level data:
+ * English label plus a catalogue key, so both the app and the public page can
+ * render the same metric in the reader's language. Values are bands from
+ * contribution.ts, never raw numbers.
+ */
+export const BENCHMARK_METRICS: { key: string; scope: ConsentScope; label: string; labelKey: string }[] = [
+  { key: 'dinner_habit', scope: 'benchmarks', label: 'dinner planning', labelKey: 'network.metricDinnerPlanning' },
+  { key: 'activities', scope: 'benchmarks', label: 'activities', labelKey: 'network.metricActivities' },
+  { key: 'chores_per_child', scope: 'benchmarks', label: 'chores per child', labelKey: 'network.metricChoresPerChild' },
+  { key: 'bedtime_band', scope: 'benchmarks', label: 'typical bedtime', labelKey: 'network.metricTypicalBedtime' },
+  { key: 'weekly_spend_band', scope: 'benchmarks', label: 'weekly spend', labelKey: 'network.metricWeeklySpend' },
+  { key: 'reminders_per_week', scope: 'benchmarks', label: 'reminders per week', labelKey: 'network.metricRemindersPerWeek' },
+];
+
+/** Which scope a metric belongs to. Every catalogued metric is benchmark-style. */
+const METRIC_SCOPE: Record<string, ConsentScope> = Object.fromEntries(BENCHMARK_METRICS.map((m) => [m.key, m.scope]));
 function metricScope(metric: string): ConsentScope {
   return METRIC_SCOPE[metric] ?? 'benchmarks';
+}
+
+/** English label for a metric (the catalogue key is `metricLabelKey`). */
+export function metricLabel(metric: string): string {
+  return BENCHMARK_METRICS.find((m) => m.key === metric)?.label ?? metric;
+}
+
+/** Catalogue key for a metric's label, or null for a metric the catalogue does not know. */
+export function metricLabelKey(metric: string): string | null {
+  return BENCHMARK_METRICS.find((m) => m.key === metric)?.labelKey ?? null;
+}
+
+/**
+ * The two coarse dimensions a cohort key encodes — parsed back out for display
+ * ("families with children 6–9 and 10–13 in a household of 3–4"). Returns null
+ * for a key this module did not produce, so a corrupt row is never described.
+ */
+export function describeCohort(key: string): { childBands: string[]; sizeBand: string } | null {
+  const m = /^kids:([^|]+)\|size:(.+)$/.exec(key);
+  if (!m) return null;
+  const childBands = m[1] === 'none' ? [] : m[1].split('.').filter(Boolean);
+  return { childBands, sizeBand: m[2] };
 }
 
 /**
@@ -115,26 +150,44 @@ export function aggregateContributions(
   return out.sort((a, b) => b.cohortSize - a.cohortSize);
 }
 
-const METRIC_LABEL: Record<string, string> = {
-  dinner_habit: 'plan dinners',
-  activities: 'run activities',
-};
-
 /**
  * Map publish-safe aggregates into InsightCandidates for a given family's cohort.
  * Only aggregates matching the family's own cohort are relevant. These still pass
  * through `visibleInsights` (consent + k-floor re-check) before display.
+ *
+ * Pass `null` for NO cohort filter — the public benchmarks page renders every
+ * published row, so its ids carry the cohort key to stay unique. Either way the
+ * rows are already k-anonymized and DP-noised: the detail exposes the noised
+ * count, never the true cohort size.
+ *
+ * `t` is optional and is how the two sentences reach a reader in their own
+ * language: the caller that renders (the intelligence page) passes the app
+ * translator, and callers that only need the ids (the public page's safety
+ * re-check) leave it out and get the English wording.
  */
-export function aggregatesToInsights(aggregates: NetworkAggregate[], familyCohort: string): InsightCandidate[] {
+export function aggregatesToInsights(
+  aggregates: NetworkAggregate[],
+  familyCohort: string | null,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): InsightCandidate[] {
   return aggregates
-    .filter((a) => a.cohortKey === familyCohort)
-    .map((a) => ({
-      id: `${a.metric}:${a.value}`,
-      scope: a.scope,
-      title: `Families like yours: ${METRIC_LABEL[a.metric] ?? a.metric}`,
-      detail: `About ${a.count} similar families report “${a.value}”.`,
-      cohortSize: a.cohortSize,
-    }));
+    .filter((a) => familyCohort === null || a.cohortKey === familyCohort)
+    .map((a) => {
+      const labelKey = metricLabelKey(a.metric);
+      const label = t && labelKey ? t(labelKey) : metricLabel(a.metric);
+      return {
+        id: familyCohort === null ? `${a.cohortKey}:${a.metric}:${a.value}` : `${a.metric}:${a.value}`,
+        scope: a.scope,
+        title: t ? t('network.insightTitle', { metric: label }) : `Families like yours: ${label}`,
+        // The BAND is a word the reader sees inside a translated sentence, so it
+        // is translated too — an English band in a German sentence is the bug
+        // labelKeys alone did not fix.
+        detail: t
+          ? t('network.insightDetail', { count: a.count, value: bandLabel(a.metric, a.value, t) })
+          : `About ${a.count} similar families report “${a.value}”.`,
+        cohortSize: a.cohortSize,
+      };
+    });
 }
 
 /** Laplace sampler (mean 0). The cron passes this as the real noise source. */
