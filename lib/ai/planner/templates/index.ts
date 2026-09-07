@@ -159,16 +159,16 @@ export function allTemplates(): WorkflowTemplate[] {
   return Object.values(TEMPLATES).filter((t): t is WorkflowTemplate => Boolean(t));
 }
 
-/**
- * Turn a template into the exact `Plan` shape the model would return, with
- * every input already encoded. This is both the skeleton the prompt shows the
- * model and the plan a deterministic routine saves directly.
- */
 /** Every step the template produces for this context: the fixed skeleton plus whatever the context multiplies out. */
 export function templateSteps(template: WorkflowTemplate, ctx: TemplateContext): TemplateStep[] {
   return [...template.steps, ...(template.dynamicSteps?.(ctx) ?? [])];
 }
 
+/**
+ * Turn a template into the exact `Plan` shape the model would return, with
+ * every input already encoded. This is both the skeleton the prompt shows the
+ * model and the plan a deterministic routine saves directly.
+ */
 export function instantiateTemplate(template: WorkflowTemplate, ctx: TemplateContext): Plan {
   const steps: PlanStep[] = templateSteps(template, ctx).map((step) => ({
     key: step.key,
