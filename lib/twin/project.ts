@@ -151,16 +151,27 @@ export function isProjectedRow(attributes: unknown): boolean {
  * projector owns AND stamped as projected are eligible, so a hand-made node
  * survives a prune even when it names one of the same tables. Edges cascade
  * with the node (0129 FKs), so removing the id is enough.
+ *
+ * `coveredRefTables` is the caller's promise that it read those tables in
+ * full. A projection is evidence of absence only for a table the read covered
+ * completely: a capped read that came back at its limit says nothing about the
+ * rows past the cap, and treating them as gone would delete live nodes (and,
+ * by cascade, their edges). So a table the caller cannot vouch for is skipped
+ * — its nodes are left alone until a complete read can judge them. Required,
+ * not optional, so no caller can prune on a truncated read by forgetting it.
  */
 export function stalePrunableEntityIds(
   rows: Array<{ id: string; ref_table?: string | null; ref_id?: string | null; attributes?: unknown }>,
   projection: TwinProjection,
+  coveredRefTables: Iterable<string>,
 ): string[] {
   const live = new Set(projection.entities.map((e) => e.key));
+  const covered = new Set(coveredRefTables);
   const stale: string[] = [];
   for (const row of rows) {
     if (!row.ref_table || !row.ref_id) continue;          // manual/seeded node
     if (!PROJECTED_REF_TABLE_SET.has(row.ref_table)) continue; // somebody else's table
+    if (!covered.has(row.ref_table)) continue;             // read truncated — unknown, not empty
     if (!isProjectedRow(row.attributes)) continue;         // hand-made, keep it
     if (!live.has(`${row.ref_table}:${row.ref_id}`)) stale.push(row.id);
   }

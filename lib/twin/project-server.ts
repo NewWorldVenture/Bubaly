@@ -16,8 +16,30 @@ type DB = SupabaseClient<Database>;
 
 export type TwinProjectionResult = { ok: boolean; error?: string; entities: number; edges: number };
 
-/** Row caps, so one huge household cannot blow the 4000-entity graph read budget. */
-const ROW_LIMIT = 500;
+/**
+ * Row caps, so one huge household cannot blow the 4000-entity graph read
+ * budget. Exported so the test that proves a capped read never authorises a
+ * prune cannot drift from the number the reads actually use.
+ */
+export const ROW_LIMIT = 500;
+
+/**
+ * Whether a capped read saw the whole table. PostgREST returns at most
+ * ROW_LIMIT rows, so a page that comes back exactly full may have left rows
+ * behind — and rows we did not see are unknown, not absent. Only a read that
+ * came back short is evidence that nothing else exists, which is what the
+ * prune needs before it deletes a node. Ties are broken by an explicit
+ * `.order()` on every capped read so the page is at least stable between runs.
+ */
+function readCoveredEverything(rows: { length: number } | null | undefined): boolean {
+  return (rows?.length ?? 0) < ROW_LIMIT;
+}
+
+/** Tables read without a cap: whatever came back is the whole table. */
+const UNCAPPED_REF_TABLES = [
+  'family_members', 'pets', 'vehicles', 'school_classes', 'teams',
+  'family_routines', 'family_places', 'financial_accounts', 'health_providers', 'homes',
+] as const;
 
 /**
  * A read that failed is not an empty table. Log which table refused and hand the
@@ -51,25 +73,33 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   // M3 — the four kinds the household actually runs on. Read alongside the
   // people/pets/places core so one projection produces one coherent graph.
   const [events, homes, storageLocations, homeAssets, inventory, warranties, projects, bills, paperwork, renewals, preferences] = await settleAll([
+    // Every capped read is ordered. PostgREST gives no stable order without an
+    // ORDER BY and Postgres moves updated tuples around the heap, so an
+    // unordered `.limit()` returns an arbitrary — and run-to-run different —
+    // page. The calendar takes the soonest events, which is the half worth
+    // keeping; everything else takes a deterministic slice by id.
     sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, category, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', eventRange.from).lt('starts_at', eventRange.to).limit(ROW_LIMIT),
+      .eq('family_id', familyId).gte('starts_at', eventRange.from).lt('starts_at', eventRange.to)
+      .order('starts_at', { ascending: true }).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('homes').select('id, name').eq('family_id', familyId).is('deleted_at', null),
-    sb.from('home_locations').select('id, name, kind').eq('family_id', familyId).limit(ROW_LIMIT),
-    sb.from('home_assets').select('id, name, category, home_id, location, warranty_until').eq('family_id', familyId).limit(ROW_LIMIT),
+    sb.from('home_locations').select('id, name, kind').eq('family_id', familyId).order('id', { ascending: true }).limit(ROW_LIMIT),
+    sb.from('home_assets').select('id, name, category, home_id, location, warranty_until')
+      .eq('family_id', familyId).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('inventory_items').select('id, name, category, location_id, owner_member_id, status, value_cents')
-      .eq('family_id', familyId).neq('status', 'disposed').limit(ROW_LIMIT),
+      .eq('family_id', familyId).neq('status', 'disposed').order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('home_warranties').select('id, name, provider, asset_id, home_id, expires_on, status')
-      .eq('family_id', familyId).is('deleted_at', null).limit(ROW_LIMIT),
+      .eq('family_id', familyId).is('deleted_at', null).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('home_projects').select('id, title, status, room, owner_id, priority')
-      .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold']).limit(ROW_LIMIT),
+      .eq('family_id', familyId).in('status', ['idea', 'planning', 'quoting', 'scheduled', 'in_progress', 'on_hold'])
+      .order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('bills').select('id, name, amount, due_date, status, category')
-      .eq('family_id', familyId).neq('status', 'paid').limit(ROW_LIMIT),
+      .eq('family_id', familyId).neq('status', 'paid').order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('paperwork_items').select('id, title, status, due_on, amount, kind, actions')
-      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).limit(ROW_LIMIT),
+      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('renewals').select('id, title, member_id, expires_at, cost, category, status')
-      .eq('family_id', familyId).eq('status', 'active').limit(ROW_LIMIT),
+      .eq('family_id', familyId).eq('status', 'active').order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('family_facts').select('id, member_id, label, value, source, confidence')
-      .eq('family_id', familyId).eq('category', 'preference').limit(ROW_LIMIT),
+      .eq('family_id', familyId).eq('category', 'preference').order('id', { ascending: true }).limit(ROW_LIMIT),
   ]);
 
   const readError = firstReadFailure([
@@ -158,7 +188,26 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   // horizon, a sold vehicle, a paid bill) must not linger claiming to be
   // current. Only rows this projector owns and stamped are eligible — a
   // hand-made node survives. Edges cascade with the node (0129 FKs).
-  const stale = stalePrunableEntityIds(idRows ?? [], projection);
+  //
+  // And only tables this run read to the end can be judged. A household with
+  // more than ROW_LIMIT inventory items (or events in the window) hands back a
+  // full page with rows left behind; those rows are live but unseen, so their
+  // nodes must not be read as stale. Such a table is withheld from the prune
+  // entirely: its nodes keep being refreshed, they are simply never deleted
+  // until a read covers the table completely.
+  const coveredRefTables = new Set<string>(UNCAPPED_REF_TABLES);
+  for (const [table, rows] of [
+    ['calendar_events', events.data], ['home_locations', storageLocations.data],
+    ['home_assets', homeAssets.data], ['inventory_items', inventory.data],
+    ['home_warranties', warranties.data], ['home_projects', projects.data],
+    ['bills', bills.data], ['paperwork_items', paperwork.data],
+    ['renewals', renewals.data], ['family_facts', preferences.data],
+  ] as Array<[string, { length: number } | null]>) {
+    if (readCoveredEverything(rows)) coveredRefTables.add(table);
+    else console.warn(`[twin] ${table} read hit the ${ROW_LIMIT}-row cap; its nodes are refreshed but not pruned this run`);
+  }
+
+  const stale = stalePrunableEntityIds(idRows ?? [], projection, coveredRefTables);
   if (stale.length) {
     const { error: pruneErr } = await sb.from('graph_entities').delete().eq('family_id', familyId).in('id', stale);
     if (pruneErr) {

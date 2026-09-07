@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { projectActivity, type ActivityDecision, type SimContext } from '@/lib/twin/simulate';
 import { createInMemorySupabase, type Row } from '@/tests/helpers/in-memory-supabase';
-import { runTwinProjection } from '@/lib/twin/project-server';
+import { runTwinProjection, ROW_LIMIT } from '@/lib/twin/project-server';
 import { assembleFamilyContext, entityProvenance, entitySubkind, entitiesOfSubkind, mapEntityRow, mapEdgeRow } from '@/lib/reasoning/context';
 import type { HouseholdSnapshot } from '@/lib/operating-index/score';
 
@@ -212,6 +212,72 @@ describe('runTwinProjection writes one graph', () => {
     expect(nodeFor(db, 'family_facts', 'f-typed')).toBeTruthy();
     // And the household's real rows are untouched.
     expect(nodeFor(db, 'home_assets', 'a1')).toBeTruthy();
+  });
+
+  // A household big enough to hit the read cap (the Home Inventory module
+  // exists so people can catalogue everything they own) used to have its
+  // out-of-page nodes deleted on the next run: the read returned ROW_LIMIT
+  // rows, the projection listed only those, and everything else looked stale.
+  // Rows past the cap are unknown, not gone.
+  it('never prunes on a read that came back at the row cap', async () => {
+    const db = household();
+    db.seed('home_locations', [{ id: 'loc1', family_id: FAM, name: 'Garage', kind: 'room' }]);
+
+    // First a household the read covers completely, so real nodes exist.
+    const early = Array.from({ length: 300 }, (_, i) => ({
+      id: `z-${String(i).padStart(3, '0')}`, family_id: FAM, name: `Old thing ${i}`,
+      category: 'general', location_id: 'loc1', owner_member_id: 'm1', status: 'kept', value_cents: 1000,
+    }));
+    db.seed('inventory_items', early);
+    await runTwinProjection(client(db), FAM, null, NOW);
+    expect(db.table('graph_entities').filter((r) => r.ref_table === 'inventory_items')).toHaveLength(300);
+
+    // Then it grows past the cap, with the new rows sorting ahead of the old
+    // ones — so the ordered page of ROW_LIMIT no longer reaches the tail.
+    db.seed('inventory_items', Array.from({ length: 250 }, (_, i) => ({
+      id: `a-${String(i).padStart(3, '0')}`, family_id: FAM, name: `New thing ${i}`,
+      category: 'general', location_id: 'loc1', owner_member_id: 'm1', status: 'kept', value_cents: 1000,
+    })));
+    expect(db.table('inventory_items').length).toBeGreaterThan(ROW_LIMIT);
+
+    const edgesBefore = db.table('graph_edges').filter((e) => e.relation === 'owned_by').length;
+    await runTwinProjection(client(db), FAM, null, NOW);
+
+    // Every node from the earlier complete read survives, tail included: the
+    // last-sorting items are live rows the capped page simply did not reach.
+    expect(nodeFor(db, 'inventory_items', 'z-299')).toBeTruthy();
+    expect(nodeFor(db, 'inventory_items', 'z-250')).toBeTruthy();
+    for (const item of early) expect(nodeFor(db, 'inventory_items', String(item.id))).toBeTruthy();
+    // Their edges cascade with the node, so nothing was cascade-deleted either.
+    expect(db.table('graph_edges').filter((e) => e.relation === 'owned_by').length)
+      .toBeGreaterThanOrEqual(edgesBefore);
+    // The rest of the graph is judged as usual — one capped table does not
+    // suspend the prune everywhere.
+    db.replace('bills', []);
+    await runTwinProjection(client(db), FAM, null, NOW);
+    expect(nodeFor(db, 'bills', 'b1')).toBeUndefined();
+  });
+
+  it('takes a deterministic page when a read is capped, so runs do not churn', async () => {
+    const seedItems = () => Array.from({ length: ROW_LIMIT + 20 }, (_, i) => ({
+      id: `i-${String(i).padStart(4, '0')}`, family_id: FAM, name: `Thing ${i}`,
+      category: 'general', location_id: null, owner_member_id: 'm1', status: 'kept', value_cents: 100,
+    }));
+
+    const db = household();
+    db.seed('inventory_items', seedItems());
+    await runTwinProjection(client(db), FAM, null, NOW);
+    const first = db.table('graph_entities').filter((r) => r.ref_table === 'inventory_items').map((r) => r.ref_id).sort();
+
+    // A second household seeded in a different physical order still reads the
+    // same page, because the read names an order rather than trusting the heap.
+    const db2 = household();
+    db2.seed('inventory_items', seedItems().reverse());
+    await runTwinProjection(client(db2), FAM, null, NOW);
+    const second = db2.table('graph_entities').filter((r) => r.ref_table === 'inventory_items').map((r) => r.ref_id).sort();
+
+    expect(first).toHaveLength(ROW_LIMIT);
+    expect(second).toEqual(first);
   });
 });
 
