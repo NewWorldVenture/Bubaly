@@ -49,15 +49,6 @@ export async function gatherContactSignals(
     marketingConsent = latest.get('marketing_email') === 'granted' || latest.get('marketing_sms') === 'granted';
   } catch { /* consent table absent */ }
 
-  // Started a demo? (demo_email_uses records the first demo per email.)
-  let startedDemo = false;
-  if (email) {
-    try {
-      const { data } = await admin.from('demo_email_uses').select('email').eq('email', email).maybeSingle();
-      startedDemo = !!data;
-    } catch { /* demo tables absent */ }
-  }
-
   // Progressive-profile completeness.
   let profileCompleteness = 0;
   try {
@@ -77,7 +68,6 @@ export async function gatherContactSignals(
     sessionCount,
     daysSinceLastSeen,
     conversions,
-    startedDemo,
     marketingConsent,
     analyticsConsent,
     profileCompleteness,

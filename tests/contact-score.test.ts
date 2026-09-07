@@ -5,7 +5,7 @@ import {
 
 const base: ContactSignals = {
   hasEmail: false, identified: false, sessionCount: 0, daysSinceLastSeen: null,
-  conversions: 0, startedDemo: false, marketingConsent: false, analyticsConsent: false,
+  conversions: 0, marketingConsent: false, analyticsConsent: false,
   profileCompleteness: 0, isCustomer: false,
 };
 
@@ -55,7 +55,7 @@ describe('scoreContact', () => {
   it('clamps the total to 100 for a maxed-out lead', () => {
     const r = scoreContact({
       hasEmail: true, identified: true, sessionCount: 10, daysSinceLastSeen: 1,
-      conversions: 3, startedDemo: true, marketingConsent: true, analyticsConsent: true,
+      conversions: 3, marketingConsent: true, analyticsConsent: true,
       profileCompleteness: 1, isCustomer: true,
     });
     expect(r.score).toBe(100);

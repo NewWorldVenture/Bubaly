@@ -28,7 +28,6 @@ import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
-import { DemoEmailGate, DemoClockPill } from '@/components/demo/demo-experience';
 import { RoleDensity } from './role-density';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
@@ -327,7 +326,7 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin, featureTiers, role, demo } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On marketplace routes the left rail becomes the Marketplace rail (the design's
@@ -346,9 +345,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <>
       {/* Role-tailored display density (kids bigger/roomier, parents default). */}
       <RoleDensity />
-      {/* Demo mode: before the clock starts, blur the app behind the email gate.
-          Once running, the countdown lives top-left in the header (below). */}
-      {demo && demo.expiresAt === null && <DemoEmailGate />}
     <div className="min-h-dvh bg-bg text-fg lg:flex">
       <SkipLink />
       {/* Desktop sidebar — global nav, or the Marketplace rail on /marketplace */}
@@ -376,8 +372,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/home" className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
-          {/* Demo countdown — pinned top-left of the header while a demo runs. */}
-          {demo?.expiresAt && <DemoClockPill expiresAt={demo.expiresAt} />}
           <div className="flex-1" />
           <HeaderSearch />
           {/* Nudge the search bar left of the action cluster for breathing room. */}
