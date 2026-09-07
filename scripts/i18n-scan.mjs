@@ -168,6 +168,9 @@ const NOT_COPY = [
   // both real copy in this product ("Record payment", a form field called
   // "Number"), and excluding them cost more than they were worth.
   /^Promise(?:Like)?$/,
+  // A list of CSS lengths — "-80px 0px -60% 0px". Every token is a signed
+  // number with a unit, which no sentence in this product is.
+  /^-?[\d.]+(?:px|rem|em|vh|vw|%|s|ms|deg|fr)?(?:\s+-?[\d.]+(?:px|rem|em|vh|vw|%|s|ms|deg|fr)?)+$/,
   // A TypeScript assertion, by the type it asserts. Bare `as X` is not usable —
   // "Download statement as CSV" and "Print / Save as PDF" are both real copy —
   // so this lists the types that only ever appear in code.
@@ -227,6 +230,11 @@ const NOT_COPY_PROPS = new Set([
   // two words of prose to any rule that does not know the attribute — and
   // `sizes` holds a media-query list, "(min-width: 1024px) 800px, 100vw".
   'd', 'sizes', 'viewBox', 'points', 'transform', 'fill', 'stroke', 'preserveAspectRatio',
+  // Geometry and machine-readable enums. `rootMargin: '-80px 0px -60% 0px'` is
+  // an IntersectionObserver margin, and schema.org's `operatingSystem` is a
+  // value a crawler parses, not a sentence a person reads. Both were lifted.
+  'rootMargin', 'threshold', 'operatingSystem', 'priceCurrency', 'currency',
+  '@type', '@context', 'applicationCategory', 'datePublished', 'dateModified',
   // Class-string holders. The value rule above catches most, but these carry a
   // single utility often enough to be worth naming.
   'tint', 'bg', 'ring', 'iconBg', 'cls', 'chip', 'badgeClass', 'wrap', 'hover', 'active',
