@@ -9,6 +9,7 @@ import {
   type ConfirmationFields, type ConfirmationImportContext, type ConfirmationPreview,
   type ConfirmationResult, type ConfirmationSource, type ConfirmationSuggestions,
 } from '@/lib/vacations/confirmation-import';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Draft = {
   name: string; kind: string; location: string; reservedAt: string;
@@ -46,6 +47,7 @@ export function TripConfirmationImport({ vacationId }: { vacationId: string }) {
 }
 
 export function ConfirmationImportWorkspace({ context }: { context: ConfirmationImportContext }) {
+  const t = useTranslations();
   const [sourceTitle, setSourceTitle] = useState(DEFAULT_TITLE);
   const [sourceText, setSourceText] = useState('');
   const [draft, setDraft] = useState<Draft>({ ...EMPTY });
@@ -210,91 +212,91 @@ export function ConfirmationImportWorkspace({ context }: { context: Confirmation
 
   const id = 'confirmation-' + context.vacationId + '-';
   if (receipt) return (
-    <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4" aria-label="Confirmation import receipt">
-      <h3 className="font-semibold">Reservation and itinerary entry saved</h3>
-      <p className="text-sm text-muted">These are household records of the confirmation you reviewed. No provider booking, payment, or calendar event was made.</p>
+    <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4" aria-label={t('tripImport.confirmationImportReceipt')}>
+      <h3 className="font-semibold">{t('tripImport.reservationAndItineraryEntrySaved')}</h3>
+      <p className="text-sm text-muted">{t('tripImport.theseAreHouseholdRecordsOfThe')}</p>
       <dl className="grid gap-2 text-sm sm:grid-cols-2">
-        <div><dt className="text-muted">Reservation</dt><dd>{receipt.preview.fields.name}</dd></div>
-        <div><dt className="text-muted">Trip-local time</dt><dd>{receipt.preview.itinerary.date} {receipt.preview.itinerary.startTime} ({receipt.preview.trip.timezone})</dd></div>
-        <div><dt className="text-muted">Request receipt</dt><dd className="break-all font-mono text-xs">{receipt.requestId}</dd></div>
-        <div><dt className="text-muted">Saved at</dt><dd className="break-all">{receipt.appliedAt}</dd></div>
-        <div><dt className="text-muted">Reservation record</dt><dd className="break-all font-mono text-xs">{receipt.reservationId}</dd></div>
-        <div><dt className="text-muted">Itinerary record</dt><dd className="break-all font-mono text-xs">{receipt.itineraryItemId}</dd></div>
+        <div><dt className="text-muted">{t('tripImport.reservation')}</dt><dd>{receipt.preview.fields.name}</dd></div>
+        <div><dt className="text-muted">{t('tripImport.tripLocalTime')}</dt><dd>{receipt.preview.itinerary.date} {receipt.preview.itinerary.startTime} ({receipt.preview.trip.timezone})</dd></div>
+        <div><dt className="text-muted">{t('tripImport.requestReceipt')}</dt><dd className="break-all font-mono text-xs">{receipt.requestId}</dd></div>
+        <div><dt className="text-muted">{t('tripImport.savedAt')}</dt><dd className="break-all">{receipt.appliedAt}</dd></div>
+        <div><dt className="text-muted">{t('tripImport.reservationRecord')}</dt><dd className="break-all font-mono text-xs">{receipt.reservationId}</dd></div>
+        <div><dt className="text-muted">{t('tripImport.itineraryRecord')}</dt><dd className="break-all font-mono text-xs">{receipt.itineraryItemId}</dd></div>
       </dl>
       <details className="rounded-xl border border-border p-3">
-        <summary className="cursor-pointer text-sm">Retained original source: {receipt.preview.source.title}</summary>
+        <summary className="cursor-pointer text-sm">{t('tripImport.retainedOriginalSource')} {receipt.preview.source.title}</summary>
         <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{receipt.preview.source.text}</pre>
         <p className="mt-2 break-all font-mono text-xs text-muted">SHA-256: {receipt.preview.source.sha256}</p>
       </details>
-      <Button type="button" size="sm" variant="secondary" onClick={startAnother}>Start another import</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={startAnother}>{t('tripImport.startAnotherImport')}</Button>
     </section>
   );
 
   return (
     <details className="rounded-2xl border border-border bg-surface/40 p-4">
-      <summary className="cursor-pointer font-semibold">Import a travel confirmation</summary>
-      <p className="mt-3 text-sm text-muted">Paste a confirmation, correct the suggested fields, then review before saving. The original text stays linked to the new reservation and itinerary entry. This does not verify provider availability or make a booking.</p>
+      <summary className="cursor-pointer font-semibold">{t('tripImport.importATravelConfirmation')}</summary>
+      <p className="mt-3 text-sm text-muted">{t('tripImport.pasteAConfirmationCorrectThe')}</p>
       <form className="mt-4 space-y-4" onSubmit={async (event) => { event.preventDefault(); await runRequest('preview'); }}>
         <fieldset disabled={busy} className="space-y-4">
           <div>
-            <label htmlFor={id + 'sourceTitle'} className="mb-1 block text-sm font-medium">Source title</label>
+            <label htmlFor={id + 'sourceTitle'} className="mb-1 block text-sm font-medium">{t('tripImport.sourceTitle')}</label>
             <input id={id + 'sourceTitle'} name="sourceTitle" value={sourceTitle} maxLength={160} className={INPUT}
               onChange={(event) => { if (clearReview()) setSourceTitle(event.target.value); }} />
           </div>
           <div>
-            <label htmlFor={id + 'sourceText'} className="mb-1 block text-sm font-medium">Original confirmation text</label>
+            <label htmlFor={id + 'sourceText'} className="mb-1 block text-sm font-medium">{t('tripImport.originalConfirmationText')}</label>
             <textarea id={id + 'sourceText'} name="sourceText" value={sourceText} rows={6} maxLength={65536} className={INPUT}
               onChange={(event) => {
                 if (!clearReview()) return;
                 setSourceText(event.target.value); setDraft({ ...EMPTY });
                 setSuggestions({ fields: {}, evidence: [], warnings: [] });
               }} />
-            <p className="mt-1 text-xs text-muted">Plain text only, up to 32,768 characters and 64 KiB. No links are opened and no text is sent to an AI provider.</p>
+            <p className="mt-1 text-xs text-muted">{t('tripImport.plainTextOnlyUpTo32')}</p>
           </div>
-          <Button type="button" size="sm" variant="secondary" onClick={suggestFields}>Suggest fields from this text</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={suggestFields}>{t('tripImport.suggestFieldsFromThisText')}</Button>
           {suggestions.warnings.map((warning) => <p key={warning} className="text-sm text-muted">{warning}</p>)}
           {suggestions.evidence.length > 0 && (
             <details className="rounded-xl border border-border p-3">
-              <summary className="cursor-pointer text-sm">Suggested field evidence</summary>
+              <summary className="cursor-pointer text-sm">{t('tripImport.suggestedFieldEvidence')}</summary>
               {suggestions.evidence.map((entry) => <p key={entry.field} className="mt-2 whitespace-pre-wrap break-words text-xs"><strong>{entry.field}, line {entry.line}:</strong> {entry.text}</p>)}
             </details>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <div><label htmlFor={id + 'name'} className="mb-1 block text-sm font-medium">Reservation name</label><input id={id + 'name'} name="name" value={draft.name} maxLength={200} required className={INPUT} onChange={(event) => updateField('name', event.target.value)} /></div>
-            <div><label htmlFor={id + 'kind'} className="mb-1 block text-sm font-medium">Reservation type</label><input id={id + 'kind'} name="kind" value={draft.kind} maxLength={40} required className={INPUT} onChange={(event) => updateField('kind', event.target.value)} /></div>
-            <div><label htmlFor={id + 'location'} className="mb-1 block text-sm font-medium">Location, if known</label><input id={id + 'location'} name="location" value={draft.location} maxLength={500} className={INPUT} onChange={(event) => updateField('location', event.target.value)} /></div>
-            <div><label htmlFor={id + 'reservedAt'} className="mb-1 block text-sm font-medium">Date and time with UTC offset</label><input id={id + 'reservedAt'} name="reservedAt" value={draft.reservedAt} required placeholder="2026-09-20T18:30:00-04:00" className={INPUT} onChange={(event) => updateField('reservedAt', event.target.value)} /><p className="mt-1 text-xs text-muted">Include seconds and the offset stated by the confirmation. Do not guess an offset for an ambiguous local time.</p></div>
-            <div><label htmlFor={id + 'partySize'} className="mb-1 block text-sm font-medium">Party size, if known</label><input id={id + 'partySize'} name="partySize" type="number" min={1} max={1000} step={1} value={draft.partySize} className={INPUT} onChange={(event) => updateField('partySize', event.target.value)} /></div>
-            <div><label htmlFor={id + 'confirmationCode'} className="mb-1 block text-sm font-medium">Confirmation code, if known</label><input id={id + 'confirmationCode'} name="confirmationCode" value={draft.confirmationCode} maxLength={120} className={INPUT} onChange={(event) => updateField('confirmationCode', event.target.value)} /></div>
+            <div><label htmlFor={id + 'name'} className="mb-1 block text-sm font-medium">{t('tripImport.reservationName')}</label><input id={id + 'name'} name="name" value={draft.name} maxLength={200} required className={INPUT} onChange={(event) => updateField('name', event.target.value)} /></div>
+            <div><label htmlFor={id + 'kind'} className="mb-1 block text-sm font-medium">{t('tripImport.reservationType')}</label><input id={id + 'kind'} name="kind" value={draft.kind} maxLength={40} required className={INPUT} onChange={(event) => updateField('kind', event.target.value)} /></div>
+            <div><label htmlFor={id + 'location'} className="mb-1 block text-sm font-medium">{t('tripImport.locationIfKnown')}</label><input id={id + 'location'} name="location" value={draft.location} maxLength={500} className={INPUT} onChange={(event) => updateField('location', event.target.value)} /></div>
+            <div><label htmlFor={id + 'reservedAt'} className="mb-1 block text-sm font-medium">{t('tripImport.dateAndTimeWithUtcOffset')}</label><input id={id + 'reservedAt'} name="reservedAt" value={draft.reservedAt} required placeholder="2026-09-20T18:30:00-04:00" className={INPUT} onChange={(event) => updateField('reservedAt', event.target.value)} /><p className="mt-1 text-xs text-muted">{t('tripImport.includeSecondsAndTheOffsetStated')}</p></div>
+            <div><label htmlFor={id + 'partySize'} className="mb-1 block text-sm font-medium">{t('tripImport.partySizeIfKnown')}</label><input id={id + 'partySize'} name="partySize" type="number" min={1} max={1000} step={1} value={draft.partySize} className={INPUT} onChange={(event) => updateField('partySize', event.target.value)} /></div>
+            <div><label htmlFor={id + 'confirmationCode'} className="mb-1 block text-sm font-medium">{t('tripImport.confirmationCodeIfKnown')}</label><input id={id + 'confirmationCode'} name="confirmationCode" value={draft.confirmationCode} maxLength={120} className={INPUT} onChange={(event) => updateField('confirmationCode', event.target.value)} /></div>
           </div>
-          <label className="flex items-start gap-2 text-sm"><input name="booked" type="checkbox" checked={draft.booked} onChange={(event) => updateField('booked', event.target.checked)} />I confirm this reservation is already booked. This records my confirmation, not a provider verification.</label>
-          <Button type="submit" size="sm" variant="secondary" loading={busy}>Preview import</Button>
+          <label className="flex items-start gap-2 text-sm"><input name="booked" type="checkbox" checked={draft.booked} onChange={(event) => updateField('booked', event.target.checked)} />{t('tripImport.iConfirmThisReservationIsAlready')}</label>
+          <Button type="submit" size="sm" variant="secondary" loading={busy}>{t('tripImport.previewImport')}</Button>
         </fieldset>
       </form>
       {issue && <p role="alert" className="mt-3 text-sm">{issue}</p>}
       {review && (
-        <section aria-label="Review confirmation import" className="mt-4 space-y-3 rounded-xl border border-brand/30 bg-elevated/40 p-4">
-          <h3 className="font-semibold">Review before saving</h3>
+        <section aria-label={t('tripImport.reviewConfirmationImport')} className="mt-4 space-y-3 rounded-xl border border-brand/30 bg-elevated/40 p-4">
+          <h3 className="font-semibold">{t('tripImport.reviewBeforeSaving')}</h3>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-muted">Trip</dt><dd>{review.trip.title}</dd></div>
-            <div><dt className="text-muted">Reservation</dt><dd>{review.fields.name} ({review.fields.kind})</dd></div>
-            <div><dt className="text-muted">Confirmed input time</dt><dd className="break-all">{review.fields.reservedAt}</dd></div>
-            <div><dt className="text-muted">Itinerary time</dt><dd>{review.itinerary.date} {review.itinerary.startTime} ({review.trip.timezone})</dd></div>
-            <div><dt className="text-muted">Location</dt><dd>{review.fields.location ?? 'Not supplied'}</dd></div>
-            <div><dt className="text-muted">Party size</dt><dd>{review.fields.partySize ?? 'Not supplied'}</dd></div>
-            <div><dt className="text-muted">Confirmation code</dt><dd className="break-all">{review.fields.confirmationCode ?? 'Not supplied'}</dd></div>
-            <div><dt className="text-muted">Booking status</dt><dd>{review.fields.booked ? 'Confirmed by you, not verified with provider' : 'Not confirmed'}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.trip')}</dt><dd>{review.trip.title}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.reservation')}</dt><dd>{review.fields.name} ({review.fields.kind})</dd></div>
+            <div><dt className="text-muted">{t('tripImport.confirmedInputTime')}</dt><dd className="break-all">{review.fields.reservedAt}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.itineraryTime')}</dt><dd>{review.itinerary.date} {review.itinerary.startTime} ({review.trip.timezone})</dd></div>
+            <div><dt className="text-muted">{t('tripImport.location')}</dt><dd>{review.fields.location ?? 'Not supplied'}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.partySize')}</dt><dd>{review.fields.partySize ?? 'Not supplied'}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.confirmationCode')}</dt><dd className="break-all">{review.fields.confirmationCode ?? 'Not supplied'}</dd></div>
+            <div><dt className="text-muted">{t('tripImport.bookingStatus')}</dt><dd>{review.fields.booked ? 'Confirmed by you, not verified with provider' : 'Not confirmed'}</dd></div>
           </dl>
           <details className="rounded-lg border border-border p-3">
-            <summary className="cursor-pointer text-sm">Original source retained unchanged</summary>
+            <summary className="cursor-pointer text-sm">{t('tripImport.originalSourceRetainedUnchanged')}</summary>
             <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{review.source.text}</pre>
             <p className="mt-2 break-all font-mono text-xs text-muted">SHA-256: {review.source.sha256}</p>
           </details>
-          <p className="text-xs text-muted">Saves one reservation and one linked itinerary entry. No end time, duration, price, booking, payment, or calendar event is inferred or created.</p>
-          <label className="flex items-start gap-2 text-sm"><input name="acknowledged" type="checkbox" checked={acknowledged} disabled={busy} onChange={(event) => { if (!busyRef.current) setAcknowledged(event.target.checked); }} />I checked the source, time zone, and every field above.</label>
+          <p className="text-xs text-muted">{t('tripImport.savesOneReservationAndOne')}</p>
+          <label className="flex items-start gap-2 text-sm"><input name="acknowledged" type="checkbox" checked={acknowledged} disabled={busy} onChange={(event) => { if (!busyRef.current) setAcknowledged(event.target.checked); }} />{t('tripImport.iCheckedTheSourceTimeZone')}</label>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" loading={busy} disabled={!acknowledged || busy} onClick={() => runRequest('apply')}>{uncertain ? 'Retry saving this review' : 'Save reservation and itinerary entry'}</Button>
-            <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={clearReview}>Discard review</Button>
+            <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={clearReview}>{t('tripImport.discardReview')}</Button>
           </div>
         </section>
       )}

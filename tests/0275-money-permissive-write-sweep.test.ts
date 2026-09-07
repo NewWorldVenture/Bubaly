@@ -99,11 +99,15 @@ describe('the migration set stays collision-free', () => {
     expect(versions.filter((v) => v === '0275')).toHaveLength(1);
   });
 
-  it('does not take a number reserved by an in-flight branch', () => {
-    // 0270 is the travel-confirmations branch, 0274 the finance-receipts one.
-    // Both are held behind an unproven production migration ledger, so their
-    // numbers must stay free rather than be reclaimed as "unused".
-    const names = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'));
-    expect(names.filter((f) => f.startsWith('0270') || f.startsWith('0274'))).toEqual([]);
-  });
+  // A reserved-number guard used to live here: 0270 and 0274 were held by two
+  // in-flight branches, and taking one would have handed whichever merged first
+  // a collision. Both have since landed and consumed their reservations — 0270
+  // with the travel-confirmation import, 0274 with the finance receipts — so the
+  // guard has served its purpose and is gone rather than left to rot.
+  //
+  // Collision detection itself is NOT reimplemented here. It lives in
+  // tests/migration-version-safety.test.ts, which checks against
+  // KNOWN_DUPLICATE_MIGRATIONS — this repo carries real historical duplicates
+  // (0010, 0026, 0042 and more), so a naive "every version appears once" check
+  // fails on history rather than on a new mistake.
 });
