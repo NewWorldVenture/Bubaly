@@ -26,6 +26,7 @@
 // A family that sees "could not start the plan" must not then find half a plan,
 // three orphan to-dos and a move on file.
 import 'server-only';
+import { createMove, planTasks } from '@/lib/services/moving';
 import { createReminder, deleteReminder } from '@/lib/services/reminders';
 import { createTodo, deleteTodo } from '@/lib/services/tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -46,7 +47,18 @@ const REMINDER_HORIZON_DAYS = 45;
 const REMINDER_HOUR = '09:00:00';
 
 /** Where a launched transition is handed off to, and the row it created there. */
-export type LifeEventHandoff = { kind: 'move' | 'project' | 'vacation'; id: string; href: string };
+export type LifeEventHandoff = {
+  kind: 'move' | 'project' | 'vacation';
+  id: string;
+  href: string;
+  /**
+   * Whether this launch made the row, or found one already on file. The undo
+   * stack reads this: a handoff that was FOUND must never be deleted on
+   * rollback, or an unrelated failure later in the launch would destroy the
+   * family's real, in-progress move.
+   */
+  created: boolean;
+};
 
 /** Which module owns which template. Templates not listed stay a checklist. */
 export const HANDOFF_BY_TEMPLATE: Record<string, LifeEventHandoff['kind']> = {
@@ -252,6 +264,11 @@ export async function launchLifeEvent(
 
 /** Undo a handoff. Spelled out per kind so the table name stays a literal the types can check. */
 async function deleteHandoff(scope: ServiceScope, handoff: LifeEventHandoff): Promise<void> {
+  // A handoff this launch only FOUND is not this launch's to undo. The one
+  // case today is a move already under way: createMove returned it rather
+  // than opening a second, and deleting it here would take a family's real
+  // move down with a playbook that failed for some unrelated reason.
+  if (!handoff.created) return;
   if (handoff.kind === 'move') {
     await scope.db.from('moves').delete().eq('id', handoff.id).eq('family_id', scope.familyId);
     return;
@@ -271,16 +288,18 @@ async function createHandoff(
   anchor: string,
 ): Promise<ServiceResult<LifeEventHandoff>> {
   if (kind === 'move') {
-    const { data, error } = await scope.db
-      .from('moves')
-      .insert({ family_id: scope.familyId, title, move_date: anchor, status: 'planning', created_by: scope.userId })
-      .select('id')
-      .single();
-    if (error || !data) {
-      console.error('[life-events] move handoff failed', error);
-      return fail(describeDbError(error, 'Could not open a move for that playbook.'), { code: SERVICE_CODES.db });
-    }
-    return ok({ kind, id: data.id, href: HANDOFF_HREF.move });
+    // Through the moving service, not a direct insert — for two reasons the
+    // insert could not honour. createMove hands back the move already on file
+    // when there is one, so a family mid-move does not get a second move
+    // opened underneath them; and planTasks lays out the ten-week timeline,
+    // idempotently, which is the half a bare `moves` row was missing. "Moving
+    // Home" is a handoff to the Move Planner, and a Move Planner with no tasks
+    // in it is not a handoff, it is an empty page.
+    const move = await createMove(scope, { title, moveDate: anchor });
+    if (!move.ok) return move;
+    const tasks = await planTasks(scope, { moveId: move.data.move.id });
+    if (!tasks.ok) return tasks;
+    return ok({ kind, id: move.data.move.id, href: HANDOFF_HREF.move, created: move.data.created });
   }
   if (kind === 'project') {
     const { data, error } = await scope.db
@@ -292,7 +311,7 @@ async function createHandoff(
       console.error('[life-events] project handoff failed', error);
       return fail(describeDbError(error, 'Could not open a project for that playbook.'), { code: SERVICE_CODES.db });
     }
-    return ok({ kind, id: data.id, href: HANDOFF_HREF.project });
+    return ok({ kind, id: data.id, href: HANDOFF_HREF.project, created: true });
   }
   const { data, error } = await scope.db
     .from('vacations')
@@ -303,5 +322,5 @@ async function createHandoff(
     console.error('[life-events] vacation handoff failed', error);
     return fail(describeDbError(error, 'Could not open a trip for that playbook.'), { code: SERVICE_CODES.db });
   }
-  return ok({ kind, id: data.id, href: HANDOFF_HREF.vacation });
+  return ok({ kind, id: data.id, href: HANDOFF_HREF.vacation, created: true });
 }
