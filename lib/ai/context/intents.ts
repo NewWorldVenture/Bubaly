@@ -26,12 +26,12 @@ import type { ServiceScope } from '@/lib/services/types';
 
 export type IntentKey =
   | 'plan_meals' | 'plan_week' | 'organize_weekend' | 'remind_everyone' | 'prepare_vacation'
-  | 'spending_review' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief' | 'plan_move'
+  | 'spending_review' | 'purchase_advice' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief' | 'plan_move'
   | 'answer_question' | 'capture' | 'navigate' | 'chief_of_staff' | 'other';
 
 export const INTENT_KEYS: readonly [IntentKey, ...IntentKey[]] = [
   'plan_meals', 'plan_week', 'organize_weekend', 'remind_everyone', 'prepare_vacation',
-  'spending_review', 'find_vendor', 'what_am_i_forgetting', 'daily_brief', 'plan_move',
+  'spending_review', 'purchase_advice', 'find_vendor', 'what_am_i_forgetting', 'daily_brief', 'plan_move',
   'answer_question', 'capture', 'navigate', 'chief_of_staff', 'other',
 ];
 
@@ -67,6 +67,10 @@ export const INTENT_SLICES: Record<IntentKey, SliceName[]> = {
   remind_everyone: ['people', 'schedule', 'activities', 'tasks', 'memory'],
   prepare_vacation: ['people', 'travel', 'documents', 'schedule', 'tasks', 'home', 'memory'],
   spending_review: ['people', 'money', 'memory'],
+  // "Should we buy X?" is answered from what the household already OWNS before
+  // it is answered from what it can afford, so `home` (inventory, assets) and
+  // `shopping` lead the money slice rather than trailing it.
+  purchase_advice: ['people', 'home', 'shopping', 'money', 'memory'],
   find_vendor: ['people', 'vendors', 'home', 'memory'],
   what_am_i_forgetting: ['people', 'proactive', 'schedule', 'tasks', 'activities', 'documents', 'home', 'money', 'memory'],
   daily_brief: ['people', 'schedule', 'tasks', 'activities', 'food', 'proactive', 'memory'],
@@ -113,6 +117,12 @@ const CONCIERGE_RULES: { intent: IntentKey; re: RegExp; confidence: number }[] =
   { intent: 'daily_brief', confidence: 0.95, re: /\b(daily brief|morning brief|brief me|what'?s (on|happening|up) today|what does (today|my day|the day) look like|today'?s (plan|summary|agenda|brief)|how does (today|the day) look)\b/i },
   { intent: 'what_am_i_forgetting', confidence: 0.95, re: /\b(what am i forgetting|what are we forgetting|am i forgetting|anything (i'?m|we'?re|i am|we are) (forgetting|missing)|what did (i|we) miss|what'?s (falling through|slipping)|anything (i|we) (missed|overlooked)|what (have|did) (i|we) (forgotten|overlooked))\b/i },
   { intent: 'spending_review', confidence: 0.9, re: /\b(why did we spend|why are we spending|spending (review|report|this month|last month|summary)|where (did|does|is) (our|the) money (go|going)|over budget|how much (did|have|are) we spen[dt]|budget (review|check|status)|spen[dt] too much|too much (money|on))\b/i },
+  // M17 "Before you buy": a purchase DECISION, not a shopping capture. It sits
+  // above the capture heuristics deliberately — "buy batteries" is a list item,
+  // "should we buy another drill?" is a question the household inventory can
+  // answer — and above find_vendor so "should we replace the dishwasher or get
+  // it fixed?" is read as the purchase it is.
+  { intent: 'purchase_advice', confidence: 0.9, re: /\b(should (we|i) (buy|get|order|replace|upgrade|splurge on)|do (we|i) (really )?need (a|an|another|more)|is it worth (buying|getting|replacing|upgrading)|worth buying|before (we|i) buy|do (we|i) already (have|own)|can (we|i) afford)\b/i },
   { intent: 'find_vendor', confidence: 0.9, re: /\b(find (a|an|me a|us a|the|our) (plumber|electrician|handyman|contractor|roofer|painter|landscaper|gardener|cleaner|babysitter|sitter|tutor|mechanic|hvac|repair|vendor|pro\b|someone (to|who))|need (a|an) (plumber|electrician|handyman|contractor|roofer|painter|landscaper|cleaner|babysitter|tutor|mechanic|repair)|who (should|can|do) (we|i) call (for|about)|get (the |our |a )?\w+( \w+)? (fixed|repaired|serviced))\b/i },
   { intent: 'prepare_vacation', confidence: 0.9, re: /\b((prepare|prep|get ready|ready|pack)( us| me)? for (our |the |a |this |next )?(vacation|trip|holiday|getaway|travel|flight)|(vacation|trip|holiday) (prep|preparation|checklist|packing|readiness)|packing list|pack for\b|are we ready for (our |the )?(trip|vacation|holiday))/i },
   { intent: 'remind_everyone', confidence: 0.95, re: /\b(remind (everyone|everybody|the family|the kids|all of us|us all|the whole family)|tell (everyone|everybody|the family|the kids)|let (everyone|everybody|the family) know|make an announcement|announce (to|that)|send (a |an )?(reminder|message|announcement) to (everyone|everybody|the family|all))\b/i },
@@ -140,7 +150,16 @@ const INBOUND_MODULE_RE = /inbox|front[-_ ]?desk|contact[-_ ]?cent(er|re)|concie
 
 function firstMatch(text: string): IntentClassification | null {
   for (const rule of CONCIERGE_RULES) {
-    if (rule.re.test(text)) return { intent: rule.intent, confidence: rule.confidence, entities: {}, source: 'fast_path' };
+    const match = rule.re.exec(text);
+    if (!match) continue;
+    const entities: Record<string, string> = {};
+    if (rule.intent === 'purchase_advice') {
+      // What comes after the trigger is the thing being considered — the
+      // advisor needs it by name to check it against the inventory.
+      const item = text.slice(match.index + match[0].length).replace(/^[\s,:-]+/, '').replace(/[?!.]+\s*$/, '').trim();
+      if (item) entities.item = item.slice(0, 200);
+    }
+    return { intent: rule.intent, confidence: rule.confidence, entities, source: 'fast_path' };
   }
   return null;
 }
@@ -243,6 +262,7 @@ const INTENT_DESCRIPTIONS: Record<IntentKey, string> = {
   remind_everyone: 'send a reminder or announcement to the household',
   prepare_vacation: 'get ready for a trip: checklists, packing, documents, house prep',
   spending_review: 'understand or review spending, budgets or bills',
+  purchase_advice: 'decide whether to buy a specific thing: do we own one, does it fit, can we afford it',
   find_vendor: 'find or contact a service provider for a home problem',
   what_am_i_forgetting: 'check readiness or what might have been missed',
   daily_brief: 'a summary of today',

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { BeforeYouBuy } from '@/components/wishlists/before-you-buy';
 import { cn } from '@/lib/utils/cn';
 import {
   claimState, canToggleClaim, sortWishes, WISH_PRIORITY_LABELS,
@@ -188,24 +189,37 @@ export function WishlistsModule() {
                   {w.price != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{w.price}</span>}
                   {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('wishlists.view')}</a>}
                 </div>
-
                 {/* Gift coordination (hidden from owner) */}
                 {!isOwnList && (
-                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
-                    {badge && <span className={cn('text-[11px] rounded border px-1.5 py-0.5', badge.cls)}>{badge.label}</span>}
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      {cs === 'claimed_by_you' && (
-                        <button onClick={() => togglePurchased(w)} className={cn('text-xs font-medium inline-flex items-center gap-1', w.is_purchased ? 'text-blue-300' : 'text-muted hover:text-blue-300')}>
-                          <ShoppingBag className="h-3.5 w-3.5" />{w.is_purchased ? 'Bought' : 'Mark bought'}
-                        </button>
-                      )}
-                      {canClaim && (
-                        <Button size="sm" variant={cs === 'claimed_by_you' ? 'outline' : 'primary'} onClick={() => toggleClaim(w)} className="gap-1 h-7 text-xs">
-                          {cs === 'claimed_by_you' ? <><Check className="h-3.5 w-3.5" /> {t('wishlists.claimed')}</> : <><HandHeart className="h-3.5 w-3.5" /> {t('wishlists.claimGift')}</>}
-                        </Button>
-                      )}
+                  <>
+                    {/*
+                      M17: check this against what the household already owns,
+                      remembers and budgeted. It sits INSIDE the owner gate with
+                      the rest of the gift signals: the advice reports whether a
+                      wish has already been bought, and 00431_wishlists.sql keeps
+                      `is_purchased` "hidden from the owner in the UI so it stays
+                      a surprise". A person opening their own list must not be
+                      told their present is already on its way.
+                    */}
+                    <div className="mt-2">
+                      <BeforeYouBuy text={w.title} priceDollars={w.price} url={w.url} wishId={w.id} />
                     </div>
-                  </div>
+                    <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
+                      {badge && <span className={cn('text-[11px] rounded border px-1.5 py-0.5', badge.cls)}>{badge.label}</span>}
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        {cs === 'claimed_by_you' && (
+                          <button onClick={() => togglePurchased(w)} className={cn('text-xs font-medium inline-flex items-center gap-1', w.is_purchased ? 'text-blue-300' : 'text-muted hover:text-blue-300')}>
+                            <ShoppingBag className="h-3.5 w-3.5" />{w.is_purchased ? 'Bought' : 'Mark bought'}
+                          </button>
+                        )}
+                        {canClaim && (
+                          <Button size="sm" variant={cs === 'claimed_by_you' ? 'outline' : 'primary'} onClick={() => toggleClaim(w)} className="gap-1 h-7 text-xs">
+                            {cs === 'claimed_by_you' ? <><Check className="h-3.5 w-3.5" /> {t('wishlists.claimed')}</> : <><HandHeart className="h-3.5 w-3.5" /> {t('wishlists.claimGift')}</>}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             );
