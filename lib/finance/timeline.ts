@@ -512,7 +512,9 @@ export type AffordabilityVerdict = 'ok' | 'tight' | 'breaches';
 export interface AffordabilityResult {
   verdict: AffordabilityVerdict;
   buffer: number;
-  scenario: { label: string; total: number; occurrences: number; recurring: boolean };
+  /** Echoes back what was actually tried, so a surface never labels the answer
+   *  with a date the person has since edited in the form. */
+  scenario: { label: string; date: string; total: number; occurrences: number; recurring: boolean };
   before: { lowestBalance: number; lowestBalanceWeek: string | null };
   after: { lowestBalance: number; lowestBalanceWeek: string | null };
   /** Dollars left above the buffer at the lowest point once the scenario is in (negative = below it). */
@@ -569,7 +571,7 @@ export function assessAffordability(input: BuildTimelineInput, scenario: Timelin
   return {
     verdict,
     buffer,
-    scenario: { label: scenario.label, total, occurrences, recurring: Boolean(scenario.recurrence) },
+    scenario: { label: scenario.label, date: scenario.date, total, occurrences, recurring: Boolean(scenario.recurrence) },
     before: { lowestBalance: base.lowestBalance, lowestBalanceWeek: base.lowestBalanceWeek },
     after: { lowestBalance: tried.lowestBalance, lowestBalanceWeek: tried.lowestBalanceWeek },
     headroom,

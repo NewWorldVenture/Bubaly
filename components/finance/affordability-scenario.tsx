@@ -118,7 +118,7 @@ export function AffordabilityScenario({ buffer }: { buffer: number }) {
                 ? t('affordabilityScenario.thatLandsBeyondThe12Week')
                 : result.scenario.recurring
                   ? t('affordabilityScenario.nTimesInTheNext12Weeks', { count: result.scenario.occurrences, total: money(result.scenario.total) })
-                  : t('affordabilityScenario.onceOnDate', { date: pretty(date) })}
+                  : t('affordabilityScenario.onceOnDate', { date: pretty(result.scenario.date) })}
             </span>
           </div>
 

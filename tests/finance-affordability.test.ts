@@ -30,7 +30,7 @@ describe('assessAffordability', () => {
     expect(r.before).toEqual({ lowestBalance: 1000, lowestBalanceWeek: '2026-03-09' });
     expect(r.after).toEqual({ lowestBalance: 700, lowestBalanceWeek: '2026-03-09' });
     expect(r.headroom).toBe(500);
-    expect(r.scenario).toEqual({ label: 'Car seat', total: 300, occurrences: 1, recurring: false });
+    expect(r.scenario).toEqual({ label: 'Car seat', date: '2026-01-20', total: 300, occurrences: 1, recurring: false });
     // From the week it lands, the base balance never drops below 1000 → 800 keeps the buffer.
     expect(r.maxAffordable).toBe(800);
   });
@@ -57,7 +57,7 @@ describe('assessAffordability', () => {
   it('expands a recurring commitment across the horizon and caps it per occurrence', () => {
     const r = assessAffordability(base(), { label: 'Tutoring', amount: 400, date: '2026-01-20', recurrence: 'monthly' });
     // Jan 20, Feb 20, Mar 20 all land inside the 12-week horizon.
-    expect(r.scenario).toEqual({ label: 'Tutoring', total: 1200, occurrences: 3, recurring: true });
+    expect(r.scenario).toEqual({ label: 'Tutoring', date: '2026-01-20', total: 1200, occurrences: 3, recurring: true });
     // 4000 −1000 −400 −1000 −400 −1000 −400 → −200 at the end.
     expect(r.after.lowestBalance).toBe(-200);
     expect(r.after.lowestBalanceWeek).toBe('2026-03-16');
@@ -71,6 +71,9 @@ describe('assessAffordability', () => {
     expect(r.verdict).toBe('ok');
     expect(r.scenario.occurrences).toBe(0);
     expect(r.scenario.total).toBe(0);
+    // The answer still says what was tried, so the panel never labels it with a
+    // date the person has since edited in the form.
+    expect(r.scenario.date).toBe('2026-09-01');
     expect(r.maxAffordable).toBeNull();
     expect(r.after).toEqual(r.before);
   });
