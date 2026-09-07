@@ -9,7 +9,8 @@
 //   * the SAME intake every other entry uses, so trust gating and the approval
 //     spine are the ones already in place — not a private write path;
 //   * `ai_handled` is stamped ONLY after a request is persisted;
-//   * a redelivered webhook re-finds its request instead of planning twice;
+//   * a redelivered webhook files NOTHING a second time — not a run, and not a
+//     second copy of the same bill in the household queue;
 //   * an emailed bill or reservation also lands in `paperwork_items`, with a
 //     kind the 0169 CHECK constraint actually admits.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,6 +67,32 @@ describe('shouldPlanInbound', () => {
   });
 });
 
+/**
+ * Exactly what a webhook does with a delivery: file it, and route it to the
+ * planner ONLY if filing it actually created a row. Calling this twice with the
+ * same input is a provider firing the same webhook twice.
+ */
+async function deliver(
+  input: {
+    channel: 'email' | 'sms' | 'voice'; body: string; subject?: string;
+    from?: string; providerRef?: string; intent: string;
+  },
+  intake: ReturnType<typeof fakeIntake>,
+) {
+  const filed = await recordInboundMessage(admin(), {
+    familyId: FAMILY, channel: input.channel, from: input.from, subject: input.subject,
+    body: input.body, providerRef: input.providerRef, aiIntent: input.intent,
+  });
+  if (filed.inserted) {
+    await routeInboundToPlanner(admin(), {
+      familyId: FAMILY, channel: input.channel, messageId: filed.messageId,
+      subject: input.subject ?? null, body: input.body, intent: input.intent,
+      providerRef: filed.providerRef, submit: intake.submit as never, now: NOW,
+    });
+  }
+  return filed;
+}
+
 describe('recordInboundMessage', () => {
   it('returns the id of the row it filed, so the caller can stamp it', async () => {
     const filed = await recordInboundMessage(admin(), {
@@ -73,8 +100,80 @@ describe('recordInboundMessage', () => {
       providerRef: 'SM123',
     });
     expect(filed.messageId).toBeTruthy();
+    expect(filed.inserted).toBe(true);
     expect(db.table('family_inbox_messages')).toHaveLength(1);
     expect(db.table('family_inbox_messages')[0]).toMatchObject({ family_id: FAMILY, channel: 'sms', direction: 'inbound' });
+  });
+
+  it('reports a redelivery as NOT inserted, and returns the row already filed', async () => {
+    const one = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'email', body: 'Invoice attached.', providerRef: 'EM-dup',
+    });
+    const two = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'email', body: 'Invoice attached.', providerRef: 'EM-dup',
+    });
+    expect(one.inserted).toBe(true);
+    expect(two.inserted).toBe(false);
+    expect(two.messageId).toBe(one.messageId);
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+  });
+
+  it('derives a ref when the provider gives none, so a Message-Id-less email still de-dupes', async () => {
+    // `uq_inbox_provider_ref` is partial: a null ref de-dupes nothing, and this
+    // delivery would otherwise be a new row, a new run and a new bill every time.
+    const one = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'email', from: 'billing@city.example', subject: 'Water bill',
+      body: 'Invoice attached. Amount due: $45.00 by March 9.',
+    });
+    const two = await recordInboundMessage(admin(), {
+      familyId: FAMILY, channel: 'email', from: 'billing@city.example', subject: 'Water bill',
+      body: 'Invoice attached. Amount due: $45.00 by March 9.',
+    });
+    expect(one.providerRef).toMatch(/^derived:[0-9a-f]{32}$/);
+    expect(two.providerRef).toBe(one.providerRef);
+    expect(one.inserted).toBe(true);
+    expect(two.inserted).toBe(false);
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+  });
+});
+
+describe('a webhook that fires twice', () => {
+  const WATER_BILL = 'Invoice attached. Amount due: $45.00 by March 9.';
+
+  it('files one row, one run and ONE paperwork item for one emailed bill', async () => {
+    const intake = fakeIntake();
+    await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, providerRef: 'EM-water', intent: 'personal' }, intake);
+    await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, providerRef: 'EM-water', intent: 'personal' }, intake);
+
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+    // The one that matters: two 'Water bill' rows in /dashboard/paperwork is two
+    // bills as far as the family and `countNeedsYou` are concerned.
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(intake.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does the same for an email the provider gave no id for', async () => {
+    const intake = fakeIntake();
+    await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, from: 'billing@city.example', intent: 'personal' }, intake);
+    await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, from: 'billing@city.example', intent: 'personal' }, intake);
+
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+    expect(db.table('paperwork_items')).toHaveLength(1);
+    expect(intake.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('still files two different emails as two records', async () => {
+    const intake = fakeIntake();
+    await deliver({ channel: 'email', subject: 'Water bill', body: WATER_BILL, providerRef: 'EM-water', intent: 'personal' }, intake);
+    await deliver({
+      channel: 'email', subject: 'Gas bill',
+      body: 'Invoice attached. Amount due: $88.00 by March 11.',
+      providerRef: 'EM-gas', intent: 'personal',
+    }, intake);
+
+    expect(db.table('family_inbox_messages')).toHaveLength(2);
+    expect(db.table('paperwork_items')).toHaveLength(2);
+    expect(intake.submit).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -227,5 +326,20 @@ describe('fileInboundPaperwork', () => {
     const id = await fileInboundPaperwork(admin(), FAMILY, 'hey are you around later', NOW);
     expect(id).toBeNull();
     expect(db.table('paperwork_items')).toHaveLength(0);
+  });
+
+  it('is idempotent on its own: the same email twice is one record', async () => {
+    const text = 'Invoice attached. Amount due: $45.00 by March 9.';
+    const first = await fileInboundPaperwork(admin(), FAMILY, text, NOW, 'EM-water');
+    const second = await fileInboundPaperwork(admin(), FAMILY, text, NOW, 'EM-water');
+    expect(second).toBe(first);
+    expect(db.table('paperwork_items')).toHaveLength(1);
+  });
+
+  it('stamps the ref it was filed under, so the row can be traced to its delivery', async () => {
+    await fileInboundPaperwork(admin(), FAMILY, 'Invoice attached. Amount due: $12.00 by March 9.', NOW, 'EM-abc');
+    expect(db.table('paperwork_items')[0].meta).toMatchObject({
+      source: 'inbound_email', provider_ref: 'EM-abc',
+    });
   });
 });

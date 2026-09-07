@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { readFileSync } from 'node:fs';
 import { loadInboxQueue } from '@/lib/inbox/server';
 
 type Reply = { data: unknown; error: unknown };
@@ -106,5 +107,53 @@ describe('loadInboxQueue read boundary', () => {
     expect(queue.allFailed).toBe(false);
     expect(queue.unavailable).toEqual({ messages: false, paperwork: false, communications: false });
     expect(err).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The two surfaces this queue feeds, read as source. Both failures these pin
+ * are invisible to tsc and to any render test that only supplies happy data:
+ *
+ *  1. THE REASSURING ZERO. `/dashboard/front-desk` passes `voiceResult.data ?? []`
+ *     — an empty array — when the `family_inbox_messages` read errors. The stat
+ *     tiles used to render `voice.length` unconditionally, so a database that
+ *     did not answer showed as "0 Calls / 0 Handled / 0 Urgent": a household
+ *     being told nothing had called.
+ *  2. THE PERMANENT "HANDLED". `ai_handled` is written the moment `submitRequest`
+ *     returns a persisted request. A run that is queued, parked in
+ *     awaiting_context, or failed still sets it — so the word the badge uses has
+ *     to be the one the flag proves ("Filed with Bubaly"), not the one it does
+ *     not ("Handled").
+ */
+describe('the words and the zeroes on the surfaces this queue feeds', () => {
+  const frontDesk = readFileSync('components/modules/front-desk-module.tsx', 'utf8');
+  const queue = readFileSync('components/modules/inbox-queue.tsx', 'utf8');
+
+  it('blanks the front desk stat tiles when the read behind them failed', () => {
+    const block = frontDesk.slice(frontDesk.indexOf('{STATS.map'), frontDesk.indexOf('</div>', frontDesk.indexOf('{STATS.map')) + 200);
+    expect(block).toContain('unavailable?.voice');
+    expect(block).toContain('—');
+  });
+
+  it('has no fourth tile mixing the frozen call log in with the live voice numbers', () => {
+    // `call_logs` is hand-typed history whose own error state lives inside a
+    // collapsed section; a tile counting it beside three live numbers reported
+    // 0 whenever that query failed, with nothing on screen to say so.
+    expect(frontDesk).not.toContain("key: 'legacy'");
+    expect(frontDesk).not.toContain('vmCount');
+  });
+
+  it('never claims "Handled" on either surface', () => {
+    for (const src of [frontDesk, queue]) {
+      expect(src).not.toContain("tr('frontDesk.handled')");
+      expect(src).not.toContain("t('inboxQueue.handled')");
+    }
+    expect(frontDesk).toContain("tr('frontDesk.filedWithBubaly')");
+    expect(queue).toContain("inboxQueue.filedWithBubaly");
+  });
+
+  it('renders the badge off handledBy, so a row a person closed is not credited to Bubaly', () => {
+    expect(queue).toContain('HANDLED_LABEL[item.handledBy]');
+    expect(queue).toContain("family: 'inboxQueue.done'");
   });
 });

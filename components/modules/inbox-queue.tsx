@@ -8,11 +8,15 @@
 // says plainly when a source could not be read, and offers exactly one action —
 // "Handle it" — which files the message through the normal intake.
 //
-// HONESTY: a row shows "Handled" only when `item.handled` is true, and that
-// comes from `family_inbox_messages.ai_handled`, written after a request was
-// persisted. The run link that appears after handling is live for this response
-// only, because the row has no column to remember it in; the copy says so
-// rather than implying a durable link.
+// HONESTY: the badge on a row says only what its row proves. A contact-center
+// row carries `ai_handled`, written after an `ai_requests` row exists — so it
+// reads "Filed with Bubaly", not "Handled": the run behind it may be queued,
+// waiting on a parent's answer, or failed, and nothing here would reconcile a
+// green "Handled" with a run that never completed. A paperwork or log row a
+// person closed reads "Done", because a person is who closed it. The run link
+// that appears after filing is live for this response only, because the row has
+// no column to remember it in; the copy says so rather than implying a durable
+// link.
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -23,7 +27,7 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { handleInboxMessageAction } from '@/app/(app)/dashboard/inbox/actions';
-import type { InboxReason, InboxSource, UnifiedInboxItem } from '@/lib/inbox/unify';
+import type { InboxHandledBy, InboxReason, InboxSource, UnifiedInboxItem } from '@/lib/inbox/unify';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -49,6 +53,12 @@ const SOURCE_META: Record<InboxSource, { labelKey: string; icon: React.Component
 
 const CHANNEL_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   email: Mail, sms: MessageSquare, voice: Phone,
+};
+
+/** One badge per KIND of closure, because they are different claims. */
+const HANDLED_LABEL: Record<InboxHandledBy, string> = {
+  bubaly: 'inboxQueue.filedWithBubaly',
+  family: 'inboxQueue.done',
 };
 
 function fmtTime(iso: string): string {
@@ -92,7 +102,7 @@ export function InboxQueue({ items, unavailable, needsYou }: {
     }
     if (result.runPath) setRunPaths((prev) => ({ ...prev, [item.id]: result.runPath as string }));
     success(t('inboxQueue.bubalyIsOnIt'));
-    // Re-read from the server so "Handled" comes from the row, not from here.
+    // Re-read from the server so the badge comes from the row, not from here.
     router.refresh();
   }
 
@@ -164,9 +174,9 @@ export function InboxQueue({ items, unavailable, needsYou }: {
                       {item.dueOn && (
                         <span className="text-[10px] text-muted">{t('inboxQueue.dueOn', { date: item.dueOn })}</span>
                       )}
-                      {item.handled && (
+                      {item.handledBy && (
                         <span className="flex items-center gap-1 rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
-                          <Check className="h-3 w-3" /> {t('inboxQueue.handled')}
+                          <Check className="h-3 w-3" /> {t(HANDLED_LABEL[item.handledBy])}
                         </span>
                       )}
                       {runPath && (

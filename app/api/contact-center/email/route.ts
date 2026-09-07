@@ -102,11 +102,17 @@ export async function POST(req: NextRequest) {
   // planner (trust-gated, approval spine unchanged), and an emailed bill or
   // reservation becomes a paperwork row. Never fatal — the provider gets its
   // acknowledgement regardless.
-  await routeInboundToPlanner(admin, {
-    familyId, channel: 'email', messageId: filed.messageId,
-    subject: subject ?? null, body: body || subject || '',
-    intent: result.intent, providerRef: messageId ?? null,
-  }).catch((error) => { console.error('[contact-center] email planner routing threw', error); });
+  //
+  // ONLY ON A NEW DELIVERY. Providers re-fire webhooks; routing a message the
+  // inbox already holds would file the same bill a second time and double the
+  // household queue's "needs you" count.
+  if (filed.inserted) {
+    await routeInboundToPlanner(admin, {
+      familyId, channel: 'email', messageId: filed.messageId,
+      subject: subject ?? null, body: body || subject || '',
+      intent: result.intent, providerRef: filed.providerRef,
+    }).catch((error) => { console.error('[contact-center] email planner routing threw', error); });
+  }
 
   // Urgent → ping the human fallback by SMS.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {

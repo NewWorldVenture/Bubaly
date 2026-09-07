@@ -5,13 +5,28 @@
 // that loses the row entirely. The mapping is therefore part of the contract,
 // not an implementation detail, and this pins both halves — what triage sees,
 // and what the database is allowed to be told.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   STORED_PAPERWORK_KINDS, classifyPaperwork, kindLabel, paperworkKindFields,
   storedPaperworkKind, triagePaperwork, type PaperworkKind,
 } from '@/lib/paperwork/triage';
 
+// The paperwork action is a `'use server'` module; these three are all it
+// reaches for that a test cannot supply, and the payload builder touches none
+// of them.
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: vi.fn() }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: vi.fn(), createServiceClient: vi.fn() }));
+
+import { paperworkInsertRow } from '@/app/(app)/dashboard/paperwork/actions';
+
 const NOW = new Date('2026-03-01T12:00:00Z');
+
+/** Every kind triage can return — the list the mapping must be total over. */
+const ALL_KINDS: PaperworkKind[] = [
+  'permission_slip', 'school_notice', 'medical_form', 'sports',
+  'bill_or_payment', 'event_flyer', 'receipt', 'reservation', 'other',
+];
 
 describe('classifyPaperwork — receipts', () => {
   it('recognises the ways a receipt announces itself', () => {
@@ -60,12 +75,19 @@ describe('the kinds the column admits', () => {
   });
 
   it('only ever produces a value the CHECK constraint accepts', () => {
-    const all: PaperworkKind[] = [
-      'permission_slip', 'school_notice', 'medical_form', 'sports',
-      'bill_or_payment', 'event_flyer', 'receipt', 'reservation', 'other',
-    ];
-    for (const kind of all) {
+    for (const kind of ALL_KINDS) {
       expect(STORED_PAPERWORK_KINDS).toContain(storedPaperworkKind(kind));
+    }
+  });
+
+  it('maps EVERY kind — a new one added to triage cannot slip through unmapped', () => {
+    // The mapping is a Record<PaperworkKind, …>, so tsc catches a missing entry
+    // at compile time; this catches the runtime half — an entry present but set
+    // to something the column would reject with a 23514.
+    for (const kind of ALL_KINDS) {
+      const fields = paperworkKindFields(kind);
+      expect(STORED_PAPERWORK_KINDS).toContain(fields.kind);
+      expect(fields.meta.triage_kind).toBe(kind);
     }
   });
 
@@ -101,5 +123,54 @@ describe('triagePaperwork end to end for the new kinds', () => {
     expect(t.due_on).toBe('2026-03-08');
     expect(t.urgency).toBe('soon');
     expect(t.summary).toContain('Reservation');
+  });
+});
+
+describe('the payload every caller inserts', () => {
+  // THE BUG THIS PINS: `addPaperworkAction` used to insert `kind: t.kind`
+  // straight from `triagePaperwork`. The generated Insert type for `kind` is a
+  // plain string, so tsc said nothing, and the day triage learned 'receipt' the
+  // paste of a receipt became a 23514 — "Could not save that paperwork", the
+  // text gone. The payload has to go through the mapping, and so does every
+  // other writer of this table.
+  it('never asks the column for a kind it does not admit', async () => {
+    const samples: [string, PaperworkKind][] = [
+      ['Your receipt from Corner Hardware. Total charged $63.40.', 'receipt'],
+      ['Reservation confirmed. Table for 4 on March 8.', 'reservation'],
+      ['Invoice attached. Amount due: $45.00 by March 9.', 'bill_or_payment'],
+      ['Permission slip: sign and return by March 6.', 'permission_slip'],
+      ['hey are you around later', 'other'],
+    ];
+    for (const [text, expected] of samples) {
+      expect(triagePaperwork(text, NOW).kind).toBe(expected);
+      const row = await paperworkInsertRow({
+        familyId: 'family-1', userId: 'user-1', text, sender: 'Corner Hardware', now: NOW,
+      });
+      expect(STORED_PAPERWORK_KINDS).toContain(row.kind);
+      expect(row.meta.triage_kind).toBe(expected);
+    }
+  });
+
+  it('files a receipt as a payment and keeps the receipt in meta', async () => {
+    const row = await paperworkInsertRow({
+      familyId: 'family-1', userId: 'user-1',
+      text: 'Your receipt from Corner Hardware. Total charged $63.40.', now: NOW,
+    });
+    expect(row.kind).toBe('bill_or_payment');
+    expect(row.meta).toEqual({ triage_kind: 'receipt' });
+    expect(row.amount).toBe(63.4);
+    expect(row.family_id).toBe('family-1');
+    expect(row.created_by).toBe('user-1');
+    expect(row.status).toBe('needs_action');
+  });
+
+  it('files a reservation as an event, with the date it commits the family to', async () => {
+    const row = await paperworkInsertRow({
+      familyId: 'family-1', userId: 'user-1',
+      text: 'Reservation confirmed. Table for 4 on March 8.', now: NOW,
+    });
+    expect(row.kind).toBe('event_flyer');
+    expect(row.meta).toEqual({ triage_kind: 'reservation' });
+    expect(row.due_on).toBe('2026-03-08');
   });
 });

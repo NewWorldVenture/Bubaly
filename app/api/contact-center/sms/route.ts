@@ -71,11 +71,15 @@ export async function POST(req: NextRequest) {
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
 
-  // M20: actionable texts reach the planner instead of stopping at the log.
-  await routeInboundToPlanner(admin, {
-    familyId, channel: 'sms', messageId: filed.messageId, body,
-    intent: result.intent, providerRef: sid ?? null,
-  }).catch((error) => { console.error('[contact-center] sms planner routing threw', error); });
+  // M20: actionable texts reach the planner instead of stopping at the log —
+  // and only when this delivery was new, so a re-fired webhook is not a second
+  // run and a second row.
+  if (filed.inserted) {
+    await routeInboundToPlanner(admin, {
+      familyId, channel: 'sms', messageId: filed.messageId, body,
+      intent: result.intent, providerRef: filed.providerRef,
+    }).catch((error) => { console.error('[contact-center] sms planner routing threw', error); });
+  }
 
   // Escalate genuine urgencies to the family's human fallback.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {

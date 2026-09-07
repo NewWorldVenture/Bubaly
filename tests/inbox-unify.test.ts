@@ -133,6 +133,39 @@ describe('unifyInbox', () => {
     expect(flagged.handled).toBe(true);
   });
 
+  it('says WHO closed a row, because "Bubaly has it" and "a person did it" are different claims', () => {
+    // `ai_handled` proves an `ai_requests` row exists — the message reached
+    // Bubaly. It does not prove the run started, finished, or succeeded, so the
+    // component must not be able to render one word for both of these.
+    const [filed] = unifyInbox({ messages: [message({ ai_handled: true })], now: NOW });
+    expect(filed.handledBy).toBe('bubaly');
+
+    const [open] = unifyInbox({ messages: [message({ ai_handled: false })], now: NOW });
+    expect(open.handledBy).toBeNull();
+
+    const [done] = unifyInbox({ paperwork: [paperwork({ status: 'done' })], now: NOW });
+    expect(done.handledBy).toBe('family');
+    const [archived] = unifyInbox({ paperwork: [paperwork({ status: 'archived' })], now: NOW });
+    expect(archived.handledBy).toBe('family');
+    const [needsAction] = unifyInbox({ paperwork: [paperwork({ status: 'needs_action' })], now: NOW });
+    expect(needsAction.handledBy).toBeNull();
+
+    const [replied] = unifyInbox({ communications: [communication({ status: 'replied' })], now: NOW });
+    expect(replied.handledBy).toBe('family');
+    const [unread] = unifyInbox({ communications: [communication({ status: 'unread' })], now: NOW });
+    expect(unread.handledBy).toBeNull();
+  });
+
+  it('keeps handled and handledBy in step, so the badge and the sort cannot disagree', () => {
+    const items = unifyInbox({
+      messages: [message({ id: 'a', ai_handled: true }), message({ id: 'b', ai_handled: false })],
+      paperwork: [paperwork({ id: 'c', status: 'done' }), paperwork({ id: 'd', status: 'needs_action' })],
+      communications: [communication({ id: 'e', status: 'archived' })],
+      now: NOW,
+    });
+    for (const item of items) expect(item.handled).toBe(item.handledBy !== null);
+  });
+
   it('offers "Handle it" only for an inbound contact-center row that is not already handled', () => {
     const [inbound] = unifyInbox({ messages: [message()], now: NOW });
     expect(inbound.canHandle).toBe(true);

@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import type { createServiceClient } from '@/lib/supabase/server';
 import type { Json, Tables } from '@/lib/database.types';
 import {
@@ -117,18 +118,72 @@ export async function provisionFamilyNumber(
   }
 }
 
+export type InboundRecord = {
+  intent: string;
+  escalated: boolean;
+  messageId: string | null;
+  /**
+   * TRUE only when THIS call created the row. A provider that fires the same
+   * webhook twice (0214 says in as many words that it will) arrives here a
+   * second time with `inserted: false`, and the caller must not route it again:
+   * the planner de-dupes on `client_request_id`, but a second paperwork row, a
+   * second entry in the household queue and a double count in `countNeedsYou`
+   * have nothing stopping them.
+   */
+  inserted: boolean;
+  /** The ref this delivery is identified by — the provider's, or a derived one. */
+  providerRef: string;
+};
+
+/**
+ * Identify a delivery the provider gave no id for.
+ *
+ * `uq_inbox_provider_ref` is partial (`where provider_ref is not null`), so a
+ * null ref de-dupes nothing: an email with no Message-Id, delivered twice, was
+ * two rows, two runs and two copies of the same bill. The ref is therefore
+ * derived from what the delivery IS — family, channel, sender, subject, body —
+ * and namespaced `derived:` so it is never mistaken for something a provider
+ * sent. The trade is that two byte-identical messages to one family on one
+ * channel collapse into one row; that is the safer half of the trade, and it is
+ * only reachable when the provider supplied no id at all.
+ */
+function derivedProviderRef(input: {
+  familyId: string; channel: InboundChannel; from?: string; subject?: string; body: string;
+}): string {
+  const digest = createHash('sha256')
+    .update([input.familyId, input.channel, input.from ?? '', input.subject ?? '', input.body].join('\u0000'))
+    .digest('hex');
+  return `derived:${digest.slice(0, 32)}`;
+}
+
 /**
  * File an inbound message into the family's unified inbox. Runs the deterministic
  * concierge classification, de-dupes on the provider ref, and pings the family
- * (best-effort) when the intent is urgent. Returns the classified intent.
+ * (best-effort) when the intent is urgent. Returns the classified intent and —
+ * load-bearing for the caller — whether this delivery was NEW.
  */
 export async function recordInboundMessage(admin: Admin, input: {
   familyId: string; channel: InboundChannel; from?: string; to?: string;
   subject?: string; body: string; providerRef?: string; aiSummary?: string; aiIntent?: string;
-}): Promise<{ intent: string; escalated: boolean; messageId: string | null }> {
+}): Promise<InboundRecord> {
   const intent = input.aiIntent ?? classifyIntent(input.body);
   const summary = input.aiSummary ?? summarizeInbound(input.body);
   const escalate = shouldNotifyFamily((intent as ReturnType<typeof classifyIntent>));
+  const providerRef = (input.providerRef ?? '').trim() || derivedProviderRef(input);
+
+  // Look before writing. `ignoreDuplicates` alone cannot tell the caller whether
+  // it inserted, and "has this delivery already arrived?" is the question the
+  // planner routing turns on.
+  const seen = await admin
+    .from('family_inbox_messages')
+    .select('id')
+    .eq('channel', input.channel)
+    .eq('provider_ref', providerRef)
+    .maybeSingle();
+  if (seen.error) console.error('[contact-center] inbound de-dupe read failed', seen.error);
+  if (seen.data?.id) {
+    return { intent, escalated: escalate, messageId: seen.data.id, inserted: false, providerRef };
+  }
 
   const { data, error } = await admin.from('family_inbox_messages').upsert({
     family_id: input.familyId,
@@ -140,7 +195,7 @@ export async function recordInboundMessage(admin: Admin, input: {
     body: input.body,
     ai_summary: summary,
     ai_intent: intent,
-    provider_ref: input.providerRef ?? null,
+    provider_ref: providerRef,
   }, { onConflict: 'channel,provider_ref', ignoreDuplicates: true })
     .select('id');
   if (error) {
@@ -148,25 +203,23 @@ export async function recordInboundMessage(admin: Admin, input: {
     throw new Error('Inbound message persistence failed');
   }
 
-  // `ignoreDuplicates` returns nothing for a re-delivered webhook, so the id is
-  // read back by the provider ref the unique index is on. A row we cannot
-  // identify is still filed — the caller simply gets `null` and skips the
-  // follow-up write rather than stamping the wrong message.
-  let messageId: string | null = data?.[0]?.id ?? null;
-  if (!messageId && input.providerRef) {
-    const found = await admin
-      .from('family_inbox_messages')
-      .select('id')
-      .eq('channel', input.channel)
-      .eq('provider_ref', input.providerRef)
-      .maybeSingle();
-    if (found.error) console.error('[contact-center] inbound message id read failed', found.error);
-    messageId = found.data?.id ?? null;
-  }
+  const messageId: string | null = data?.[0]?.id ?? null;
+  if (messageId) return { intent, escalated: escalate, messageId, inserted: true, providerRef };
+
+  // `ignoreDuplicates` returns nothing when the unique index swallowed the row —
+  // two deliveries racing each other — so the id is read back by the ref the
+  // index is on, and this call reports that it did NOT insert.
+  const found = await admin
+    .from('family_inbox_messages')
+    .select('id')
+    .eq('channel', input.channel)
+    .eq('provider_ref', providerRef)
+    .maybeSingle();
+  if (found.error) console.error('[contact-center] inbound message id read failed', found.error);
 
   // The caller (webhook) decides how to escalate (SMS the human fallback, etc.)
   // using the returned flag — this lib stays storage-only.
-  return { intent, escalated: escalate, messageId };
+  return { intent, escalated: escalate, messageId: found.data?.id ?? null, inserted: false, providerRef };
 }
 
 /** Paperwork triage kinds worth filing: a form, a bill, a receipt, a reservation. */
@@ -193,8 +246,11 @@ export type InboundRouteOutcome = {
  * ledger are exactly the ones already in place. Nothing is auto-executed here
  * that a person would not have to approve when they asked for it themselves.
  *
- * The provider ref becomes the request's `client_request_id`, so a webhook that
- * fires twice re-finds the request it already made rather than planning again.
+ * A REDELIVERY MUST NOT PLAN TWICE, and that is guarded in two places: the
+ * webhook only calls this when `recordInboundMessage` reports it actually
+ * inserted the row, and the provider ref becomes the request's
+ * `client_request_id`, so an intake that is reached anyway re-finds the request
+ * it already made rather than planning again.
  *
  * `ai_handled` is written only after the request is persisted; there is no
  * `request_id` column to stamp (see the migration ask), so the link between the
@@ -225,9 +281,11 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   if (!scope) return { ...empty, reason: 'no_scope' };
 
   // Paperwork first: an emailed bill or reservation is a record the family
-  // needs whether or not the planner does anything with the message.
+  // needs whether or not the planner does anything with the message. It is
+  // filed idempotently: the webhook's caller already skips a redelivery, and
+  // the filer itself refuses to make the same record twice.
   const paperworkItemId = input.channel === 'email'
-    ? await fileInboundPaperwork(admin, input.familyId, text, input.now)
+    ? await fileInboundPaperwork(admin, input.familyId, text, input.now, input.providerRef)
     : null;
 
   const submit = input.submit ?? submitRequest;
@@ -263,12 +321,33 @@ export async function routeInboundToPlanner(admin: Admin, input: {
  * it recognises something. Only columns 0169 actually defines are written, and
  * a kind the CHECK does not admit ('receipt', 'reservation') is stored as its
  * closest admitted value with the finer kind kept in `meta`.
+ *
+ * IDEMPOTENT, because a webhook fires twice and a family must not be shown two
+ * copies of one water bill. The dedupe key is `raw_text` under `family_id`: the
+ * same email carries the same text, and unlike `meta->>'provider_ref'` it is a
+ * column both Postgres and the read path can filter on without a new index. The
+ * ref is still stamped into `meta` so the row can be traced back to the delivery
+ * it came from.
  */
 export async function fileInboundPaperwork(
-  admin: Admin, familyId: string, text: string, now?: Date,
+  admin: Admin, familyId: string, text: string, now?: Date, providerRef?: string | null,
 ): Promise<string | null> {
   const triage = triagePaperwork(text, now ?? new Date());
   if (!FILEABLE_PAPERWORK.has(triage.kind)) return null;
+  const rawText = text.slice(0, 20_000);
+
+  const existing = await admin
+    .from('paperwork_items')
+    .select('id')
+    .eq('family_id', familyId)
+    .eq('raw_text', rawText)
+    .limit(1)
+    .maybeSingle();
+  if (existing.data?.id) return existing.data.id;
+  // A read that did not answer cannot prove this is new — but refusing to file
+  // would lose the bill, and a visible duplicate is the smaller harm of the two.
+  if (existing.error) console.error('[contact-center] inbound paperwork de-dupe read failed', existing.error);
+
   const fields = paperworkKindFields(triage.kind);
   const { data, error } = await admin
     .from('paperwork_items')
@@ -277,14 +356,14 @@ export async function fileInboundPaperwork(
       kind: fields.kind,
       title: triage.title,
       summary: triage.summary,
-      raw_text: text.slice(0, 20_000),
+      raw_text: rawText,
       due_on: triage.due_on,
       amount: triage.amount,
       urgency: triage.urgency,
       // `actions` is a jsonb column; the triage result is a plain array of flat
       // records, which is valid JSON but not structurally `Json` to TypeScript.
       actions: triage.actions as unknown as Json,
-      meta: { ...fields.meta, source: 'inbound_email' },
+      meta: { ...fields.meta, source: 'inbound_email', provider_ref: providerRef ?? null },
     })
     .select('id')
     .maybeSingle();
