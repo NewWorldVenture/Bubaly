@@ -129,3 +129,93 @@ export function buildOutcomePlan(id: OutcomeId, ctx: OutcomeContext = EMPTY_CONT
 export function outcomeUrgencyCount(id: OutcomeId, ctx: OutcomeContext): number {
   return buildOutcomePlan(id, ctx).filter((s) => s.badge).length;
 }
+
+// ── "Do one thing now" (M30) ─────────────────────────────────────────────────
+//
+// A family that has just finished the wizard has seen a brief and a celebration
+// screen and has done nothing. The activation metric measures the first OUTCOME
+// viewed, and nothing on the path there pointed at one — so the last screen of
+// onboarding said "start exploring", which is another way of saying "you work
+// out what to do next".
+//
+// This picks ONE thing, from the same `buildOutcomePlan` the Outcomes page
+// renders and from the same real snapshot, and hands back the step's own href.
+// It promises nothing and claims nothing has happened: it is a door, chosen by
+// what the family's own data says is closest to hand.
+
+/** Why a first thing was chosen — each reason has its own copy. */
+export type FirstThingReason = 'overdue' | 'events' | 'grocery' | 'birthday' | 'default';
+
+export type FirstThing = {
+  outcomeId: OutcomeId;
+  reason: FirstThingReason;
+  /** English source copy; the UI renders `labelKey`/`detailKey` through t(). */
+  label: string;
+  labelKey: string;
+  detail: string;
+  detailKey: string;
+  /** The step of that outcome's plan this sends the family into. */
+  href: string;
+};
+
+const FIRST_THING_COPY: Record<FirstThingReason, { label: string; labelKey: string; detail: string; detailKey: string }> = {
+  overdue: {
+    label: 'Clear what is overdue',
+    labelKey: 'doOneThing.overdueLabel',
+    detail: 'Your ranked next actions — start with the first one.',
+    detailKey: 'doOneThing.overdueDetail',
+  },
+  events: {
+    label: 'See today, in order',
+    labelKey: 'doOneThing.eventsLabel',
+    detail: 'Everything happening today, and what to get ready.',
+    detailKey: 'doOneThing.eventsDetail',
+  },
+  grocery: {
+    label: 'Finish the shopping list',
+    labelKey: 'doOneThing.groceryLabel',
+    detail: 'Everything left to buy, in one list.',
+    detailKey: 'doOneThing.groceryDetail',
+  },
+  birthday: {
+    label: 'Get ready for the birthday',
+    labelKey: 'doOneThing.birthdayLabel',
+    detail: 'Plan the day while there is still time.',
+    detailKey: 'doOneThing.birthdayDetail',
+  },
+  default: {
+    label: 'Start with today',
+    labelKey: 'doOneThing.defaultLabel',
+    detail: 'Open your day and put the first thing in it.',
+    detailKey: 'doOneThing.defaultDetail',
+  },
+};
+
+/** reason → (outcome, index of the step in its plan). */
+const FIRST_THING_TARGET: Record<FirstThingReason, { outcomeId: OutcomeId; step: number }> = {
+  overdue: { outcomeId: 'run_today', step: 1 },   // "What needs you"
+  events: { outcomeId: 'run_today', step: 0 },    // "Today's schedule"
+  grocery: { outcomeId: 'feed_family', step: 1 }, // "Shopping list"
+  birthday: { outcomeId: 'celebrate', step: 0 },  // "Celebrations"
+  default: { outcomeId: 'run_today', step: 0 },
+};
+
+/**
+ * The one thing to offer a family that has not reached its first outcome yet.
+ *
+ * Priority is by what is already true of their data, most pressing first: an
+ * overdue task beats a full day, a full day beats a shopping list, and a family
+ * with none of those is pointed at today rather than at a feature tour.
+ */
+export function pickFirstThing(ctx: OutcomeContext = EMPTY_CONTEXT): FirstThing {
+  const reason: FirstThingReason =
+    ctx.overdueTasks > 0 ? 'overdue'
+    : ctx.eventsToday > 0 ? 'events'
+    : ctx.openGrocery > 0 ? 'grocery'
+    : ctx.birthdaysSoon > 0 ? 'birthday'
+    : 'default';
+  const target = FIRST_THING_TARGET[reason];
+  const plan = buildOutcomePlan(target.outcomeId, ctx);
+  const step = plan[target.step] ?? plan[0];
+  return { outcomeId: target.outcomeId, reason, ...FIRST_THING_COPY[reason], href: step.href };
+}

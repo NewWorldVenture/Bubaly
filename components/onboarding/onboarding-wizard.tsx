@@ -36,6 +36,8 @@ import {
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { pickFirstThing } from '@/lib/outcomes/launcher';
+import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -700,7 +702,13 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
         ))}
       </div>
 
-      <Button className="mt-7 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
+      {/* M30 — one real next step instead of "go explore". Seeded from the brief
+          that was just computed, so it points at the day they can already see. */}
+      <div className="mt-6">
+        <DoOneThingCard thing={pickFirstThing({ eventsToday: brief?.todayCount ?? 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 })} />
+      </div>
+
+      <Button className="mt-3 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
 
       {kids.length > 0 && (
         <Link

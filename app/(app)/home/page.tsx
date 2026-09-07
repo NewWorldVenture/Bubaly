@@ -39,6 +39,10 @@ import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
+import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
+import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
+import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
+import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Home' };
@@ -350,6 +354,40 @@ export default async function HomePage() {
   // indexed read of the lifecycle row skips everything for completed accounts;
   // the full completeness resolve runs only for the needs-setup / reset cohort.
   // Degrades to "no nudge" pre-migration.
+  // M30 — "Do one thing now". Only for someone who has not reached first value
+  // yet. The milestone is read PER PERSON, not per family, which is both what
+  // `activation_events` RLS allows (a row is readable only by the user who
+  // recorded it) and the right reading: a second parent joining a settled
+  // household is still on their own first session. The snapshot is already in
+  // hand except the open-grocery count, read only for that cohort. A failed
+  // read hides the card and logs — the card is an offer, so withholding it says
+  // nothing false, while showing it on a guess would claim they are new.
+  let firstThing: FirstThing | null = null;
+  const { data: activated, error: activationError } = await supabase
+    .from('activation_events').select('id')
+    .eq('family_id', familyId).eq('user_id', ctx.user.id)
+    .eq('milestone', FIRST_VALUE_MILESTONE).limit(1);
+  if (activationError) console.error('[home] activation milestone read failed', activationError);
+  else if ((activated ?? []).length === 0) {
+    const { count: openGrocery, error: groceryError } = await supabase
+      .from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('is_checked', false);
+    if (groceryError) console.error('[home] open grocery count read failed', groceryError);
+    const birthdaysSoon = memberList.filter((m) => {
+      if (!m.birthday) return false;
+      const next = nextBirthdayDate(m.birthday, now);
+      if (!next) return false;
+      const days = daysUntil(next, now);
+      return days >= 0 && days <= 14;
+    }).length;
+    firstThing = pickFirstThing({
+      eventsToday: (todayEvents ?? []).length,
+      overdueTasks: tasksOverdue ?? 0,
+      openGrocery: openGrocery ?? 0,
+      birthdaysSoon,
+    });
+  }
+
   let setupNudge: { score: number; headline: string } | null = null;
   if (isManager(me.role)) {
     try {
@@ -385,6 +423,9 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* M30 — one real next step for a family that has not reached first value. */}
+      {firstThing && <DoOneThingCard thing={firstThing} />}
 
       {/* Finish-setup nudge → /dashboard/setup (needs-setup / reset cohort). */}
       {setupNudge && (
