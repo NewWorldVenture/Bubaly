@@ -3,8 +3,10 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
-import { insightDedupeKey } from '@/lib/finance/timeline';
+import { insightDedupeKey, type CashflowTimeline } from '@/lib/finance/timeline';
 import { MoneyTimelineModule } from '@/components/modules/money-timeline-module';
+import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Financial Copilot' };
 export const dynamic = 'force-dynamic';
@@ -20,7 +22,17 @@ export default async function MoneyTimelinePage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const timeline = await loadMoneyTimeline(supabase, familyId);
+  // The loader throws on a real money read failure (see timeline-load.ts):
+  // a forecast missing its bills or a trip is a reassuring-but-wrong balance,
+  // so it fails closed here rather than rendering "smooth water".
+  let timeline: CashflowTimeline;
+  try {
+    timeline = await loadMoneyTimeline(supabase, familyId);
+  } catch (err) {
+    console.error('[dashboard/money-timeline] forecast read failed', err);
+    const tr = await getTranslations();
+    return <ErrorState message={tr('moneyTimeline.couldNotLoadYourMoney')} />;
+  }
 
   // Persisted acknowledge/dismiss state, keyed by the insight's stable dedupe key.
   // Degrades safely before migration 0168 (treat as "no persisted state").
