@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { runGraph } from '@/lib/ai/runs/executor';
 import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         }
 
         try {
-          const result = await runGraph(run.id, { budgetMs: Math.min(PER_RUN_BUDGET_MS, remaining - 2_000), db });
+          const result = await runGraph(run.id, { budgetMs: Math.min(PER_RUN_BUDGET_MS, remaining - 2_000), db, replan: replanPortFor(db) });
           results.push({ runId: run.id, status: result.status, completed: result.completed, failed: result.failed });
         } catch (error) {
           // One bad run must not take the tick down: the lease is released so

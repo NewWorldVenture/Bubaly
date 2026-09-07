@@ -118,9 +118,11 @@ export type ExecutorPort = {
   notifyFamily(scope: ServiceScope, input: NotifyStepInput): Promise<ServiceResult<{ created: number }>>;
   verify(scope: ServiceScope, spec: unknown): Promise<ServiceResult<VerificationOutcome>>;
   /**
-   * Re-planning with the results gathered so far (§9's `replan` step). Owned by
-   * the planner (lib/ai/planner), which is a later slice; until it is wired the
-   * executor reports a replan step as blocked instead of pretending it ran.
+   * Re-planning with the results gathered so far (§9's `replan` step): plans
+   * the rest of the run as a new plan version and returns its id. Owned by the
+   * planner (`replanRun` in lib/ai/planner, handed in as `replanPortFor(db)` by
+   * lib/ai/runs/continue.ts and the cron). A port built without one is a
+   * real, handled state: a replan step blocks honestly instead of pretending.
    */
   replan:
     | ((scope: ServiceScope, run: RunSnapshot, step: StepSnapshot, steps: StepSnapshot[]) => Promise<ServiceResult<{ planId: string }>>)
@@ -153,6 +155,14 @@ const RETRY_BASE_DELAY_MS = 500;
 const RETRY_MAX_DELAY_MS = 30_000;
 /** Safety net: the loop is driven by state changes, so a pass that changes nothing must not spin. */
 const MAX_PASSES = 100;
+/**
+ * Re-plans per run. Every re-plan may itself end in another replan step (the
+ * validator allows one per plan), so without a ceiling a model that keeps
+ * deferring the decision would keep the run alive forever. Two is enough for
+ * "look, decide, look again"; the third is blocked and the run reports what it
+ * managed, which is the honest end of a plan that never converged.
+ */
+export const MAX_REPLANS_PER_RUN = 2;
 
 // --- Idempotency ------------------------------------------------------------
 
@@ -454,7 +464,13 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       );
     }
 
-    const batch = runnable.slice(0, MAX_STEP_CONCURRENCY);
+    const batch = pickBatch(runnable, steps);
+    if (!batch.length) {
+      // Only replan steps can run, and a step is still waiting on a person: the
+      // re-plan must see that decision, so the run parks (finalizeRun reports
+      // `awaiting_approval` when anything is) and resumes when it lands.
+      return finalizeRun(port, run, steps);
+    }
     const settled = await Promise.allSettled(batch.map((step) => runStep(port, scope, run, step, steps, deadline)));
 
     let parkedApproval = false;
@@ -514,6 +530,23 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
   return finalizeRun(port, run, steps);
+}
+
+/**
+ * The steps to run together this pass.
+ *
+ * A replan step runs ALONE and LAST: the re-plan carries forward the steps
+ * that have finished and replaces the rest, so anything still in flight or
+ * still runnable beside it would be lost from the new plan. Ordinary runnable
+ * steps therefore always go first (up to the concurrency cap), a replan only
+ * once nothing else can run, and never while a step is waiting on a person —
+ * that decision is part of what the re-plan is meant to see.
+ */
+function pickBatch(runnable: readonly StepSnapshot[], all: readonly StepSnapshot[]): StepSnapshot[] {
+  const ordinary = runnable.filter((step) => step.step_type !== 'replan');
+  if (ordinary.length) return ordinary.slice(0, MAX_STEP_CONCURRENCY);
+  if (all.some((step) => step.status === 'awaiting_approval')) return [];
+  return runnable.slice(0, 1);
 }
 
 /**
@@ -1059,6 +1092,19 @@ async function runReplanStep(
     return { kind: 'progressed' };
   }
 
+  // Every earlier re-plan is carried into the current plan as a completed
+  // replan step (`replanRun`), so the plan's own steps are the run's re-plan
+  // count — no extra query, and a continuation on a fresh worker sees the
+  // same number. Blocked, not failed: nothing went wrong, the run simply may
+  // not defer the decision again.
+  const priorReplans = steps.filter((s) => s.id !== step.id && s.step_type === 'replan' && s.status === 'completed').length;
+  if (priorReplans >= MAX_REPLANS_PER_RUN) {
+    const message = `This run has already been re-planned ${MAX_REPLANS_PER_RUN} times, so Bubaly stopped here instead of planning again.`;
+    await port.updateStep(run, step.id, { status: 'blocked', error: message, completed_at: new Date(port.now()).toISOString() });
+    await port.appendEvent(run, { eventType: 'blocked', stepId: step.id, message, payload: { replans: priorReplans, limit: MAX_REPLANS_PER_RUN } });
+    return { kind: 'progressed' };
+  }
+
   const replanned = await port.replan(scope, run, step, [...steps]);
   if (!replanned.ok) return failStep(port, run, step, replanned.error, replanned.retryable === true);
 
@@ -1071,7 +1117,7 @@ async function runReplanStep(
     eventType: 'planned',
     stepId: step.id,
     message: 'Bubaly re-planned the rest of this run with what it had learned.',
-    payload: { plan_id: replanned.data.planId },
+    payload: { plan_id: replanned.data.planId, replans: priorReplans + 1, limit: MAX_REPLANS_PER_RUN },
   });
   return { kind: 'replanned', planId: replanned.data.planId };
 }
@@ -1088,12 +1134,22 @@ function approvalDomainFor(step: StepSnapshot): string {
   return known.includes(prefix) ? prefix : 'scheduling';
 }
 
+export type ExecutorPortOptions = {
+  /**
+   * The re-planning port (`replanPortFor(db)` from lib/ai/planner). Injected
+   * rather than imported: the planner already imports this module (the
+   * validator borrows `parseNotifyInput`), and a static import back would
+   * make the two a cycle. Omitted, a replan step blocks honestly.
+   */
+  replan?: ExecutorPort['replan'];
+};
+
 /**
  * Build the real port over a service client. Every statement filters
  * `family_id` explicitly - the service client bypasses RLS, so the tenancy
  * boundary here is the code, not the database.
  */
-export function createExecutorPort(db: SupabaseClient<Database>): ExecutorPort {
+export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorPortOptions = {}): ExecutorPort {
   const scopeCache = new Map<string, ServiceScope>();
 
   // A minimal system scope for the bookkeeping writes, which only ever need the
@@ -1229,9 +1285,10 @@ export function createExecutorPort(db: SupabaseClient<Database>): ExecutorPort {
       if (!parsed.ok) return parsed;
       return runVerification(scope, parsed.data);
     },
-    // Wired by the planner slice (P2-02); null here is a real, handled state,
-    // not a stub: a replan step blocks and the run reports partial completion.
-    replan: null,
+    // Null is a real, handled state, not a stub: a caller that builds the
+    // port without the planner's `replanPortFor` gets a replan step that
+    // blocks and a run that reports partial completion.
+    replan: opts.replan ?? null,
     async setRequestState(run, state, error) {
       if (!run.request_id) return;
       const terminal = state === 'completed' || state === 'partially_completed' || state === 'failed' || state === 'cancelled';
@@ -1257,9 +1314,14 @@ export function createExecutorPort(db: SupabaseClient<Database>): ExecutorPort {
 /**
  * Execute a run. This is the entry point the cron, the continuation helper and
  * the run controls all use; `db` may be supplied when the caller already holds
- * a service client (the cron claims a batch with one).
+ * a service client (the cron claims a batch with one), and `replan` is the
+ * planner's port (`replanPortFor(db)`) so a replan step runs instead of
+ * blocking.
  */
-export async function runGraph(runId: string, opts?: { budgetMs?: number; db?: SupabaseClient<Database> }): Promise<RunGraphResult> {
+export async function runGraph(
+  runId: string,
+  opts?: { budgetMs?: number; db?: SupabaseClient<Database>; replan?: ExecutorPort['replan'] },
+): Promise<RunGraphResult> {
   const db = opts?.db ?? createServiceClient();
-  return runGraphWith(createExecutorPort(db), runId, { budgetMs: opts?.budgetMs });
+  return runGraphWith(createExecutorPort(db, { replan: opts?.replan ?? null }), runId, { budgetMs: opts?.budgetMs });
 }

@@ -23,15 +23,17 @@ import { NeedsAttention } from '@/components/concierge/needs-attention';
 import { WorkingOn } from '@/components/concierge/working-on';
 import { CompletedByBubaly } from '@/components/concierge/completed-by-bubaly';
 import {
-  buildToday, mergeCompletedByBubaly, workingRunsFrom, WORKING_RUN_STATES,
-  type AiActivityRow, type CompletedRunRow, type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
+  buildToday, workingRunsFrom, WORKING_RUN_STATES,
+  type TodayChoreRow, type TodayEventRow, type TodayReminderRow, type TodayTodoRow,
   type WorkingRunRow, type WorkingStepRow,
 } from '@/lib/home/today';
+import { loadCompletedByBubaly } from '@/lib/home/completed';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { needsHeadline, summarizeNeeds, topNeeds } from '@/lib/home/needs-attention';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
 import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/services/scope';
+import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
@@ -199,6 +201,14 @@ export default async function HomePage() {
 
   const memberList = (members ?? []) as Member[];
   const memberById = new Map(memberList.map((m) => [m.id, m]));
+
+  // M8 — the composed schedule model for today's events (leave-by, driver, car,
+  // dinner and care constraints), so the Today strip says WHY an event needs
+  // attention instead of the bare "Today". Started here, awaited before
+  // `buildToday`, so it overlaps the reads below. The loader is fail-closed:
+  // a failed read is logged there and shown as a retryable note under the
+  // strip, never as a strip that looks all clear.
+  const schedulePromise = loadScheduleIntelligence(supabase, { familyId, tz, now, fromMs: dayBounds.start, toMs: dayBounds.end });
   const me = ctx.active.member;
   const myFirstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
 
@@ -239,7 +249,6 @@ export default async function HomePage() {
   // the approvals inbox, whose failure is shown, because "nothing needs you"
   // is a claim.
   const dayEndIso = todayEnd.toISOString();
-  const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
   const manager = isManager(me.role);
   // A ServiceResult, not a Postgrest response — awaited beside the batch
   // rather than inside it, with its own fallback so a throw costs the
@@ -248,23 +257,20 @@ export default async function HomePage() {
     console.warn('[home] pending AI approvals read threw', cause);
     return { ok: false as const, error: String(cause) };
   });
+  // "Completed by Bubaly" (M6): one fail-closed loader that reads the ledger for
+  // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
+  // response, so it is awaited BESIDE the batch — settleAll substitutes the
+  // { data, error } shape for a rejection, which has no `ok` to branch on.
+  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+    console.error('[home] completed-by-Bubaly read threw', cause);
+    return { ok: false as const, error: String(cause) };
+  });
   const [
-    activeRunsRes, completedRunsRes, agentRes, autoDoneRes, recsRes,
+    activeRunsRes, recsRes,
     moneyApprovalsRes, choreSignoffRes, todosDueRes, choresDueRes, remindersDueRes,
   ] = await settleAll([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
-    supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
-      .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
-      .order('completed_at', { ascending: false, nullsFirst: false }).limit(6),
-    // Specialist-agent actions completed recently — the Chief of Staff reports
-    // its whole staff's work, not just the run executor's.
-    supabase.from('agent_activity').select('id, title, detail, href, created_at')
-      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h)
-      .order('created_at', { ascending: false }).limit(5),
-    supabase.from('autopilot_suggestions').select('id, title, created_at')
-      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
-      .order('created_at', { ascending: false }).limit(5),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
     manager
@@ -283,7 +289,7 @@ export default async function HomePage() {
       .order('remind_at', { ascending: true }).limit(20),
   ]);
   for (const [label, res] of [
-    ['active runs', activeRunsRes], ['completed runs', completedRunsRes], ['agent activity', agentRes], ['autopilot handled', autoDoneRes],
+    ['active runs', activeRunsRes],
     ['recommendations', recsRes], ['money approvals', moneyApprovalsRes], ['chore sign-offs', choreSignoffRes],
     ['todos due', todosDueRes], ['chores due', choresDueRes], ['reminders due', remindersDueRes],
   ] as const) {
@@ -299,14 +305,8 @@ export default async function HomePage() {
   if (activeStepError) console.error('[home] active run steps read failed', activeStepError);
   const workingRuns = workingRunsFrom(activeRuns, (activeStepRows ?? []) as WorkingStepRow[]);
 
-  const completedItems = mergeCompletedByBubaly(
-    (completedRunsRes.data ?? []) as CompletedRunRow[],
-    [
-      ...((agentRes.data ?? []) as AiActivityRow[]),
-      ...((autoDoneRes.data ?? []) as { id: string; title: string; created_at: string }[])
-        .map((s) => ({ id: s.id, title: s.title, detail: null, href: '/dashboard/autopilot', created_at: s.created_at })),
-    ],
-  );
+  const completedItems = completedRes.ok ? completedRes.data : [];
+  const completedError = completedRes.ok ? null : completedRes.error;
 
   const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
   const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
@@ -333,6 +333,7 @@ export default async function HomePage() {
     if (moreChoresError) console.error('[home] chore titles read failed', moreChoresError);
     for (const c of moreChores ?? []) choreTitleById.set(c.id, c.title);
   }
+  const scheduleRes = await schedulePromise;
   const today = buildToday({
     events: ((todayEvents ?? []) as TodayEventRow[]),
     todos: (todosDueRes.data ?? []) as TodayTodoRow[],
@@ -340,6 +341,7 @@ export default async function HomePage() {
     reminders: (remindersDueRes.data ?? []) as TodayReminderRow[],
     choreTitles: Object.fromEntries(choreTitleById),
     todayKey, tz, now,
+    ...(scheduleRes.ok ? { insights: scheduleRes.data.byEvent } : {}),
   });
 
   // R11 — the category metric: how much family admin the system removed this week.
@@ -411,7 +413,8 @@ export default async function HomePage() {
       <AskBar />
 
       {/* §16 Command Center: what needs a person, what Bubaly is doing, the
-          family's day, what is coming, and what Bubaly finished. */}
+          family's day, what is coming, and what Bubaly finished. Home shows the
+          top five; the full, uncapped queue (M5) lives at /dashboard/needs-you. */}
       <NeedsAttention
         items={needs.shown}
         more={needs.more}
@@ -420,9 +423,10 @@ export default async function HomePage() {
         moneyApprovalKinds={Object.fromEntries(((moneyApprovalsRes.data ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
         recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
         canDecide={manager}
+        seeAllHref="/dashboard/needs-you"
       />
 
-      <WorkingOn familyId={familyId} initial={workingRuns} />
+      <WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" />
 
       <Card>
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
@@ -438,12 +442,23 @@ export default async function HomePage() {
                     <div className="min-w-0 flex-1 border-l border-border pl-3">
                       <p className="truncate text-sm font-semibold">{item.title}</p>
                       <p className="truncate text-xs text-muted">{item.kind === 'reminder' ? 'Reminder' : 'Event'}{who ? ` · ${firstName(who.display_name)}` : ''}</p>
+                      {item.insight && (
+                        <p className={cn('truncate text-xs font-semibold', item.insight.severity === 'urgent' ? 'text-rose-400' : item.insight.severity === 'warn' ? 'text-amber-500' : 'text-muted')}>
+                          {i18nT(item.insight.reasonKey, item.insight.params)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 </li>
               );
             })}
           </ul>
+        )}
+        {!scheduleRes.ok && (
+          <p role="alert" className="mt-3 text-xs text-rose-400">
+            {tr('home.couldNotCheckTodaysSchedule')}{' '}
+            <Link href="/home" className="font-semibold underline underline-offset-2">{tr('home.tryAgain')}</Link>
+          </p>
         )}
         {today.tasks.length > 0 && (
           <ul className={cn('space-y-2.5', today.schedule.length > 0 && 'mt-4 border-t border-border pt-4')} aria-label={tr('home.dueToday')}>
@@ -489,7 +504,7 @@ export default async function HomePage() {
         </div>
       </Card>
 
-      <CompletedByBubaly items={completedItems} />
+      <CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" />
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner data={timeSaved} />

@@ -18,6 +18,7 @@ import 'server-only';
 import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGraph, type RunGraphResult } from './executor';
 import { claimRun, releaseRun } from './store';
@@ -59,7 +60,9 @@ export async function continueRun(
 
   const leaseOwner = claim.data.leaseOwner;
   try {
-    const result = await runGraph(runId, { budgetMs, db });
+    // The planner's re-planning port rides along so a `replan` step plans the
+    // rest of the run (as a new plan version) instead of blocking.
+    const result = await runGraph(runId, { budgetMs, db, replan: replanPortFor(db) });
     return { ...result, claimed: true };
   } finally {
     // The executor clears the lease itself when it parks or finishes; this is

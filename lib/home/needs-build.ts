@@ -6,8 +6,10 @@ import type { NeedItem } from './needs-attention';
 import {
   parentApprovalToNeed, renewalToNeed, documentExpiryToNeed,
   aiApprovalToNeed, awaitingRunToNeed, recommendationToNeed,
+  factSuggestionToNeed, inboxMessageToNeed, paperworkActionsToNeeds,
   type ParentApprovalRow, type RenewalRow, type DocumentRow,
   type AiApprovalRow, type AwaitingRunRow, type RecommendationRow,
+  type FactSuggestionRow, type InboxMessageRow, type PaperworkRow,
 } from './needs-sources';
 
 export type HomeNeedsInput = {
@@ -29,6 +31,12 @@ export type HomeNeedsInput = {
   awaitingRuns?: AwaitingRunRow[];
   /** Pending `family_ai_recommendations` (§11 level 1). */
   recommendations?: RecommendationRow[];
+  /** `family_playbook_suggestions` still 'suggested' — memories Bubaly inferred and nobody confirmed (M5). */
+  factSuggestions?: FactSuggestionRow[];
+  /** `family_inbox_messages` rows; the mapper keeps only unread inbound ones that want a human reply (M5). */
+  inboxMessages?: InboxMessageRow[];
+  /** Open `paperwork_items`; each unmaterialised sign / pay / RSVP action becomes its own item (M5). */
+  paperwork?: PaperworkRow[];
 };
 
 /**
@@ -59,6 +67,13 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
     if (n) items.push(n);
   }
   for (const r of data.recommendations ?? []) items.push(recommendationToNeed(r));
+  // M5: the three sources that never reached the queue before. Each mapper
+  // returns null / [] for a row that needs nobody (lapsed suggestion, read or
+  // outbound message, materialised action), so the reader can pass rows as
+  // they come off the table.
+  for (const r of data.factSuggestions ?? []) { const n = factSuggestionToNeed(r, data.now); if (n) items.push(n); }
+  for (const r of data.inboxMessages ?? []) { const n = inboxMessageToNeed(r); if (n) items.push(n); }
+  for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.now));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
   for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
   for (const c of data.conflicts)

@@ -26,7 +26,14 @@ import { cn } from '@/lib/utils/cn';
 import { DOMAIN_LABELS } from '@/lib/trust/engine';
 import { decideApproval, editAndApproveApproval } from '@/app/(app)/dashboard/approvals-actions';
 import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data';
+import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import { useTranslations } from '@/components/i18n/locale-provider';
+
+/** A context slice in the family's words; the raw name when it is not one we ship. */
+function sliceLabelOf(slice: string, t: (key: string) => string): string {
+  const key = sliceLabelKey(slice);
+  return key ? t(key) : sliceLabel(slice);
+}
 
 export type ApprovalCardResult =
   | { decision: 'approved' | 'rejected' | 'modified'; summary: string; resumedRunId: string | null }
@@ -190,6 +197,33 @@ export function ApprovalCard({
           </div>
         </div>
       </div>
+
+      {/* WHAT BUBALY LOOKED AT (M24). Collapsed, because it is evidence rather
+          than part of the decision, and NAMES ONLY — `basedOnFrom` in
+          lib/approvals/card-data.ts is the gate that keeps the context
+          snapshot's rows out of this card. `withheld` matters as much as
+          `read`: it is where a parent sees that a meal plan never touched the
+          money slice. Nothing renders when the caller resolved no context, so
+          the expander is never an empty reassurance. */}
+      {!compact && approval.basedOn && (
+        <details className="mt-2 text-[11px]">
+          <summary className="cursor-pointer text-muted focus-ring">{t('approval.basedOn')}</summary>
+          <div className="mt-1 space-y-0.5 pl-1">
+            {approval.basedOn.read.length > 0 && (
+              <p className="text-fg/70">
+                <span className="font-semibold uppercase tracking-wide text-muted">{t('trustActivity.read')}</span>
+                {approval.basedOn.read.map((slice) => ` · ${sliceLabelOf(slice, t)}`).join('')}
+              </p>
+            )}
+            {approval.basedOn.withheld.length > 0 && (
+              <p className="text-amber-300/80">
+                <span className="font-semibold uppercase tracking-wide text-muted">{t('trustActivity.withheld')}</span>
+                {approval.basedOn.withheld.map((slice) => ` · ${sliceLabelOf(slice, t)}`).join('')}
+              </p>
+            )}
+          </div>
+        </details>
+      )}
 
       {/* What this request is waiting for. A two-parent rule that says so only
           in the toast after you tap Approve is a rule the family cannot see. */}

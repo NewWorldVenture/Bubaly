@@ -14,6 +14,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { acceptPolicySuggestionAction } from '@/app/(app)/dashboard/trust/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -33,7 +34,7 @@ const KIND_ICON: Record<string, typeof Rocket> = {
   document: FileClock, appointment: CalendarClock, chore: ListChecks,
   birthday: Cake, groceries: ShoppingCart, conflict: CalendarX,
   finance: Wallet, wellbeing: HeartPulse, medication: Pill, meal: UtensilsCrossed,
-  insurance: ShieldIcon,
+  insurance: ShieldIcon, policy: ShieldIcon,
 };
 
 function iconFor(kind: string) {
@@ -97,6 +98,17 @@ export function AutopilotModule() {
 
   async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     const supabase = createClient();
+    // A learned policy (M7) is written by the trust action, never here: only a
+    // manager may hand Bubaly standing permission, and the row it writes is
+    // one narrow trust_policies row scoped to a single tool. The action also
+    // marks the suggestion done, so nothing below claims it was.
+    if (s.kind === 'policy' && status !== 'dismissed') {
+      const accepted = await acceptPolicySuggestionAction({ suggestionId: s.id });
+      if (!accepted.ok) return toastError(accepted.error ?? t('autopilotModule.couldNotSaveThatPolicy'));
+      success(t('autopilotModule.policyAccepted'));
+      void refresh();
+      return;
+    }
     // Approving a "create reminder" writes a real reminder the family sees on the
     // Reminders page (family_reminders, ai_suggested) — the notification cron picks
     // it up via dueFamilyReminderNotices, same as the Front Desk's call reminders.
@@ -255,7 +267,7 @@ function SuggestionRow({ s, onApprove, onDismiss }: {
         <div className="flex flex-shrink-0 items-center gap-1">
           <button onClick={onApprove}
             className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-            <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
+            <Check className="h-3.5 w-3.5" /> {s.kind === 'policy' ? t('autopilotModule.trustBubalyWithThis') : (s.action_label ?? 'Do it')}
           </button>
           <button onClick={onDismiss} aria-label={t('autopilot.dismiss')}
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">

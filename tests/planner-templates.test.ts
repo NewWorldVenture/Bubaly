@@ -29,15 +29,21 @@ function ctxOn(todayKey: string, extra: Partial<Parameters<typeof templateContex
 describe('workflow templates are runnable skeletons', () => {
   const ctx = ctxOn('2026-09-05');
 
-  it('covers the seven signature workflows plus the two proactive asks', () => {
+  it('covers the seven signature workflows, the two proactive asks, the move and the chief-of-staff sweep', () => {
     expect(allTemplates().map((t) => t.intent).sort()).toEqual([
-      'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
+      'chief_of_staff', 'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_move', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
     ]);
+    // The move is reachable from its own intent and carries the dynamic half
+    // the other templates do not have — see planner-plan-move.test.ts.
+    expect(templateFor('plan_move')).toMatchObject({ intent: 'plan_move', agent: 'household_manager' });
+    expect(typeof templateFor('plan_move')?.dynamicSteps).toBe('function');
     for (const intent of INTENT_KEYS) {
       const template = templateFor(intent);
       if (template) expect(template.intent).toBe(intent);
     }
     expect(templateFor('answer_question')).toBeNull();
+    // `other` plans from scratch on purpose: it is for text nothing recognised.
+    expect(templateFor('other')).toBeNull();
   });
 
   it('names a real roster agent for every workflow', () => {

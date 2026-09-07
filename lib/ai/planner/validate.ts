@@ -20,7 +20,11 @@
 //   3. Graph — dependencies on unknown keys are removed; dependents of a
 //      dropped step are dropped too (their precondition is gone); a cycle
 //      REJECTS the plan, because a cyclic plan has no runnable step and the
-//      executor would report a completed run that did nothing.
+//      executor would report a completed run that did nothing. A `replan`
+//      step is a decision point, not a branch: at most one per plan
+//      (`MAX_REPLAN_STEPS`), it must depend on the reads it decides from, and
+//      nothing may depend on it — the re-plan replaces everything that has
+//      not run, so a step "after" it could never execute.
 //   4. Trust — a PURE dry run of the executor's gate per act step, over trust
 //      inputs loaded once by the caller: `evaluateAction` then `riskToDecision`
 //      exactly as `lib/ai/tools/execute.ts` applies them. `evaluateTrust` is
@@ -52,14 +56,14 @@ import {
   type AutonomyBehavior, type Capability, type Decision, type Delegation, type Grant, type Policy, type TrustRole,
 } from '@/lib/trust/engine';
 import {
-  MAX_DESCRIPTION_CHARS, MAX_FOLLOWUPS, MAX_OBJECTIVE_CHARS, MAX_REASONING_CHARS, MAX_STEPS,
+  MAX_DESCRIPTION_CHARS, MAX_FOLLOWUPS, MAX_OBJECTIVE_CHARS, MAX_REASONING_CHARS, MAX_REPLAN_STEPS, MAX_STEPS,
   parseStepInput, toExecutorCondition, type Plan, type PlanRiskLevel, type PlanStep,
 } from './schema';
 
 export type PlanIssueCode =
   | 'duplicate_key' | 'too_many_steps' | 'missing_tool' | 'unknown_tool' | 'off_catalogue' | 'type_coerced' | 'invalid_input'
   | 'invalid_condition' | 'unknown_dependency' | 'dependency_dropped' | 'invalid_verify' | 'invalid_notify'
-  | 'invalid_followup' | 'past_followup' | 'denied' | 'recommend_only' | 'cycle' | 'empty';
+  | 'invalid_followup' | 'past_followup' | 'invalid_replan' | 'denied' | 'recommend_only' | 'cycle' | 'empty';
 
 /**
  * `reason` is the refusal itself, kept apart from `message` (which wraps it in
@@ -321,6 +325,7 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
   const dropped = new Set<string>();
   const recommendOnly: ValidatedStep[] = [];
   const behaviors: (AutonomyBehavior | null)[] = [];
+  let replans = 0;
 
   const rawSteps = plan.steps.slice(0, MAX_STEPS);
   if (plan.steps.length > MAX_STEPS) {
@@ -340,6 +345,16 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
     if (!draft) {
       dropped.add(key);
       continue;
+    }
+    if (draft.stepType === 'replan') {
+      replans += 1;
+      if (replans > MAX_REPLAN_STEPS) {
+        // The second decision point is the first one's job: a re-plan may
+        // itself end in a replan step, and the executor caps the chain.
+        dropped.add(key);
+        issues.push({ code: 'invalid_replan', step: key, message: `Step "${key}" is a second replan step; a plan may have at most ${MAX_REPLAN_STEPS}. Fold the decision into the first one, which can re-plan again if it must.` });
+        continue;
+      }
     }
     if (draft.stepType === 'act' && draft.tool) {
       behaviors.push(draft.behavior);
@@ -371,6 +386,23 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
     });
   }
 
+  // Nothing runs "after" a replan step: the re-plan replaces every step that
+  // has not run, so a dependent of one could never execute. Dropped here so
+  // the cascade below takes its own dependents with it.
+  const replanKeys = new Set(drafts.filter((d) => d.stepType === 'replan').map((d) => d.key));
+  for (let i = drafts.length - 1; i >= 0; i -= 1) {
+    const draft = drafts[i];
+    const after = draft.dependsOn.find((dep) => replanKeys.has(dep));
+    if (!after) continue;
+    drafts.splice(i, 1);
+    dropped.add(draft.key);
+    issues.push({
+      code: 'invalid_replan',
+      step: draft.key,
+      message: `"${draft.key}" depends on the replan step "${after}"; nothing may. The re-plan itself decides what comes after it, so leave this step out and let the re-plan add it.`,
+    });
+  }
+
   // Pass 2: the graph. Unknown dependencies are removed; dependents of dropped
   // steps are dropped transitively (their precondition no longer exists).
   const keys = new Set(drafts.map((d) => d.key));
@@ -394,6 +426,19 @@ export function validatePlan(plan: Plan, inputs: ValidationInputs): ValidationRe
         issues.push({ code: 'unknown_dependency', step: draft.key, message: `Step "${draft.key}" depended on ${unknown.map((k) => `"${k}"`).join(', ')}, which do not exist; those dependencies were removed.` });
       }
     }
+  }
+
+  // A replan step whose dependencies all turned out not to exist has nothing
+  // to decide from — the executor would run it before any read — so it goes
+  // the way of one with an empty depends_on. Nothing depends on a replan step
+  // (enforced above), so there is no cascade to run.
+  for (let i = drafts.length - 1; i >= 0; i -= 1) {
+    const draft = drafts[i];
+    if (draft.stepType !== 'replan' || draft.dependsOn.length) continue;
+    drafts.splice(i, 1);
+    keys.delete(draft.key);
+    dropped.add(draft.key);
+    issues.push({ code: 'invalid_replan', step: draft.key, message: `Step "${draft.key}" is a replan step whose dependencies do not exist; list the retrieve steps whose results decide what comes next, or plan the actions directly.` });
   }
 
   const cycle = findDependencyCycle(drafts.map((d) => ({ id: d.key, status: 'queued' as StepState, dependency_ids: d.dependsOn })));
@@ -585,6 +630,19 @@ function buildDraft(raw: PlanStep, key: string, inputs: ValidationInputs, issues
         input: { summary: typeof parsedInput.value.summary === 'string' ? parsedInput.value.summary : description, consequences: Array.isArray(parsedInput.value.consequences) ? parsedInput.value.consequences : [] },
         approvalRequired: true, riskLevel: 'low', decisionReason: 'The plan asks a person before continuing.', behavior: null, tool: null, verifySpec: null,
       };
+    case 'replan': {
+      // A re-plan with nothing learned is the original plan again. It must
+      // wait on the reads it decides from; the executor also runs it alone and
+      // last, so the results it sees are the run's whole outcome so far.
+      if (!base.dependsOn.length) {
+        issues.push({ code: 'invalid_replan', step: key, message: `Step "${key}" is a replan step with an empty depends_on; list the retrieve steps whose results decide what comes next, or plan the actions directly.` });
+        return null;
+      }
+      const prompt = typeof parsedInput.value.prompt === 'string' && parsedInput.value.prompt.trim()
+        ? clip(parsedInput.value.prompt, MAX_DESCRIPTION_CHARS)
+        : description;
+      return { ...base, stepType: 'replan', toolName: null, input: { prompt }, approvalRequired: false, riskLevel: 'low', decisionReason: null, behavior: null, tool: null, verifySpec: null };
+    }
     default:
       return null;
   }
@@ -609,10 +667,14 @@ function parseVerifySlot(raw: PlanStep, key: string, issues: PlanIssue[]): unkno
  * Follow-ups run LAST: a `followup` step parks the run until its time, so it
  * must depend on every leaf, or the executor would park the run before the
  * work. Each follow-up's prompt reaches the managers as a notification when
- * the run resumes — the honest implementation while the executor has no
- * re-planning port (see `replanRun` in ./index.ts for the day it does).
+ * the run resumes. A plan that ends in a replan step gets none: the re-plan
+ * replaces everything after it, follow-ups included, and can ask for its own.
  */
 function appendFollowups(steps: ValidatedStep[], followups: Plan['followups'], inputs: ValidationInputs, issues: PlanIssue[]): void {
+  if (followups.length && steps.some((s) => s.stepType === 'replan')) {
+    issues.push({ code: 'invalid_followup', step: null, message: 'Follow-ups were left out because the plan ends in a replan step; the re-plan can schedule its own once it knows what remains.' });
+    return;
+  }
   const resolved = followups
     .map((f, index) => ({ index, at: resolveFollowupAt(f.after, inputs.now, inputs.tz), prompt: clip(f.prompt, MAX_DESCRIPTION_CHARS) }))
     .filter((f) => {

@@ -27,6 +27,7 @@
 import 'server-only';
 import type { Json, NotificationType, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
+import { DIGEST_NOTIFICATION_TYPES, type NotificationPriority } from '@/lib/notifications/priority';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getAISettings } from '../ai-settings';
 import { dayKeyInTz, hourInTz, scopeNow, zonedTimeMs } from '../scope';
@@ -48,6 +49,15 @@ export type NotifyInput = {
   sendAt?: string | null;
   /** Skip the quiet-hours deferral — for things that are urgent by definition. */
   urgent?: boolean;
+  /**
+   * Say this at most ONCE per `relatedId`, read or not. The default guard
+   * only drops a duplicate while the first copy is still unread, which is
+   * right for "the renewal is still expiring" and wrong for a day's morning
+   * brief: a parent who read it at 7:05 must not get it again when the cron
+   * re-runs at 8. Pair it with a `relatedId` that names the occasion
+   * (`brief:2026-09-07`), because without one the title is the identity.
+   */
+  once?: boolean;
 };
 
 export type NotifyResult = {
@@ -143,8 +153,9 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
     .from('notifications')
     .select('user_id')
     .eq('family_id', scope.familyId)
-    .eq('type', input.type)
-    .eq('is_read', false);
+    .eq('type', input.type);
+  // `once` widens the guard to every prior copy; the default is unread only.
+  if (!input.once) dupeQuery = dupeQuery.eq('is_read', false);
   dupeQuery = input.relatedId ? dupeQuery.eq('related_id', input.relatedId) : dupeQuery.eq('title', title);
 
   const { data: existing, error: dupeError } = await dupeQuery;
@@ -284,8 +295,19 @@ export async function markRead(scope: ServiceScope, notificationId: string): Pro
  * Unread notifications for the acting user, plus the family-wide ones.
  * Rows whose `send_at` is still in the future are withheld — that is what a
  * quiet-hours deferral has to mean at read time as well as at push time.
+ *
+ * `priority` narrows the read to one half of the queue. There is no priority
+ * COLUMN (see lib/notifications/priority.ts for the migration this is standing
+ * in for), so the filter is on `type` — which is exactly what the classifier
+ * uses, so a caller asking for 'digest' gets the same rows the Daily Brief will
+ * fold and the bell will not count. 'now' is expressed as NOT-in rather than
+ * in, so a notification type added later still reaches the surfaces that
+ * interrupt.
  */
-export async function listUnread(scope: ServiceScope, opts?: { limit?: number }): Promise<ServiceResult<Notification[]>> {
+export async function listUnread(
+  scope: ServiceScope,
+  opts?: { limit?: number; priority?: NotificationPriority },
+): Promise<ServiceResult<Notification[]>> {
   const nowIso = scopeNow(scope).toISOString();
   let query = scope.db
     .from('notifications')
@@ -295,6 +317,8 @@ export async function listUnread(scope: ServiceScope, opts?: { limit?: number })
     .lte('send_at', nowIso)
     .order('send_at', { ascending: false })
     .limit(Math.min(Math.max(opts?.limit ?? 50, 1), 200));
+  if (opts?.priority === 'digest') query = query.in('type', [...DIGEST_NOTIFICATION_TYPES]);
+  else if (opts?.priority === 'now') query = query.not('type', 'in', `(${DIGEST_NOTIFICATION_TYPES.join(',')})`);
   // A cron scope has no user of its own; it reads the whole family's queue.
   if (scope.userId) query = query.or(`user_id.eq.${scope.userId},user_id.is.null`);
 

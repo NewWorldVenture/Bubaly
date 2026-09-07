@@ -86,7 +86,8 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success(tr('lifeEventsModule.playbookStartedYourChecklistIs'));
+    // A move launches the Move Planner rather than a checklist here, so say where it went.
+    success(res.moveId ? tr('lifeEventsModule.moveOnFile') : tr('lifeEventsModule.playbookStartedYourChecklistIs'));
     setStartTemplate(null);
   }
 

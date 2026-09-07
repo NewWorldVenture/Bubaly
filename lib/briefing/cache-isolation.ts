@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AppContextValue } from '@/components/app/app-context';
+import { BriefDecisionsSchema } from '@/lib/briefing/response-schema';
 
 export type BriefingType = 'morning' | 'evening' | 'weekly';
 
@@ -50,6 +51,18 @@ const responseSchema = z.object({
     byDomain: z.array(z.object({ domain, count })),
     headline: z.string(),
   }).optional(),
+  // Present only when something is waiting on a person. The route fails the
+  // whole request when the decisions read fails, so an absent slice means
+  // "nothing to decide", never "could not tell".
+  decisions: BriefDecisionsSchema.optional(),
+  // The quiet notifications the brief folded in. Optional because a cached or
+  // older response predates the section, and `alsoTodayUnavailable` is what
+  // keeps a failed read from rendering as "nothing else today".
+  alsoToday: z.array(z.object({
+    id: z.string(), title: z.string(), detail: z.string().nullable(),
+    href: z.string(), at: z.string().nullable(),
+  })).optional(),
+  alsoTodayUnavailable: z.boolean().optional(),
 }).passthrough();
 
 export type BriefingData = z.infer<typeof briefingSchema>;

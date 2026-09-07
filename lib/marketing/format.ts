@@ -27,3 +27,42 @@ export function familiesNote(
     ? t('marketing.builtForModernFamilyLife')
     : t('marketing.registeredFamilies', { count: formatFamilies(n) });
 }
+
+/**
+ * The smallest "things Bubaly finished" aggregate the public site will print.
+ *
+ * Below this the line is HIDDEN, not rounded up and not replaced with a
+ * placeholder: hidden is honest, small is honest, invented is not. The number
+ * itself comes from `public_handled_stats()` (lib/marketing/stats.ts), which
+ * counts runs that reached a finished state across real families.
+ */
+export const HANDLED_PUBLIC_MIN = 25;
+
+/** Same rounding as formatFamilies: exact below 1k, rounded down with a "+" above. */
+export function formatHandled(n: number): string {
+  return formatFamilies(n);
+}
+
+/** True when a real "things finished" count is large enough to print at all. */
+export function meetsHandledFloor(n: number): boolean {
+  return Number.isFinite(n) && n >= HANDLED_PUBLIC_MIN;
+}
+
+/**
+ * The public "things finished" line, or '' when the real count is below
+ * HANDLED_PUBLIC_MIN. Callers render the line only when this is non-empty, so
+ * a site with no runs yet shows nothing rather than "0 things finished".
+ *
+ * Takes a translator for the same reason familiesNote does: this sentence is
+ * read on the public homepage in every language we ship, and `lib/` is
+ * outside the i18n gate's surfaces, so an English literal here would never be
+ * caught. The number is formatted by formatHandled; the words come from
+ * `handledProof.aggregateNote`.
+ */
+export function handledNote(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  n: number,
+): string {
+  if (!meetsHandledFloor(n)) return '';
+  return t('handledProof.aggregateNote', { count: formatHandled(n) });
+}

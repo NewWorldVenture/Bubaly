@@ -5,6 +5,7 @@ import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { deliverMorningBriefs } from '@/lib/briefing/deliver';
 import { expireStale, remindPendingApprovals } from '@/lib/services/approvals';
 
 export const runtime = 'nodejs';
@@ -54,6 +55,19 @@ export async function GET(req: NextRequest) {
     console.error('Approval expiry/reminder sweep failed:', e);
   }
 
+  // The morning brief (§49): one notification per family per family-local
+  // day, to the managers, with the headline and what needs deciding. Filed
+  // before push dispatch so it rides this tick's pushes; a family it failed
+  // for is a notification this tick did not generate, and is counted as one.
+  let briefs = { delivered: 0, families: 0, skipped: 0, failed: 0 };
+  try {
+    briefs = await deliverMorningBriefs(supabase);
+    generationFailures += briefs.failed;
+  } catch (e) {
+    generationFailures += 1;
+    console.error('Morning brief delivery failed:', e);
+  }
+
   // Deliver pushes for any un-pushed notifications across all families.
   let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
   let pushDispatchFailures = 0;
@@ -78,7 +92,7 @@ export async function GET(req: NextRequest) {
   const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures + emailed.failed;
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, families: families?.length ?? 0, created: total, approvals, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
+    { ok, families: families?.length ?? 0, created: total, approvals, briefs, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
     { status: ok ? 200 : 502 },
   );
 }

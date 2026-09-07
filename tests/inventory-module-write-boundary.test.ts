@@ -20,7 +20,7 @@ function bodies(fn: string): string[] {
 }
 
 describe('inventory-module writes fail visibly', () => {
-  for (const fn of ['deleteItem', 'setStatus', 'deleteLocation']) {
+  for (const fn of ['deleteItem', 'setStatus', 'deleteLocation', 'confirmHere']) {
     it(`${fn} guards its Supabase result`, () => {
       const b = body(fn);
       expect(b).toMatch(/const \{ error \} =/);
@@ -40,6 +40,23 @@ describe('inventory-module writes fail visibly', () => {
     expect(move.indexOf("from('inventory_items').update(")).toBeLessThan(move.indexOf("from('inventory_moves').insert("));
     expect(move).toContain('if (moveError) return toastError(describeDbError(moveError));');
   });
+  it('"confirm it is here" writes a family-scoped move with from = to and the confirmed reason', () => {
+    const b = body('confirmHere');
+    expect(b).toContain("from('inventory_moves').insert(");
+    expect(b).toContain('family_id: familyId');
+    expect(b).toContain('from_location_id: item.location_id, to_location_id: item.location_id');
+    expect(b).toContain('reason: CONFIRM_REASON');
+    // Nothing about the item itself changes — a confirmation is not a move.
+    expect(b).not.toContain("from('inventory_items').update(");
+  });
+
+  it('shows "last confirmed" only from a move row that is really on file', () => {
+    // The card reads the value back through the finder rather than assuming
+    // the write it just made succeeded.
+    expect(src).toContain('lastConfirmed(moves.data,');
+    expect(src).toContain("tr('inventory.lastConfirmed')");
+  });
+
   it('photo uploads surface storage errors', () => {
     const b = body('uploadPhoto');
     expect(b).toContain('const { data: stored, error: upErr } =');

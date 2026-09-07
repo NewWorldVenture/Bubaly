@@ -5,6 +5,27 @@ import { parseBuildRevision } from './lib/build-identity.mjs';
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // `next build` re-runs the type-check and ESLint that CI already runs as
+  // their own steps, and it runs them in the SAME worker that is holding
+  // webpack's module graph. That co-residency, not the type-check itself, is
+  // what makes the build fragile: a Vercel deployment of this branch died in
+  // "Linting and checking validity of types" with "Ineffective mark-compacts
+  // near heap limit", and locally that worker was at 4,471 MB against the
+  // 4,096 MB old-space cap in package.json.
+  //
+  // The same check standing on its own is cheap. Measured on this tree with
+  // .next/types present: `tsc --noEmit` peaks at 1,082 MB and exits 0 — a
+  // quarter of the memory for the same work, because it is not sharing a heap
+  // with the compiler.
+  //
+  // So the pass moves rather than disappears. .github/workflows/ci.yml builds
+  // first and type-checks after, which is what keeps the coverage whole:
+  // tsconfig.json includes .next/types/**, so the standalone check validates
+  // every generated route signature as well as the app, and Lint is its own
+  // step. Both gate every pull request, and production only builds a commit
+  // that passed them.
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
   // Next inlines this literal into the build artifact. Never derive identity
   // from a request or substitute a branch/revision when the build input is absent.
   env: {

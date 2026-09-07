@@ -34,6 +34,7 @@ import { documentsSlice } from './slices/documents';
 import { foodSlice } from './slices/food';
 import { homeSlice } from './slices/home';
 import { memorySlice } from './slices/memory';
+import { movingSlice } from './slices/moving';
 import { moneySlice, DEFAULT_CURRENCY } from './slices/money';
 import { peopleSlice } from './slices/people';
 import { proactiveSlice } from './slices/proactive';
@@ -59,6 +60,7 @@ const SLICES: Record<SliceName, SliceDefinition> = {
   documents: documentsSlice,
   memory: memorySlice,
   proactive: proactiveSlice,
+  moving: movingSlice,
 };
 
 /** The app's locale until families carry one; the header states it so the model formats dates the way the family reads them. */

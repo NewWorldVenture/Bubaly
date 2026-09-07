@@ -3,6 +3,8 @@
 // No Supabase / React imports so grouping and conflict detection stay
 // deterministically unit-testable.
 
+import { zonedTimeMs } from '@/lib/schedule/zoned';
+
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 
 export interface RideLike {
@@ -109,6 +111,30 @@ export function assessDriverSchedule(rides: RideLike[]): DriverScheduleAssessmen
 /** Compatibility wrapper for callers that only need known conflicting IDs. */
 export function driverConflicts(rides: RideLike[]): Set<string> {
   return assessDriverSchedule(rides).conflicts;
+}
+
+export type RideWindow = { start: number; end: number; /** false when the drop-off had to be assumed */ knownEnd: boolean };
+
+/**
+ * A ride's busy window as epoch ms, resolved on the family's wall clock so it
+ * can be compared with calendar instants. `ride_date` + `pickup_time` are the
+ * family's local wall clock (the planner stores what the form typed); the
+ * drop-off ends the window when it is recorded and later than the pickup,
+ * otherwise `defaultDurationMin` is assumed and `knownEnd` says so. Null when
+ * the pickup time or date is missing/invalid — a ride with no time cannot be
+ * placed against anything.
+ */
+export function rideWindow(ride: Pick<RideLike, 'ride_date' | 'pickup_time' | 'dropoff_time'>, tz: string, defaultDurationMin = 60): RideWindow | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ride.ride_date)) return null;
+  const pickup = clockSeconds(ride.pickup_time);
+  if (pickup === null) return null;
+  const start = zonedTimeMs(ride.ride_date, Math.floor(pickup / 3600), Math.floor((pickup % 3600) / 60), tz);
+  if (!Number.isFinite(start)) return null;
+  const dropoff = clockSeconds(ride.dropoff_time);
+  if (dropoff !== null && dropoff > pickup) {
+    return { start, end: start + (dropoff - pickup) * 1000, knownEnd: true };
+  }
+  return { start, end: start + Math.max(1, defaultDurationMin) * 60_000, knownEnd: false };
 }
 
 /** Rides today or later, excluding completed/cancelled — the "upcoming" view. */

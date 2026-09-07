@@ -4,6 +4,8 @@ import {
   explainInsight,
   explainAgentActivity,
   explainConsensus,
+  explainTrustDecision,
+  isAcceptedPolicy,
   confidenceNarrative,
 } from '@/lib/ai/explanation';
 
@@ -89,5 +91,64 @@ describe('explainConsensus', () => {
     expect(e.factors.some((f) => f.label === 'Budget checked')).toBe(false);
     expect(e.factors.find((f) => f.label === 'Family agreement')?.value).toMatch(/Split Vote/i);
     expect(e.reason).toMatch(/best balances/i); // fallback
+  });
+});
+
+describe('explainTrustDecision (M7 learned policies)', () => {
+  const accepted = {
+    name: 'Bubaly may create reminders', created_at: '2026-08-12T10:00:00Z', effect: 'allow',
+    conditions: { tags: ['reminders.create'], source: 'autopilot', approvals: 4 },
+  };
+
+  it('names the day the family accepted the policy — the answer to "why did Bubaly not ask?"', () => {
+    const e = explainTrustDecision({ decision: 'allow', reason: 'Allowed by a household policy.', domain: 'scheduling', capability: 'automate', policy: accepted });
+    expect(e.reason).toBe('Allowed by a policy you accepted on 12 August 2026.');
+    const byLabel = Object.fromEntries(e.factors.map((f) => [f.label, f]));
+    expect(byLabel['Decision']?.value).toBe('Allow');
+    expect(byLabel['Area']?.value).toBe('Scheduling');
+    expect(byLabel['Policy']?.value).toBe('Bubaly may create reminders');
+    expect(byLabel['Policy']?.detail).toBe('only reminders.create');
+    expect(e.tip).toMatch(/Trust → Policies/);
+  });
+
+  it('says "blocked" for an accepted deny policy', () => {
+    const e = explainTrustDecision({ decision: 'deny', policy: { ...accepted, effect: 'deny' } });
+    expect(e.reason).toBe('Blocked by a policy you accepted on 12 August 2026.');
+  });
+
+  it('falls back to the policy name for one typed into the Trust form', () => {
+    const e = explainTrustDecision({ decision: 'allow', policy: { name: 'Calendar OK', created_at: '2026-08-12T10:00:00Z', conditions: {} } });
+    expect(e.reason).toBe('Allowed by the household policy “Calendar OK”.');
+    expect(e.factors.find((f) => f.label === 'Policy')?.detail).toBeUndefined();
+  });
+
+  it('keeps the engine’s own reason when no policy is cited', () => {
+    const e = explainTrustDecision({ decision: 'require_approval', reason: 'AI automation here needs review.', domain: 'finances', confidence: 0.85 });
+    expect(e.reason).toBe('AI automation here needs review.');
+    expect(e.confidence).toBe(85);
+    expect(e.factors.some((f) => f.label === 'Policy')).toBe(false);
+    expect(e.tip).toBeUndefined();
+  });
+
+  it('recognises a policy accepted from an Autopilot suggestion by its source', () => {
+    expect(isAcceptedPolicy({ source: 'autopilot', tags: ['x'] })).toBe(true);
+    expect(isAcceptedPolicy({ tags: ['x'] })).toBe(false);
+    expect(isAcceptedPolicy(null)).toBe(false);
+  });
+});
+
+describe('explainAutopilot — a learned-policy suggestion', () => {
+  it('never promises auto-handling, whatever the confidence, and says what accepting does', () => {
+    const e = explainAutopilot({
+      kind: 'policy', title: 'Let Bubaly create reminders without asking',
+      detail: 'Approved 4 times since 12 Aug, never rejected. Scheduling · reminders.create',
+      confidence: 89, urgency: 1, source_kind: 'approval_requests', action_label: 'Trust Bubaly with this',
+    });
+    expect(e.reason).toMatch(/Approved 4 times since 12 Aug, never rejected/);
+    expect(e.factors.find((f) => f.label === 'Signal')?.value).toBe('Approval History');
+    expect(e.factors.find((f) => f.label === 'Signal')?.detail).toBe('read from your approval history');
+    expect(e.tip).toMatch(/Nothing runs until you accept/);
+    expect(e.tip).toMatch(/one narrow policy/);
+    expect(e.tip).not.toMatch(/automatically/);
   });
 });

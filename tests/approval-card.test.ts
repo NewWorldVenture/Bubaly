@@ -17,7 +17,7 @@ vi.mock('@/app/(app)/dashboard/approvals-actions', () => ({
 
 const { ApprovalCard, formatExpiry, formatAmount } = await import('@/components/approvals/approval-card');
 const { ToastProvider } = await import('@/components/ui/toast');
-const { toApprovalCardData, editableFieldsFor } = await import('@/lib/approvals/card-data');
+const { toApprovalCardData, editableFieldsFor, basedOnFrom } = await import('@/lib/approvals/card-data');
 const { PendingApprovals, toPendingCard } = await import('@/components/home/pending-approvals');
 
 const row = {
@@ -95,6 +95,58 @@ describe('ApprovalCard', () => {
     expect(html).toContain('aria-label="Approve: Order the birthday cake"');
     expect(html).toContain('Review all (+2 more)');
     expect(toPendingCard({ id: 'p1', title: 't' })).toMatchObject({ consequences: [], canEdit: false, editableFields: [] });
+  });
+});
+
+// M24 — "Based on": the card may say WHAT Bubaly looked at before it asked,
+// because a parent deciding on someone else's plan deserves to know the answer
+// was built from the calendar and not from the family's bank balance. It may
+// say it only in slice NAMES: the same card is the one that has never shown a
+// payload, a tool name or a reasoning chain, and the context snapshot behind
+// these names holds the actual rows.
+describe('based on', () => {
+  it('lists the slice names it was given, read and withheld, and still no payload', () => {
+    const data = toApprovalCardData(row, {
+      requestedBy: null,
+      canEdit: true,
+      basedOn: { read: ['food', 'schedule'], withheld: ['money'] },
+    });
+    expect(data.basedOn).toEqual({ read: ['food', 'schedule'], withheld: ['money'] });
+
+    const html = render(React.createElement(ApprovalCard, { approval: data, canDecide: true }));
+    expect(html).toContain('What Bubaly looked at');
+    expect(html).toContain('Food and allergies');
+    expect(html).toContain('The calendar');
+    // Withheld is the half that proves the fence held.
+    expect(html).toContain('Budgets and bills');
+    expect(html).not.toContain('calendar.createEvent');
+    expect(html).not.toContain('secret_token');
+    expect(html).not.toContain('{');
+  });
+
+  it('draws nothing when the caller resolved no context — an empty "Based on" would be a claim', () => {
+    const data = toApprovalCardData(row, { requestedBy: null, canEdit: true });
+    expect(data.basedOn).toBeUndefined();
+    const html = render(React.createElement(ApprovalCard, { approval: data, canDecide: true }));
+    expect(html).not.toContain('What Bubaly looked at');
+  });
+
+  it('stays off the compact card on Home, where there is no room for evidence', () => {
+    const data = toApprovalCardData(row, { requestedBy: null, canEdit: true, basedOn: { read: ['food'], withheld: [] } });
+    const html = render(React.createElement(ApprovalCard, { approval: data, canDecide: true, compact: true }));
+    expect(html).not.toContain('What Bubaly looked at');
+  });
+
+  it('accepts slice names and refuses anything that could be the snapshot itself', () => {
+    expect(basedOnFrom({ read: ['food', 'schedule'], withheld: ['money'] })).toEqual({ read: ['food', 'schedule'], withheld: ['money'] });
+    // Not names: rows, objects, numbers, a stray sentence, a table name in caps.
+    expect(basedOnFrom({ read: [{ allergies: ['peanuts'] }, 42, 'Emma has a peanut allergy', 'Documents'], withheld: [] })).toBeUndefined();
+    expect(basedOnFrom({ read: [], withheld: [] })).toBeUndefined();
+    expect(basedOnFrom(null)).toBeUndefined();
+    expect(basedOnFrom('food')).toBeUndefined();
+    // Long lists are capped rather than rendered whole.
+    const many = Array.from({ length: 40 }, (_, i) => `slice${i}`);
+    expect(basedOnFrom({ read: many, withheld: [] })?.read.length).toBe(16);
   });
 });
 

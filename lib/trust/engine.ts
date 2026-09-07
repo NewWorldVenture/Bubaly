@@ -217,6 +217,17 @@ function withinTimeWindow(localTime: string | undefined, start?: string, end?: s
   return s <= e ? (t >= s && t <= e) : (t >= s || t <= e);
 }
 
+/**
+ * The tags an executing tool carries, so a policy scoped by `conditions.tags`
+ * to ONE tool matches exactly that tool: the bare name and a `tool:` form, for
+ * every spelling given (a surface's legacy alias and the registry's canonical
+ * name). `['reminders.create', 'tool:reminders.create']`.
+ */
+export function toolTags(...names: (string | null | undefined)[]): string[] {
+  const unique = [...new Set(names.map((n) => n?.trim()).filter((n): n is string => Boolean(n)))];
+  return unique.flatMap((n) => [n, `tool:${n}`]);
+}
+
 function conditionsSatisfied(c: PolicyConditions, ctx: ActionContext): boolean {
   if (c.maxAmountCents != null && (ctx.amountCents ?? 0) > c.maxAmountCents) return false;
   if (c.minConfidence != null && (ctx.confidence ?? 0) < c.minConfidence) return false;

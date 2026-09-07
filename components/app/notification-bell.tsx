@@ -5,6 +5,7 @@ import { Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { bellLabel, badgeCount } from '@/lib/tone/partner-phrasing';
+import { DIGEST_NOTIFICATION_TYPES } from '@/lib/notifications/priority';
 import { useApp } from './app-context';
 
 export function NotificationBell() {
@@ -26,6 +27,14 @@ export function NotificationBell() {
         // is `not null default now()` (0002_tables.sql:415), so this hides
         // nothing that is already due.
         .lte('send_at', new Date().toISOString())
+        // A badge is an interrupt. `notificationPriority` says which types earn
+        // one; the rest — a fixture three days out, a filter to change, a
+        // shopping reminder — are still in the list and are folded into the
+        // Daily Brief's "Also today", so nothing is hidden, it is just not
+        // shouting. `not in` rather than `in` on purpose: a notification type
+        // added after this line still counts, because being unclassified must
+        // never mean being silenced.
+        .not('type', 'in', `(${DIGEST_NOTIFICATION_TYPES.join(',')})`)
         .or(`user_id.eq.${userId},user_id.is.null`);
       // On a transient read failure, keep the current badge rather than falsely
       // clearing it to 0 (which would tell the user they have no notifications).

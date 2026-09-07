@@ -71,3 +71,35 @@ describe('momentWhen', () => {
     expect(momentWhen('2026-07-05T09:00:00.000Z', false, now)).toContain('Tomorrow');
   });
 });
+
+describe('buildMomentPrep with a composed departure (M8 schedule intelligence)', () => {
+  const departure = { leaveByISO: '2026-07-04T14:30:00.000Z', travelMinutes: 30 };
+
+  it('uses the real drive time instead of the category buffer for a located, timed moment', () => {
+    const prep = buildMomentPrep({ ...base, title: 'Soccer game', location: 'City Fields' }, { departure });
+    expect(prep.leaveByISO).toBe('2026-07-04T14:30:00.000Z');
+    expect(prep.travelBufferMins).toBe(30);
+    expect(prep.leaveBySource).toBe('drive_time');
+    const leave = prep.items.find((i) => i.id === 'leave-by');
+    expect(leave?.hint).toBe('30 min drive to City Fields');
+    expect(leave?.reminderTitle).toBe('Leave for Soccer game');
+  });
+
+  it('labels the static buffer as such when no departure is composed', () => {
+    const prep = buildMomentPrep({ ...base, title: 'Soccer game', location: 'City Fields' });
+    expect(prep.leaveBySource).toBe('category_buffer');
+    expect(prep.items.find((i) => i.id === 'leave-by')?.hint).toBe('35 min to City Fields');
+    expect(buildMomentPrep({ ...base, title: 'Soccer practice' }).leaveBySource).toBeNull();
+  });
+
+  it('ignores a departure for an unlocated, all-day, or unparseable case and keeps the buffer', () => {
+    const noPlace = buildMomentPrep({ ...base, title: 'Soccer practice' }, { departure });
+    expect(noPlace.leaveByISO).toBeNull();
+    expect(noPlace.leaveBySource).toBeNull();
+    const allDay = buildMomentPrep({ ...base, title: 'County fair', location: 'Fairgrounds', all_day: true }, { departure });
+    expect(allDay.leaveByISO).toBeNull();
+    const bad = buildMomentPrep({ ...base, title: 'Soccer game', location: 'City Fields' }, { departure: { leaveByISO: 'not a time', travelMinutes: 30 } });
+    expect(bad.leaveBySource).toBe('category_buffer');
+    expect(bad.leaveByISO).toBe('2026-07-04T14:25:00.000Z');
+  });
+});
