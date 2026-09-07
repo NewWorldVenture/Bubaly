@@ -12,7 +12,7 @@ export const maxDuration = 60;
 //
 // HONESTY BOUNDARY. Bubaly has no outbound voice integration: nothing here can
 // dial, so nothing here may write `status = 'calling'`. An earlier version
-// flipped due rows to 'calling' whenever TWILIO_* keys were present and left a
+// flipped due rows to 'calling' whenever telephony keys were present and left a
 // note that the dial "is triggered here when integrating a voice provider" —
 // which persisted a row that said a call was in progress while no phone rang.
 // Now a due, queued call is parked as 'action_needed' with the reason written

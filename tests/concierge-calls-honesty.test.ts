@@ -134,6 +134,18 @@ describe('the module and page make no claim the row cannot back', () => {
     }
   });
 
+  it('and the front-desk link into this queue no longer says the AI dials out', () => {
+    // components/modules/front-desk-module.tsx links here; its copy is the
+    // first thing a family reads about outbound calls, so it is held to the
+    // same rule even though the component itself is untouched.
+    const frontDesk = readFileSync('components/modules/front-desk-module.tsx', 'utf8');
+    expectSays(frontDesk, 'frontDesk.haveBubalyMakeACallFor', 'Get a call plan from Bubaly');
+    expectSays(frontDesk, 'frontDesk.bookRescheduleConfirmOrChaseThe', 'Book, reschedule, confirm or chase — Bubaly writes the call plan; a parent makes the call.');
+    for (const key of ['frontDesk.haveBubalyMakeACallFor', 'frontDesk.bookRescheduleConfirmOrChaseThe']) {
+      expect(MESSAGES[key]).not.toMatch(/dials out|make a call for you|bubaly (makes|places) the call/i);
+    }
+  });
+
   it('keeps the list on screen when the realtime refresh fails, and fails the page closed', () => {
     expect(src).toMatch(/const \{ data, error \} = await supabase\.from\('concierge_calls'\)/);
     expect(src).toMatch(/console\.error\('\[concierge-calls\] refresh read failed'/);
