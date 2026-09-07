@@ -45,7 +45,19 @@ function resolveSpecifier(fromFile: string, spec: string): string | null {
   return null;
 }
 
-type Entry = { declaresClient: boolean; imports: string[] };
+/**
+ * `useTranslations()` inside a JSDoc block or a `//` note is prose, not a call.
+ * `components/ui/states.tsx` explains in its header comment why it can use
+ * neither translator, and an unmasked search reads that as a hook.
+ */
+function withoutComments(source: string): string {
+  const blank = (m: string) => m.replace(/[^\n]/g, ' ');
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, lead: string) => lead + blank(m.slice(lead.length)));
+}
+
+type Entry = { declaresClient: boolean; callsHook: boolean; imports: string[] };
 
 const files = sourceFiles();
 const sources = new Map<string, Entry>();
@@ -53,6 +65,7 @@ for (const file of files) {
   const src = readFileSync(file, 'utf8');
   sources.set(file, {
     declaresClient: /^['"]use client['"]/.test(src.trimStart()),
+    callsHook: /\buseTranslations\s*\(/.test(withoutComments(src)),
     // `import type … from` is ERASED at compile time and says nothing about
     // whether a module reaches the browser. Counting it made
     // `app/(app)/dashboard/contact-center/page.tsx` look client, because the
@@ -123,5 +136,78 @@ describe('lib/i18n/server never reaches the browser', () => {
     expect(sources.get(card)?.declaresClient, 'the card declares nothing itself').toBe(false);
     expect(sources.get(dispatcher)?.declaresClient, 'its dispatcher declares it').toBe(true);
     expect(isClientModule(card)).toBe(true);
+  });
+});
+
+/**
+ * The mirror image of the block above, and the one that actually shipped a red
+ * CI: a SERVER component that calls `useTranslations()`. Nothing static catches
+ * it — the module graph is legal, tsc is happy, and `next build` compiles it —
+ * so it only appears at RENDER time, as a 500 with
+ *
+ *   Attempted to call useTranslations() from the server but useTranslations is
+ *   on the client.
+ *
+ * `components/a11y/skip-link.tsx` is rendered directly by
+ * `app/(marketing)/layout.tsx`, so every marketing route 500'd: 230 Playwright
+ * failures from one missing directive.
+ *
+ * The rule this encodes is React's own: the server renders down from each route
+ * entry and STOPS at the first `'use client'`. A module the server can still
+ * reach when it stops may not call a hook.
+ */
+const ROUTE_ENTRY = /(^|\/)(page|layout|template|default|not-found|loading|route)\.tsx?$/;
+
+function serverRenderedModules(): Set<string> {
+  const roots = files.filter(
+    (file) =>
+      file.startsWith(join(ROOT, 'app'))
+      && ROUTE_ENTRY.test(file)
+      && !sources.get(file)!.declaresClient,
+  );
+  const reached = new Set(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    for (const target of sources.get(queue.shift()!)!.imports) {
+      // `'use client'` is where the server stops; everything under it is the
+      // browser's problem and may hold as many hooks as it likes.
+      if (reached.has(target) || sources.get(target)?.declaresClient) continue;
+      reached.add(target);
+      queue.push(target);
+    }
+  }
+  return reached;
+}
+
+describe('useTranslations never runs on the server', () => {
+  it('is called only from modules the server render cannot reach', () => {
+    const offenders = [...serverRenderedModules()]
+      .filter((file) => sources.get(file)!.callsHook)
+      .map((file) => relative(ROOT, file))
+      .sort();
+
+    expect(
+      offenders,
+      "these render on the server, so they need `await getTranslations()` from "
+        + "@/lib/i18n/server — or a 'use client' directive of their own",
+    ).toEqual([]);
+  });
+
+  it('reads a route entry as a server root and stops at the first client module', () => {
+    const layout = resolve(ROOT, 'app/(marketing)/layout.tsx');
+    const skipLink = resolve(ROOT, 'components/a11y/skip-link.tsx');
+    const rendered = serverRenderedModules();
+    expect(rendered.has(layout), 'the marketing layout is a server root').toBe(true);
+    expect(sources.get(skipLink)?.declaresClient, 'the skip link declares client').toBe(true);
+    expect(rendered.has(skipLink), 'so the server render stops before it').toBe(false);
+  });
+
+  it('does not read a hook named in a comment as a call', () => {
+    // `components/ui/states.tsx` is server-reachable AND says the words
+    // "useTranslations() is a hook a server component cannot run" in its header.
+    const states = resolve(ROOT, 'components/ui/states.tsx');
+    expect(serverRenderedModules().has(states), 'the module is server-reachable').toBe(true);
+    expect(readFileSync(states, 'utf8'), 'and names the hook in prose').toContain('useTranslations()');
+    expect(sources.get(states)?.callsHook, 'but does not call it').toBe(false);
   });
 });

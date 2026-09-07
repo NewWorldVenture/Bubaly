@@ -1,3 +1,8 @@
+'use client';
+
+// Client for the same reason as `components/a11y/skip-link.tsx`: it calls
+// `useTranslations()` for the link's accessible name and is rendered from the
+// server layouts under `app/(app)/kids` and `app/(auth)`.
 import Image from 'next/image';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import Link from 'next/link';
