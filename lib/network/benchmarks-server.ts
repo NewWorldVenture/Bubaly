@@ -8,6 +8,7 @@
 // `{ ok: false }` and must render an error, never an empty benchmark.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/database.types';
 import { BENCHMARKS_PUBLICATION_KEY, isBenchmarksPublished } from './benchmarks';
 import { K_ANONYMITY_FLOOR, type ConsentScope } from './insights';
@@ -25,6 +26,27 @@ export async function readBenchmarksPublication(sb: DB): Promise<PublicationRead
     return { ok: false };
   }
   return { ok: true, published: isBenchmarksPublished(data?.value), updatedAt: data?.updated_at ?? null };
+}
+
+/**
+ * Whether /resources/benchmarks currently EXISTS, for a caller that only wants
+ * to know whether it may link there. The page 404s unless this flag is on, so a
+ * surface that advertises it without asking is advertising a 404.
+ *
+ * False for every uncertainty — service role unconfigured, the read errored, the
+ * request never completed. A link we cannot prove leads somewhere is not shown,
+ * which is the honest direction: the worst case is a family not seeing a card
+ * about a page that is published, not a family landing on a dead end.
+ */
+export async function benchmarksPageIsPublished(): Promise<boolean> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return false;
+  try {
+    const read = await readBenchmarksPublication(createServiceClient());
+    return read.ok && read.published;
+  } catch (cause) {
+    console.error('[benchmarks] publication flag read failed', cause);
+    return false;
+  }
 }
 
 export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; computedAt: string | null } | { ok: false };

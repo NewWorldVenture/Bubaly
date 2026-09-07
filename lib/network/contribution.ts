@@ -35,7 +35,17 @@ export type ContributionInput = {
   remindersPerWeek?: number;
 };
 
-export type ContributionBucket = { label: string; labelKey: string; value: string };
+/** One band as a reader must see it: the stored English band plus its catalogue key. */
+export type BandValue = { value: string; labelKey: string | null };
+
+export type ContributionBucket = {
+  label: string;
+  labelKey: string;
+  /** The stored English band(s), joined — the persisted value, never the rendered one. */
+  value: string;
+  /** The same bands, each with the catalogue key that renders it in the reader's language. */
+  valueBands: BandValue[];
+};
 
 function ageBand(birthday: string, now: Date): string | null {
   const b = new Date(birthday);
@@ -148,6 +158,130 @@ export function typicalWeeklySpend(expenseAmounts: number[], windowDays: number)
   return total / weeks;
 }
 
+
+// ---------------------------------------------------------------------------
+// THE BAND CATALOGUE
+//
+// Every band string this file can emit, with the catalogue key that renders it
+// in the reader's language.
+//
+// The English band is the PERSISTED value: it is what sits in
+// `network_contributions.metrics` and `network_aggregates.value`, and what the
+// nightly aggregation groups on. It must never change, and nothing here changes
+// it. What a READER sees is a different thing entirely, and it has to be
+// translated — the public /resources/benchmarks page, the admin report, the
+// consent preview and the weekly digest all interpolate a band into an already
+// translated sentence, and „Etwa 84 Familien geben ‚most nights (6–7)‘ an“ is
+// exactly the failure this catalogue exists to stop.
+// ---------------------------------------------------------------------------
+
+/** The families of bands this file emits. A metric's values come from exactly one. */
+export type BandFamily = 'age' | 'size' | 'activities' | 'dinner' | 'chores' | 'bedtime' | 'spend' | 'reminders';
+
+/** How the translator is called wherever a band is rendered. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const NUMERIC = {
+  none: 'network.bandNone',
+  '0–2': 'network.band0to2',
+  '1–2': 'network.band1to2',
+  '1–3': 'network.band1to3',
+  '3–4': 'network.band3to4',
+  '3–5': 'network.band3to5',
+  '4–7': 'network.band4to7',
+  '5+': 'network.band5Plus',
+  '6–9': 'network.band6to9',
+  '6+': 'network.band6Plus',
+  '8–14': 'network.band8to14',
+  '10–13': 'network.band10to13',
+  '14–17': 'network.band14to17',
+  '15+': 'network.band15Plus',
+} as const;
+
+/**
+ * value → catalogue key, per band family. Exhaustive by construction: every band
+ * function above returns one of these strings and nothing else, and
+ * tests/network-benchmark-bands.test.ts sweeps the whole input space to prove it.
+ */
+export const BAND_LABEL_KEYS: Record<BandFamily, Record<string, string>> = {
+  age: {
+    '0–2': NUMERIC['0–2'], '3–5': NUMERIC['3–5'], '6–9': NUMERIC['6–9'],
+    '10–13': NUMERIC['10–13'], '14–17': NUMERIC['14–17'], adult: 'network.bandAdult',
+  },
+  size: { '1–2': NUMERIC['1–2'], '3–4': NUMERIC['3–4'], '5+': NUMERIC['5+'] },
+  activities: { none: NUMERIC.none, '1–2': NUMERIC['1–2'], '3–4': NUMERIC['3–4'], '5+': NUMERIC['5+'] },
+  dinner: {
+    'rarely (0–1)': 'network.bandDinnerRarely',
+    'sometimes (2–3)': 'network.bandDinnerSometimes',
+    'often (4–5)': 'network.bandDinnerOften',
+    'most nights (6–7)': 'network.bandDinnerMostNights',
+  },
+  chores: { none: NUMERIC.none, '1–2': NUMERIC['1–2'], '3–5': NUMERIC['3–5'], '6+': NUMERIC['6+'] },
+  bedtime: {
+    'before 7pm': 'network.bandBedtimeBefore7pm',
+    '7–8pm': 'network.bandBedtime7to8pm',
+    '8–9pm': 'network.bandBedtime8to9pm',
+    '9–10pm': 'network.bandBedtime9to10pm',
+    'after 10pm': 'network.bandBedtimeAfter10pm',
+  },
+  spend: {
+    none: NUMERIC.none,
+    'under 100': 'network.bandSpendUnder100',
+    '100–250': 'network.bandSpend100to250',
+    '250–500': 'network.bandSpend250to500',
+    '500–1,000': 'network.bandSpend500to1000',
+    '1,000+': 'network.bandSpend1000Plus',
+  },
+  reminders: {
+    none: NUMERIC.none, '1–3': NUMERIC['1–3'], '4–7': NUMERIC['4–7'],
+    '8–14': NUMERIC['8–14'], '15+': NUMERIC['15+'],
+  },
+};
+
+/** Which family a PUBLISHED metric's values come from. Keys match BENCHMARK_METRICS. */
+export const METRIC_BAND_FAMILY: Record<string, BandFamily> = {
+  dinner_habit: 'dinner',
+  activities: 'activities',
+  chores_per_child: 'chores',
+  bedtime_band: 'bedtime',
+  weekly_spend_band: 'spend',
+  reminders_per_week: 'reminders',
+};
+
+/** Catalogue key for one band of a known family, or null for a value we did not emit. */
+export function bandFamilyLabelKey(family: BandFamily, value: string): string | null {
+  return BAND_LABEL_KEYS[family][value] ?? null;
+}
+
+/** Catalogue key for a published metric's band, or null for a metric/value the catalogue does not know. */
+export function bandLabelKey(metric: string, value: string): string | null {
+  const family = METRIC_BAND_FAMILY[metric];
+  return family ? bandFamilyLabelKey(family, value) : null;
+}
+
+/**
+ * The band a reader sees. Falls back to the stored English only when this
+ * catalogue does not know the value — a row written by an older aggregation, or
+ * a metric added since. That is deliberate: an unknown band is still shown (the
+ * number behind it is real), it simply cannot be translated, and the band test
+ * pins that nothing this code EMITS can land in that branch.
+ */
+export function bandLabel(metric: string, value: string, t?: Translate): string {
+  const key = bandLabelKey(metric, value);
+  return key && t ? t(key) : value;
+}
+
+/** The same, for the age and household-size bands that describe a cohort. */
+export function bandFamilyLabel(family: BandFamily, value: string, t?: Translate): string {
+  const key = bandFamilyLabelKey(family, value);
+  return key && t ? t(key) : value;
+}
+
+/** A list of bands from one family, described so a render site can translate each. */
+function bandValues(family: BandFamily, values: string[]): BandValue[] {
+  return values.map((value) => ({ value, labelKey: bandFamilyLabelKey(family, value) }));
+}
+
 const CHILD_BAND_ORDER = ['0–2', '3–5', '6–9', '10–13', '14–17'];
 
 /** Structured coarse features — the single source of truth for both the consent
@@ -193,13 +327,15 @@ export function contributionFeatures(input: ContributionInput, now: Date = new D
 export function computeContribution(input: ContributionInput, now: Date = new Date()): ContributionBucket[] {
   const f = contributionFeatures(input, now);
   const buckets: ContributionBucket[] = [];
-  if (f.childBands.length) buckets.push({ label: 'Children in age bands', labelKey: 'network.bucketChildrenInAgeBands', value: f.childBands.join(', ') });
-  buckets.push({ label: 'Household size', labelKey: 'network.bucketHouseholdSize', value: f.sizeBand });
-  buckets.push({ label: 'Dinner planning habit', labelKey: 'network.bucketDinnerPlanningHabit', value: f.dinnerBand });
-  buckets.push({ label: 'Activities', labelKey: 'network.bucketActivities', value: f.activityBand });
-  if (f.choresPerChildBand !== null) buckets.push({ label: 'Chores per child', labelKey: 'network.bucketChoresPerChild', value: f.choresPerChildBand });
-  if (f.bedtimeBand !== null) buckets.push({ label: 'Typical bedtime', labelKey: 'network.bucketTypicalBedtime', value: f.bedtimeBand });
-  if (f.weeklySpendBand !== null) buckets.push({ label: 'Weekly spend', labelKey: 'network.bucketWeeklySpend', value: f.weeklySpendBand });
-  if (f.remindersBand !== null) buckets.push({ label: 'Reminders per week', labelKey: 'network.bucketRemindersPerWeek', value: f.remindersBand });
+  const push = (label: string, labelKey: string, family: BandFamily, values: string[]) =>
+    buckets.push({ label, labelKey, value: values.join(', '), valueBands: bandValues(family, values) });
+  if (f.childBands.length) push('Children in age bands', 'network.bucketChildrenInAgeBands', 'age', f.childBands);
+  push('Household size', 'network.bucketHouseholdSize', 'size', [f.sizeBand]);
+  push('Dinner planning habit', 'network.bucketDinnerPlanningHabit', 'dinner', [f.dinnerBand]);
+  push('Activities', 'network.bucketActivities', 'activities', [f.activityBand]);
+  if (f.choresPerChildBand !== null) push('Chores per child', 'network.bucketChoresPerChild', 'chores', [f.choresPerChildBand]);
+  if (f.bedtimeBand !== null) push('Typical bedtime', 'network.bucketTypicalBedtime', 'bedtime', [f.bedtimeBand]);
+  if (f.weeklySpendBand !== null) push('Weekly spend', 'network.bucketWeeklySpend', 'spend', [f.weeklySpendBand]);
+  if (f.remindersBand !== null) push('Reminders per week', 'network.bucketRemindersPerWeek', 'reminders', [f.remindersBand]);
   return buckets;
 }

@@ -7,11 +7,14 @@
 // floor is dropped, never displayed, whatever table it came from.
 
 import { BENCHMARK_METRICS, describeCohort, metricLabel, metricLabelKey, type NetworkAggregate } from './aggregate';
+import { bandLabelKey } from './contribution';
 import { K_ANONYMITY_FLOOR, isSuppressed } from './insights';
 
 export type BenchmarkRow = NetworkAggregate & {
   label: string;
   labelKey: string | null;
+  /** Catalogue key for the BAND in `value` — what a reader sees, in their language. */
+  valueKey: string | null;
   childBands: string[];
   sizeBand: string;
 };
@@ -46,7 +49,10 @@ export function benchmarkRows(aggregates: NetworkAggregate[], minCohort: number 
     if (!(a.count > 0)) continue;
     const cohort = describeCohort(a.cohortKey);
     if (!cohort) continue;
-    out.push({ ...a, label: metricLabel(a.metric), labelKey: metricLabelKey(a.metric), childBands: cohort.childBands, sizeBand: cohort.sizeBand });
+    out.push({
+      ...a, label: metricLabel(a.metric), labelKey: metricLabelKey(a.metric),
+      valueKey: bandLabelKey(a.metric, a.value), childBands: cohort.childBands, sizeBand: cohort.sizeBand,
+    });
   }
   return out.sort((x, y) => y.cohortSize - x.cohortSize || x.cohortKey.localeCompare(y.cohortKey) || x.value.localeCompare(y.value));
 }

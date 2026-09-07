@@ -12,7 +12,7 @@
 // The cron feeds it real consenting-family contributions; every rule is here so
 // it can't be bypassed downstream.
 
-import type { ContributionFeatures } from './contribution';
+import { bandLabel, type ContributionFeatures } from './contribution';
 import { K_ANONYMITY_FLOOR, type ConsentScope, type InsightCandidate } from './insights';
 
 /** Approved defaults (owner sign-off 2026-07-06). */
@@ -179,8 +179,11 @@ export function aggregatesToInsights(
         id: familyCohort === null ? `${a.cohortKey}:${a.metric}:${a.value}` : `${a.metric}:${a.value}`,
         scope: a.scope,
         title: t ? t('network.insightTitle', { metric: label }) : `Families like yours: ${label}`,
+        // The BAND is a word the reader sees inside a translated sentence, so it
+        // is translated too — an English band in a German sentence is the bug
+        // labelKeys alone did not fix.
         detail: t
-          ? t('network.insightDetail', { count: a.count, value: a.value })
+          ? t('network.insightDetail', { count: a.count, value: bandLabel(a.metric, a.value, t) })
           : `About ${a.count} similar families report “${a.value}”.`,
         cohortSize: a.cohortSize,
       };

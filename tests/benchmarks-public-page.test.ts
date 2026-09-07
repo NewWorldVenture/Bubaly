@@ -47,7 +47,10 @@ describe('benchmark rows are k-anonymized whatever the table says', () => {
       'dinner_habit:often (4–5):120',
       'weekly_spend_band:1,000+:40',
     ]);
-    expect(safe[0]).toMatchObject({ childBands: ['6–9'], sizeBand: '3–4', label: 'dinner planning', labelKey: 'network.metricDinnerPlanning' });
+    expect(safe[0]).toMatchObject({
+      childBands: ['6–9'], sizeBand: '3–4', label: 'dinner planning',
+      labelKey: 'network.metricDinnerPlanning', valueKey: 'network.bandDinnerOften',
+    });
     expect(safe[1]).toMatchObject({ childBands: [], sizeBand: '1–2' });
   });
 
@@ -102,7 +105,8 @@ describe('/resources/benchmarks — the public page', () => {
     expectSays(publicPage, 'benchmarksPage.aboutFamiliesReport', 'About {count} families report “{value}”');
     // the per-row block renders count, cohort n and the sentence together
     const row = publicPage.slice(publicPage.indexOf('{g.rows.map((r) =>'), publicPage.indexOf('</li>'));
-    expect(row).toContain("t('benchmarksPage.aboutFamiliesReport', { count: r.count, value: r.value })");
+    // the band inside the sentence is a catalogue key, not the stored English band
+    expect(row).toContain("t('benchmarksPage.aboutFamiliesReport', { count: r.count, value: r.valueKey ? t(r.valueKey) : r.value })");
     expect(row).toContain("t('benchmarksPage.cohortOf', { n: r.cohortSize })");
     expect(row).toContain("t('benchmarksPage.aggregatedNotice')");
   });
@@ -125,6 +129,31 @@ describe('/resources/benchmarks — the public page', () => {
     expectSays(intelligenceModule, 'intelligence.seePublicBenchmarks', 'See the public benchmarks');
     const nav = readFileSync('lib/constants/navigation.ts', 'utf8');
     expect(nav).not.toContain('/resources/benchmarks');
+  });
+
+  // The card says the rows are "published for everyone at /resources/benchmarks".
+  // That page 404s unless the marketing_settings flag is on, and no migration or
+  // seed creates that row — so the DEFAULT state of every environment is
+  // unpublished. An unconditional card is therefore an inert control and a claim
+  // with nothing persisted behind it. The flag has to be read, server-side.
+  it('the public-benchmarks card is gated on the publication flag, read server-side', () => {
+    expect(intelligencePage).toContain("import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server'");
+    expect(intelligencePage).toContain('const benchmarksPublished = await benchmarksPageIsPublished();');
+    expect(intelligencePage).toContain('benchmarksPublished={benchmarksPublished}');
+    expect(intelligenceModule).toContain('benchmarksPublished = false');
+    expect(intelligenceModule).toContain('{benchmarksPublished && (');
+    // the link and the claim live INSIDE that guard
+    const guarded = intelligenceModule.slice(intelligenceModule.indexOf('{benchmarksPublished && ('));
+    expect(guarded).toContain('href="/resources/benchmarks"');
+    expect(guarded).toContain("t('intelligence.publicBenchmarksHint')");
+  });
+
+  it('the flag helper fails closed — an unreadable flag hides the card, it does not show it', () => {
+    expect(serverReads).toContain('export async function benchmarksPageIsPublished(): Promise<boolean>');
+    expect(serverReads).toContain('if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return false;');
+    expect(serverReads).toContain('return read.ok && read.published;');
+    // a rejection (transport failure) is caught and answered "not published"
+    expect(serverReads).toMatch(/catch \(cause\) \{\s*console\.error\('\[benchmarks\] publication flag read failed', cause\);\s*return false;/);
   });
 });
 

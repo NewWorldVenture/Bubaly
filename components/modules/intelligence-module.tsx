@@ -26,7 +26,17 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Consent = Tables<'network_consent'>;
 
-export function IntelligenceModule({ contribution = [], candidates = [] }: { contribution?: ContributionBucket[]; candidates?: InsightCandidate[] }) {
+export function IntelligenceModule({
+  contribution = [],
+  candidates = [],
+  benchmarksPublished = false,
+}: {
+  contribution?: ContributionBucket[];
+  candidates?: InsightCandidate[];
+  /** Read server-side from the marketing_settings publication flag. False means
+   *  /resources/benchmarks does not exist right now, so nothing links to it. */
+  benchmarksPublished?: boolean;
+}) {
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -99,7 +109,10 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
           <div className="flex flex-wrap gap-2">
             {contribution.map((b) => (
               <span key={b.labelKey} className="rounded-full border border-border px-3 py-1 text-xs">
-                <span className="text-muted">{t(b.labelKey)}:</span> {b.value}
+                {/* The band is what the family reads, so it is translated too —
+                    `b.value` is the stored English band, not the rendered one. */}
+                <span className="text-muted">{t(b.labelKey)}:</span>{' '}
+                {b.valueBands.map((v) => (v.labelKey ? t(v.labelKey) : v.value)).join(', ')}
               </span>
             ))}
           </div>
@@ -152,14 +165,20 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
         </div>
       )}
 
-      {/* The same k-anonymized rows, published for everyone — the research half of the network. */}
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
-        <Globe className="mt-0.5 size-5 shrink-0 text-brand-text" />
-        <div>
-          <Link href="/resources/benchmarks" className="text-sm font-semibold underline">{t('intelligence.seePublicBenchmarks')}</Link>
-          <p className="text-xs text-muted">{t('intelligence.publicBenchmarksHint')}</p>
+      {/* The same k-anonymized rows, published for everyone — the research half of
+          the network. Shown ONLY while the admin publication flag says the page
+          exists: /resources/benchmarks calls notFound() otherwise, and a card
+          claiming rows are "published for everyone" while the link 404s is a
+          claim with no row behind it. The flag is read server-side. */}
+      {benchmarksPublished && (
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+          <Globe className="mt-0.5 size-5 shrink-0 text-brand-text" />
+          <div>
+            <Link href="/resources/benchmarks" className="text-sm font-semibold underline">{t('intelligence.seePublicBenchmarks')}</Link>
+            <p className="text-xs text-muted">{t('intelligence.publicBenchmarksHint')}</p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

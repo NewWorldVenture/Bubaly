@@ -9,6 +9,7 @@
 // from raw data here; every number came out of aggregate.ts, already noised.
 
 import { metricLabel, metricLabelKey, type NetworkAggregate } from './aggregate';
+import { bandLabel } from './contribution';
 import { K_ANONYMITY_FLOOR, isSuppressed, type ConsentState } from './insights';
 
 export type CompareLine = {
@@ -85,11 +86,13 @@ function rank(line: CompareLine): number {
  */
 export function renderCompareLine(line: CompareLine | null, t: (key: string, params?: Record<string, string | number>) => string): string | null {
   if (!line) return null;
+  // Both bands are words inside the sentence, not opaque ids: the digest that
+  // reaches a German household must not read “most nights (6–7)”.
   const params = {
     count: line.count,
     label: t(line.labelKey),
-    value: line.cohortValue,
-    familyValue: line.familyValue,
+    value: bandLabel(line.metric, line.cohortValue, t),
+    familyValue: bandLabel(line.metric, line.familyValue, t),
   };
   return line.matches ? t('network.compareLineSame', params) : t('network.compareLineDiffers', params);
 }

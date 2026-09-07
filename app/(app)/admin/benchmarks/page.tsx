@@ -8,6 +8,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { readBenchmarkAggregates, readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 import { groupBenchmarks, type BenchmarkRow } from '@/lib/network/benchmarks';
 import { AGG_DEFAULTS } from '@/lib/network/aggregate';
+import { bandFamilyLabel } from '@/lib/network/contribution';
 import { K_ANONYMITY_FLOOR } from '@/lib/network/insights';
 import { fmtDate } from '@/lib/utils/format';
 import { setBenchmarksPublicationAction } from './actions';
@@ -139,7 +140,7 @@ export default async function AdminBenchmarksPage() {
                   {g.rows.map((r) => (
                     <tr key={`${r.cohortKey}|${r.value}`} className="border-t border-border">
                       <td className="py-2 pr-4">{cohortLabel(r, t)}</td>
-                      <td className="py-2 pr-4 font-medium">{r.value}</td>
+                      <td className="py-2 pr-4 font-medium">{r.valueKey ? t(r.valueKey) : r.value}</td>
                       <td className="py-2 pr-4 text-right tabular-nums">{r.count.toLocaleString()}</td>
                       <td className="py-2 text-right tabular-nums">{r.cohortSize.toLocaleString()}</td>
                     </tr>
@@ -156,9 +157,9 @@ export default async function AdminBenchmarksPage() {
 
 function cohortLabel(row: BenchmarkRow, t: (key: string, params?: Record<string, string | number>) => string): string {
   const kids = row.childBands.length
-    ? t('adminBenchmarks.kidsBands', { bands: row.childBands.join(', ') })
+    ? t('adminBenchmarks.kidsBands', { bands: row.childBands.map((b) => bandFamilyLabel('age', b, t)).join(', ') })
     : t('adminBenchmarks.noKids');
-  return `${kids} · ${t('adminBenchmarks.householdOf', { size: row.sizeBand })}`;
+  return `${kids} · ${t('adminBenchmarks.householdOf', { size: bandFamilyLabel('size', row.sizeBand, t) })}`;
 }
 
 async function AdminBenchmarksReadError() {

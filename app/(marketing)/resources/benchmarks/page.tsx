@@ -11,6 +11,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { readBenchmarkAggregates, readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 import { benchmarkRows, groupBenchmarks } from '@/lib/network/benchmarks';
 import { aggregatesToInsights, AGG_DEFAULTS } from '@/lib/network/aggregate';
+import { bandFamilyLabel } from '@/lib/network/contribution';
 import { K_ANONYMITY_FLOOR, isSuppressed } from '@/lib/network/insights';
 import { fmtDate } from '@/lib/utils/format';
 
@@ -19,9 +20,10 @@ export const dynamic = 'force-dynamic';
 const PATH = '/resources/benchmarks';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata(PATH, {
-    title: 'Household Benchmarks — how families like yours run the week',
-    description: 'Coarse, anonymized patterns from consenting families: dinner planning, chores per child, bedtimes, weekly spend and reminders. Every number is backed by at least 20 households and noised; no family is identifiable.',
+    title: t('benchmarksPage.metaTitle'),
+    description: t('benchmarksPage.metaDescription', { floor: K_ANONYMITY_FLOOR }),
   });
 }
 
@@ -93,13 +95,16 @@ export default async function BenchmarksPage() {
                   {g.rows.map((r) => (
                     <li key={`${r.cohortKey}|${r.value}`} className="py-3">
                       <p className="text-sm font-medium">
-                        {t('benchmarksPage.aboutFamiliesReport', { count: r.count, value: r.value })}
+                        {/* The BAND is a word this sentence is built around, so it is
+                            translated like the sentence. `r.value` stays the stored
+                            English band and is never what a reader sees. */}
+                        {t('benchmarksPage.aboutFamiliesReport', { count: r.count, value: r.valueKey ? t(r.valueKey) : r.value })}
                       </p>
                       <p className="mt-1 text-xs text-muted">
                         {r.childBands.length
-                          ? t('benchmarksPage.familiesWithKids', { bands: r.childBands.join(', ') })
+                          ? t('benchmarksPage.familiesWithKids', { bands: r.childBands.map((b) => bandFamilyLabel('age', b, t)).join(', ') })
                           : t('benchmarksPage.familiesWithoutKids')}
-                        {' · '}{t('benchmarksPage.householdOf', { size: r.sizeBand })}
+                        {' · '}{t('benchmarksPage.householdOf', { size: bandFamilyLabel('size', r.sizeBand, t) })}
                         {' · '}{t('benchmarksPage.cohortOf', { n: r.cohortSize })}
                       </p>
                       <p className="mt-1 text-[11px] text-muted">{t('benchmarksPage.aggregatedNotice')}</p>
@@ -126,7 +131,7 @@ export default async function BenchmarksPage() {
         </p>
       </Section>
 
-      <MarketingAeoSection path={PATH} name="Household Benchmarks" description={t('benchmarksPage.description')} />
+      <MarketingAeoSection path={PATH} name={t('benchmarksPage.eyebrow')} description={t('benchmarksPage.description')} />
       <CTASection title={t('benchmarksPage.ctaTitle')} subtitle={t('benchmarksPage.ctaSubtitle')} />
     </>
   );

@@ -9,6 +9,7 @@ import {
 } from '@/lib/network/contribution';
 import { cohortKey, aggregatesToInsights, type NetworkAggregate } from '@/lib/network/aggregate';
 import { CHILD_ROLES, OPEN_CHORE_STATUSES, SPEND_WINDOW_DAYS } from '@/lib/network/aggregate-server';
+import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server';
 import type { ConsentScope } from '@/lib/network/insights';
 
 export const metadata: Metadata = { title: 'Intelligence Network | Bubaly' };
@@ -81,7 +82,19 @@ export default async function IntelligencePage() {
   // `t` so the two insight sentences reach the reader in their own language.
   const candidates = aggregatesToInsights(aggregates, myCohort, t);
 
-  return <IntelligenceModule contribution={computeContribution(input, now)} candidates={candidates} />;
+  // Does /resources/benchmarks exist right now? The public page 404s unless the
+  // admin publication flag is on, and marketing_settings is admin-only, so the
+  // answer has to come from the service role here rather than from the module.
+  // False on any failure — the card is omitted rather than linking to a 404.
+  const benchmarksPublished = await benchmarksPageIsPublished();
+
+  return (
+    <IntelligenceModule
+      contribution={computeContribution(input, now)}
+      candidates={candidates}
+      benchmarksPublished={benchmarksPublished}
+    />
+  );
 }
 
 async function IntelligenceReadError() {
