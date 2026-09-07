@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -13,12 +14,13 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 // family member; the actual write-back happens client-side via the existing
 // Supabase notes update path so RLS stays the source of truth.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-notes:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many note-analysis requests. Please try again shortly.' },
+      { error: t('notes.tooManyNoteAnalysisRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
     const { content } = (boundedBody.value ?? {}) as { content?: string };
     const text = (content ?? '').trim();
     if (!text) {
-      return NextResponse.json({ error: 'Note content is required' }, { status: 400 });
+      return NextResponse.json({ error: t('notes.noteContentIsRequired') }, { status: 400 });
     }
 
     const { system, user } = buildNotesPrompt(text);
@@ -57,12 +59,12 @@ export async function POST(req: NextRequest) {
       },
     );
     if (!insights) {
-      return NextResponse.json({ error: 'Could not analyze this note. Please try again.' }, { status: 502 });
+      return NextResponse.json({ error: t('notes.couldNotAnalyzeThisNote') }, { status: 502 });
     }
 
     return NextResponse.json({ insights });
   } catch (err) {
     console.error('Notes AI error:', err);
-    return NextResponse.json({ error: 'Failed to analyze note' }, { status: 500 });
+    return NextResponse.json({ error: t('notes.failedToAnalyzeNote') }, { status: 500 });
   }
 }

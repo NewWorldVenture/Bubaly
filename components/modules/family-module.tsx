@@ -179,8 +179,8 @@ export function FamilyModule() {
 
   async function copyCode() {
     if (!family?.family_code) return;
-    try { await navigator.clipboard.writeText(family.family_code); success('Family code copied'); }
-    catch { toastError('Could not copy the code'); }
+    try { await navigator.clipboard.writeText(family.family_code); success(t('familyModule.familyCodeCopied')); }
+    catch { toastError(t('familyModule.couldNotCopyTheCode')); }
   }
 
   const sharedCards = [
@@ -196,7 +196,7 @@ export function FamilyModule() {
       <div className="module-main space-y-5">
         <PageHeader
           title={t('family.family')}
-          description="Your family hub. Everyone. Everything. In one place."
+          description={t('familyModule.yourFamilyHubEveryoneEverything')}
           action={
             <div className="flex flex-wrap items-center gap-2">
               {canManage && <Button onClick={() => { setEditMember(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> {t('family.addMember')}</Button>}
@@ -456,7 +456,7 @@ export function FamilyModule() {
               const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
-              success('Member removed'); void refreshMembers();
+              success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
         </div>
@@ -566,7 +566,7 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
       .eq('id', family.id).select('*').maybeSingle();
     setSaving(false);
     if (err || !data) { toastError(err ? describeDbError(err) : 'Could not save'); return; }
-    success('Family profile updated');
+    success(t('familyModule.familyProfileUpdated'));
     onSaved(data as Family);
   }
 
@@ -576,7 +576,7 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
         <Field label={t('family.familyName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required />}</Field>
         <Field label={t('family.address')}>{(id) => <Input id={id} value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('family.123FamilyWayAustinTx78701')} />}</Field>
         <Field label={t('family.timeZone')}>{(id) => <Input id={id} value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Chicago" />}</Field>
-        <Field label={t('family.coverPhotoUrl')} hint="Paste an image URL for your family cover.">{(id) => <Input id={id} value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…" />}</Field>
+        <Field label={t('family.coverPhotoUrl')} hint={t('familyModule.pasteAnImageUrlFor')}>{(id) => <Input id={id} value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…" />}</Field>
         <Button type="submit" className="w-full" loading={saving} disabled={saving || !name.trim()}>{t('family.saveChanges')}</Button>
       </form>
     </Modal>

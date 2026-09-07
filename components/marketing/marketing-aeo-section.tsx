@@ -1,4 +1,5 @@
 import { FAQAccordion } from '@/components/marketing/faq-accordion';
+import { getTranslations } from '@/lib/i18n/server';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { MarketingPageStructuredData } from '@/components/marketing/structured-data';
 import { readAeoQuestionsForPath } from '@/lib/marketing/aeo';
@@ -12,6 +13,7 @@ export async function MarketingAeoSection({
   name: string;
   description: string;
 }) {
+  const t = await getTranslations();
   const result = await readAeoQuestionsForPath(path);
   const items = result.questions.map((item) => ({ q: item.question, a: item.answer }));
 
@@ -23,7 +25,7 @@ export async function MarketingAeoSection({
           <SectionHeading
             eyebrow="Knowledge Center"
             title={`Answers about ${name}`}
-            description="Clear answers maintained by the Bubaly team and kept in sync with the public site."
+            description={t('marketingAeoSection.clearAnswersMaintainedByThe')}
           />
           <div className="mx-auto mt-10 max-w-3xl">
             <FAQAccordion items={items} />

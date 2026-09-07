@@ -121,7 +121,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not add that link');
     setLinkUrl('');
-    success('Added to your feed');
+    success(tr('socialFeedModule.addedToYourFeed'));
     router.refresh();
   }
 
@@ -201,9 +201,9 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           </div>
 
           {empty ? (
-            <EmptyState icon={Rss} title={tr('socialFeed.yourFeedIsEmpty')} description="Paste any link above — a video, post, or article — to add it instantly, or connect your favorite accounts. It all lands here, ad-free." action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> {tr('socialFeed.addYourFirstSource')}</Button>} />
+            <EmptyState icon={Rss} title={tr('socialFeed.yourFeedIsEmpty')} description={tr('socialFeedModule.pasteAnyLinkAboveA')} action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> {tr('socialFeed.addYourFirstSource')}</Button>} />
           ) : feed.length === 0 ? (
-            <EmptyState icon={Filter} title={tr('socialFeed.nothingMatches')} description="Try a different tab or clear the filter." />
+            <EmptyState icon={Filter} title={tr('socialFeed.nothingMatches')} description={tr('socialFeedModule.tryADifferentTabOr')} />
           ) : (
             <div className="space-y-3">
               {feed.map((item) => (

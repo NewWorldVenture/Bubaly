@@ -82,7 +82,7 @@ export function WishlistsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('What do you wish for?'); return; }
+    if (!form.title.trim()) { toastError(t('wishlistsModule.whatDoYouWishFor')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), url: form.url.trim() || null, price: form.price ? Number(form.price) : null, priority: form.priority, notes: form.notes.trim() || null };
@@ -100,7 +100,7 @@ export function WishlistsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('wishlist_items').delete().eq('id', w.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Removed');
+    success(t('wishlistsModule.removed'));
   }
 
   async function toggleClaim(w: Wish) {
@@ -127,7 +127,7 @@ export function WishlistsModule() {
     <div>
       <PageHeader
         title={t('wishlists.wishLists')}
-        description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
+        description={t('wishlistsModule.everyoneSWishesInOne')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="wishlists" />

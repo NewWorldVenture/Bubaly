@@ -26,12 +26,12 @@ export function HomeApprovalActions({ approvalId, kind }: { approvalId: string; 
       const res = kind === 'allowance_request'
         ? await decideAllowanceRequestAction({ approvalId, decision })
         : await decideSpendRequestAction({ approvalId, decision });
-      if (!res.ok) { toastError(res.error ?? 'Could not update that approval.'); return; }
+      if (!res.ok) { toastError(res.error ?? t('homeApprovalActions.couldNotUpdateThatApproval')); return; }
       setDone(true);
       success(decision === 'approved' ? 'Approved ✓' : 'Declined');
       router.refresh();
     } catch {
-      toastError('Could not update that approval.');
+      toastError(t('homeApprovalActions.couldNotUpdateThatApproval'));
     } finally {
       setBusy(null);
     }

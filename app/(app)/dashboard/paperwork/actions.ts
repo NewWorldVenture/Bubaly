@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
@@ -15,6 +16,7 @@ const PATH = '/dashboard/paperwork';
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<void> {
+  const tr = await getTranslations();
   const text = String(formData.get('text') ?? '').trim();
   const sender = String(formData.get('sender') ?? '').trim() || null;
   if (!text) return;
@@ -37,7 +39,7 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
     actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
     created_by: ctx.user.id,
   });
-  if (error) throw new Error(describeActionError(error, 'Could not save that paperwork.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')));
   revalidatePath(PATH);
 }
 
@@ -53,6 +55,7 @@ export async function materializePaperworkActionAction(input: {
   itemId: string;
   actionIndex: number;
 }): Promise<void> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -83,7 +86,7 @@ export async function materializePaperworkActionAction(input: {
       all_day: Boolean(dueOn),
       created_by: ctx.user.id,
     }).select('id').single();
-    if (error) throw new Error(describeActionError(error, 'Could not add that to your calendar.'));
+    if (error) throw new Error(describeActionError(error, tr('actions.couldNotAddThatTo')));
     materializedAs = 'calendar_event';
     materializedId = data?.id ?? null;
   } else {
@@ -129,17 +132,18 @@ type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
  * parent can copy/edit/send. Key-gated — an honest message when AI isn't set up.
  */
 export async function draftPaperworkReplyAction(itemId: string): Promise<DraftResult> {
-  if (!itemId) return { ok: false, error: 'Invalid item' };
+  const tr = await getTranslations();
+  if (!itemId) return { ok: false, error: tr('actions.invalidItem') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!item) return { ok: false, error: 'Paperwork not found' };
+  if (!item) return { ok: false, error: tr('actions.paperworkNotFound') };
 
   if (!(await isAIConfigured())) {
-    return { ok: false, error: 'AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft replies.' };
+    return { ok: false, error: tr('actions.aiIsnTConfiguredYet') };
   }
 
   const source = (item.raw_text || item.summary || item.title || '').slice(0, 6000);
@@ -179,7 +183,7 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   } catch (err) {
     return { ok: false, error: describeAIError(err).message };
   }
-  if (!draft) return { ok: false, error: 'Could not draft a reply. Please try again.' };
+  if (!draft) return { ok: false, error: tr('actions.couldNotDraftAReply') };
 
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
   // Persisting the draft is best-effort — it is returned to the caller regardless —
@@ -195,11 +199,12 @@ export async function setPaperworkStatusAction(input: {
   itemId: string;
   status: 'needs_action' | 'in_progress' | 'done' | 'archived';
 }): Promise<void> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not update that paperwork.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')));
   revalidatePath(PATH);
 }

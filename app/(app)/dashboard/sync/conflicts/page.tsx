@@ -35,7 +35,7 @@ export default async function SyncConflictsPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncConflicts.conflicts')}</h1>
-        <ErrorState message="Could not load your sync conflicts from Supabase. Refresh and try again." />
+        <ErrorState message={t('conflicts.couldNotLoadYourSync')} />
         <a href="/dashboard/sync/conflicts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncConflicts.refreshConflicts')}</a>
       </div>
     );
@@ -75,9 +75,9 @@ export default async function SyncConflictsPage() {
                   <p className="mt-0.5 text-sm text-muted">{KIND_LABEL[c.conflict_kind] ?? c.conflict_kind}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <Badge tone="brand">Keep ours</Badge>
-                  <Badge tone="accent">Keep theirs</Badge>
-                  <Badge tone="neutral">Keep both</Badge>
+                  <Badge tone="brand">{t('conflicts.keepOurs')}</Badge>
+                  <Badge tone="accent">{t('conflicts.keepTheirs')}</Badge>
+                  <Badge tone="neutral">{t('conflicts.keepBoth')}</Badge>
                 </div>
               </div>
             </Card>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -23,20 +24,21 @@ async function fetchWithTimeout(url: string, ms = FETCH_TIMEOUT): Promise<Respon
 // Ticketmaster + SeatGeek (keyed, nationwide, ZIP+radius) plus the family's
 // curated ICS/RSS local feeds (city, library, parks, school...). Deduped + cached.
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: tr('discover.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceRequestRateLimit(supabase, `weekend:${ctx.user.id}`, { limit: 12 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many event searches. Please try again shortly.' },
+    { error: tr('discover.tooManyEventSearchesPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: tr('discover.requestBodyIsTooLarge') }, { status: 400 });
   const { zip, radius, days } = (boundedBody.value ?? {}) as { zip?: string; radius?: number; days?: number };
-  if (!zip || !isValidZip(zip)) return NextResponse.json({ error: 'Enter a valid 5-digit ZIP code.' }, { status: 400 });
+  if (!zip || !isValidZip(zip)) return NextResponse.json({ error: tr('discover.enterAValid5Digit') }, { status: 400 });
   const radiusMiles = RADIUS_OPTIONS.includes(radius as never) ? radius! : DEFAULT_RADIUS;
   const windowDays = Number.isInteger(days) && days! >= 1 && days! <= 30 ? days! : DEFAULT_DAYS;
   const { startISO, endISO } = discoveryWindow(windowDays);
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
   // No sources at all → tell the user how to enable discovery (never fake data).
   if (sourcesUsed.length === 0) {
     return NextResponse.json({
-      error: 'No event sources are connected yet. Add a TICKETMASTER_API_KEY / SEATGEEK_CLIENT_ID, or add a local ICS/RSS feed below.',
+      error: tr('discover.noEventSourcesAreConnected'),
       needsConfig: true,
     }, { status: 503 });
   }
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
       const { error } = await supabase.from('weekend_events').upsert(rows, { onConflict: 'family_id,source,external_id' });
       if (error) {
         console.error('Weekend event write failed:', error);
-        return NextResponse.json({ error: 'Could not save discovered events.' }, { status: 500 });
+        return NextResponse.json({ error: tr('discover.couldNotSaveDiscoveredEvents') }, { status: 500 });
       }
     }
   }

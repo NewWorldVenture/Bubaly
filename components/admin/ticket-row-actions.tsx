@@ -20,10 +20,10 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
           toastError(result.error ?? 'Could not update that ticket.');
           return;
         }
-        success('Ticket status updated.');
+        success(t('ticketRowActions.ticketStatusUpdated'));
         setOpen(false);
       } catch {
-        toastError('Could not update that ticket. Please try again.');
+        toastError(t('ticketRowActions.couldNotUpdateThatTicket'));
       }
     });
   }

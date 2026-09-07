@@ -10,15 +10,16 @@ import { ReferralSettingsForm } from './settings-form';
 import { saveReferralConfigAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Referrals', robots: { index: false } };
+export const metadata: Metadata = { title: 'referrals.referrals', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight">Referrals</h1>
-      <ErrorState message="Could not load referral settings and activity from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/referrals" className="text-sm font-medium text-brand-text underline">Refresh referrals</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('referrals.referrals')}</h1>
+      <ErrorState message={t('referrals.couldNotLoadReferralSettings')} />
+      <Link href="/admin/marketing/referrals" className="text-sm font-medium text-brand-text underline">{t('referrals.refreshReferrals')}</Link>
     </div>
   );
 }

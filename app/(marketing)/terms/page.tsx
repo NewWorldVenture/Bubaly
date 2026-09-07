@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
+  // The browser tab title is copy too — a French visitor should not get an
+  // English <title> above a French page.
+  const t = await getTranslations();
   return resolveMarketingMetadata('/terms', {
-  title: 'Terms of Service',
+  title: t('terms.termsOfService'),
   description: 'The terms that govern your use of Bubaly, the family organizer.',
   });
 }
@@ -99,12 +103,13 @@ const SECTIONS: LegalSection[] = [
   },
 ];
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const t = await getTranslations();
   return (
     <>
       <LegalPage
-        title="Terms of Service"
-        summary="The agreement that governs your use of Bubaly. Plain language, no surprises."
+        title={t('terms.termsOfService')}
+        summary={t('terms.theAgreementThatGovernsYour')}
         lastUpdated="June 24, 2026"
         path="/terms"
         sections={SECTIONS}

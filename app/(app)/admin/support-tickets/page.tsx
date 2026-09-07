@@ -14,7 +14,7 @@ import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Support Tickets', robots: { index: false } };
+export const metadata: Metadata = { title: 'supportTickets.supportTickets', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
@@ -22,7 +22,7 @@ const PAGE_SIZE = 10;
 const TABS = [
   { key: 'all',        label: 'All Tickets' },
   { key: 'mine',       label: 'My Tickets' },
-  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'unassigned', label: 'supportTickets.unassigned' },
   { key: 'open',       label: 'Open' },
   { key: 'pending',    label: 'Pending' },
   { key: 'resolved',   label: 'Resolved' },
@@ -267,7 +267,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                               <span className="text-xs">{ticket.assigned_agent_name}</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted/60 italic">Unassigned</span>
+                            <span className="text-xs text-muted/60 italic">{tr('supportTickets.unassigned')}</span>
                           )}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted whitespace-nowrap">
@@ -398,15 +398,16 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
   );
 }
 
-function AdminReadError() {
+async function AdminReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Support Tickets</h1>
-        <p className="mt-1 text-sm text-muted">Manage and resolve customer support requests.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('supportTickets.supportTickets')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('supportTickets.manageAndResolveCustomerSupport')}</p>
       </div>
-      <ErrorState message="Could not load support tickets. Refresh and try again." />
-      <a href="/admin/support-tickets" className="text-sm font-medium text-brand-text underline">Refresh tickets</a>
+      <ErrorState message={tr('supportTickets.couldNotLoadSupportTickets')} />
+      <a href="/admin/support-tickets" className="text-sm font-medium text-brand-text underline">{tr('supportTickets.refreshTickets')}</a>
     </div>
   );
 }

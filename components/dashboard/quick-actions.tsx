@@ -63,7 +63,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await saveDashboardLayoutAction({ featureKeys: keys });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save layout');
-    success('Dashboard saved');
+    success(t('quickActions.dashboardSaved'));
     setEditing(false);
     router.refresh();
   }
@@ -72,7 +72,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await resetDashboardLayoutAction({});
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not reset');
-    success('Reset to default');
+    success(t('quickActions.resetToDefault'));
     setEditing(false);
     router.refresh();
   }
@@ -82,7 +82,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
     const res = await saveFamilyDefaultLayoutAction({ featureKeys: keys });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not set family default');
-    success('Saved as the family default');
+    success(t('quickActions.savedAsTheFamilyDefault'));
   }
 
   const addable = available.filter((f) => !keys.includes(f.key));
@@ -123,7 +123,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 py-4 text-center">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><FeatureIcon icon={f.icon} className="h-4 w-4" /></div>
             <span className="text-[11px] font-semibold">{f.label}</span>
-            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">Fixed</span>}
+            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">{t('quickActions.fixed')}</span>}
           </Link>
         ))}
 
@@ -134,8 +134,8 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             <button onClick={() => setPicker({ mode: 'replace', index: i })} className="grid h-9 w-9 place-items-center rounded-xl bg-elevated"><FeatureIcon icon={f.icon} className="h-4 w-4" /></button>
             <span className="text-[11px] font-semibold">{f.label}</span>
             <div className="absolute bottom-1 right-1 flex flex-col">
-              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" className="text-muted hover:text-fg disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
-              <button onClick={() => move(i, 1)} disabled={i === tiles.length - 1} aria-label="Move down" className="text-muted hover:text-fg disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
+              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={t('quickActions.moveUp')} className="text-muted hover:text-fg disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
+              <button onClick={() => move(i, 1)} disabled={i === tiles.length - 1} aria-label={t('quickActions.moveDown')} className="text-muted hover:text-fg disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
             </div>
           </div>
         ) : (
@@ -196,17 +196,17 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
     const res = await saveDashboardSettingsAction({ allowChildCustomization: allowChild, lockToFamilyDefault: lockAll });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save settings');
-    success('Dashboard settings saved');
+    success(t('quickActions.dashboardSettingsSaved'));
     onClose();
     router.refresh();
   }
   async function resetEveryone() {
-    if (!confirm('Reset every family member’s dashboard to the default?')) return;
+    if (!confirm(t('quickActions.resetEveryFamilyMemberS'))) return;
     setSaving(true);
     const res = await resetAllLayoutsAction();
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not reset');
-    success('Everyone’s dashboard was reset');
+    success(t('quickActions.everyoneSDashboardWasReset'));
     onClose();
     router.refresh();
   }
@@ -223,7 +223,7 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
   return (
     <Modal open onClose={onClose} title={t('quickActions.familyDashboardSettings')}>
       <div className="space-y-3">
-        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label={t('quickActions.allowChildrenToCustomize')} hint="Let kid accounts personalize their own dashboard buttons." />
+        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label={t('quickActions.allowChildrenToCustomize')} hint={t('quickActions.letKidAccountsPersonalizeTheir')} />
         <Toggle on={lockAll} onToggle={() => setLockAll((v) => !v)} label={t('quickActions.useTheFamilyDefaultForEveryone')} hint="Everyone sees the shared default; only parents can change it." />
         <button onClick={resetEveryone} disabled={saving} className="flex w-full items-center gap-2 rounded-xl border border-border p-3 text-left text-sm text-muted hover:border-danger/40 hover:text-danger transition">
           <RotateCcw className="h-4 w-4" /> {t('quickActions.resetAllMembersDashboardsToDefault')}

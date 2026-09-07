@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
@@ -15,18 +16,19 @@ export const maxDuration = 60;
 // returns an MP3 stream from OpenAI's speech endpoint. The key stays server-side.
 // Honest 503 when OpenAI isn't configured — never synthesizes a fake/silent clip.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-voice-speak:${ctx.user.id}`, { limit: 30 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many voice requests. Please try again shortly.' },
+      { error: t('speak.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Voice isn’t configured. Add an OpenAI key in Admin → AI Engine.' },
+        { error: t('speak.voiceIsnTConfiguredAdd') },
         { status: 503 },
       );
     }
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
     const { text, voice } = (boundedBody.value ?? {}) as { text?: string; voice?: string };
     const speech = prepareSpeechText(text ?? '');
-    if (!speech) return NextResponse.json({ error: 'Nothing to say' }, { status: 400 });
+    if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
 
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
     const res = await fetchExternal('https://api.openai.com/v1/audio/speech', {
@@ -64,6 +66,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('TTS route error', err);
-    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('speak.somethingWentWrongPleaseTry') }, { status: 500 });
   }
 }

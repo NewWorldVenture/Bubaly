@@ -34,7 +34,7 @@ export default async function InboxPage() {
             <EmptyState
               icon={InboxIcon}
               title={t('dashboardSocialInbox.inboxIsEmpty')}
-              description="Comments, mentions, and replies from connected accounts appear here once their APIs are credentialed. Nothing is fabricated."
+              description={t('inbox.commentsMentionsAndRepliesFrom')}
             />
           ) : (
             comments.map((c) => (
@@ -48,10 +48,10 @@ export default async function InboxPage() {
                 </div>
                 <p className="text-sm text-muted">{c.body}</p>
                 <div className="mt-2 flex items-center gap-3">
-                  {c.permalink_url && <a href={c.permalink_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-text underline">Open original <ExternalLink className="h-3 w-3" /></a>}
+                  {c.permalink_url && <a href={c.permalink_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-text underline">{t('inbox.openOriginal')}{' '}<ExternalLink className="h-3 w-3" /></a>}
                   {c.status === 'open' && (
                     <form action={resolveCommentAction.bind(null, c.id)}>
-                      <button className="text-xs font-medium text-muted hover:text-fg underline">Mark resolved</button>
+                      <button className="text-xs font-medium text-muted hover:text-fg underline">{t('inbox.markResolved')}</button>
                     </form>
                   )}
                 </div>

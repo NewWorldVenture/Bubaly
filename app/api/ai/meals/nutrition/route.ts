@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -36,27 +37,28 @@ const SYSTEM =
  * unchanged content never re-bills the model — pass `refresh: true` to recompute.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('nutrition.unauthorized') }, { status: 401 }); }
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: t('nutrition.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const familyId = ctx.active.familyId;
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('nutrition.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const subjectType = String(body.subjectType ?? '') as NutritionSubject;
   const subjectId = String(body.subjectId ?? '').slice(0, 64);
   const refresh = body.refresh === true;
   if (!SUBJECTS.includes(subjectType) || !subjectId) {
-    return NextResponse.json({ error: 'subjectType (recipe|meal|week) and subjectId are required.' }, { status: 400 });
+    return NextResponse.json({ error: t('nutrition.subjecttypeRecipeMealWeekAnd') }, { status: 400 });
   }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-meals-nutrition:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many nutrition requests. Please try again shortly.' },
+    { error: t('nutrition.tooManyNutritionRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
@@ -75,21 +77,21 @@ export async function POST(req: Request) {
   if (subjectType === 'recipe') {
     const { data: r } = await supabase.from('family_recipes')
       .select('name,servings,ingredients,category,allergy_flags').eq('id', subjectId).eq('family_id', familyId).maybeSingle();
-    if (!r) return NextResponse.json({ error: 'Recipe not found.' }, { status: 404 });
+    if (!r) return NextResponse.json({ error: t('nutrition.recipeNotFound') }, { status: 404 });
     servings = r.servings ?? 1;
     userMsg = `Dish: ${r.name} (${r.category}). Servings: ${servings}. Ingredients: ${ingredientLines(r.ingredients)}.\n` +
       `Report nutrition PER SERVING.`;
   } else if (subjectType === 'meal') {
     const { data: m } = await supabase.from('meals')
       .select('name,meal_type,ingredients,notes').eq('id', subjectId).eq('family_id', familyId).maybeSingle();
-    if (!m) return NextResponse.json({ error: 'Meal not found.' }, { status: 404 });
+    if (!m) return NextResponse.json({ error: t('nutrition.mealNotFound') }, { status: 404 });
     servings = 1;
     userMsg = `Dish: ${m.name} (${m.meal_type}). Ingredients: ${ingredientLines(m.ingredients) || 'typical preparation'}.\n` +
       `Report nutrition for ONE serving.`;
   } else {
     // week: subjectId is the week-start date; analyze the planned meals.
     if (!/^\d{4}-\d{2}-\d{2}$/.test(subjectId)) {
-      return NextResponse.json({ error: 'For a week, subjectId must be the week-start date (YYYY-MM-DD).' }, { status: 400 });
+      return NextResponse.json({ error: t('nutrition.forAWeekSubjectidMust') }, { status: 400 });
     }
     const dates = weekDates(subjectId);
     const { data: plans } = await supabase.from('meal_plans')
@@ -104,7 +106,7 @@ export async function POST(req: Request) {
       .map((p) => ({ label: nameById.get(p.meal_id ?? '') ?? 'meal', date: p.plan_date, meal_type: p.meal_type }))
       .filter((l) => l.label !== 'meal' || true);
     if (lines.length === 0) {
-      return NextResponse.json({ error: 'No planned meals for this week yet.' }, { status: 422 });
+      return NextResponse.json({ error: t('nutrition.noPlannedMealsForThis') }, { status: 422 });
     }
     weekDetails = lines.map((l) => ({ label: l.label, date: l.date }));
     userMsg = `Estimate the AVERAGE PER DAY nutrition across this week's planned meals.\n` +
@@ -143,7 +145,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
-  if (!parsed) return NextResponse.json({ error: 'Could not read the nutrition estimate. Try again.' }, { status: 422 });
+  if (!parsed) return NextResponse.json({ error: t('nutrition.couldNotReadTheNutrition') }, { status: 422 });
   const { nutrition: n, summary } = parsed;
 
   // Upsert the cache ------------------------------------------------------
@@ -158,7 +160,7 @@ export async function POST(req: Request) {
     .select('*').single();
   if (error) {
     console.error('Meal nutrition write failed:', error);
-    return NextResponse.json({ error: 'Could not save the nutrition details.' }, { status: 500 });
+    return NextResponse.json({ error: t('nutrition.couldNotSaveTheNutrition') }, { status: 500 });
   }
 
   return NextResponse.json({ nutrition: saved, cached: false });

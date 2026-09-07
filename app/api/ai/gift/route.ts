@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolveProvider } from '@/lib/ai/provider';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
@@ -13,13 +14,14 @@ import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bo
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   // Tight limit: a public, model-backed endpoint. 5 requests/minute/IP.
   // AI-2: per-instance in-memory gate first (cheap), then a durable, cross-instance
   // limit via Postgres so the cap holds under horizontal scale.
   const ip = clientIp(req.headers);
   const limited = rateLimit(`ai-gift:${ip}`, { limit: 5, windowMs: 60_000 });
   const rejected = (retryAfter: number) => NextResponse.json(
-    { error: 'Please wait a moment before asking for more ideas.' },
+    { error: t('gift.pleaseWaitAMomentBefore') },
     { status: 429, headers: { 'Retry-After': String(retryAfter) } },
   );
   if (!limited.ok) return rejected(limited.retryAfter);
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Bad request' }, { status: 400 });
   const body = (boundedBody.value ?? {}) as { token?: string; relationship?: string };
   const token = typeof body.token === 'string' ? body.token : '';
-  if (!token) return NextResponse.json({ error: 'Missing gift link.' }, { status: 400 });
+  if (!token) return NextResponse.json({ error: t('gift.missingGiftLink') }, { status: 400 });
   const relationship = typeof body.relationship === 'string' ? body.relationship.slice(0, 40).trim() || null : null;
 
   const { data: link } = await supabase
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
     .select('id, is_active, occasion, child_wallet_id, family_id')
     .eq('token', token)
     .maybeSingle();
-  if (!link || !link.is_active) return NextResponse.json({ error: 'This gift link is no longer active.' }, { status: 404 });
+  if (!link || !link.is_active) return NextResponse.json({ error: t('gift.thisGiftLinkIsNo') }, { status: 404 });
 
   // Resolve the child's first name + their top active goal (kept minimal).
   let childName = 'the child';
@@ -71,11 +73,11 @@ export async function POST(req: NextRequest) {
     const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
     const suggestions = parseGiftSuggestions(completion.text || '');
     if (suggestions.messages.length === 0) {
-      return NextResponse.json({ error: 'Could not think of ideas right now. Please try again.' }, { status: 502 });
+      return NextResponse.json({ error: t('gift.couldNotThinkOfIdeas') }, { status: 502 });
     }
     return NextResponse.json(suggestions);
   } catch (err) {
     console.error('AI gift assistant error:', err);
-    return NextResponse.json({ error: 'Could not generate ideas right now.' }, { status: 500 });
+    return NextResponse.json({ error: t('gift.couldNotGenerateIdeasRight') }, { status: 500 });
   }
 }

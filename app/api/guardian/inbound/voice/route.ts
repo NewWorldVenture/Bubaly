@@ -3,6 +3,7 @@
 // Runs the decision pipeline and responds with TwiML within the 5-second window.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
@@ -22,6 +23,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   // Parse Twilio form data
   const boundedForm = await readBoundedRequestFormData(req, MAX_TWILIO_BODY_BYTES);
   if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     return finish(wrapTwiml(
       twimlRecord({
         action: `${BASE_URL}/api/guardian/status/voicemail`,
-        text: 'Hello! Please leave a message and we\'ll get back to you.',
+        text: 'Hello! Please leave a message and we’ll get back to you.',
         maxLength: 120,
       }),
     ));
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
   if (routingMode === 'blocked') {
     await updateCommStatus(supabase, commId, 'blocked');
     return finish(wrapTwiml(
-      twimlSay('I\'m sorry, we\'re not able to take this call. Goodbye.'),
+      twimlSay(tr('voice.iMSorryWeRe')),
       twimlHangup(),
     ));
   }
@@ -185,14 +187,14 @@ export async function POST(req: NextRequest) {
         speechTimeout: 'auto',
       }),
       // If caller doesn't speak, prompt again
-      twimlSay('I didn\'t catch that. Please try again.'),
+      twimlSay(tr('voice.iDidnTCatchThat')),
       twimlHangup(),
     ));
   }
 
   // Default fallback
   return finish(wrapTwiml(
-    twimlSay('Thank you for calling. We\'ll get back to you soon. Goodbye.'),
+    twimlSay(tr('voice.thankYouForCallingWe')),
     twimlHangup(),
   ));
 }

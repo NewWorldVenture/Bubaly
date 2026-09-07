@@ -120,7 +120,7 @@ export function NavigationChoices() {
     void persist(next, childMap);
   }
   function remove(href: string) {
-    if (keys.length <= 1) { toastError('Keep at least one destination in your sidebar.'); return; }
+    if (keys.length <= 1) { toastError(t('navigationChoices.keepAtLeastOneDestination')); return; }
     // Drop any saved sub-page layout for a removed group so it doesn't linger.
     const { [href]: _gone, ...restChildren } = childMap;
     void persist(keys.filter((k) => k !== href), restChildren);
@@ -132,7 +132,7 @@ export function NavigationChoices() {
   function reset() {
     if (isDefault) return;
     void persist([...DEFAULT_SIDEBAR_NAV_KEYS], {});
-    success('Sidebar reset to the default layout');
+    success(t('navigationChoices.sidebarResetToTheDefault'));
   }
 
   // ── Sub-page (child) ops ─────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ export function NavigationChoices() {
               {hasGroup && open && (
                 <div className="ml-6 border-l border-border/60 px-3 pb-3 pl-3">
                   {kidItems.length === 0 ? (
-                    <p className="py-2 text-xs text-muted">No sub-pages — <span className="font-medium text-fg">{item.label}</span> shows as a plain link. Add some below.</p>
+                    <p className="py-2 text-xs text-muted">{t('navigationChoices.noSubPages')}{' '}<span className="font-medium text-fg">{item.label}</span>{' '}{t('navigationChoices.showsAsAPlainLink')}</p>
                   ) : (
                     <ul className="space-y-1 py-2">
                       {kidItems.map((kid, ki) => (

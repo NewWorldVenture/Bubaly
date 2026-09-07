@@ -98,12 +98,11 @@ export default async function PushPage() {
                 {canSendPush(c.status) && (
                   <form action={sendPushCampaignAction.bind(null, c.id)}>
                     <button type="submit" className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
-                      <Send className="h-3.5 w-3.5" /> Send
-                    </button>
+                      <Send className="h-3.5 w-3.5" />{' '}{t('push.send')}</button>
                   </form>
                 )}
                 <form action={deletePushCampaignAction.bind(null, c.id)}>
-                  <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                  <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('push.delete')}</button>
                 </form>
               </div>
             </Card>
@@ -114,15 +113,16 @@ export default async function PushPage() {
   );
 }
 
-function AdminPushReadError() {
+async function AdminPushReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Push</h1>
-        <p className="mt-1 text-sm text-muted">Create and deliver consent-aware push campaigns.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('push.marketingPush')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('push.createAndDeliverConsentAware')}</p>
       </div>
-      <ErrorState message="Could not load push campaigns from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/push" className="text-sm font-medium text-brand-text underline">Refresh push</Link>
+      <ErrorState message={t('push.couldNotLoadPushCampaigns')} />
+      <Link href="/admin/marketing/push" className="text-sm font-medium text-brand-text underline">{t('push.refreshPush')}</Link>
     </div>
   );
 }

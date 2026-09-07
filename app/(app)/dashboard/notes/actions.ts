@@ -15,6 +15,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createNote, deleteNote, updateNote, MAX_TITLE } from '@/lib/services/notes';
@@ -42,6 +43,7 @@ export async function saveNoteAction(
   noteId: string | null,
   input: { title: string | null; body: string },
 ): Promise<NoteActionResult> {
+  const t = await getTranslations();
   const scope = await noteScope();
 
   try {
@@ -54,7 +56,7 @@ export async function saveNoteAction(
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[note-action] save failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not save that note.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSaveThatNote')) };
   }
 }
 
@@ -64,7 +66,8 @@ export async function saveNoteAction(
  * a partner just pinned on another phone; a boolean says what was meant.
  */
 export async function setNotePinnedAction(noteId: string, pinned: boolean): Promise<NoteActionResult> {
-  if (!noteId) return { ok: false, error: 'That note could not be found.' };
+  const t = await getTranslations();
+  if (!noteId) return { ok: false, error: t('actions.thatNoteCouldNotBe') };
   const scope = await noteScope();
 
   try {
@@ -75,12 +78,13 @@ export async function setNotePinnedAction(noteId: string, pinned: boolean): Prom
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[note-action] pin failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not pin that note.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotPinThatNote')) };
   }
 }
 
 export async function deleteNoteAction(noteId: string): Promise<NoteActionResult> {
-  if (!noteId) return { ok: false, error: 'That note could not be found.' };
+  const t = await getTranslations();
+  if (!noteId) return { ok: false, error: t('actions.thatNoteCouldNotBe') };
   const scope = await noteScope();
 
   try {
@@ -91,7 +95,7 @@ export async function deleteNoteAction(noteId: string): Promise<NoteActionResult
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[note-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not delete that note.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotDeleteThatNote')) };
   }
 }
 
@@ -101,7 +105,8 @@ export async function deleteNoteAction(noteId: string): Promise<NoteActionResult
  * partner edited copies what they wrote rather than what this tab remembers.
  */
 export async function duplicateNoteAction(noteId: string): Promise<NoteActionResult> {
-  if (!noteId) return { ok: false, error: 'That note could not be found.' };
+  const t = await getTranslations();
+  if (!noteId) return { ok: false, error: t('actions.thatNoteCouldNotBe') };
   const scope = await noteScope();
 
   try {
@@ -112,7 +117,7 @@ export async function duplicateNoteAction(noteId: string): Promise<NoteActionRes
       .eq('id', noteId)
       .maybeSingle();
     if (error) throw error;
-    if (!source) return { ok: false, error: 'That note could not be found.' };
+    if (!source) return { ok: false, error: t('actions.thatNoteCouldNotBe') };
 
     // "Copy of " is 8 characters the family did not type, so a note already at
     // the 200-character title bound would otherwise be un-duplicatable. Trim
@@ -125,6 +130,6 @@ export async function duplicateNoteAction(noteId: string): Promise<NoteActionRes
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[note-action] duplicate failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not duplicate that note.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotDuplicateThatNote')) };
   }
 }

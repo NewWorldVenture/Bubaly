@@ -132,15 +132,15 @@ function FocusQueue() {
         if (!active.current) return;
         if (outcome === 'completed') {
           setDoneCount((n) => n + 1);
-          success('To-do saved as done.');
+          success(tr('focusModule.toDoSavedAsDone'));
         } else if (outcome === 'submitted') {
           setSubmittedCount((n) => n + 1);
-          success('Chore submitted for approval.');
+          success(tr('focusModule.choreSubmittedForApproval'));
         }
         setIndex((i) => i + 1);
       });
     } catch (err) {
-      if (active.current) toastError(describeDbError(err, 'Could not update'));
+      if (active.current) toastError(describeDbError(err, tr('focusModule.couldNotUpdate')));
     } finally {
       savingRef.current = false;
       if (active.current) setSaving(false);

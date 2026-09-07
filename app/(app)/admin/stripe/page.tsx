@@ -186,15 +186,16 @@ export default async function AdminStripeMoneyPage() {
   );
 }
 
-function AdminStripeReadError() {
+async function AdminStripeReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold">Money - Stripe Financial Mode</h1>
-        <p className="mt-1 text-sm text-muted">Platform oversight for Stripe financial capabilities.</p>
+        <h1 className="text-2xl font-bold">{t('stripe.moneyStripeFinancialMode')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('stripe.platformOversightForStripeFinancial')}</p>
       </div>
-      <ErrorState message="Could not load Stripe financial data from Supabase. Refresh and try again." />
-      <a href="/admin/stripe" className="text-sm font-medium text-brand-text underline">Refresh Stripe overview</a>
+      <ErrorState message={t('stripe.couldNotLoadStripeFinancial')} />
+      <a href="/admin/stripe" className="text-sm font-medium text-brand-text underline">{t('stripe.refreshStripeOverview')}</a>
     </div>
   );
 }

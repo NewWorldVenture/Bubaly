@@ -60,7 +60,7 @@ export default async function MarketplaceInsightsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('marketplaceInsights.marketplacePulse')} description="The state of your family's board — supply, demand, prices, and what's hot right now." />
+      <PageHeader title={t('marketplaceInsights.marketplacePulse')} description={t('insights.theStateOfYourFamily')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile icon={Package} label={t('marketplaceInsights.activeListings')} value={ins.totalActive} />

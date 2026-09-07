@@ -110,8 +110,8 @@ export function SportsModule() {
       created_by: userId, member_id: eventForm.member_id || null,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save event'); return; }
-    success('Event added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveEvent')); return; }
+    success(tr('sportsModule.eventAdded'));
     setEventOpen(false);
     setEventForm({ title: '', event_type: 'game', sport: '', team: '', starts_at: '', location: '', notes: '', member_id: '' });
     refreshEvents();
@@ -127,8 +127,8 @@ export function SportsModule() {
       member_id: teamForm.member_id || null, is_active: true, created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to add team'); return; }
-    success('Team added!');
+    if (err) { toastError(tr('sportsModule.failedToAddTeam')); return; }
+    success(tr('sportsModule.teamAdded'));
     setTeamOpen(false);
     setTeamForm({ sport: '', team_name: '', season: '', coach: '', member_id: '' });
     refreshTeams();
@@ -146,8 +146,8 @@ export function SportsModule() {
       created_by: userId,
     });
     setSaving(false);
-    if (err) { toastError('Failed to save result'); return; }
-    success('Game result added!');
+    if (err) { toastError(tr('sportsModule.failedToSaveResult')); return; }
+    success(tr('sportsModule.gameResultAdded'));
     setGameOpen(false);
     setGameForm({ team_id: '', opponent: '', our_score: '', their_score: '', date: '', result: 'win', notes: '' });
     refreshGames();
@@ -164,7 +164,7 @@ export function SportsModule() {
       <div className="module-main module-page">
         <PageHeader
           title={tr('sports.sports')}
-          description="Track games, practices, standings, and team schedules."
+          description={tr('sportsModule.trackGamesPracticesStandingsAnd')}
           action={<div className="flex items-center gap-2"><AiInsight kind="sports" iconOnly /><Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addEvent')}</Button></div>}
         />
 
@@ -200,7 +200,7 @@ export function SportsModule() {
           </div>
           {upcoming.length === 0 ? (
             <div className="px-5 pb-5">
-              <EmptyState icon={Calendar} title={tr('sports.noUpcomingEvents')} description="Add a sports event to get started." action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addEvent')}</Button>} />
+              <EmptyState icon={Calendar} title={tr('sports.noUpcomingEvents')} description={tr('sportsModule.addASportsEventTo')} action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addEvent')}</Button>} />
             </div>
           ) : (
             <>
@@ -263,7 +263,7 @@ export function SportsModule() {
               <Button variant="ghost" size="sm" onClick={() => setTeamOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addTeam')}</Button>
             </div>
             {activeTeams.length === 0 ? (
-              <EmptyState icon={Users} title={tr('sports.noTeamsYet')} description="Add your first team to track rosters and records." action={<Button onClick={() => setTeamOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addTeam')}</Button>} />
+              <EmptyState icon={Users} title={tr('sports.noTeamsYet')} description={tr('sportsModule.addYourFirstTeamTo')} action={<Button onClick={() => setTeamOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addTeam')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {activeTeams.map((team) => {
@@ -295,7 +295,7 @@ export function SportsModule() {
               <Button variant="ghost" size="sm" onClick={() => setGameOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addResult')}</Button>
             </div>
             {recentResults.length === 0 ? (
-              <EmptyState icon={Trophy} title={tr('sports.noGameResults')} description="Log a game result to start tracking your record." action={<Button onClick={() => setGameOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addResult')}</Button>} />
+              <EmptyState icon={Trophy} title={tr('sports.noGameResults')} description={tr('sportsModule.logAGameResultTo')} action={<Button onClick={() => setGameOpen(true)}><Plus className="h-4 w-4" /> {tr('sports.addResult')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {recentResults.map((r) => {

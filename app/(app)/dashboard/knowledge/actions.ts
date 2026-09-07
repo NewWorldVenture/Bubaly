@@ -18,6 +18,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { forgetFact, rememberFact, updateFact, type UpdateFactInput } from '@/lib/services/memory';
@@ -47,6 +48,7 @@ export async function saveFactAction(
   factId: string | null,
   input: UpdateFactInput & { label: string; value: string },
 ): Promise<FactActionResult> {
+  const t = await getTranslations();
   const scope = await memoryScope();
 
   try {
@@ -75,12 +77,13 @@ export async function saveFactAction(
       : { ok: true, id: result.data.suggestion.id };
   } catch (err) {
     console.error('[memory-action] save failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not save that memory.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSaveThatMemory')) };
   }
 }
 
 export async function setFactPinnedAction(factId: string, pinned: boolean): Promise<FactActionResult> {
-  if (!factId) return { ok: false, error: 'That memory could not be found.' };
+  const t = await getTranslations();
+  if (!factId) return { ok: false, error: t('actions.thatMemoryCouldNotBe') };
   const scope = await memoryScope();
 
   try {
@@ -90,12 +93,13 @@ export async function setFactPinnedAction(factId: string, pinned: boolean): Prom
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[memory-action] pin failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not pin that memory.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotPinThatMemory')) };
   }
 }
 
 export async function forgetFactAction(factId: string): Promise<FactActionResult> {
-  if (!factId) return { ok: false, error: 'That memory could not be found.' };
+  const t = await getTranslations();
+  if (!factId) return { ok: false, error: t('actions.thatMemoryCouldNotBe') };
   const scope = await memoryScope();
 
   try {
@@ -105,6 +109,6 @@ export async function forgetFactAction(factId: string): Promise<FactActionResult
     return { ok: true, id: factId };
   } catch (err) {
     console.error('[memory-action] forget failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that memory.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatMemory')) };
   }
 }

@@ -40,8 +40,8 @@ export default async function MarketplaceReviewsPage() {
   if (reviewsError) {
     return (
       <div>
-        <PageHeader title={t('marketplaceReviews.reviews')} description="Two-sided reviews — both parties rate every completed exchange." />
-        <ErrorState message="Couldn’t load your reviews. Refresh and try again." />
+        <PageHeader title={t('marketplaceReviews.reviews')} description={t('reviews.twoSidedReviewsBothParties')} />
+        <ErrorState message={t('reviews.couldnTLoadYourReviews')} />
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default async function MarketplaceReviewsPage() {
     <section className="mt-5">
       <h2 className="mb-2 text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">None yet.</p>
+        <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('reviews.noneYet')}</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((r) => (
@@ -76,7 +76,7 @@ export default async function MarketplaceReviewsPage() {
 
   return (
     <div>
-      <PageHeader title={t('marketplaceReviews.reviews')} description="Two-sided reviews — both parties rate every completed exchange." />
+      <PageHeader title={t('marketplaceReviews.reviews')} description={t('reviews.twoSidedReviewsBothParties')} />
       <div className="rounded-2xl border border-border bg-surface/60 p-4">
         <p className="text-sm font-semibold">{t('marketplaceReviews.yourRating')}</p>
         {summary.count === 0 ? (

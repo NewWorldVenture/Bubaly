@@ -42,7 +42,7 @@ export default async function AdminSecurityPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSecurity.security')}</h1>
           <p className="mt-1 text-sm text-muted">{t('adminSecurity.liveAccessControlSignalsAcrossAccounts')}</p>
         </div>
-        <ErrorState message="Could not load security data from Supabase. Refresh and try again." />
+        <ErrorState message={tr('security.couldNotLoadSecurityData')} />
         <a href="/admin/security" className="text-sm font-medium text-brand-text underline">{t('adminSecurity.refreshSecurityOverview')}</a>
       </div>
     );
@@ -92,7 +92,7 @@ export default async function AdminSecurityPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSecurity.security')}</h1>
           <p className="mt-1 text-sm text-muted">{t('adminSecurity.liveAccessControlSignalsAcrossAccounts')}</p>
         </div>
-        <ErrorState message="Could not load security activity details from Supabase. Refresh and try again." />
+        <ErrorState message={tr('security.couldNotLoadSecurityActivity')} />
         <a href="/admin/security" className="text-sm font-medium text-brand-text underline">{t('adminSecurity.refreshSecurityOverview')}</a>
       </div>
     );
@@ -183,7 +183,7 @@ export default async function AdminSecurityPage() {
                     <td className="px-3 py-2.5 font-medium">{u.email ?? '—'}</td>
                     <td className="px-3 py-2.5 text-muted">{u.lastSignIn ? fmtDate(u.lastSignIn, 'MMM d, yyyy') : 'Never'}</td>
                     <td className="px-3 py-2.5">
-                      {u.banned ? <Badge tone="danger">Banned</Badge> : u.confirmed ? <Badge tone="success">Confirmed</Badge> : <Badge tone="warning">Unconfirmed</Badge>}
+                      {u.banned ? <Badge tone="danger">{tr('security.banned')}</Badge> : u.confirmed ? <Badge tone="success">{tr('security.confirmed')}</Badge> : <Badge tone="warning">{tr('security.unconfirmed')}</Badge>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <UserSecurityActions userId={u.id} email={u.email} banned={u.banned} />
@@ -215,7 +215,7 @@ export default async function AdminSecurityPage() {
                   <span className="font-medium">{log.resource}</span>
                   {log.family_id && <span className="text-muted">in {familyNameById.get(log.family_id) ?? 'a family'}</span>}
                   {actor && <span className="text-muted">· by {actor.full_name || actor.email}</span>}
-                  {viaAdmin && <Badge tone="brand">Site Admin</Badge>}
+                  {viaAdmin && <Badge tone="brand">{tr('security.siteAdmin')}</Badge>}
                   <span className="ml-auto text-xs text-muted">{fmtDate(log.created_at, 'MMM d, h:mm a')}</span>
                 </li>
               );

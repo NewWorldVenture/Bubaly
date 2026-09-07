@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import Link from 'next/link';
 import {
@@ -70,7 +71,8 @@ const DAY = [
   },
 ];
 
-export default function AIPage() {
+export default async function AIPage() {
+  const t = await getTranslations();
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
@@ -81,38 +83,29 @@ export default function AIPage() {
             <Sparkles className="h-7 w-7 text-brand-text" />
           </span>
 
-          <span className="mt-8 inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
-            Bubaly AI
-          </span>
+          <span className="mt-8 inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">{t('ai.bubalyAi')}</span>
 
           <h1 className="mx-auto mt-5 max-w-4xl text-4xl font-bold tracking-tight sm:text-6xl">
             It doesn’t just answer.{' '}
-            <span className="gradient-text-violet">It does the work.</span>
+            <span className="gradient-text-violet">{t('ai.itDoesTheWork')}</span>
           </h1>
 
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted sm:text-xl">
-            Ask in plain language and Bubaly takes real action inside your family’s life — creating
-            the events, chores, reminders, meal plans, and lists that would otherwise sit on your
-            mental to-do list. The invisible work, done.
-          </p>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted sm:text-xl">{t('ai.askInPlainLanguageAnd')}</p>
 
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link href="/signup">
-              <Button size="lg">
-                Start free — 5 days <ArrowRight className="h-5 w-5" />
+              <Button size="lg">{t('ai.startFree5Days')}{' '}<ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
             <Link
               href="#demo"
               className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/50 px-5 py-2.5 text-sm font-semibold transition hover:border-brand/40 hover:bg-surface/80"
-            >
-              See it work
-            </Link>
+            >{t('ai.seeItWork')}</Link>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-brand-text" /> Family-scoped &amp; private</span>
-            <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-brand-text" /> Takes real action</span>
+            <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-brand-text" />{' '}{t('ai.takesRealAction')}</span>
             <span className="inline-flex items-center gap-1.5"><Cpu className="h-3.5 w-3.5 text-brand-text" /> Model-agnostic</span>
           </div>
         </Section>
@@ -122,8 +115,8 @@ export default function AIPage() {
       <Section id="demo" className="pt-4">
         <SectionHeading
           eyebrow="Ask → Act"
-          title="Say it in plain language. Watch it get done."
-          description="Pick a prompt — Bubaly replies and creates the real records, the same cards your family sees inside the app."
+          title={t('ai.sayItInPlainLanguage')}
+          description={t('ai.pickAPromptBubalyReplies')}
         />
         <div className="mt-12">
           <AiActionDemo />
@@ -134,7 +127,7 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="Not a chatbot — a doer"
-          title="The difference is what happens after you ask"
+          title={t('ai.theDifferenceIsWhatHappens')}
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {DIFFERENTIATORS.map((d) => (
@@ -153,8 +146,8 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="One assistant, the whole household"
-          title="Everything it can take off your plate"
-          description="Bubaly reaches across your family’s calendar, lists, money, documents, and safety — so a single ask can touch every corner of family life."
+          title={t('ai.everythingItCanTakeOff')}
+          description={t('ai.bubalyReachesAcrossYourFamily')}
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CAPABILITIES.map((c) => (
@@ -173,8 +166,8 @@ export default function AIPage() {
       <Section className="pt-0">
         <SectionHeading
           eyebrow="A Tuesday, handled"
-          title="What a day feels like with Bubaly in it"
-          description="It doesn’t wait to be asked. Bubaly works in the background and surfaces the right thing at the right moment."
+          title={t('ai.whatADayFeelsLike')}
+          description={t('ai.itDoesnTWaitTo')}
         />
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
           {DAY.map((d, i) => (
@@ -196,10 +189,10 @@ export default function AIPage() {
       </Section>
 
       <CTASection
-        title="Meet the assistant that actually does things"
+        title={t('ai.meetTheAssistantThatActually')}
         subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
       />
-      <MarketingAeoSection path="/ai" name="Bubaly AI" description="An assistant that takes real action inside your family life." />
+      <MarketingAeoSection path="/ai" name={t('ai.bubalyAi')} description={t('ai.anAssistantThatTakesReal')} />
     </>
   );
 }

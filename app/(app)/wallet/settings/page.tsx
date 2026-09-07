@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -9,6 +10,7 @@ import { WalletSettingsView, type ChildRuleRow } from '@/components/wallet/walle
 export const metadata: Metadata = { title: 'Wallet Settings' };
 
 export default async function WalletSettingsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -20,7 +22,7 @@ export default async function WalletSettingsPage() {
   ]);
   if (childWalletsError || membersError || rulesError) {
     console.error('[wallet-settings] Read failed', childWalletsError ?? membersError ?? rulesError);
-    return <ErrorState message="Could not load wallet settings. Refresh and try again." />;
+    return <ErrorState message={t('settings.couldNotLoadWalletSettings')} />;
   }
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));

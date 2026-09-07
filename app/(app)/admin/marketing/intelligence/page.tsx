@@ -8,15 +8,16 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Customer Intelligence', robots: { index: false } };
+export const metadata: Metadata = { title: 'intelligence.customerIntelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Customer Intelligence</h1>
-      <ErrorState message="Could not load customer intelligence from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/intelligence" className="text-sm font-medium text-brand-text underline">Refresh customer intelligence</a>
+      <h1 className="text-xl font-black sm:text-2xl">{t('intelligence.customerIntelligence')}</h1>
+      <ErrorState message={t('intelligence.couldNotLoadCustomerIntelligence')} />
+      <a href="/admin/marketing/intelligence" className="text-sm font-medium text-brand-text underline">{t('intelligence.refreshCustomerIntelligence')}</a>
     </div>
   );
 }
@@ -110,7 +111,7 @@ export default async function IntelligencePage() {
             <div key={model} className="rounded-xl border border-border bg-surface/30 p-3">
               <p className="mb-2 text-sm font-semibold">{ATTRIBUTION_MODEL_LABELS[model]}</p>
               {rows.length === 0 ? (
-                <p className="text-xs text-muted">No conversions yet.</p>
+                <p className="text-xs text-muted">{t('intelligence.noConversionsYet')}</p>
               ) : (
                 <ul className="space-y-1.5">
                   {rows.map((r) => (

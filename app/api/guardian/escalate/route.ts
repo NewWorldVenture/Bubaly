@@ -3,6 +3,7 @@
 // Notifies ALL parent members via push + SMS + attempted outbound call.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
@@ -16,19 +17,20 @@ export const runtime = 'nodejs';
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   // Internal only — verify with shared secret. Fail CLOSED: this endpoint can
   // blast SMS + outbound calls to every parent, so an unset secret must mean
   // "disabled", never "open". (CRON_SECRET is the deploy-wide fallback.)
   const authHeader = req.headers.get('authorization');
   const secret = process.env.GUARDIAN_INTERNAL_SECRET || process.env.CRON_SECRET;
   if (!secret || authHeader !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: tr('escalate.unauthorized') }, { status: 401 });
   }
 
   const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid JSON' }, { status: 400 });
   const parsed = guardianEscalationSchema.safeParse(boundedBody.value);
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid escalation payload' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: tr('escalate.invalidEscalationPayload') }, { status: 400 });
   const body = parsed.data;
 
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
     .eq('is_active', true);
   if (membersError) {
     await markGuardianCallbackError(supabase, callbackId, 'Unable to load family members for escalation.');
-    return NextResponse.json({ error: 'Unable to process escalation' }, { status: 500 });
+    return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
   }
 
   const notifiedIds: string[] = [];
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
   });
   if (escalationError) {
     await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
-    return NextResponse.json({ error: 'Unable to process escalation' }, { status: 500 });
+    return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
   }
 
   return finish({ ok: true, pushSent, smsSent, callAttempted, notifiedCount: notifiedIds.length });

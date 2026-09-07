@@ -118,7 +118,7 @@ export default async function SyncProviderPage({
           <ArrowLeft className="h-4 w-4" /> {t('dashboardSyncAccounts.allAccounts')}
         </Link>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
-        <ErrorState message="Could not load this provider account from Supabase. Refresh and try again." />
+        <ErrorState message={t('accounts.couldNotLoadThisProvider')} />
         <a href={`/dashboard/sync/accounts/${provider}`} className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshProviderAccount')}</a>
       </div>
     );
@@ -173,9 +173,9 @@ export default async function SyncProviderPage({
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium">{label}</p>
                     {c.read && c.write && <Badge tone="success">Two-way</Badge>}
-                    {c.write && !c.read && <Badge tone="accent">Export only</Badge>}
-                    {c.read && !c.write && <Badge tone="brand">Import only</Badge>}
-                    {!c.read && !c.write && <Badge tone="neutral">Not supported</Badge>}
+                    {c.write && !c.read && <Badge tone="accent">{t('accounts.exportOnly')}</Badge>}
+                    {c.read && !c.write && <Badge tone="brand">{t('accounts.importOnly')}</Badge>}
+                    {!c.read && !c.write && <Badge tone="neutral">{t('accounts.notSupported')}</Badge>}
                   </div>
                   {c.limitation && <p className="mt-0.5 text-xs text-muted">{c.limitation}</p>}
                 </div>

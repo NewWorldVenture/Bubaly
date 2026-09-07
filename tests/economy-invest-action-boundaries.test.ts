@@ -14,7 +14,7 @@ describe('economy and simulated-investing transaction boundaries', () => {
 
     expect(economyActions).toContain("supabase.rpc('economy_decide_redemption'");
     expect(investActions).toContain("supabase.rpc('invest_decide_order'");
-    expect(investActions).toContain("if (bucket.error) return actionFailure('load the Invest balance', bucket.error);");
+    expect(investActions).toContain("if (bucket.error) return actionFailure('load the Invest balance', t('invest.couldNotLoadTheInvestBalance'), bucket.error);");
   });
 
   it('defines authenticated, locked, all-or-nothing approval RPCs', () => {

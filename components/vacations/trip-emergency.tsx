@@ -55,7 +55,7 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
 
   if (contactsLoading || medicalLoading) return <LoadingBlock />;
   if (contactsError || medicalError) {
-    return <ErrorState message="Could not load the emergency summary. Refresh and try again." onRetry={() => { void Promise.all([refreshContacts(), refreshMedical()]); }} />;
+    return <ErrorState message={t('tripEmergency.couldNotLoadTheEmergency')} onRetry={() => { void Promise.all([refreshContacts(), refreshMedical()]); }} />;
   }
   if (contacts.length === 0 && medical.length === 0) return null;
 
@@ -108,7 +108,7 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
       <EmergencySummary vacationId={vacationId} />
       <TripCrudSection<Contact>
         table="vacation_emergency_contacts" vacationId={vacationId} title={t('tripEmergency.emergencyContacts')} icon={ShieldAlert}
-        fields={contactFields} emptyText="No emergency contacts" addLabel="Add contact"
+        fields={contactFields} emptyText={t('tripEmergency.noEmergencyContacts')} addLabel="Add contact"
         renderRow={(c) => (
           <div>
             <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">· {c.category}</span> : null}</p>
@@ -118,7 +118,7 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
       />
       <TripCrudSection<Medical>
         table="vacation_medical_information" vacationId={vacationId} title={t('tripEmergency.medicalInformation')} icon={HeartPulse}
-        fields={medicalFields} emptyText="No medical info" addLabel="Add medical info"
+        fields={medicalFields} emptyText={t('tripEmergency.noMedicalInfo')} addLabel="Add medical info"
         renderRow={(m, members) => {
           const who = m.member_id ? members.get(m.member_id)?.display_name : 'Traveler';
           return (

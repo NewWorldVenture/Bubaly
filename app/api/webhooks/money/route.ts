@@ -5,6 +5,7 @@
 // every event is deduped via stripe_webhook_events. The authorization handler
 // must respond fast (Stripe's real-time window), so this route does minimal work.
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -19,18 +20,19 @@ export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
   const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
   const secret = process.env.STRIPE_MONEY_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
-  if (!secret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+  if (!secret) return NextResponse.json({ error: t('money.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
   try {
     event = getStripe().webhooks.constructEvent(body, sig, secret);
   } catch {
-    return NextResponse.json({ error: 'Webhook signature invalid' }, { status: 400 });
+    return NextResponse.json({ error: t('money.webhookSignatureInvalid') }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -52,9 +54,9 @@ export async function POST(req: NextRequest) {
     if (claim.outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
     claimToken = claim.claimToken ?? '';
   } catch {
-    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
   }
-  if (!claimToken) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  if (!claimToken) return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
 
   try {
     switch (event.type) {

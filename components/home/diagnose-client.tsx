@@ -40,9 +40,9 @@ export function DiagnoseClient({ assets }: { assets: Asset[] }) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) setError(data.error ?? 'Diagnosis failed.');
+      if (!res.ok) setError(data.error ?? tr('diagnoseClient.diagnosisFailed'));
       else setResult({ text: data.text, trade: data.recommendedTrade, tradeLabel: data.recommendedTradeLabel });
-    } catch { setError('Network error.'); }
+    } catch { setError(tr('diagnoseClient.networkError')); }
     finally { setBusy(false); }
   }
 

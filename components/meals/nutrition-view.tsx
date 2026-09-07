@@ -46,11 +46,11 @@ export function NutritionView() {
 
   // A genuine read failure must surface + be retryable, not silently render as an
   // empty tracker. (Missing-table/offline are already degraded to empty by the hook.)
-  if (error) return <ErrorState message="Could not load nutrition logs. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('nutritionView.couldNotLoadNutritionLogs')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
-      <PageHeader title={t('nutrition.nutritionTracker')} description="Log meals and track calories & macros per family member."
+      <PageHeader title={t('nutrition.nutritionTracker')} description={t('nutritionView.logMealsAndTrackCalories')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('nutrition.logFood')}</Button>} />
 
       {/* Member tabs */}
@@ -72,7 +72,7 @@ export function NutritionView() {
       </div>
 
       {loading ? <SkeletonList /> : todayLogs.length === 0 ? (
-        <EmptyState icon={Apple} title={t('nutrition.nothingLoggedToday')} description="Log a meal or snack to start tracking today's nutrition."
+        <EmptyState icon={Apple} title={t('nutrition.nothingLoggedToday')} description={t('nutritionView.logAMealOrSnack')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('nutrition.logFood')}</Button>} />
       ) : (
         <div className="space-y-4">
@@ -86,7 +86,7 @@ export function NutritionView() {
                       <p className="truncate text-sm font-semibold">{l.item}</p>
                       <p className="truncate text-xs text-muted">{l.calories} cal · P {Number(l.protein_g)}g · C {Number(l.carbs_g)}g · F {Number(l.fat_g)}g{l.water_ml ? ` · 💧 ${l.water_ml}ml` : ''}</p>
                     </div>
-                    <button onClick={() => remove(l.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => remove(l.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -119,7 +119,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.item.trim()) return toastError('Add a food item');
+    if (!v.item.trim()) return toastError(t('nutritionView.addAFoodItem'));
     setSaving(true);
     const { error } = await createClient().from('nutrition_logs').insert({
       family_id: familyId, member_id: v.member_id || null, logged_on: v.logged_on, meal: v.meal, item: v.item.trim(),
@@ -128,14 +128,14 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Logged');
+    success(t('nutritionView.logged'));
     onClose();
   }
 
   return (
     <Modal open onClose={onClose} title={t('nutrition.logFood')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('nutrition.foodItem')}>{(id) => <Input id={id} value={v.item} onChange={(e) => setV({ ...v, item: e.target.value })} placeholder="Oatmeal with berries" required autoFocus />}</Field>
+        <Field label={t('nutrition.foodItem')}>{(id) => <Input id={id} value={v.item} onChange={(e) => setV({ ...v, item: e.target.value })} placeholder={t('nutritionView.oatmealWithBerries')} required autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label={t('nutrition.member')}>{(id) => <Select id={id} value={v.member_id} onChange={(e) => setV({ ...v, member_id: e.target.value })}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={t('nutrition.meal')}>{(id) => <Select id={id} value={v.meal} onChange={(e) => setV({ ...v, meal: e.target.value })}>{MEALS.map((m) => <option key={m} value={m}>{MEAL_META[m].label}</option>)}</Select>}</Field>
@@ -147,7 +147,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
           <Field label={t('nutrition.carbs')}>{(id) => <Input id={id} type="number" step="0.1" value={v.carbs_g} onChange={(e) => setV({ ...v, carbs_g: e.target.value })} placeholder="45" />}</Field>
           <Field label="Fat">{(id) => <Input id={id} type="number" step="0.1" value={v.fat_g} onChange={(e) => setV({ ...v, fat_g: e.target.value })} placeholder="8" />}</Field>
         </div>
-        <Field label={t('nutrition.waterMl')} hint="Optional">{(id) => <Input id={id} type="number" value={v.water_ml} onChange={(e) => setV({ ...v, water_ml: e.target.value })} placeholder="250" />}</Field>
+        <Field label={t('nutrition.waterMl')} hint={t('nutritionView.optional')}>{(id) => <Input id={id} type="number" value={v.water_ml} onChange={(e) => setV({ ...v, water_ml: e.target.value })} placeholder="250" />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('nutrition.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.item.trim()}>Log</Button>

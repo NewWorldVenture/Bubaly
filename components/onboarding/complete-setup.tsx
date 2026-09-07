@@ -73,7 +73,7 @@ export function CompleteSetupForm({
     });
     setSaving(false);
     if (!res.ok) { toastError(res.error ?? 'Could not save your setup'); return; }
-    success('Setup saved — your family profile is complete.');
+    success(t('completeSetup.setupSavedYourFamilyProfile'));
     router.push('/dashboard');
     router.refresh();
   }
@@ -83,7 +83,7 @@ export function CompleteSetupForm({
     const res = await resetOnboardingAction();
     setResetting(false);
     if (!res.ok) { toastError(res.error ?? 'Could not reset onboarding'); return; }
-    success('Onboarding reset — walk through setup again below.');
+    success(t('completeSetup.onboardingResetWalkThroughSetup'));
     router.refresh();
   }
 

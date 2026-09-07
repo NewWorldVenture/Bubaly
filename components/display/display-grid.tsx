@@ -188,7 +188,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             );
           })}
         </ul>
-      ) : <Empty icon={Calendar} text="Nothing scheduled today" />;
+      ) : <Empty icon={Calendar} text={tr('displayGrid.nothingScheduledToday')} />;
     }
 
     case 'upcoming':
@@ -201,7 +201,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             </li>
           ))}
         </ul>
-      ) : <Empty icon={Calendar} text="No upcoming events" />;
+      ) : <Empty icon={Calendar} text={tr('displayGrid.noUpcomingEvents')} />;
 
     case 'calendar': return <MonthCalendar cal={data.calendar} />;
 
@@ -219,7 +219,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             );
           })}
         </ul>
-      ) : <Empty icon={CheckCircle2} text="All done! 🎉" />;
+      ) : <Empty icon={CheckCircle2} text={tr('displayGrid.allDone')} />;
 
     case 'meals':
       return data.meals.length ? (
@@ -236,7 +236,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             </li>
           ))}
         </ul>
-      ) : <Empty icon={UtensilsCrossed} text="No meals planned" />;
+      ) : <Empty icon={UtensilsCrossed} text={tr('displayGrid.noMealsPlanned')} />;
 
     case 'grocery':
       return (
@@ -268,7 +268,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={r.id} className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 shrink-0 text-amber-300" /><span className="min-w-0 flex-1 truncate text-white">{r.title}</span></li>
           ))}
         </ul>
-      ) : <Empty icon={Bell} text="No reminders due" />;
+      ) : <Empty icon={Bell} text={tr('displayGrid.noRemindersDue')} />;
 
     case 'birthdays':
       return data.birthdays.length ? (
@@ -277,7 +277,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span className="text-white">{b.name}</span><span className="ml-auto text-xs text-white/50">{b.date}</span></li>
           ))}
         </ul>
-      ) : <Empty icon={Cake} text="No birthdays this week" />;
+      ) : <Empty icon={Cake} text={tr('displayGrid.noBirthdaysThisWeek')} />;
 
     case 'notes':
       return data.notes.length ? (
@@ -286,7 +286,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/50">{n.body}</p></li>
           ))}
         </ul>
-      ) : <Empty icon={StickyNote} text="No pinned notes" />;
+      ) : <Empty icon={StickyNote} text={tr('displayGrid.noPinnedNotes')} />;
 
     default: return null;
   }
@@ -472,6 +472,7 @@ const DRIFT_CSS = `@keyframes displayDrift{0%,100%{transform:translate(0,0)}25%{
 export function DisplayShell({ initialTiles, initialSettings, data, familyId, userId }: {
   initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
@@ -542,7 +543,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
     setSaving(false);
     if (error) { toastError(error.message); return; }
-    success('Display saved'); setEditing(false);
+    success(tr('displayGrid.displaySaved')); setEditing(false);
   }
 
   const dayIcon = part === 'night' || part === 'evening' ? Moon : Sun;
@@ -659,7 +660,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
               {editing && (
                 <div className="absolute inset-0 flex flex-col justify-between bg-black/75 p-3 backdrop-blur-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/60">Tile</span>
+                    <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
                       <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
                       <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
@@ -667,7 +668,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-xs text-white/60">Section
+                    <label className="block text-xs text-white/60">{tr('displayGrid.section')}
                       <select
                         value={tile.widget === 'service' ? `service:${tile.href ?? ''}` : tile.widget}
                         onChange={(e) => {
@@ -679,17 +680,17 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                         }}
                         className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white"
                       >
-                        <optgroup label="Display widgets">
+                        <optgroup label={t('displayGrid.displayWidgets')}>
                           {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
                         </optgroup>
-                        <optgroup label="All services & features">
+                        <optgroup label={t('displayGrid.allServicesFeatures')}>
                           {ALL_SERVICES_CATALOG.map((s) => (
                             <option key={s.href} value={`service:${s.href}`}>{s.label}</option>
                           ))}
                         </optgroup>
                       </select>
                     </label>
-                    <label className="block text-xs text-white/60">Size
+                    <label className="block text-xs text-white/60">{tr('displayGrid.size')}
                       <select value={tile.size} onChange={(e) => update(tile.id, { size: e.target.value as TileSize })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
                         {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                       </select>

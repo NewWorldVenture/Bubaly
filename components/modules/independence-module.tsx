@@ -56,7 +56,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   if (kids.length === 0) {
     return (
       <div className="module-page">
-        <PageHeader title={t('independence.independence')} description="Responsibilities that grow as your kids do." />
+        <PageHeader title={t('independence.independence')} description={t('independenceModule.responsibilitiesThatGrowAsYour')} />
         <div className="rounded-2xl border border-border bg-surface/30 p-8 text-center">
           <p className="text-sm text-muted">
             {t('independence.addAChildOrTeenTo')}
@@ -70,7 +70,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
     <div className="module-page">
       <PageHeader
         title={t('independence.independence')}
-        description="An age-based ladder of real-life skills — responsibilities grow as they do."
+        description={t('independenceModule.anAgeBasedLadderOf')}
       />
 
       {/* Kid switcher */}

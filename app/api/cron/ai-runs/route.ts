@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { runGraph } from '@/lib/ai/runs/executor';
@@ -31,8 +32,9 @@ const WAVE_SIZE = 4;
 const LEASE_SECONDS = 180;
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('aiRuns.unauthorized') }, { status: 401 });
   }
 
   const startedAt = Date.now();
@@ -99,6 +101,6 @@ export async function GET(req: NextRequest) {
     }, { status: claimFailures === 0 ? 200 : 502 });
   } catch (error) {
     console.error('[cron/ai-runs] tick failed', error);
-    return NextResponse.json({ error: 'AI run continuation failed' }, { status: 500 });
+    return NextResponse.json({ error: t('aiRuns.aiRunContinuationFailed') }, { status: 500 });
   }
 }

@@ -53,7 +53,7 @@ export function TreasuryView({
 
   return (
     <div className="module-page">
-      <PageHeader title={tr('treasury.familyTreasury')} description="Complete financial picture for your household." />
+      <PageHeader title={tr('treasury.familyTreasury')} description={tr('treasuryView.completeFinancialPictureForYour')} />
       <WalletSubnav />
 
       {/* Hero: total balance */}

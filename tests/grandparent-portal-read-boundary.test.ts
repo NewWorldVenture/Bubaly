@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/grandparent-portal/page.tsx', 'utf8');
@@ -17,7 +18,8 @@ describe('grandparent-portal read boundary', () => {
   it('logs and returns an ErrorState on a roster read failure', () => {
     expect(page).toContain('if (membersRes.error) {');
     expect(page).toContain("console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);");
-    expect(page).toContain('return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'grandparentPortal.couldNotLoadYourFamily', "Could not load your family portal from Supabase. Refresh and try again.");
   });
 
   it('derives members only after the fail-closed guard', () => {

@@ -39,7 +39,7 @@ export function NotificationsModule() {
         : "You're all caught up — nothing new.");
       void refresh();
     } catch {
-      toastError('Network error. Please try again.');
+      toastError(t('notificationsModule.networkErrorPleaseTryAgain'));
     } finally {
       setScanning(false);
     }

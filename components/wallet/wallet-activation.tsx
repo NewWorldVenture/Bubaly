@@ -30,13 +30,13 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
     const res = await activateFamilyWalletAction();
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not activate the wallet');
-    success('Family Wallet activated 🎉');
+    success(t('walletActivation.familyWalletActivated'));
     router.refresh();
   }
 
   return (
     <div className="module-page mx-auto max-w-2xl">
-      <PageHeader title={t('walletActivation.familyWallet')} description="A parent-controlled financial operating system for your family." />
+      <PageHeader title={t('walletActivation.familyWallet')} description={t('walletActivation.aParentControlledFinancialOperating')} />
 
       <div className="mb-6 flex flex-col items-center gap-4 rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-8 text-center">
         <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/15">
@@ -66,7 +66,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
         <ul className="space-y-2 text-xs text-muted">
           <li>{t('walletActivation.theWalletIs')} <strong>{t('walletActivation.controlledByYou')}</strong>{t('walletActivation.theParentGuardianChildBalancesAre')}</li>
           <li>{t('walletActivation.inThisModeBalancesAre')} <strong>{t('walletActivation.trackedInsideBubaly')}</strong> {t('walletActivation.aVirtualLedgerToTeachSaving')}</li>
-          <li>• <strong>{t('walletActivation.bubalyIsNotABank')}</strong> When money movement and cards are enabled, funds and cards are provided through Stripe and its banking partners, with separate terms.</li>
+          <li>• <strong>{t('walletActivation.bubalyIsNotABank')}</strong>{' '}{t('walletActivation.whenMoneyMovementAndCards')}</li>
           <li>{t('walletActivation.noClaimsAreMadeAboutFdic')}</li>
           <li>{t('walletActivation.anyFeesWillBeDisclosedBefore')}</li>
         </ul>

@@ -37,7 +37,7 @@ export default async function KidsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (kidsError) {
     console.error('[kids] kids dashboard read failed', kidsError);
-    return <ErrorState message="We couldn't load your day right now. Try again in a moment!" />;
+    return <ErrorState message={tr('kids.weCouldnTLoadYour')} />;
   }
 
   const myTasks = myTasksRes.data;

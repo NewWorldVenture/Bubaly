@@ -102,6 +102,7 @@ export function TripCrudSection<T extends Row>({
   addLabel?: string;
   orderBy?: (a: T, b: T) => number;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -134,9 +135,9 @@ export function TripCrudSection<T extends Row>({
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this item?')) return;
+    if (!confirm(t('shared.deleteThisItem'))) return;
     const { error } = await (createClient() as any).from(table).delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('shared.deleted'));
   }
 
   return (
@@ -145,7 +146,7 @@ export function TripCrudSection<T extends Row>({
         <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {addLabel}</Button>
       } />
       {loading ? <LoadingBlock /> : error ? <ErrorState message={`Could not load ${title.toLowerCase()}. Refresh and try again.`} onRetry={refresh} /> : rows.length === 0 ? (
-        <EmptyState icon={icon} title={emptyText} description="Add your first one to get started." />
+        <EmptyState icon={icon} title={emptyText} description={t('shared.addYourFirstOneTo')} />
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
@@ -188,7 +189,7 @@ export function TripCrudSection<T extends Row>({
                       );
                       if (f.type === 'member') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
-                          <option value="">— Select —</option>
+                          <option value="">{t('shared.select')}</option>
                           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                         </Select>
                       );

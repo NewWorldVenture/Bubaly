@@ -89,7 +89,7 @@ export function TripMemoriesModule() {
         created_by: userId,
       });
       if (error) return toastError(describeDbError(error));
-      success('Memory saved');
+      success(t('tripMemoriesModule.memorySaved'));
       setForm(null);
     } finally {
       setSaving(false);
@@ -97,15 +97,15 @@ export function TripMemoriesModule() {
   }
 
   async function remove(m: Memory) {
-    if (!confirm('Delete this memory?')) return;
+    if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
     if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
     const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load trip memories. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('tripMemoriesModule.couldNotLoadTripMemories')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -118,7 +118,7 @@ export function TripMemoriesModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={BookHeart} title={t('tripMemories.noMemoriesYet')} description="Capture moments from your trips — a photo, a note, a place you loved." />
+        <EmptyState icon={BookHeart} title={t('tripMemories.noMemoriesYet')} description={t('tripMemoriesModule.captureMomentsFromYourTrips')} />
       ) : groups.map((g) => (
         <div key={g.vacationId || 'general'}>
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">

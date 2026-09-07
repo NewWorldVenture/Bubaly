@@ -10,7 +10,7 @@ import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'System Overview', robots: { index: false } };
+export const metadata: Metadata = { title: 'system.systemOverview', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 function fmtBytes(bytes: number): string {
@@ -166,15 +166,16 @@ export default async function AdminSystemPage() {
   );
 }
 
-function AdminSystemReadError() {
+async function AdminSystemReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">System Overview</h1>
-        <p className="mt-1 text-sm text-muted">Live connectivity checks and real usage measured just now.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('system.systemOverview')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('system.liveConnectivityChecksAndReal')}</p>
       </div>
-      <ErrorState message="Could not load system usage from Supabase. Refresh and try again." />
-      <a href="/admin/system" className="text-sm font-medium text-brand-text underline">Refresh system overview</a>
+      <ErrorState message={t('system.couldNotLoadSystemUsage')} />
+      <a href="/admin/system" className="text-sm font-medium text-brand-text underline">{t('system.refreshSystemOverview')}</a>
     </div>
   );
 }

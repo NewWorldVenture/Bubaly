@@ -50,7 +50,7 @@ export default async function AdminWalletPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">{tr('adminWallet.liveWalletOversightAcrossEveryFamily')}</p>
         </div>
-        <ErrorState message="Could not load wallet oversight from Supabase. Refresh and try again." />
+        <ErrorState message={tr('wallet.couldNotLoadWalletOversight')} />
         <a href="/admin/wallet" className="text-sm font-medium text-brand-text underline">{tr('adminWallet.refreshWalletOverview')}</a>
       </div>
     );
@@ -80,10 +80,7 @@ export default async function AdminWalletPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
             <Wallet className="h-6 w-6 text-brand-text" /> {tr('adminWallet.familyWallet')}
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Oversight for the virtual-ledger Family Wallet across every family — activation, pending
-            approvals, ledger volume, feature flags, and recent audit activity.
-          </p>
+          <p className="mt-1 text-sm text-muted">{tr('wallet.oversightForTheVirtualLedger')}</p>
         </div>
         <Link href="/admin/wallet/reconciliation"
           className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text">

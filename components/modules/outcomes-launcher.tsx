@@ -41,7 +41,7 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader
         title={t('outcomesLauncher.whatDoYouWantToGet')}
-        description="Pick an outcome — we’ll pull together everything it takes, and flag what needs you right now."
+        description={t('outcomesLauncher.pickAnOutcomeWeLl')}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
@@ -11,8 +12,9 @@ export const maxDuration = 60;
 // note instead of silently stalling — so the feature is honest and usable end to
 // end even before telephony is wired, and lights up automatically once it is.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('place.unauthorized') }, { status: 401 });
   }
 
   const admin = createServiceClient();
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
     .limit(25);
   if (error) {
     console.error('Concierge call queue read failed:', error);
-    return NextResponse.json({ ok: false, error: 'Could not load queued concierge calls.' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: t('place.couldNotLoadQueuedConcierge') }, { status: 500 });
   }
 
   const rows = due ?? [];

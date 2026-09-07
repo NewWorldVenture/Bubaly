@@ -67,10 +67,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Headset className="h-6 w-6" /></div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('contactCenter.operationsCenter')}</h1>
-          <p className="mt-1 text-sm text-muted">
-            Your family’s one address and phone number for the world — every call, text, and email lands here,
-            triaged by your AI concierge.
-          </p>
+          <p className="mt-1 text-sm text-muted">{tr('contactCenterModule.yourFamilySOneAddress')}</p>
         </div>
       </header>
 

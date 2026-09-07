@@ -5,6 +5,7 @@
 // these cover connect/disconnect a source, favorite/read state, and adding items
 // (manual now; the same insert path a future ingestion worker uses).
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
@@ -22,8 +23,9 @@ const asCategory = (v: unknown): Category =>
 export async function addSourceAction(input: {
   platform: string; displayName?: string; handle?: string; category?: string; accountCount?: number;
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isPlatform(input.platform)) return { ok: false, error: 'Pick a supported platform.' };
+  if (!isPlatform(input.platform)) return { ok: false, error: t('actions.pickASupportedPlatform') };
   const platform = input.platform as Platform;
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_sources').insert({
@@ -91,11 +93,12 @@ export async function markAllReadAction(): Promise<Result> {
  * the canonical URL is the `external_id`, so re-adding the same link is a no-op.
  */
 export async function addByUrlAction(input: { url: string; category?: string; sourceId?: string | null }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const raw = (input.url ?? '').trim();
-  if (!raw) return { ok: false, error: 'Paste a link to add.' };
+  if (!raw) return { ok: false, error: t('actions.pasteALinkToAdd') };
   const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  if (!isSafePublicUrl(url)) return { ok: false, error: 'Enter a valid public web link.' };
+  if (!isSafePublicUrl(url)) return { ok: false, error: t('actions.enterAValidPublicWeb') };
 
   let html: string;
   try {
@@ -124,12 +127,12 @@ export async function addByUrlAction(input: { url: string; category?: string; so
     if (!res.ok) return { ok: false, error: `Couldn’t fetch that link (HTTP ${res.status}).` };
     const type = res.headers.get('content-type') ?? '';
     if (type && !/text\/html|application\/xhtml|text\/xml|application\/xml/i.test(type)) {
-      return { ok: false, error: 'That link isn’t a web page we can preview.' };
+      return { ok: false, error: t('actions.thatLinkIsnTA') };
     }
     // Cap the body we parse — the <head> is all we need.
     html = await res.text();
   } catch {
-    return { ok: false, error: 'Couldn’t reach that link. Check it and try again.' };
+    return { ok: false, error: t('actions.couldnTReachThatLink') };
   }
 
   const draft = buildItemFromHtml(url, html);
@@ -168,9 +171,10 @@ export async function addFeedItemAction(input: {
   content?: string; mediaUrls?: string[]; thumbnailUrl?: string; permalink?: string;
   kind?: 'post' | 'video' | 'photo' | 'link'; durationLabel?: string; category?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isPlatform(input.platform)) return { ok: false, error: 'Pick a supported platform.' };
-  if (!input.authorName?.trim()) return { ok: false, error: 'Add who posted it.' };
+  if (!isPlatform(input.platform)) return { ok: false, error: t('actions.pickASupportedPlatform') };
+  if (!input.authorName?.trim()) return { ok: false, error: t('actions.addWhoPostedIt') };
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items').insert({
     family_id: ctx.active.familyId,

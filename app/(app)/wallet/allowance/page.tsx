@@ -26,7 +26,7 @@ export default async function WalletAllowancePage() {
   ]);
   if (childWalletsError) {
     console.error('[wallet-allowance] Child wallets read failed', childWalletsError);
-    return <ErrorState message="Could not load wallet allowance recipients. Refresh and try again." />;
+    return <ErrorState message={t('allowance.couldNotLoadWalletAllowance')} />;
   }
   if (membersError) { console.error('[wallet-allowance] Family members read failed', membersError); dataWarnings.push('Family members'); }
   if (rulesError) { console.error('[wallet-allowance] Allowance rules read failed', rulesError); dataWarnings.push('Allowance rules'); }

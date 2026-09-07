@@ -46,7 +46,7 @@ describe('notes-module write boundaries fail visibly', () => {
   it('duplicate only claims success after the failure guard', () => {
     const b = body('duplicate');
     const guard = b.indexOf('if (!res.ok) return toastError');
-    const claim = b.indexOf("success('Note duplicated");
+    const claim = b.indexOf("success(t('notesModule.noteDuplicated')");
     expect(guard).toBeGreaterThan(-1);
     expect(claim).toBeGreaterThan(guard);
   });
@@ -54,7 +54,7 @@ describe('notes-module write boundaries fail visibly', () => {
   it('remove only claims success after the failure guard', () => {
     const b = body('remove');
     const guard = b.indexOf('if (!res.ok) return toastError');
-    const claim = b.indexOf("success('Note deleted");
+    const claim = b.indexOf("success(t('notesModule.noteDeleted')");
     expect(guard).toBeGreaterThan(-1);
     expect(claim).toBeGreaterThan(guard);
   });
@@ -62,7 +62,7 @@ describe('notes-module write boundaries fail visibly', () => {
   it('the editor only claims success after the failure guard', () => {
     const b = body('onSubmit');
     const guard = b.indexOf('if (!res.ok) return toastError');
-    const claim = b.indexOf("success(note ? 'Note saved'");
+    const claim = b.indexOf("success(t(note ? 'notesModule.noteSaved'");
     expect(guard).toBeGreaterThan(-1);
     expect(claim).toBeGreaterThan(guard);
   });

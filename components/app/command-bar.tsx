@@ -109,14 +109,14 @@ export function CommandBar() {
       setOpen(false);
       success(
         res.count > 1 ? `${res.count} items added` : r.label,
-        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo')); } },
+        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
-      toastError(describeDbError(err, 'Could not save that.'));
+      toastError(describeDbError(err, t('commandBar.couldNotSaveThat')));
     } finally {
       setBusy(false);
     }
-  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError]);
+  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { setOpen(false); return; }
@@ -151,9 +151,7 @@ export function CommandBar() {
         </div>
 
         {query.trim() === '' ? (
-          <p className="px-4 py-6 text-center text-xs text-muted">
-            Jump to a page, capture a task/note/event, or ask Bubaly. Try “plan our week”, “remind me to…”, “add milk to the list”, or a page name.
-          </p>
+          <p className="px-4 py-6 text-center text-xs text-muted">{t('commandBar.jumpToAPageCapture')}</p>
         ) : (
           <ul className="max-h-[52vh] overflow-y-auto py-1">
             {results.map((r, i) => {

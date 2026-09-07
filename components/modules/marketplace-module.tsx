@@ -119,7 +119,7 @@ export function MarketplaceModule({
   async function cleanupOwnedPhoto(path = ownedPhotoPath) {
     if (!path) return;
     const { error } = await removeMarketplacePhotoPath(createClient(), path);
-    if (error) toastError('The uploaded photo could not be cleaned up.');
+    if (error) toastError(t('marketplaceModule.theUploadedPhotoCouldNot'));
     setOwnedPhotoPath((current) => (current === path ? null : current));
   }
 
@@ -130,7 +130,7 @@ export function MarketplaceModule({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Give your listing a title'); return; }
+    if (!form.title.trim()) { toastError(t('marketplaceModule.giveYourListingATitle')); return; }
     setSaving(true);
     const sb = createClient();
     const priced = kindHasPrice(form.kind);
@@ -166,16 +166,16 @@ export function MarketplaceModule({
     if (err) { toastError(describeDbError(err)); return; }
     if (l.photo_url) {
       const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
-      if (photoError) toastError('Listing removed, but its uploaded photo could not be cleaned up.');
+      if (photoError) toastError(t('marketplaceModule.listingRemovedButItsUploaded'));
     }
-    success('Removed');
+    success(t('marketplaceModule.removed'));
   }
 
   async function withdraw(l: Listing) {
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Listing withdrawn');
+    success(t('marketplaceModule.listingWithdrawn'));
   }
 
   // A member expresses interest / claims → creates an open offer + flips the
@@ -192,7 +192,7 @@ export function MarketplaceModule({
         family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
       });
       if (err) {
-        if (err.code === '23505') { success('You already reached out about this'); return; }
+        if (err.code === '23505') { success(t('marketplaceModule.youAlreadyReachedOutAbout')); return; }
         toastError(describeDbError(err)); return;
       }
       success(kind === 'claim' ? 'You claimed this — the owner will confirm' : 'Interest sent to the owner');
@@ -215,14 +215,14 @@ export function MarketplaceModule({
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Offer declined');
+    success(t('marketplaceModule.offerDeclined'));
   }
 
   async function markCompleted(l: Listing) {
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'completed' });
     if (err) { toastError(describeDbError(err)); return; }
-    success('Marked complete 🎉');
+    success(t('marketplaceModule.markedComplete'));
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -234,7 +234,7 @@ export function MarketplaceModule({
     <div>
       <PageHeader
         title={t('marketplace.familyMarketplace')}
-        description="Buy, sell, rent, borrow or give away within the family. Post an item and everyone can claim it."
+        description={t('marketplaceModule.buySellRentBorrowOr')}
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
@@ -270,7 +270,7 @@ export function MarketplaceModule({
 
       {visible.length === 0 ? (
         <EmptyState icon={Store} title={t('marketplace.nothingOnTheBoardYet')}
-          description="Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs."
+          description={t('marketplaceModule.postTheFirstItemSell')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>} />
       ) : (
         <>
@@ -366,7 +366,7 @@ export function MarketplaceModule({
       <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit listing' : 'Post a listing'}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('marketplace.whatIsIt')} required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Kids' balance bike" autoFocus />}
+            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('marketplaceModule.eGKidsBalanceBike')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('marketplace.type')}>
@@ -426,7 +426,7 @@ export function MarketplaceModule({
           </Field>
 
           <Field label={t('marketplace.details')}>
-            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
+            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('marketplaceModule.sizeAgeWhyYouRe')} />}
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">

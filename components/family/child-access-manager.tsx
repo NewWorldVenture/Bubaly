@@ -73,7 +73,7 @@ function ResetRow({ member }: { member: AccessMember }) {
     const res = await resetChildPinAction({ memberId: member.id, pin });
     setBusy(false);
     if (!res.ok) { toastError(res.error); return; }
-    success('PIN reset'); setPin(''); setOpen(false);
+    success(t('childAccessManager.pinReset')); setPin(''); setOpen(false);
   }
 
   return (

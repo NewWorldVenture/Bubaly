@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -23,13 +24,14 @@ const AI_AUDIT_ACTION = 'relationship_ai_digest';
 // dates + partner preferences + wishlist + recorded gift outcomes, then asks the AI for
 // warm, specific nudges and tailored gift ideas. Returns structured JSON.
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many relationship-helper requests. Please try again shortly.' },
+      { error: t('relationship.tooManyRelationshipHelperRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -56,7 +58,7 @@ export async function POST() {
     ]);
 
     if (datesErr && isMissingRelationError(datesErr)) {
-      return NextResponse.json({ error: 'The Relationship Helper isn’t set up on this database yet.' }, { status: 503 });
+      return NextResponse.json({ error: t('relationship.theRelationshipHelperIsnT') }, { status: 503 });
     }
 
     const dates: RelDate[] = (dateRows ?? []).map((d) => ({
@@ -124,7 +126,7 @@ export async function POST() {
       },
     );
     if (!digest) {
-      return NextResponse.json({ error: 'Could not generate suggestions right now. Please try again.' }, { status: 502 });
+      return NextResponse.json({ error: t('relationship.couldNotGenerateSuggestionsRight') }, { status: 502 });
     }
     // Best-effort metering record (never blocks the response).
     await logAudit(supabase, { familyId, actorId: ctx.user.id, action: AI_AUDIT_ACTION, resource: 'relationship' });
@@ -135,6 +137,6 @@ export async function POST() {
     return NextResponse.json({ digest, context });
   } catch (err) {
     console.error('Relationship AI error:', err);
-    return NextResponse.json({ error: 'Something went wrong generating suggestions.' }, { status: 500 });
+    return NextResponse.json({ error: t('relationship.somethingWentWrongGeneratingSuggestions') }, { status: 500 });
   }
 }

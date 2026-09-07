@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -16,12 +17,13 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 4_096;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `blogsub:${ip}`, { limit: 20 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('subscribe.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   const email = normalizeEmail(body.email);
-  if (!email) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+  if (!email) return NextResponse.json({ error: t('subscribe.enterAValidEmailAddress') }, { status: 400 });
 
   const source = normalizeSource(body.source);
   const visitorId = normalizeVisitorId(body.visitorId);
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
         .from('blog_subscribers')
         .update({ status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) })
         .eq('id', existing.id);
-      if (error) return NextResponse.json({ error: 'Could not subscribe right now.' }, { status: 500 });
+      if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
     }
     return NextResponse.json({ ok: true, already: existing.status === 'active' });
   }
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     // A concurrent insert racing us is fine — the subscriber exists either way.
     if (error.code === '23505') return NextResponse.json({ ok: true, already: true });
-    return NextResponse.json({ error: 'Could not subscribe right now.' }, { status: 500 });
+    return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }

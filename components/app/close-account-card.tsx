@@ -18,11 +18,11 @@ export function CloseAccountCard() {
 
   async function close() {
     if (busy) return;
-    if (!window.confirm('Close your account? Nothing is deleted — you can reopen anytime and everything will be exactly where you left it.')) return;
+    if (!window.confirm(t('closeAccountCard.closeYourAccountNothingIs'))) return;
     setBusy(true);
     const res = await closeAccountAction();
     setBusy(false);
-    if (res.ok) { success('Your account is closed. Your data is safe.'); window.location.reload(); }
+    if (res.ok) { success(t('closeAccountCard.yourAccountIsClosedYour')); window.location.reload(); }
     else toastError(res.error);
   }
 

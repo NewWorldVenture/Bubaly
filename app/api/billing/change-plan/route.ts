@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
@@ -21,10 +22,11 @@ const MODIFIABLE = new Set(['active', 'trialing', 'past_due']);
  * Free we fall back to Checkout. Family admins (parents) only.
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     if (!isAdmin(ctx.active.role)) {
-      return NextResponse.json({ error: 'Only a parent can change the plan.' }, { status: 403 });
+      return NextResponse.json({ error: t('changePlan.onlyAParentCanChange') }, { status: 403 });
     }
     const familyId = ctx.active.familyId;
 
@@ -37,15 +39,15 @@ export async function POST(req: NextRequest) {
     }
     const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: string };
     if (!plan || !isStripePlan(plan)) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+      return NextResponse.json({ error: t('changePlan.invalidPlan') }, { status: 400 });
     }
     const priceId = STRIPE_PLANS[plan];
-    if (!priceId) return NextResponse.json({ error: 'That plan is not configured.' }, { status: 400 });
+    if (!priceId) return NextResponse.json({ error: t('changePlan.thatPlanIsNotConfigured') }, { status: 400 });
 
     const supabase = await createServer();
     const limited = await enforceRequestRateLimit(supabase, `billing:change-plan:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many billing requests. Please try again shortly.' },
+      { error: t('changePlan.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     const stripe = getStripe();
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (subError) {
       console.error('[billing-change-plan] Subscription read failed', subError);
-      return NextResponse.json({ error: 'Subscription status is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
     }
 
     // No-op guard: already on exactly this plan + interval.
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
     if (sub?.provider_ref && MODIFIABLE.has(sub.status)) {
       const stripeSub = await stripe.subscriptions.retrieve(sub.provider_ref);
       const itemId = stripeSub.items.data[0]?.id;
-      if (!itemId) return NextResponse.json({ error: 'No subscription item found.' }, { status: 409 });
+      if (!itemId) return NextResponse.json({ error: t('changePlan.noSubscriptionItemFound') }, { status: 409 });
 
       await stripe.subscriptions.update(sub.provider_ref, {
         items: [{ id: itemId, price: priceId }],
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
         .eq('family_id', familyId);
       if (syncError) {
         console.error('[billing-change-plan] Subscription sync write failed', syncError);
-        return NextResponse.json({ error: 'Stripe changed the plan, but local billing sync is pending. Please refresh before retrying.', providerUpdated: true }, { status: 503 });
+        return NextResponse.json({ error: t('changePlan.stripeChangedThePlanBut'), providerUpdated: true }, { status: 503 });
       }
 
       return NextResponse.json({ ok: true, changed: true, mode: 'updated' });
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (billingCustomerError) {
       console.error('[billing-change-plan] Billing customer read failed', billingCustomerError);
-      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('changePlan.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
 
     let customerId = bc?.customer_ref ?? null;
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
       const { error: customerWriteError } = await supabase.from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
       if (customerWriteError) {
         console.error('[billing-change-plan] Billing customer write failed', customerWriteError);
-        return NextResponse.json({ error: 'Could not save the billing account. Please try again.' }, { status: 503 });
+        return NextResponse.json({ error: t('changePlan.couldNotSaveTheBilling') }, { status: 503 });
       }
     }
 
@@ -142,6 +144,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, changed: false, mode: 'checkout', url: session.url });
   } catch (err) {
     console.error('change-plan error:', err);
-    return NextResponse.json({ error: 'Could not change the plan. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('changePlan.couldNotChangeThePlan') }, { status: 500 });
   }
 }

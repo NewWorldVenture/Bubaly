@@ -120,7 +120,7 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
           <Row icon={Bell} label={t('profile.notifications')} href="/dashboard/settings#notifications" />
           <Row icon={CreditCard} label={t('profile.subscriptionBilling')} href="/dashboard/billing" />
           {isSuperAdmin && (
-            <Row icon={ShieldCheck} label={t('profile.siteAdmin')} href="/admin" badge="Admin" />
+            <Row icon={ShieldCheck} label={t('profile.siteAdmin')} href="/admin" badge={t('profileModule.admin')} />
           )}
         </Section>
       </div>

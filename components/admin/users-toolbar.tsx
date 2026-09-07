@@ -47,7 +47,7 @@ export function UsersToolbar({ families, exportRows }: {
     const res = await adminCreateUserAction({ email, familyId: familyId || undefined, role: familyId ? role : undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Invite sent — they’ll get a Supabase sign-in email');
+    success(t('usersToolbar.inviteSentTheyLlGet'));
     setModal(null);
     router.refresh();
   }
@@ -63,7 +63,7 @@ export function UsersToolbar({ families, exportRows }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error);
-    success('Family created');
+    success(t('usersToolbar.familyCreated'));
     setModal(null);
     router.refresh();
   }
@@ -81,13 +81,13 @@ export function UsersToolbar({ families, exportRows }: {
       </Button>
 
       {modal === 'user' && (
-        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.addNewUser')} description="Sends a real Supabase sign-in invite to this email.">
+        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.addNewUser')} description={t('usersToolbar.sendsARealSupabaseSign')}>
           <form onSubmit={onCreateUser} className="space-y-4">
             <Field label={t('usersToolbar.email')} required>{(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}</Field>
             <Field label={t('usersToolbar.addDirectlyToAFamilyOptional')}>
               {(id) => (
                 <Select id={id} name="familyId" defaultValue="">
-                  <option value="">Don’t add to a family yet</option>
+                  <option value="">{t('usersToolbar.donTAddToA')}</option>
                   {families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </Select>
               )}
@@ -108,10 +108,10 @@ export function UsersToolbar({ families, exportRows }: {
       )}
 
       {modal === 'family' && (
-        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.createAFamily')} description="Creates the family with an existing user as its parent/admin.">
+        <Modal open onClose={() => setModal(null)} title={t('usersToolbar.createAFamily')} description={t('usersToolbar.createsTheFamilyWithAn')}>
           <form onSubmit={onCreateFamily} className="space-y-4">
-            <Field label={t('usersToolbar.familyName')} required>{(id) => <Input id={id} name="name" placeholder="The Rivera Family" autoFocus />}</Field>
-            <Field label={t('usersToolbar.ownersEmail')} hint="They must already have an account." required>
+            <Field label={t('usersToolbar.familyName')} required>{(id) => <Input id={id} name="name" placeholder={t('usersToolbar.theRiveraFamily')} autoFocus />}</Field>
+            <Field label={t('usersToolbar.ownersEmail')} hint={t('usersToolbar.theyMustAlreadyHaveAn')} required>
               {(id) => <Input id={id} name="ownerEmail" type="email" placeholder="owner@example.com" />}
             </Field>
             <Field label={t('usersToolbar.timeZone')}>{(id) => <Input id={id} name="timezone" defaultValue="America/New_York" />}</Field>

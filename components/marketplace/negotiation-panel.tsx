@@ -178,7 +178,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
     if (viewer === 'buyer') {
       const bad = validateOfferAmount(cents, askCents);
       if (bad) { onError(bad); return; }
-    } else if (!cents || cents <= 0) { onError('Enter a valid counter amount.'); return; }
+    } else if (!cents || cents <= 0) { onError(tr('negotiationPanel.enterAValidCounterAmount')); return; }
     // Buyers counter through the offer RPC (it appends to the same thread);
     // sellers counter through the respond RPC.
     start(async () => {

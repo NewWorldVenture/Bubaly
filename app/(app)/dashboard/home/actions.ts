@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -24,6 +25,7 @@ function num(fd: FormData, k: string): number | null {
 
 // ── Warranties ──────────────────────────────────────────────────────────────
 export async function saveWarrantyAction(fd: FormData) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const id = str(fd, 'id');
   const row = {
@@ -47,20 +49,22 @@ export async function saveWarrantyAction(fd: FormData) {
   const { error } = id
     ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId)
     : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
-  if (error) throw new Error(describeActionError(error, 'Could not save that warranty.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatWarranty')));
   revalidatePath('/dashboard/home/warranties');
   revalidatePath('/dashboard/home');
 }
 
 export async function deleteWarrantyAction(id: string) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const { error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not delete that warranty.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatWarranty')));
   revalidatePath('/dashboard/home/warranties');
 }
 
 // ── Contractors ─────────────────────────────────────────────────────────────
 export async function saveContractorAction(fd: FormData) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const id = str(fd, 'id');
   const row = {
@@ -78,19 +82,21 @@ export async function saveContractorAction(fd: FormData) {
   const { error } = id
     ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId)
     : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
-  if (error) throw new Error(describeActionError(error, 'Could not save that contractor.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatContractor')));
   revalidatePath('/dashboard/home/pros');
 }
 
 export async function deleteContractorAction(id: string) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const { error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not delete that contractor.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatContractor')));
   revalidatePath('/dashboard/home/pros');
 }
 
 // ── Service records ─────────────────────────────────────────────────────────
 export async function saveServiceRecordAction(fd: FormData) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const assetId = str(fd, 'asset_id');
   const serviceDate = str(fd, 'service_date');
@@ -105,7 +111,7 @@ export async function saveServiceRecordAction(fd: FormData) {
     next_due_on: str(fd, 'next_due_on'),
     created_by: userId,
   });
-  if (error) throw new Error(describeActionError(error, 'Could not save that service record.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatService')));
   // Keep the asset's last-serviced date fresh for life/forecast math. Best-effort
   // (the record itself is already saved), but log a failure so a broken update is
   // observable instead of silently drifting the forecast math.
@@ -118,14 +124,16 @@ export async function saveServiceRecordAction(fd: FormData) {
 }
 
 export async function deleteServiceRecordAction(id: string) {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const { error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
-  if (error) throw new Error(describeActionError(error, 'Could not delete that service record.'));
+  if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatService')));
   revalidatePath('/dashboard/home/service');
 }
 
 // ── Deterministic forecast → schedule recommended maintenance for an asset ────
 export async function scheduleRecommendedTasksAction(assetId: string): Promise<{ ok: boolean; created: number; error?: string }> {
+  const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
   const { data: asset } = await supabase
     .from('home_assets')
@@ -133,10 +141,10 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
     .eq('id', assetId)
     .eq('family_id', familyId)
     .maybeSingle();
-  if (!asset) return { ok: false, created: 0, error: 'Asset not found.' };
+  if (!asset) return { ok: false, created: 0, error: tr('actions.assetNotFound') };
 
   const cadences = DEFAULT_CADENCES[asset.category ?? ''] ?? [];
-  if (cadences.length === 0) return { ok: false, created: 0, error: 'No recommended schedule for this asset type yet.' };
+  if (cadences.length === 0) return { ok: false, created: 0, error: tr('actions.noRecommendedScheduleForThis') };
 
   // Avoid duplicating tasks we already created for this asset.
   const { data: existing } = await supabase

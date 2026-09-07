@@ -50,7 +50,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const dollars = Number(feeDollars);
-    if (!Number.isFinite(dollars) || dollars < 0) { toastError('Enter a valid service fee'); return; }
+    if (!Number.isFinite(dollars) || dollars < 0) { toastError(t('stripeSetupForm.enterAValidServiceFee')); return; }
     setSaving(true);
     const res = await saveStripeSettingsAction({
       enabled,
@@ -63,7 +63,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Stripe Setup saved');
+    success(t('stripeSetupForm.stripeSetupSaved'));
     setSecretKey(''); setWebhookSecret('');
     router.refresh();
   }
@@ -74,9 +74,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
         <CreditCard className="h-4 w-4 text-brand-text" />
         <h2 className="font-semibold">{t('stripeSetup.stripeSetup')}</h2>
       </div>
-      <p className="mb-4 text-sm text-muted">
-        Configure the Bubaly Stripe account and the per-transaction service fee paid to Bubaly. These override the environment defaults at runtime.
-      </p>
+      <p className="mb-4 text-sm text-muted">{t('stripeSetupForm.configureTheBubalyStripeAccount')}</p>
 
       <form onSubmit={save} className="space-y-4">
         {/* Enable + service fee */}
@@ -97,7 +95,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
               </div>
             )}
           </Field>
-          <Field label={t('stripeSetup.serviceFeeStripePriceId')} hint="A one-time Price in the Bubaly account, added to checkout invoices.">
+          <Field label={t('stripeSetup.serviceFeeStripePriceId')} hint={t('stripeSetupForm.aOneTimePriceIn')}>
             {(id) => <Input id={id} value={feePriceId} onChange={(e) => setFeePriceId(e.target.value)} placeholder="price_…" />}
           </Field>
         </div>
@@ -107,7 +105,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
           <Field label={t('stripeSetup.publishableKey')}>
             {(id) => <Input id={id} value={publishableKey} onChange={(e) => setPublishableKey(e.target.value)} placeholder="pk_live_…" />}
           </Field>
-          <Field label={t('stripeSetup.connectPlatformAccountId')} hint="Bubaly platform account for routing application fees.">
+          <Field label={t('stripeSetup.connectPlatformAccountId')} hint={t('stripeSetupForm.bubalyPlatformAccountForRouting')}>
             {(id) => <Input id={id} value={connectAccountId} onChange={(e) => setConnectAccountId(e.target.value)} placeholder="acct_…" />}
           </Field>
           <Field label={t('stripeSetup.secretKey')} hint={initial.hasSecret ? 'Saved — leave blank to keep.' : initial.envSecretSet ? 'Using env STRIPE_SECRET_KEY — enter to override.' : 'Not set.'}>
@@ -134,7 +132,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
           </p>
         )}
 
-        <p className="inline-flex items-center gap-1 text-xs text-muted"><KeyRound className="h-3.5 w-3.5" /> Secrets are stored server-side and never sent back to the browser. Test uses the saved key — save before testing a new one.</p>
+        <p className="inline-flex items-center gap-1 text-xs text-muted"><KeyRound className="h-3.5 w-3.5" />{' '}{t('stripeSetupForm.secretsAreStoredServerSide')}</p>
       </form>
     </Card>
   );

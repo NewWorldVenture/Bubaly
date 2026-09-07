@@ -46,12 +46,12 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
   }
 
   async function send(resend = false) {
-    if (!isLikelyE164(phone)) { toastError('Enter a valid phone number.'); return; }
+    if (!isLikelyE164(phone)) { toastError(t('phoneAuth.enterAValidPhoneNumber')); return; }
     setSending(true);
     const { error } = await createClient().auth.signInWithOtp({ phone });
     setSending(false);
     if (error) { toastError(providerHint(error.message, 'Phone')); return; }
-    if (resend) success('Code sent'); else setPhase('code');
+    if (resend) success(t('phoneAuth.codeSent')); else setPhase('code');
     startCountdown();
   }
 

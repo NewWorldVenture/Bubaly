@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -14,7 +15,12 @@ import { decide } from '@/lib/services/approvals';
 
 type Result = { ok: boolean; error?: string };
 
-function actionFailure(error: unknown, fallback = 'Could not update Trust Engine settings.'): Result {
+// The fallback is a PARAMETER now, not a default. A default is evaluated in
+// the function's own scope, where the request translator cannot be — the lift
+// put `t(...)` there and tsc said `Cannot find name 't'`. Every call site
+// names its own message, which is also the only way each one can say what
+// actually failed.
+function actionFailure(error: unknown, fallback: string): Result {
   console.error('[trust-action] failed:', error);
   return { ok: false, error: describeActionError(error, fallback) };
 }
@@ -24,8 +30,9 @@ const EFFECTS = ['allow', 'deny', 'require_approval', 'auto_approve'] as const;
 const SUBJECT_KINDS = ['role', 'member', 'ai', 'everyone'] as const;
 
 async function managerCtx() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ctx: null, error: 'Only a parent or adult can manage the Trust Engine.' as const };
+  if (!isManager(ctx.active.role)) return { ctx: null, error: t('actions.onlyAParentOrAdult') };
   return { ctx, error: null };
 }
 
@@ -49,15 +56,16 @@ export async function savePolicyAction(input: {
   priority?: number;
   enabled?: boolean;
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
 
   const name = input.name.trim();
-  if (!name) return { ok: false, error: 'Give the policy a name.' };
-  if (!isDomain(input.domain)) return { ok: false, error: 'Unknown domain.' };
-  if (!isCapability(input.capability)) return { ok: false, error: 'Unknown capability.' };
-  if (!(EFFECTS as readonly string[]).includes(input.effect)) return { ok: false, error: 'Unknown effect.' };
-  if (!(SUBJECT_KINDS as readonly string[]).includes(input.subjectKind)) return { ok: false, error: 'Unknown subject.' };
+  if (!name) return { ok: false, error: t('actions.giveThePolicyAName') };
+  if (!isDomain(input.domain)) return { ok: false, error: t('actions.unknownDomain') };
+  if (!isCapability(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
+  if (!(EFFECTS as readonly string[]).includes(input.effect)) return { ok: false, error: t('actions.unknownEffect') };
+  if (!(SUBJECT_KINDS as readonly string[]).includes(input.subjectKind)) return { ok: false, error: t('actions.unknownSubject') };
   const model = input.approvalModel && (APPROVAL_MODELS as readonly string[]).includes(input.approvalModel) ? input.approvalModel : 'single';
   // The model IS the rule (lib/approvals/threshold.ts). Storing a count that
   // disagrees with it is how "Two-parent" came to approve on one vote, so the
@@ -83,31 +91,33 @@ export async function savePolicyAction(input: {
 
   if (input.id) {
     const { error: e } = await supabase.from('trust_policies').update(base).eq('id', input.id).eq('family_id', ctx.active.familyId);
-    if (e) return actionFailure(e, 'Could not update that policy.');
+    if (e) return actionFailure(e, t('actions.couldNotUpdateThatPolicy'));
   } else {
     const { error: e } = await supabase.from('trust_policies').insert({ ...base, family_id: ctx.active.familyId, created_by: ctx.user.id });
-    if (e) return actionFailure(e, 'Could not create that policy.');
+    if (e) return actionFailure(e, t('actions.couldNotCreateThatPolicy'));
   }
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
 
 export async function togglePolicyAction(input: { id: string; enabled: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_policies').update({ enabled: input.enabled }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return actionFailure(e, 'Could not update that policy.');
+  if (e) return actionFailure(e, t('actions.couldNotUpdateThatPolicy'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
 
 export async function deletePolicyAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_policies').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return actionFailure(e, 'Could not delete that policy.');
+  if (e) return actionFailure(e, t('actions.couldNotDeleteThatPolicy'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -116,22 +126,23 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
 export async function setPermissionGrantAction(input: {
   memberId: string; domain: string; capability: string; effect: 'allow' | 'deny' | 'clear';
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
-  if (!isDomain(input.domain) || input.domain === 'all') return { ok: false, error: 'Pick a specific domain.' };
-  if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: 'Unknown capability.' };
+  if (!isDomain(input.domain) || input.domain === 'all') return { ok: false, error: t('actions.pickASpecificDomain') };
+  if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
 
   const supabase = await createServer();
   if (input.effect === 'clear') {
     const { error: e } = await supabase.from('permission_grants').delete()
       .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability);
-    if (e) return actionFailure(e, 'Could not clear that permission grant.');
+    if (e) return actionFailure(e, t('actions.couldNotClearThatPermission'));
   } else {
     const { error: e } = await supabase.from('permission_grants').upsert({
       family_id: ctx.active.familyId, member_id: input.memberId,
       domain: input.domain, capability: input.capability as Capability, effect: input.effect, created_by: ctx.user.id,
     }, { onConflict: 'family_id,member_id,domain,capability' });
-    if (e) return actionFailure(e, 'Could not save that permission grant.');
+    if (e) return actionFailure(e, t('actions.couldNotSaveThatPermission'));
   }
   revalidatePath('/dashboard/trust');
   return { ok: true };
@@ -141,11 +152,12 @@ export async function setPermissionGrantAction(input: {
 export async function createDelegationAction(input: {
   fromMemberId: string; toMemberId: string; domains: string[]; reason?: string; expiresAt: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
-  if (input.fromMemberId === input.toMemberId) return { ok: false, error: 'Delegate to a different member.' };
+  if (input.fromMemberId === input.toMemberId) return { ok: false, error: t('actions.delegateToADifferentMember') };
   const expires = new Date(input.expiresAt);
-  if (Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) return { ok: false, error: 'Pick a future expiry.' };
+  if (Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) return { ok: false, error: t('actions.pickAFutureExpiry') };
   const domains = input.domains.filter(d => isDomain(d) && d !== 'all');
 
   const supabase = await createServer();
@@ -155,18 +167,19 @@ export async function createDelegationAction(input: {
     domains, reason: input.reason?.trim() || null,
     expires_at: expires.toISOString(), created_by: ctx.user.id,
   });
-  if (e) return actionFailure(e, 'Could not create that delegation.');
+  if (e) return actionFailure(e, t('actions.couldNotCreateThatDelegation'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
 
 export async function revokeDelegationAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return actionFailure(e, 'Could not revoke that delegation.');
+  if (e) return actionFailure(e, t('actions.couldNotRevokeThatDelegation'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -180,8 +193,9 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
  * 0251's RLS both enforce it again.
  */
 export async function decideApprovalAction(input: { id: string; decision: 'approved' | 'rejected'; note?: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent or adult can decide approvals.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentOrAdult2') };
   const scope = scopeFromUserContext(ctx, await createServer());
   const result = await decide(scope, input.id, input.decision, input.note ?? null);
   if (!result.ok) return { ok: false, error: result.error };
@@ -193,6 +207,7 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
 
 // ─── Emergency mode ──────────────────────────────────────────────────────────
 export async function activateEmergencyAction(input: { kind: string; reason?: string; elevatedDomains: string[] }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const kinds = ['medical', 'missing_person', 'severe_weather', 'natural_disaster', 'vehicle_accident', 'general'];
@@ -203,13 +218,13 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
   // Emergency elevation outranks every deny, policy and risk tier, so it must
   // name what it is elevating. Defaulting an empty selection to ['all'] turned
   // "I did not choose" into "everything, including money and medical".
-  if (!domains.length) return { ok: false, error: 'Choose which areas the emergency should unlock.' };
+  if (!domains.length) return { ok: false, error: t('actions.chooseWhichAreasTheEmergency') };
 
   const { error: e } = await supabase.from('emergency_sessions').insert({
     family_id: ctx.active.familyId, kind, reason: input.reason?.trim() || null,
     activated_by: ctx.active.member.id, elevated_domains: domains,
   });
-  if (e) return actionFailure(e, 'Could not activate emergency mode.');
+  if (e) return actionFailure(e, t('actions.couldNotActivateEmergencyMode'));
 
   // 0260: the ledger is written by the server, not by the session that acted.
   await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
@@ -222,13 +237,14 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
 }
 
 export async function endEmergencyAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('emergency_sessions')
     .update({ ended_at: new Date().toISOString(), ended_by: ctx.active.member.id })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return actionFailure(e, 'Could not end emergency mode.');
+  if (e) return actionFailure(e, t('actions.couldNotEndEmergencyMode'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }

@@ -67,12 +67,12 @@ export function PaperworkModule({ items }: { items: Item[] }) {
     startTransition(async () => {
       const res = await draftPaperworkReplyAction(itemId);
       setBusyKey(null);
-      if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success('AI drafted a reply'); }
+      if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success(t('paperworkModule.aiDraftedAReply')); }
       else toastError(res.error);
     });
   };
   const copyDraft = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); success('Copied'); } catch { toastError('Could not copy'); }
+    try { await navigator.clipboard.writeText(text); success(t('paperworkModule.copied')); } catch { toastError(t('paperworkModule.couldNotCopy')); }
   };
 
   const counts = useMemo(() => {
@@ -114,10 +114,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
             <Inbox className="h-6 w-6 text-brand-text" /> {t('paperwork.paperworkInbox')}
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Paste any slip, form, or flyer — AI pulls out what you actually have to
-            do, and one tap puts it on the calendar or your reminders.
-          </p>
+          <p className="mt-1 max-w-xl text-sm text-muted">{t('paperworkModule.pasteAnySlipFormOr')}</p>
         </div>
         <button
           onClick={() => setComposerOpen((v) => !v)}

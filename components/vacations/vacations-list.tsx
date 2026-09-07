@@ -74,7 +74,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError('Give your trip a name');
+    if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
     const { data, error } = await createClient().from('vacations').insert({
       family_id: familyId, created_by: userId,
       title: form.title.trim(),
@@ -87,7 +87,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       is_international: form.is_international,
     }).select('id').single();
     if (error) return toastError(error.message);
-    success('Trip created');
+    success(tr('vacationsList.tripCreated'));
     setForm(null);
     router.push(`/dashboard/vacations/${data.id}/overview`);
   }
@@ -124,7 +124,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       )}
 
       {loading ? <LoadingBlock /> : error ? (
-        <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={tr('vacationsList.couldNotLoadYourTrips')} onRetry={refresh} />
       ) : sorted.length === 0 ? (
         <EmptyState icon={Plane} title={tr('vacationsList.noTripsYet')} description="Create your first vacation — or let the AI builder plan one for you." />
       ) : (
@@ -157,10 +157,10 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       {form && (
         <Modal open onClose={() => setForm(null)} title={tr('vacationsList.newTrip')}>
           <form onSubmit={create} className="space-y-3">
-            <Field label={tr('vacationsList.tripName')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Summer at Disney World" required />}</Field>
+            <Field label={tr('vacationsList.tripName')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={tr('vacationsList.summerAtDisneyWorld')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={tr('vacationsList.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{VACATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-              <Field label={tr('vacationsList.destination')}>{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Orlando, FL" />}</Field>
+              <Field label={tr('vacationsList.destination')}>{(id) => <Input id={id} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder={tr('vacationsList.orlandoFl')} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={tr('vacationsList.startDate')}>{(id) => <Input id={id} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />}</Field>

@@ -10,6 +10,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { removeSlot, setSlot } from '@/lib/services/meals';
@@ -42,7 +43,8 @@ export async function planMealAction(input: {
   date: string;
   mealType: MealType;
 }): Promise<MealPlanActionResult> {
-  if (!input.mealId || !input.date) return { ok: false, error: 'Pick a meal and a day.' };
+  const t = await getTranslations();
+  if (!input.mealId || !input.date) return { ok: false, error: t('actions.pickAMealAndA') };
   const scope = await mealScope();
 
   try {
@@ -53,12 +55,13 @@ export async function planMealAction(input: {
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[meal-action] plan failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add that meal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatMeal')) };
   }
 }
 
 export async function removeMealPlanAction(planId: string): Promise<MealPlanActionResult> {
-  if (!planId) return { ok: false, error: 'That planned meal could not be found.' };
+  const t = await getTranslations();
+  if (!planId) return { ok: false, error: t('actions.thatPlannedMealCouldNot') };
   const scope = await mealScope();
 
   try {
@@ -69,6 +72,6 @@ export async function removeMealPlanAction(planId: string): Promise<MealPlanActi
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[meal-action] remove failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not clear that meal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotClearThatMeal')) };
   }
 }

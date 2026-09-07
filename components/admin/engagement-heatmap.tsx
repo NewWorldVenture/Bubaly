@@ -1,7 +1,9 @@
+import { getTranslations } from '@/lib/i18n/server';
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** Real activity heatmap built from actual created_at timestamps — not simulated. */
-export function EngagementHeatmap({ timestamps }: { timestamps: string[] }) {
+export async function EngagementHeatmap({ timestamps }: { timestamps: string[] }) {
+  const t = await getTranslations();
   const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (const ts of timestamps) {
     const d = new Date(ts);
@@ -37,14 +39,13 @@ export function EngagementHeatmap({ timestamps }: { timestamps: string[] }) {
             ))}
           </div>
           <div className="mt-2 flex items-center justify-end gap-2 text-xs text-muted">
-            Low <div className="h-2 w-24 rounded-full bg-gradient-to-r from-brand/10 to-brand" /> High
-          </div>
+            Low <div className="h-2 w-24 rounded-full bg-gradient-to-r from-brand/10 to-brand" />{' '}{t('engagementHeatmap.high')}</div>
         </div>
       </div>
       <div className="rounded-xl border border-border bg-surface/40 p-4">
-        <h3 className="mb-3 text-sm font-semibold">Peak Activity</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t('engagementHeatmap.peakActivity')}</h3>
         {peaks.length === 0 ? (
-          <p className="text-sm text-muted">Not enough activity recorded yet.</p>
+          <p className="text-sm text-muted">{t('engagementHeatmap.notEnoughActivityRecordedYet')}</p>
         ) : (
           <ol className="space-y-2 text-sm">
             {peaks.map((p, i) => (

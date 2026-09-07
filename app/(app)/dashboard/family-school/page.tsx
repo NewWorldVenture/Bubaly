@@ -36,7 +36,7 @@ export default async function FamilySchoolPage() {
     .find((e) => e && !isMissingTableError(e));
   if (schoolError) {
     console.error('[dashboard/family-school] school read failed', schoolError);
-    return <ErrorState message="Could not load your family school hub from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familySchool.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -51,7 +51,7 @@ export default async function FamilySchoolPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('dashboardFamilySchool.familySchoolHub')} description="Classes, grades, projects and parent-teacher dates across every kid." />
+      <PageHeader title={t('dashboardFamilySchool.familySchoolHub')} description={t('familySchool.classesGradesProjectsAndParent')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile href="/dashboard/school" label={t('dashboardFamilySchool.classes')} value={classes?.length ?? 0} icon={BookOpen} accent="bg-blue-600" sublabel="Schedule" />
@@ -75,7 +75,7 @@ export default async function FamilySchoolPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarClock} text="No school events coming up." />}
+          ) : <MiniEmpty icon={CalendarClock} text={t('familySchool.noSchoolEventsComingUp')} />}
         </SectionCard>
 
         <SectionCard title={t('dashboardFamilySchool.recentGrades')} viewAllHref="/dashboard/school">
@@ -92,7 +92,7 @@ export default async function FamilySchoolPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={NotebookPen} text="No grades recorded yet." />}
+          ) : <MiniEmpty icon={NotebookPen} text={t('familySchool.noGradesRecordedYet')} />}
         </SectionCard>
       </div>
 
@@ -107,7 +107,7 @@ export default async function FamilySchoolPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={BookOpen} text="No classes added yet." />}
+        ) : <MiniEmpty icon={BookOpen} text={t('familySchool.noClassesAddedYet')} />}
       </SectionCard>
     </div>
   );

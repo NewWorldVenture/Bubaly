@@ -23,7 +23,7 @@ export default async function WalletTreasuryPage() {
     .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
   if (walletError) {
     console.error('[wallet-treasury] Wallet read failed', walletError);
-    return <ErrorState message="Could not load the family wallet. Refresh and try again." />;
+    return <ErrorState message={tr('treasury.couldNotLoadTheFamily')} />;
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 

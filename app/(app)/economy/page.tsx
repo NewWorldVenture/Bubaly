@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: 'Family Economy' };
 export const dynamic = 'force-dynamic';
 
 export default async function EconomyPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -35,7 +37,7 @@ export default async function EconomyPage() {
     .find((e) => e && !isMissingTableError(e));
   if (economyError) {
     console.error('[economy] family economy read failed', economyError);
-    return <ErrorState message="Could not load your family economy from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('economy.couldNotLoadYourFamily')} />;
   }
 
   const currencies = currenciesRes.data;

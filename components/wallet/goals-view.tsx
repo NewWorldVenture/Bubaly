@@ -54,13 +54,13 @@ export function GoalsView({ goals, childOptions, canManage }: {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('goals.familyWallet')} description="Save toward what matters — together."
+      <PageHeader title={t('goals.familyWallet')} description={t('goalsView.saveTowardWhatMattersTogether')}
         action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       <WalletSubnav />
 
       {goals.length === 0 ? (
         <EmptyState icon={Target} title={t('goals.noGoalsYet')}
-          description="Set a savings goal — a bike, a trip, a giving target — and watch it grow."
+          description={t('goalsView.setASavingsGoalA')}
           action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       ) : (
         <div className="space-y-5">
@@ -193,8 +193,8 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     const title = String(form.get('title') ?? '').trim();
     const target = Number(form.get('target'));
     const targetDate = String(form.get('targetDate') ?? '').trim() || null;
-    if (!title) return toastError('Give the goal a name.');
-    if (!Number.isFinite(target) || target <= 0) return toastError('Set a target greater than $0.');
+    if (!title) return toastError(t('goalsView.giveTheGoalAName'));
+    if (!Number.isFinite(target) || target <= 0) return toastError(t('goalsView.setATargetGreaterThan'));
     setLoading(true);
     const res = await createGoalAction({
       title, kind, targetCents: Math.round(target * 100),
@@ -202,7 +202,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not create goal');
-    success('Goal created');
+    success(t('goalsView.goalCreated'));
     onClose();
     router.refresh();
   }
@@ -211,7 +211,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
     <Modal open onClose={onClose} title={t('goals.newSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('goals.whatAreYouSavingFor')}>
-          {(id) => <Input id={id} name="title" placeholder="New bike, vacation fund…" autoFocus />}
+          {(id) => <Input id={id} name="title" placeholder={t('goalsView.newBikeVacationFund')} autoFocus />}
         </Field>
         <Field label={t('goals.targetAmountUsd')}>
           {(id) => <Input id={id} name="target" type="number" min="0" step="0.01" inputMode="decimal" placeholder="100.00" />}
@@ -237,7 +237,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
           {(id) => (
             <select id={id} value={childId} onChange={(e) => setChildId(e.target.value)}
               className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand/40 focus:outline-none">
-              <option value="">Family goal</option>
+              <option value="">{t('goalsView.familyGoal')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
@@ -263,7 +263,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('goalsView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await fundGoalAction({ goalId: goal.id, amountCents: Math.round(dollars * 100) });
     setLoading(false);

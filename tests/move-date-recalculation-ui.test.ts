@@ -33,6 +33,14 @@ vi.mock('react', async (original) => ({
     if (!(index in mocks.slots)) mocks.slots[index] = { current: initial };
     return mocks.slots[index];
   },
+  // The panel calls `useTranslations()`, which reads a context. This harness
+  // invokes the component as a plain function, so there is no React dispatcher
+  // and the real `useContext` throws. Returning undefined is the honest stand-in
+  // for "rendered outside a LocaleProvider": `useTranslations` then falls back
+  // through `translate({}, key)` to SOURCE_MESSAGES, so the panel renders its
+  // ENGLISH copy — which is exactly what the assertions below are written
+  // against, and what a user would see if the provider were ever missing.
+  useContext: () => undefined,
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => {
     const index = mocks.cursor++;
     const slots = mocks.slots;

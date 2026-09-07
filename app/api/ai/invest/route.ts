@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -15,6 +16,7 @@ import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/se
 // per-day metering as the wallet coach. Explains an investing concept; never
 // gives buy/sell advice or promises returns.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -22,11 +24,11 @@ export async function POST(req: NextRequest) {
 
     const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
     if (aiCoachLevel(tier) === 'none') {
-      return NextResponse.json({ error: 'The Money Mentor is available on the Basic and Plus plans.' }, { status: 403 });
+      return NextResponse.json({ error: t('invest.theMoneyMentorIsAvailable') }, { status: 403 });
     }
     const limited = await enforceAIRateLimit(supabase, `ai-invest:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many Money Mentor requests. Please try again shortly.' },
+      { error: t('invest.tooManyMoneyMentorRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    if (!boundedBody.ok) return NextResponse.json({ error: t('invest.requestBodyIsTooLarge') }, { status: 400 });
     const body = (boundedBody.value ?? {}) as { childWalletId?: string; assetId?: string };
 
     // Resolve the child's name + (optional) selected asset + portfolio value.
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
         return parsed;
       },
     );
-    if (!coaching.explainer) return NextResponse.json({ error: 'Could not generate an explanation right now.' }, { status: 502 });
+    if (!coaching.explainer) return NextResponse.json({ error: t('invest.couldNotGenerateAnExplanation') }, { status: 502 });
 
     await supabase.from('wallet_audit_logs').insert({
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_invest_call', entity_type: 'ai_invest_mentor', detail: 'Money Mentor explainer',
@@ -93,6 +95,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ coaching, tier });
   } catch (err) {
     console.error('Invest mentor error:', err);
-    return NextResponse.json({ error: 'Failed to generate an explanation' }, { status: 500 });
+    return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 500 });
   }
 }

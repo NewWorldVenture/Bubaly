@@ -154,9 +154,7 @@ export function RunControls({
             {editableSteps.map((step) => (
               <li key={step.id} className="flex items-center justify-between gap-3">
                 <span className="min-w-0 flex-1 truncate text-sm text-fg/90">{step.description}</span>
-                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={`Edit: ${step.description}`}>
-                  Edit
-                </Button>
+                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={`Edit: ${step.description}`}>{t('runControls.edit')}</Button>
               </li>
             ))}
           </ul>

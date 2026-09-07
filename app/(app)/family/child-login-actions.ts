@@ -6,6 +6,7 @@
 // family via requireUserContext, so RLS + this guard both hold.
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { isValidPin } from '@/lib/onboarding/pin';
@@ -21,25 +22,26 @@ const secret = () => process.env.CHILD_LOGIN_SECRET || null;
 export async function createChildLoginAction(input: {
   memberId: string; username: string; pin: string;
 }): Promise<Result<{ username: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent or guardian can create a child login.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('childLoginActions.onlyAParentOrGuardian') };
   const sec = secret();
-  if (!sec) return { ok: false, error: 'Child logins aren’t configured on the server yet (set CHILD_LOGIN_SECRET).' };
+  if (!sec) return { ok: false, error: t('childLoginActions.childLoginsArenTConfigured') };
 
   const username = normalizeUsername(input.username);
-  if (!isValidUsername(username)) return { ok: false, error: 'Username must be 3–24 letters or numbers.' };
-  if (!isValidPin(input.pin)) return { ok: false, error: 'PIN must be 4 digits.' };
+  if (!isValidUsername(username)) return { ok: false, error: t('childLoginActions.usernameMustBe324') };
+  if (!isValidPin(input.pin)) return { ok: false, error: t('childLoginActions.pinMustBe4Digits') };
 
   const admin = createServiceClient();
 
   const { data: member } = await admin.from('family_members')
     .select('id, family_id, display_name, user_id')
     .eq('id', input.memberId).maybeSingle();
-  if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: 'Member not found in your family.' };
-  if (member.user_id) return { ok: false, error: 'This member already has a login.' };
+  if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
+  if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
 
   const { data: taken } = await admin.from('child_logins').select('id').ilike('username', username).limit(1);
-  if (taken && taken.length > 0) return { ok: false, error: 'That username is taken — try another.' };
+  if (taken && taken.length > 0) return { ok: false, error: t('childLoginActions.thatUsernameIsTakenTry') };
 
   const email = syntheticChildEmail(username);
   const password = deriveChildPassword(sec, username, input.pin);
@@ -48,13 +50,13 @@ export async function createChildLoginAction(input: {
     email, password, email_confirm: true,
     user_metadata: { child: true, family_id: member.family_id, member_id: member.id, username, display_name: member.display_name },
   });
-  if (createErr || !created?.user) return { ok: false, error: 'Could not create the login. The username may already be in use.' };
+  if (createErr || !created?.user) return { ok: false, error: t('childLoginActions.couldNotCreateTheLogin') };
   const childUserId = created.user.id;
 
   // Link the member to the new auth user so they ARE this member on sign-in.
   const { error: linkErr } = await admin.from('family_members')
     .update({ user_id: childUserId, is_active: true }).eq('id', member.id);
-  if (linkErr) { await admin.auth.admin.deleteUser(childUserId); return { ok: false, error: 'Could not link the login.' }; }
+  if (linkErr) { await admin.auth.admin.deleteUser(childUserId); return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') }; }
 
   const { error: rowErr } = await admin.from('child_logins').insert({
     family_id: member.family_id, member_id: member.id, user_id: childUserId, username, created_by: ctx.user.id,
@@ -62,7 +64,7 @@ export async function createChildLoginAction(input: {
   if (rowErr) {
     await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
     await admin.auth.admin.deleteUser(childUserId);
-    return { ok: false, error: 'Could not save the login.' };
+    return { ok: false, error: t('childLoginActions.couldNotSaveTheLogin') };
   }
 
   // Set the child's active family so their context resolves on first sign-in.
@@ -72,7 +74,7 @@ export async function createChildLoginAction(input: {
     await admin.from('child_logins').delete().eq('user_id', childUserId);
     await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
     await admin.auth.admin.deleteUser(childUserId);
-    return { ok: false, error: 'Could not finish setting up the login.' };
+    return { ok: false, error: t('childLoginActions.couldNotFinishSettingUp') };
   }
 
   // A username can be reused after an earlier child login was removed. Clear any
@@ -91,20 +93,21 @@ export async function createChildLoginAction(input: {
 
 /** Reset a child's PIN. Manager only. */
 export async function resetChildPinAction(input: { memberId: string; pin: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent or guardian can reset a PIN.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('childLoginActions.onlyAParentOrGuardian2') };
   const sec = secret();
-  if (!sec) return { ok: false, error: 'Child logins aren’t configured on the server yet.' };
-  if (!isValidPin(input.pin)) return { ok: false, error: 'PIN must be 4 digits.' };
+  if (!sec) return { ok: false, error: t('childLoginActions.childLoginsArenTConfigured2') };
+  if (!isValidPin(input.pin)) return { ok: false, error: t('childLoginActions.pinMustBe4Digits') };
 
   const admin = createServiceClient();
   const { data: row } = await admin.from('child_logins')
     .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
-  if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: 'Login not found.' };
+  if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
 
   const password = deriveChildPassword(sec, row.username, input.pin);
   const { error } = await admin.auth.admin.updateUserById(row.user_id, { password });
-  if (error) return { ok: false, error: 'Could not reset the PIN.' };
+  if (error) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
 
   // A parent reset should also lift any brute-force lockout on that username, so
   // the child can sign in immediately with the new PIN.

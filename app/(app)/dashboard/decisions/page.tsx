@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { DecisionsModule } from '@/components/modules/decisions-module';
@@ -11,6 +12,7 @@ export const metadata: Metadata = { title: 'Decision Engine | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function DecisionsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   // R2: surface Knowledge Graph relationship context alongside the decision tool —
@@ -29,7 +31,7 @@ export default async function DecisionsPage() {
     <>
       {reasoningError && (
         <div className="mx-auto mb-4 max-w-5xl px-4 pt-6">
-          <ErrorState message="Relationship insights are temporarily unavailable from Supabase. Refresh and try again." />
+          <ErrorState message={t('decisions.relationshipInsightsAreTemporarilyUnavailable')} />
         </div>
       )}
       {insights.length > 0 && (

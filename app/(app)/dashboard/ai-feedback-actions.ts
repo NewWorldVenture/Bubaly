@@ -5,6 +5,7 @@
 // we append a family-scoped row to ai_feedback. RLS (is_family_member) guarantees
 // a caller only ever writes into their own family's log. Append-only signal.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 
 export type FeedbackSurface = 'insight' | 'autopilot' | 'agent' | 'voting' | 'decision' | 'briefing';
@@ -27,8 +28,9 @@ type Result = { ok: boolean; error?: string };
 /** Record a "Why this?" response. Validates the enums so a bad client can't
  *  violate the CHECK constraints; truncates snapshots to keep rows small. */
 export async function recordAiFeedbackAction(input: RecordFeedbackInput): Promise<Result> {
-  if (!input || !SURFACES.includes(input.surface)) return { ok: false, error: 'Invalid surface' };
-  if (!SIGNALS.includes(input.signal)) return { ok: false, error: 'Invalid signal' };
+  const t = await getTranslations();
+  if (!input || !SURFACES.includes(input.surface)) return { ok: false, error: t('aiFeedbackActions.invalidSurface') };
+  if (!SIGNALS.includes(input.signal)) return { ok: false, error: t('aiFeedbackActions.invalidSignal') };
 
   const ctx = await requireUserContext();
   const supabase = await createServer();

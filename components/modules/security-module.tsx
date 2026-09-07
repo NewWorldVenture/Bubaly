@@ -74,20 +74,20 @@ export function SecurityModule() {
     const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
     const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
     if (error) return toastError(describeDbError(error));
-    success('Logged'); setForm(null);
+    success(tr('securityModule.logged')); setForm(null);
   }
   async function toggleResolved(ev: Event) {
     const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this event?')) return;
+    if (!confirm(tr('securityModule.deleteThisEvent'))) return;
     const { error } = await createClient().from('home_security_events').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('securityModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load security events. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('securityModule.couldNotLoadSecurityEvents')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -141,7 +141,7 @@ export function SecurityModule() {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={tr('security.noSecurityEvents')} description="Log alarm triggers, camera events, sensor alerts and tests to keep a clear safety record." />
+        <EmptyState icon={ShieldCheck} title={tr('security.noSecurityEvents')} description={tr('securityModule.logAlarmTriggersCameraEvents')} />
       ) : (
         <div className="space-y-2">
           {visible.map((ev) => {

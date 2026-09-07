@@ -130,22 +130,22 @@ export function NextActionsModule() {
     const result = await completeTodoAction(taskId, true);
     if (!result.ok) { toastError(result.error); return; }
     journey.complete(); // first clear completes the journey (no-op thereafter)
-    success('Nice — one less thing');
+    success(i18nT('nextActionsModule.niceOneLessThing'));
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (error) return <ErrorState message="Could not load next actions. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={i18nT('nextActionsModule.couldNotLoadNextActions')} onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title={tr('nextActions.nextBestActions')}
-        description="Everything that needs the family, ranked by what matters most right now."
+        description={i18nT('nextActionsModule.everythingThatNeedsTheFamily')}
       />
 
       {ranked.length === 0 ? (
         <EmptyState icon={Sparkles} title={i18nT('nextActions.youreAllCaughtUp')}
-          description="No overdue tasks, upcoming events, or closing opportunities need attention. Enjoy it." />
+          description={i18nT('nextActionsModule.noOverdueTasksUpcomingEvents')} />
       ) : (
         <>
           <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">

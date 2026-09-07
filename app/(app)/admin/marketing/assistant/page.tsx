@@ -42,10 +42,10 @@ export default function MarketingAssistantPage() {
         body: JSON.stringify({ task, input }),
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? 'Generation failed.'); return; }
+      if (!res.ok) { setError(json.error ?? tr('assistant.generationFailed')); return; }
       setOutput(json.text ?? '');
     } catch {
-      setError('Network error. Please try again.');
+      setError(tr('assistant.networkErrorPleaseTryAgain'));
     } finally {
       setLoading(false);
     }

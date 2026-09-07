@@ -94,7 +94,7 @@ export function VotingModule() {
     e.preventDefault();
     if (!form || !form.question.trim()) return;
     const opts = form.options.filter((o) => o.label.trim());
-    if (opts.length < 2) return toastError('Add at least two options');
+    if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
     const supabase = createClient();
     const { data: poll, error } = await supabase.from('family_polls').insert({
       family_id: familyId,
@@ -108,7 +108,7 @@ export function VotingModule() {
       closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
       created_by: userId,
     }).select('id').single();
-    if (error || !poll) return toastError(describeDbError(error, 'Could not create'));
+    if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
     const { error: oErr } = await supabase.from('family_poll_options').insert(
       opts.map((o, i) => ({
         family_id: familyId, poll_id: poll.id, label: o.label.trim(), sort: i,
@@ -118,12 +118,12 @@ export function VotingModule() {
       })),
     );
     if (oErr) return toastError(describeDbError(oErr));
-    success('Poll created');
+    success(tr('votingModule.pollCreated'));
     setForm(null);
   }
 
   async function vote(poll: Poll, optionId: string) {
-    if (!meId) return toastError('Join the family as a member to vote');
+    if (!meId) return toastError(tr('votingModule.joinTheFamilyAsA'));
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
@@ -147,13 +147,13 @@ export function VotingModule() {
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this poll?')) return;
+    if (!confirm(tr('votingModule.deleteThisPoll'))) return;
     const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('votingModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family voting data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('votingModule.couldNotLoadFamilyVoting')} onRetry={refresh} />;
   const all = polls ?? [];
   const budgetRows = budgets ?? [];
 
@@ -171,7 +171,7 @@ export function VotingModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Vote} title={tr('voting.noPollsYet')} description="Create a poll to make a collaborative family decision — a trip, a restaurant, a movie night. Add each option's cost and Bubaly will facilitate consensus." />
+        <EmptyState icon={Vote} title={tr('voting.noPollsYet')} description={tr('votingModule.createAPollToMake')} />
       ) : all.map((p) => {
         const opts = (optionsByPoll.get(p.id) ?? []) as Option[];
         const pollVotes = (votesByPoll.get(p.id) ?? []) as VoteRow[];

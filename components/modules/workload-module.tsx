@@ -93,7 +93,7 @@ export function WorkloadModule({
     <div className="module-page">
       <PageHeader
         title={tr('workload.workloadBalance')}
-        description="Who's carrying the household — measured, made visible, and one tap to fix."
+        description={tr('workloadModule.whoSCarryingTheHousehold')}
       />
 
       {/* AI headline */}

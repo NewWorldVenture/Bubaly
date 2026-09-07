@@ -167,7 +167,7 @@ export function FinancesModule() {
   const loading = la || lt || lb || lbi || lg;
   const readError = accountsError || txnsError || budgetsError || billsError || goalsError;
   if (loading) return <SkeletonList count={6} />;
-  if (readError) return <ErrorState message="Could not load financial data. Refresh and try again." onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
+  if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
 
   const STATS = [
     { label: 'Total Balance', value: usd(totalBalance), sub: netThisMonth >= 0 ? `${usd(Math.abs(netThisMonth))} this month` : `${usd(Math.abs(netThisMonth))} this month`, up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
@@ -181,7 +181,7 @@ export function FinancesModule() {
       <div className="module-main overflow-y-auto">
         <PageHeader
           title={tr('finances.finances')}
-          description="Stay on top of your family's money, budgets, and goals."
+          description={tr('financesModule.stayOnTopOfYour')}
           action={
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('finances.addTransaction')}</Button>
@@ -466,12 +466,12 @@ export function FinancesModule() {
 
       {addOpen && (
         <AddTransactionModal familyId={familyId} userId={userId} selfId={selfId} accounts={accounts} members={members}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refreshTxns(); success('Transaction added'); }}
+          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refreshTxns(); success(tr('financesModule.transactionAdded')); }}
           onError={toastError} />
       )}
       {linkOpen && (
         <LinkAccountModal familyId={familyId} userId={userId}
-          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); void refreshAccounts(); success('Account linked'); }}
+          onClose={() => setLinkOpen(false)} onSaved={() => { setLinkOpen(false); void refreshAccounts(); success(tr('financesModule.accountLinked')); }}
           onError={toastError} />
       )}
     </div>
@@ -536,8 +536,8 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
     const amount = Number(f.get('amount'));
-    if (!name) return onError('Add a description');
-    if (!amount || amount <= 0) return onError('Enter a valid amount');
+    if (!name) return onError(tr('financesModule.addADescription'));
+    if (!amount || amount <= 0) return onError(tr('financesModule.enterAValidAmount'));
     setLoading(true);
     const res = await createTransactionAction({
       name, amount,
@@ -586,7 +586,7 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return onError('Name the account');
+    if (!name) return onError(tr('financesModule.nameTheAccount'));
     setLoading(true);
     const { error } = await createClient().from('financial_accounts').insert({
       family_id: familyId, created_by: userId, name,
@@ -601,7 +601,7 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
     onSaved();
   }
   return (
-    <Modal open title={tr('finances.linkAccount')} description="Add an account to track balances and spending." onClose={onClose}>
+    <Modal open title={tr('finances.linkAccount')} description={tr('financesModule.addAnAccountToTrack')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={tr('finances.accountName')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('finances.jointChecking')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
@@ -609,8 +609,8 @@ function LinkAccountModal({ familyId, userId, onClose, onSaved, onError }: {
           <Field label={tr('finances.balance')}>{(id) => <Input id={id} name="balance" type="number" inputMode="decimal" step="0.01" placeholder="0.00" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('finances.institution')} hint="Optional">{(id) => <Input id={id} name="institution" placeholder={tr('finances.chase')} />}</Field>
-          <Field label={tr('finances.last4')} hint="Optional">{(id) => <Input id={id} name="last_four" maxLength={4} placeholder="4567" />}</Field>
+          <Field label={tr('finances.institution')} hint={tr('financesModule.optional')}>{(id) => <Input id={id} name="institution" placeholder={tr('finances.chase')} />}</Field>
+          <Field label={tr('finances.last4')} hint={tr('financesModule.optional')}>{(id) => <Input id={id} name="last_four" maxLength={4} placeholder="4567" />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('finances.cancel')}</Button>

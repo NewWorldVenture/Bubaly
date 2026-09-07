@@ -92,10 +92,7 @@ export function AppLockSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold">{t('appLockSettings.appLock')}</h3>
-            <p className="mt-0.5 max-w-md text-xs text-muted">
-              Require a 4-digit PIN to open Bubaly on this browser. Handy when you share a device.
-              You can always sign out from the lock screen if you forget it.
-            </p>
+            <p className="mt-0.5 max-w-md text-xs text-muted">{t('appLockSettings.requireA4DigitPin')}</p>
             {enabled ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" /> On

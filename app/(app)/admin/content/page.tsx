@@ -9,7 +9,7 @@ import { DocumentRowActions } from '@/components/admin/document-row-actions';
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Content Management', robots: { index: false } };
+export const metadata: Metadata = { title: 'content.contentManagement', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const TABS = [
@@ -221,15 +221,16 @@ export default async function AdminContentPage({ searchParams }: Params) {
   );
 }
 
-function AdminContentReadError() {
+async function AdminContentReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Content Management</h1>
-        <p className="mt-1 text-sm text-muted">Manage all documents and files across every family on Bubaly.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('content.contentManagement')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('content.manageAllDocumentsAndFiles')}</p>
       </div>
-      <ErrorState message="Could not load content from Supabase. Refresh and try again." />
-      <a href="/admin/content" className="text-sm font-medium text-brand-text underline">Refresh content</a>
+      <ErrorState message={tr('content.couldNotLoadContentFrom')} />
+      <a href="/admin/content" className="text-sm font-medium text-brand-text underline">{tr('content.refreshContent')}</a>
     </div>
   );
 }

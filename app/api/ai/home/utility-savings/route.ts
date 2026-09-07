@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
@@ -22,13 +23,14 @@ export const dynamic = 'force-dynamic';
  * sees only the computed figures and is told to reuse them verbatim.
  */
 export async function POST() {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('utilitySavings.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-home-utility-savings:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many utility-savings requests. Please try again shortly.' },
+    { error: t('utilitySavings.tooManyUtilitySavingsRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const { data: rows } = await supabase
@@ -40,7 +42,7 @@ export async function POST() {
 
   const bills = (rows ?? []) as BillLike[];
   if (bills.length === 0) {
-    return NextResponse.json({ error: 'Add a few utility bills first so we can analyse your costs.' }, { status: 400 });
+    return NextResponse.json({ error: t('utilitySavings.addAFewUtilityBills') }, { status: 400 });
   }
 
   const summary = summarizeUtilities(bills);

@@ -28,6 +28,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { addItems, checkItem, clearChecked, removeItem, type GroceryItemInput } from '@/lib/services/groceries';
@@ -50,6 +51,7 @@ export type AddGroceryItemsInput = {
 };
 
 export async function addGroceryItemsAction(input: AddGroceryItemsInput): Promise<AddGroceryItemsResult> {
+  const t = await getTranslations();
   // Outside the try: `requireUserContext` sends a signed-out caller to /login by
   // throwing, and catching that would show them a toast instead.
   const ctx = await requireUserContext();
@@ -70,7 +72,7 @@ export async function addGroceryItemsAction(input: AddGroceryItemsInput): Promis
     };
   } catch (err) {
     console.error('[grocery-action] add failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add those items.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThoseItems')) };
   }
 }
 
@@ -87,7 +89,8 @@ async function groceryScope() {
 
 /** Tick an item off, or put it back. */
 export async function setGroceryItemCheckedAction(itemId: string, checked: boolean): Promise<GroceryItemActionResult> {
-  if (!itemId) return { ok: false, error: 'That item could not be found.' };
+  const t = await getTranslations();
+  if (!itemId) return { ok: false, error: t('actions.thatItemCouldNotBe') };
   const scope = await groceryScope();
   try {
     const result = await checkItem(scope, itemId, checked);
@@ -96,12 +99,13 @@ export async function setGroceryItemCheckedAction(itemId: string, checked: boole
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[grocery-action] check failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that item.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatItem')) };
   }
 }
 
 export async function removeGroceryItemAction(itemId: string): Promise<GroceryItemActionResult> {
-  if (!itemId) return { ok: false, error: 'That item could not be found.' };
+  const t = await getTranslations();
+  if (!itemId) return { ok: false, error: t('actions.thatItemCouldNotBe') };
   const scope = await groceryScope();
   try {
     const result = await removeItem(scope, itemId);
@@ -110,7 +114,7 @@ export async function removeGroceryItemAction(itemId: string): Promise<GroceryIt
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[grocery-action] remove failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that item.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatItem')) };
   }
 }
 
@@ -127,7 +131,8 @@ export type ClearCheckedResult =
  * service asks the database which items are checked, at the moment of asking.
  */
 export async function clearCheckedGroceriesAction(listId: string): Promise<ClearCheckedResult> {
-  if (!listId) return { ok: false, error: 'That list could not be found.' };
+  const t = await getTranslations();
+  if (!listId) return { ok: false, error: t('actions.thatListCouldNotBe') };
   const scope = await groceryScope();
   try {
     const result = await clearChecked(scope, listId);
@@ -136,6 +141,6 @@ export async function clearCheckedGroceriesAction(listId: string): Promise<Clear
     return { ok: true, removed: result.data.removed };
   } catch (err) {
     console.error('[grocery-action] clear checked failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not clear the checked items.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotClearTheChecked')) };
   }
 }

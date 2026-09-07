@@ -30,6 +30,7 @@ export function EconomyView(props: {
   currencies: Currency[]; members: Member[]; balances: BalanceCell[];
   rewards: Reward[]; redemptions: Redemption[]; canManage: boolean;
 }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const { currencies, members, balances, rewards, redemptions, canManage } = props;
   const router = useRouter();
@@ -55,8 +56,8 @@ export function EconomyView(props: {
   if (currencies.length === 0 && !canManage) {
     return (
       <div>
-        <PageHeader title={tr('economy.familyEconomy')} description="Earn and spend family tokens." />
-        <EmptyState icon={Coins} title={tr('economy.noCurrenciesYet')} description="Ask a parent to set up your family's tokens." />
+        <PageHeader title={tr('economy.familyEconomy')} description={t('economyView.earnAndSpendFamilyTokens')} />
+        <EmptyState icon={Coins} title={tr('economy.noCurrenciesYet')} description={t('economyView.askAParentToSet')} />
       </div>
     );
   }
@@ -70,7 +71,7 @@ export function EconomyView(props: {
 
   return (
     <div>
-      <PageHeader title={tr('economy.familyEconomy')} description="Custom family tokens kids earn and spend on rewards — no cash involved." />
+      <PageHeader title={tr('economy.familyEconomy')} description={t('economyView.customFamilyTokensKidsEarn')} />
 
       <div className="mb-5 mt-3 flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface/40 p-1 no-scrollbar">
         {TABS.filter((t) => t.show).map((t) => (
@@ -88,7 +89,7 @@ export function EconomyView(props: {
       {/* ── Balances ── */}
       {tab === 'balances' && (
         kids.length === 0 ? (
-          <EmptyState icon={Coins} title={tr('economy.noKidsYet')} description="Add child members to start the family economy." />
+          <EmptyState icon={Coins} title={tr('economy.noKidsYet')} description={t('economyView.addChildMembersToStart')} />
         ) : (
           <div className="space-y-3">
             {kids.map((m) => (
@@ -98,7 +99,7 @@ export function EconomyView(props: {
                   <p className="font-semibold">{m.name}</p>
                 </div>
                 {currencies.length === 0 ? (
-                  <p className="text-sm text-muted">No currencies yet.</p>
+                  <p className="text-sm text-muted">{t('economyView.noCurrenciesYet')}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {currencies.map((c) => (
@@ -132,7 +133,7 @@ export function EconomyView(props: {
       {/* ── Requests (manager) ── */}
       {tab === 'requests' && canManage && (
         pending.length === 0 ? (
-          <EmptyState icon={Inbox} title={tr('economy.noPendingRequests')} description="Redemption requests will appear here for approval." />
+          <EmptyState icon={Inbox} title={tr('economy.noPendingRequests')} description={t('economyView.redemptionRequestsWillAppearHere')} />
         ) : (
           <div className="space-y-2">
             {pending.map((r) => (
@@ -145,13 +146,11 @@ export function EconomyView(props: {
                   <button type="button" disabled={busy === `decide-${r.id}`}
                     onClick={() => run(`decide-${r.id}`, () => decideRedemptionAction({ redemptionId: r.id, approve: true }), 'Approved')}
                     className="inline-flex items-center gap-1 rounded-lg bg-success/15 px-2.5 py-1.5 text-xs font-medium text-success hover:bg-success/25">
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
+                    <Check className="h-3.5 w-3.5" />{' '}{t('economyView.approve')}</button>
                   <button type="button" disabled={busy === `decide-${r.id}`}
                     onClick={() => run(`decide-${r.id}`, () => decideRedemptionAction({ redemptionId: r.id, approve: false }), 'Rejected')}
                     className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-danger">
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
+                    <X className="h-3.5 w-3.5" />{' '}{t('economyView.reject')}</button>
                 </div>
               </div>
             ))}

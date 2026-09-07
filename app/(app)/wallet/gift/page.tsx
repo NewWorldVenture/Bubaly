@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -10,6 +11,7 @@ import { PayHandleManager, type PayHandleRow } from '@/components/wallet/pay-han
 export const metadata: Metadata = { title: 'Wallet Gifts' };
 
 export default async function WalletGiftPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -23,7 +25,7 @@ export default async function WalletGiftPage() {
   ]);
   if (linksError || pendingError || childWalletsError || membersError || handlesError) {
     console.error('[wallet-gift] Read failed', linksError ?? pendingError ?? childWalletsError ?? membersError ?? handlesError);
-    return <ErrorState message="Could not load wallet gifts. Refresh and try again." />;
+    return <ErrorState message={t('gift.couldNotLoadWalletGifts')} />;
   }
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));

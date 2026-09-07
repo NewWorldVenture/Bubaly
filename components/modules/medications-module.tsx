@@ -177,7 +177,7 @@ export function MedicationsModule() {
     }
     setBusyDose(null);
     if (err) { toastError(describeDbError(err)); return; }
-    if (status === 'taken') success('Dose logged');
+    if (status === 'taken') success(t('medicationsModule.doseLogged'));
   }
 
   // ── Medication CRUD ───────────────────────────────────────
@@ -189,7 +189,7 @@ export function MedicationsModule() {
 
   async function saveMed(e: React.FormEvent) {
     e.preventDefault();
-    if (!medForm.name.trim()) { toastError('Name is required'); return; }
+    if (!medForm.name.trim()) { toastError(t('medicationsModule.nameIsRequired')); return; }
     setSavingMed(true);
     const sb = createClient();
     const fields = {
@@ -215,7 +215,7 @@ export function MedicationsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('medications').delete().eq('id', m.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Medication deleted');
+    success(t('medicationsModule.medicationDeleted'));
   }
 
   async function toggleActive(m: Medication) {
@@ -230,7 +230,7 @@ export function MedicationsModule() {
   async function saveSchedule(e: React.FormEvent) {
     e.preventDefault();
     if (!scheduleFor) return;
-    if (scheduleForm.days_of_week.length === 0) { toastError('Pick at least one day'); return; }
+    if (scheduleForm.days_of_week.length === 0) { toastError(t('medicationsModule.pickAtLeastOneDay')); return; }
     setSavingSchedule(true);
     const sb = createClient();
     const { error: err } = await sb.from('medication_schedules').insert({
@@ -242,7 +242,7 @@ export function MedicationsModule() {
     });
     setSavingSchedule(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Schedule added');
+    success(t('medicationsModule.scheduleAdded'));
     setScheduleFor(null);
   }
 
@@ -271,13 +271,13 @@ export function MedicationsModule() {
   const loading = medsLoading || schedulesLoading || dosesLoading;
   const readError = medsError || schedulesError || dosesError;
   if (loading) return <SkeletonList count={5} />;
-  if (readError) return <ErrorState message="Could not load medication data. Refresh and try again." onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
+  if (readError) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
 
   return (
     <div>
       <PageHeader
         title={t('medications.medications')}
-        description="Track medications, dosing schedules, and adherence for the whole family."
+        description={t('medicationsModule.trackMedicationsDosingSchedulesAnd')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medications" />
@@ -460,7 +460,7 @@ export function MedicationsModule() {
             {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder={t('medications.eGTakeWithFood')} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t('medications.refillDue')} hint="Bubaly reminds you before it runs out.">
+            <Field label={t('medications.refillDue')} hint={t('medicationsModule.bubalyRemindsYouBeforeIt')}>
               {(id) => <Input id={id} type="date" value={medForm.refill_on} onChange={(e) => setMedForm((f) => ({ ...f, refill_on: e.target.value }))} />}
             </Field>
             <Field label={t('medications.remindDaysAhead')}>

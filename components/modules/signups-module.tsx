@@ -95,7 +95,7 @@ export function SignupsModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(t('signupsModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -129,7 +129,7 @@ export function SignupsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Signup deleted');
+    success(t('signupsModule.signupDeleted'));
   }
 
   const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
@@ -150,7 +150,7 @@ export function SignupsModule() {
     <div>
       <PageHeader
         title={t('signups.registrationsSignups')}
-        description="Never miss a camp, school, or activity registration deadline again."
+        description={t('signupsModule.neverMissACampSchool')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="signups" iconOnly />

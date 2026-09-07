@@ -36,7 +36,7 @@ export default async function SocialSettingsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (socialError) {
     console.error('[dashboard/social/settings] social settings read failed', socialError);
-    return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('settings.couldNotLoadYourSocial')} />;
   }
 
   const settings = settingsRes.data;
@@ -97,7 +97,7 @@ export default async function SocialSettingsPage() {
               <form key={m.id} action={grantAccessAction} className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5">
                 <input type="hidden" name="user_id" value={m.user_id} />
                 <span className="min-w-0 flex-1 truncate text-sm">{m.display_name ?? 'Member'}</span>
-                {!explicit && <Badge tone="neutral" title="Default by household role">default</Badge>}
+                {!explicit && <Badge tone="neutral" title={t('settings.defaultByHouseholdRole')}>default</Badge>}
                 <select name="social_role" defaultValue={effective} disabled={!canManage} className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
                   {SOCIAL_ROLES.map((r) => <option key={r} value={r}>{SOCIAL_ROLE_LABELS[r]}</option>)}
                 </select>

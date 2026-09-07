@@ -82,7 +82,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const existing = new Set(items.map((i) => i.name.toLowerCase()));
     const toAdd = suggestions.filter((s) => !existing.has(s.name.toLowerCase()))
       .map((s) => ({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: s.name, category: s.category, quantity: s.quantity, ai_suggested: true, created_by: userId }));
-    if (toAdd.length === 0) { setBusy(false); return toastError('Your list already covers the essentials'); }
+    if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
     if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
@@ -97,7 +97,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (!form?.name.trim()) return;
     const listId = await ensureMasterList();
     const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-    if (error) toastError(error.message); else success('Added');
+    if (error) toastError(error.message); else success(tr('tripPacking.added'));
     setForm(null);
   }
   async function remove(id: string) {
@@ -106,7 +106,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load the packing plan. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={tr('tripPacking.couldNotLoadThePacking')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -126,7 +126,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       )}
 
       {items.length === 0 ? (
-        <EmptyState icon={Luggage} title={tr('tripPacking.nothingPackedYet')} description="Tap “Smart list” to auto-generate a packing list from your trip type, weather, and activities." />
+        <EmptyState icon={Luggage} title={tr('tripPacking.nothingPackedYet')} description={tr('tripPacking.tapSmartListToAuto')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {PACK_CATEGORIES.filter((c) => byCategory.has(c.value)).map((cat) => (

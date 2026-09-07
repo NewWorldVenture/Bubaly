@@ -42,7 +42,7 @@ export default async function GrandparentPortalPage() {
   // enrichment reads stay best-effort (each degrades to a hidden section).
   if (membersRes.error) {
     console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);
-    return <ErrorState message="Could not load your family portal from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
   }
   const members = membersRes.data;
 

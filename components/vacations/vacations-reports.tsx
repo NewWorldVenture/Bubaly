@@ -58,9 +58,9 @@ export function VacationsReports() {
 
   if (tripsLoading || expensesLoading || budgetsLoading || scoresLoading) return <LoadingBlock />;
   if (tripsError || expensesError || budgetsError || scoresError) {
-    return <ErrorState message="Could not load complete vacation reports. Refresh and try again." onRetry={refreshAll} />;
+    return <ErrorState message={tr('vacationsReports.couldNotLoadCompleteVacation')} onRetry={refreshAll} />;
   }
-  if (trips.length === 0) return <EmptyState icon={BarChart3} title={tr('vacationsReports.noTripsToReportOnYet')} description="Create a vacation to see analytics here." />;
+  if (trips.length === 0) return <EmptyState icon={BarChart3} title={tr('vacationsReports.noTripsToReportOnYet')} description={tr('vacationsReports.createAVacationToSee')} />;
 
   return (
     <div className="space-y-6">

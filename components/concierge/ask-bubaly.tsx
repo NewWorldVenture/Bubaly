@@ -75,7 +75,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
     setAnswer('');
     switch (data.outcome) {
       case 'plan':
-        success('Bubaly is on it.');
+        success(t('askBubaly.bubalyIsOnIt'));
         if (data.redirect) router.push(data.redirect);
         setInline(null);
         break;
@@ -89,7 +89,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
         setInline({ kind: 'recommendation', text: data.summary, runId: data.runId });
         break;
     }
-  }, [onOutcome, router, success]);
+  }, [onOutcome, router, success, t]);
 
   const submit = useCallback(async (raw: string) => {
     const query = raw.trim();
@@ -113,7 +113,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
 
   const reply = useCallback(async () => {
     if (inline?.kind !== 'clarification' || !answer.trim() || busy) return;
-    if (!inline.runId) { toastError('Bubaly lost track of that question. Ask again.'); setInline(null); return; }
+    if (!inline.runId) { toastError(t('askBubaly.bubalyLostTrackOfThat')); setInline(null); return; }
     setBusy(true);
     setError(null);
     try {
@@ -121,7 +121,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
     } finally {
       setBusy(false);
     }
-  }, [answer, busy, handle, inline, toastError]);
+  }, [answer, busy, handle, inline, toastError, t]);
 
   const hero = variant === 'hero';
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/readiness/page.tsx', 'utf8');
@@ -25,7 +26,8 @@ describe('readiness score read boundary', () => {
 
   it('logs and returns an ErrorState on a primary read failure', () => {
     expect(page).toContain("console.error('[dashboard/readiness] readiness score read failed', primaryError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family readiness from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'readiness.couldNotLoadYourFamily', "Could not load your family readiness from Supabase. Refresh and try again.");
   });
 
   it('leaves the forward horizon block best-effort (documented cnt helper)', () => {

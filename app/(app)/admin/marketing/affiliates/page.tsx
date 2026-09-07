@@ -10,7 +10,7 @@ import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Affiliates', robots: { index: false } };
+export const metadata: Metadata = { title: 'affiliates.affiliates', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Affiliate = Tables<'affiliates'>;
@@ -38,7 +38,7 @@ export default async function AffiliatesPage() {
   const byAffiliate = payoutByAffiliate(refs);
 
   const stats = [
-    { label: 'Affiliates', value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: t('affiliates.affiliates'), value: list.length, icon: Handshake, tint: 'text-violet-400 bg-violet-500/15' },
     { label: 'Conversions', value: overall.conversions, icon: BadgeCheck, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Owed (unpaid)', value: formatCents(overall.pendingPayoutCents), icon: Wallet, tint: 'text-amber-400 bg-amber-500/15' },
     { label: 'Paid out', value: formatCents(overall.paidCents), icon: DollarSign, tint: 'text-blue-400 bg-blue-500/15' },
@@ -46,7 +46,7 @@ export default async function AffiliatesPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">External partners who earn commission on conversions — low-cost acquisition with transparent payouts. Each partner drives traffic with <code className="rounded bg-elevated px-1 py-0.5 text-xs">?via=CODE</code>.</p>
+      <p className="text-sm text-muted">{t('affiliates.externalPartnersWhoEarnCommission')}{' '}<code className="rounded bg-elevated px-1 py-0.5 text-xs">?via=CODE</code>.</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -96,7 +96,7 @@ export default async function AffiliatesPage() {
                         <div className="flex items-center justify-end gap-1">
                           {(sum?.pendingPayoutCents ?? 0) > 0 && (
                             <form action={markAffiliatePaidAction.bind(null, a.id)}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">Pay out</button>
+                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('affiliates.payOut')}</button>
                             </form>
                           )}
                           <form action={toggleAffiliateStatusAction.bind(null, a.id, a.status === 'active' ? 'paused' : 'active')}>
@@ -119,15 +119,16 @@ export default async function AffiliatesPage() {
   );
 }
 
-function AdminAffiliatesReadError() {
+async function AdminAffiliatesReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Affiliates</h1>
-        <p className="mt-1 text-sm text-muted">Manage partner conversions and payouts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('affiliates.affiliates')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('affiliates.managePartnerConversionsAndPayouts')}</p>
       </div>
-      <ErrorState message="Could not load affiliate payout data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/affiliates" className="text-sm font-medium text-brand-text underline">Refresh affiliates</Link>
+      <ErrorState message={t('affiliates.couldNotLoadAffiliatePayout')} />
+      <Link href="/admin/marketing/affiliates" className="text-sm font-medium text-brand-text underline">{t('affiliates.refreshAffiliates')}</Link>
     </div>
   );
 }

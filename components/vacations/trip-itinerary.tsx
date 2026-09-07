@@ -72,12 +72,12 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   const [busy, setBusy] = useState(false);
 
   async function generateDays() {
-    if (!trip?.start_date || !trip?.end_date) return toastError('Set trip start and end dates first');
+    if (!trip?.start_date || !trip?.end_date) return toastError(t('tripItinerary.setTripStartAndEnd'));
     setBusy(true);
     const range = dateRange(trip.start_date, trip.end_date);
     const existing = new Set(days.map((d) => d.day_date));
     const toAdd = range.filter((d) => !existing.has(d)).map((d) => ({ family_id: familyId, vacation_id: vacationId, day_date: d, created_by: userId }));
-    if (toAdd.length === 0) { setBusy(false); return toastError('All days already exist'); }
+    if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
     if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
@@ -85,7 +85,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError('Title required');
+    if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
     const row = {
       day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
       title: form.title.trim(), location: form.location.trim() || null,
@@ -102,7 +102,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   }
 
   async function removeItem(id: string) {
-    if (!confirm('Delete this item?')) return;
+    if (!confirm(t('tripItinerary.deleteThisItem'))) return;
     const { error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id);
     if (error) toastError(error.message);
   }
@@ -112,7 +112,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load this itinerary. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={t('tripItinerary.couldNotLoadThisItinerary')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -133,7 +133,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {sortedDays.length === 0 ? (
-        <EmptyState icon={CalendarRange} title={t('tripItinerary.noDaysPlannedYet')} description="Set trip dates then click “Build days from dates”, or add days as you go." />
+        <EmptyState icon={CalendarRange} title={t('tripItinerary.noDaysPlannedYet')} description={t('tripItinerary.setTripDatesThenClick')} />
       ) : (
         <div className="space-y-4">
           {sortedDays.map((day, i) => (
@@ -179,7 +179,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       {form && (
         <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit item' : 'Add itinerary item'}>
           <form onSubmit={saveItem} className="space-y-3">
-            <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Magic Kingdom" required />}</Field>
+            <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('tripItinerary.magicKingdom')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('tripItinerary.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
               <Field label={t('tripItinerary.timeOfDay')}>{(id) => <Select id={id} value={form.day_part} onChange={(e) => setForm({ ...form, day_part: e.target.value })}>{DAY_PARTS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select>}</Field>

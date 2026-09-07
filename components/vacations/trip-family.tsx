@@ -27,7 +27,7 @@ export function TripFamily({ vacationId }: { vacationId: string }) {
   return (
     <TripCrudSection<VMember>
       table="vacation_members" vacationId={vacationId} title={t('tripFamily.whosGoing')} icon={Users}
-      fields={fields} emptyText="No travelers added" addLabel="Add traveler"
+      fields={fields} emptyText={t('tripFamily.noTravelersAdded')} addLabel="Add traveler"
       renderRow={(m, members) => {
         const fm = m.member_id ? members.get(m.member_id) : null;
         const name = fm?.display_name || m.guest_name || 'Traveler';

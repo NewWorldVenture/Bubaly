@@ -91,10 +91,10 @@ export function RecipesModule() {
         body: JSON.stringify({ constraint: tonightConstraint }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGetSuggestions'));
       setTonightPicks(json.picks ?? []);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not get suggestions'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGetSuggestions')));
     } finally {
       setTonightBusy(false);
     }
@@ -144,11 +144,11 @@ export function RecipesModule() {
         body: JSON.stringify({ recipeId: recipe.id, actionId }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
-      success('AI variant saved to your recipes');
+      if (!res.ok) throw new Error(json.error ?? tr('recipesModule.couldNotGenerateVariant'));
+      success(tr('recipesModule.aiVariantSavedToYour'));
       setViewing(null);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not generate variant'));
+      toastError(describeDbError(err, tr('recipesModule.couldNotGenerateVariant')));
     } finally {
       setAiBusy(null);
     }
@@ -161,7 +161,7 @@ export function RecipesModule() {
       last_made_at: new Date().toISOString(),
     }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Marked as made today! 🍴');
+    success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
 
@@ -219,7 +219,7 @@ export function RecipesModule() {
       .from('grocery_lists')
       .insert({ family_id: familyId, name, created_by: userId })
       .select('id').single();
-    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, 'Could not create list')); return; }
+    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, tr('recipesModule.couldNotCreateList'))); return; }
     const ok = await addItemsToList(groceryPrompt, created.id);
     setCreatingList(false);
     if (ok) setGroceryPrompt(null);
@@ -232,13 +232,13 @@ export function RecipesModule() {
   };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family recipes. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('recipesModule.couldNotLoadFamilyRecipes')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
       <PageHeader
         title={tr('recipes.familyRecipes')}
-        description="Your family's cookbook — organized, searchable, and always at hand."
+        description={tr('recipesModule.yourFamilySCookbookOrganized')}
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
@@ -295,7 +295,7 @@ export function RecipesModule() {
       {/* Recipe grid */}
       {filtered.length === 0 ? (
         <EmptyState icon={ChefHat} title={tr('recipes.noRecipesYet')}
-          description="Add your family's favorite recipes and they'll appear here."
+          description={tr('recipesModule.addYourFamilySFavorite')}
           action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -380,7 +380,7 @@ export function RecipesModule() {
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm('Delete this recipe?')) deleteRecipe(viewing.id); }}
+                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -612,7 +612,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
       instructions: instructions.filter((s) => s.text.trim()),
       allergy_flags: selectedFlags,
     };
-    if (!payload.name) return toastError('Recipe name is required');
+    if (!payload.name) return toastError(tr('recipesModule.recipeNameIsRequired'));
     setLoading(true);
     const supabase = createClient();
     const { error } = recipe
@@ -628,7 +628,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <Field label={tr('recipes.recipeName')} required>
-          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder="Grandma's Spaghetti, Taco Tuesday…" autoFocus />}
+          {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder={tr('recipesModule.grandmaSSpaghettiTacoTuesday')} autoFocus />}
         </Field>
         <Field label={tr('recipes.description')}>
           {(id) => <Textarea id={id} name="description" defaultValue={recipe?.description ?? ''} placeholder={tr('recipes.aBriefDescriptionOfThisDish')} className="min-h-[60px]" />}
@@ -729,7 +729,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={tr('recipes.notes')}>
-            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder="Chef's tips, substitutions…" className="min-h-[60px]" />}
+            {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder={tr('recipesModule.chefSTipsSubstitutions')} className="min-h-[60px]" />}
           </Field>
           <Field label={tr('recipes.sourceUrl')}>
             {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}

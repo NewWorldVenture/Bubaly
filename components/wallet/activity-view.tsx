@@ -85,7 +85,7 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Receipt} title={tr('activity.noTransactions')} description="Wallet activity will appear here as money moves in and out." />
+        <EmptyState icon={Receipt} title={tr('activity.noTransactions')} description={tr('activityView.walletActivityWillAppearHere')} />
       ) : (
         <div className="space-y-5">
           {groups.map((g) => (

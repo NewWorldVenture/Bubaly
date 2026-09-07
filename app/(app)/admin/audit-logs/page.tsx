@@ -8,7 +8,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Audit Logs', robots: { index: false } };
+export const metadata: Metadata = { title: 'auditLogs.auditLogs', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 25;
@@ -146,15 +146,16 @@ export default async function AuditLogsPage({ searchParams }: Params) {
   );
 }
 
-function AdminAuditLogsReadError() {
+async function AdminAuditLogsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
-        <p className="mt-1 text-sm text-muted">Complete audit trail of all system actions.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('auditLogs.auditLogs')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('auditLogs.completeAuditTrailOfAll')}</p>
       </div>
-      <ErrorState message="Could not load audit logs from Supabase. Refresh and try again." />
-      <a href="/admin/audit-logs" className="text-sm font-medium text-brand-text underline">Refresh audit logs</a>
+      <ErrorState message={t('auditLogs.couldNotLoadAuditLogs')} />
+      <a href="/admin/audit-logs" className="text-sm font-medium text-brand-text underline">{t('auditLogs.refreshAuditLogs')}</a>
     </div>
   );
 }

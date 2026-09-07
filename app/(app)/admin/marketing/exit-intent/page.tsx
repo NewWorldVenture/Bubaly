@@ -11,7 +11,7 @@ import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/mar
 import { createExitIntentAction, toggleExitIntentAction, deleteExitIntentAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Exit-Intent Popups', robots: { index: false } };
+export const metadata: Metadata = { title: 'exitIntent.exitIntentPopups', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Offer = Tables<'marketing_exit_intent'>;
@@ -19,12 +19,13 @@ type Offer = Tables<'marketing_exit_intent'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Exit-Intent Popups</h1>
-      <ErrorState message="Could not load exit-intent offers from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">Refresh exit-intent offers</Link>
+      <h1 className="text-xl font-black sm:text-2xl">{t('exitIntent.exitIntentPopups')}</h1>
+      <ErrorState message={t('exitIntent.couldNotLoadExitIntent')} />
+      <Link href="/admin/marketing/exit-intent" className="text-sm font-medium text-brand-text underline">{t('exitIntent.refreshExitIntentOffers')}</Link>
     </div>
   );
 }

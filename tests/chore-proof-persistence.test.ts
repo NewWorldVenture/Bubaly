@@ -34,7 +34,7 @@ describe('chore proof persistence boundaries', () => {
     const code = source();
 
     expect(code).toContain('catch {');
-    expect(code).toContain("return { ok: false, error: 'Could not review your proof. Please try again.' }");
+    expect(code).toContain("return { ok: false, error: t('actions.couldNotReviewYourProof') }");
     expect(code).toContain('await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);');
   });
 });

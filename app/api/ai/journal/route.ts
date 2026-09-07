@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -11,13 +12,14 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 // signed-in member, informed by their recent entries. Falls back to the
 // evergreen prompt-of-the-day if AI is unavailable, so the UX never dead-ends.
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-journal:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many journal requests. Please try again shortly.' },
+      { error: t('journal.tooManyJournalRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -58,6 +60,6 @@ export async function POST() {
     return NextResponse.json({ prompt: promptOfTheDay(), source: 'evergreen' });
   } catch (err) {
     console.error('Journal prompt error:', err);
-    return NextResponse.json({ error: 'Failed to generate a prompt' }, { status: 500 });
+    return NextResponse.json({ error: t('journal.failedToGenerateAPrompt') }, { status: 500 });
   }
 }

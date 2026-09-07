@@ -121,7 +121,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'recommendations', vacationId }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed'); else success(`${data.count} recommendations`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(tr('tripOverview.networkError')); }
     setRefreshing(false);
   }
 
@@ -131,7 +131,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load this trip overview. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={tr('tripOverview.couldNotLoadThisTrip')} onRetry={refreshAll} />;
 
   const lvlLabel = { not_started: 'Not started', getting_there: 'Getting there', almost_ready: 'Almost ready', ready: 'Ready to go!' }[readiness.level];
 
@@ -185,7 +185,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
               return (
                 <li key={r.id} className={`flex items-start justify-between gap-3 rounded-xl border ${tone} bg-elevated/30 p-3`}>
                   <div><p className="text-sm font-medium">{meta.emoji} {r.title}</p>{r.detail && <p className="mt-0.5 text-xs text-muted">{r.detail}</p>}</div>
-                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">Dismiss</button>
+                  <button onClick={() => dismissReco(r.id)} className="shrink-0 text-xs text-muted hover:text-fg">{tr('tripOverview.dismiss')}</button>
                 </li>
               );
             })}

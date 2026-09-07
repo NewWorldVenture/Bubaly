@@ -42,7 +42,7 @@ export default async function FamilyHealthPage() {
     .find((e) => e && !isMissingTableError(e));
   if (healthError) {
     console.error('[dashboard/family-health] health read failed', healthError);
-    return <ErrorState message="Could not load your family health summary from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyHealth.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -55,7 +55,7 @@ export default async function FamilyHealthPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('dashboardFamilyHealth.familyHealthCoordinator')} description="Appointments, medications, providers and emergency medical summaries." />
+      <PageHeader title={t('dashboardFamilyHealth.familyHealthCoordinator')} description={t('familyHealth.appointmentsMedicationsProvidersAndEmergency')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile href="/dashboard/medical" label={t('dashboardFamilyHealth.appts30d')} value={appts?.length ?? 0} icon={CalendarHeart} accent="bg-rose-500" sublabel="Medical" />
@@ -79,7 +79,7 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarHeart} text="No upcoming appointments." />}
+          ) : <MiniEmpty icon={CalendarHeart} text={t('familyHealth.noUpcomingAppointments')} />}
         </SectionCard>
 
         <SectionCard title={t('dashboardFamilyHealth.activeMedications')} viewAllHref="/dashboard/medical">
@@ -94,12 +94,12 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Pill} text="No active medications." />}
+          ) : <MiniEmpty icon={Pill} text={t('familyHealth.noActiveMedications')} />}
         </SectionCard>
       </div>
 
       {manager && (
-        <SectionCard title={t('dashboardFamilyHealth.allergyConditionWatch')} description="Restricted summary — visible to parents and adults only">
+        <SectionCard title={t('dashboardFamilyHealth.allergyConditionWatch')} description={t('familyHealth.restrictedSummaryVisibleToParents')}>
           {profiles && profiles.length > 0 ? (
             <ul className="grid gap-3 sm:grid-cols-2">
               {profiles.filter((p) => p.allergies || p.conditions).map((p) => (
@@ -110,7 +110,7 @@ export default async function FamilyHealthPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={ShieldPlus} text="No allergies or conditions recorded." />}
+          ) : <MiniEmpty icon={ShieldPlus} text={t('familyHealth.noAllergiesOrConditionsRecorded')} />}
         </SectionCard>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -19,26 +20,27 @@ export const dynamic = 'force-dynamic';
  * The user can then save real contractors they find into home_contractors.
  */
 export async function POST(req: Request) {
+  const tr = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: tr('findPro.unauthorized') }, { status: 401 }); }
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-home-find-pro:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many contractor-guidance requests. Please try again shortly.' },
+    { error: tr('findPro.tooManyContractorGuidanceRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: tr('findPro.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: tr('findPro.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const trade = String(body.trade ?? '').slice(0, 40);
   const job = String(body.job ?? '').slice(0, 600).trim();
   const location = String(body.location ?? '').slice(0, 80).trim();
   const tradeLabel = TRADES.find((t) => t.value === trade)?.label ?? trade ?? 'a contractor';
-  if (!trade && !job) return NextResponse.json({ error: 'Pick a trade or describe the job.' }, { status: 400 });
+  if (!trade && !job) return NextResponse.json({ error: tr('findPro.pickATradeOrDescribe') }, { status: 400 });
 
   const system =
     'You are a savvy homeowner advocate helping someone hire a contractor. Never invent specific company names, ' +

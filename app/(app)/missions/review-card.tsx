@@ -70,7 +70,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
           {item.mediaUrls.map((url, i) => (
             <a key={i} href={url} target="_blank" rel="noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="Proof" className="h-28 w-28 rounded-xl border border-border object-cover" />
+              <img src={url} alt={t('reviewCard.proof')} className="h-28 w-28 rounded-xl border border-border object-cover" />
             </a>
           ))}
         </div>

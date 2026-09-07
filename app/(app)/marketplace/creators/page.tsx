@@ -29,7 +29,7 @@ export default async function MarketplaceCreatorsPage() {
 
   if (storesError) {
     console.error('[marketplace-creators] Storefronts read failed', storesError);
-    return <ErrorState message="Could not load marketplace storefronts. Refresh and try again." />;
+    return <ErrorState message={t('creators.couldNotLoadMarketplaceStorefronts')} />;
   }
   if (followsError) {
     console.error('[marketplace-creators] Follows read failed', followsError);
@@ -64,7 +64,7 @@ export default async function MarketplaceCreatorsPage() {
 
   return (
     <div>
-      <PageHeader title={t('marketplaceCreators.creators')} description="Verified & trusted sellers — the family storefronts, ranked by rating and following." />
+      <PageHeader title={t('marketplaceCreators.creators')} description={t('creators.verifiedTrustedSellersTheFamily')} />
       {dataWarnings.length > 0 && (
         <div role="status" aria-label={t('marketplaceCreators.marketplaceCreatorsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

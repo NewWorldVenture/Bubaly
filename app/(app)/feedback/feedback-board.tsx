@@ -205,7 +205,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
             <div className="min-w-0 flex-1">
               <p className="text-xs">
                 <span className={cn('font-semibold', c.is_team && 'text-brand-text')}>{c.author_name}</span>
-                {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">Team</span>}
+                {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{t('feedbackBoard.team')}</span>}
                 <span className="ml-1.5 text-muted">{timeAgo(c.created_at)}</span>
               </p>
               <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.body}</p>
@@ -242,7 +242,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
         start(async () => {
           const res = await setIdeaStatusAction({ ideaId: idea.id, status });
           if (!res.ok) { error(res.error ?? 'Could not update status.'); return; }
-          if (isFeedbackStatus(status)) { onChanged(status); success('Roadmap updated.'); }
+          if (isFeedbackStatus(status)) { onChanged(status); success(t('feedbackBoard.roadmapUpdated')); }
         });
       }}
       className="rounded-lg border border-border bg-bg px-2 py-1 text-[11px] font-semibold outline-none focus:border-brand"

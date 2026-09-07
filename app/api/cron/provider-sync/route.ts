@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
 import { runProviderSync } from '@/lib/sync/engine/generic';
@@ -16,8 +17,9 @@ export const maxDuration = 300;
 const BATCH = 25;
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('providerSync.unauthorized') }, { status: 401 });
   }
 
   const admin = createServiceClient();
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
     .limit(BATCH);
   if (error) {
     console.error('Provider-sync cron read failed:', error);
-    return NextResponse.json({ ok: false, error: 'Provider synchronization failed.' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: t('providerSync.providerSynchronizationFailed') }, { status: 500 });
   }
 
   let synced = 0, skipped = 0, failed = 0, auditFailed = 0;
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
         exported: result.exported,
         skipped: result.skipped,
         conflicts: result.conflicts,
-        ...(result.error ? { error: 'Provider synchronization failed.' } : {}),
+        ...(result.error ? { error: t('providerSync.providerSynchronizationFailed') } : {}),
       });
       const { error: auditError } = await admin.from('sync_audit_logs').insert({
         user_id: account.user_id, family_id: account.family_id,
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       failed++;
       console.error(`Provider sync failed for account ${account.id}:`, e);
-      details.push({ account: account.id, provider: account.provider, error: 'Provider synchronization failed.' });
+      details.push({ account: account.id, provider: account.provider, error: t('providerSync.providerSynchronizationFailed') });
     }
   }
 

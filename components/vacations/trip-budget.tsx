@@ -53,12 +53,12 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
     const { error } = existing
       ? await createClient().from('vacation_budgets').update({ planned_cents: cents }).eq('id', existing.id)
       : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId });
-    if (error) toastError(error.message); else success('Budget updated');
+    if (error) toastError(error.message); else success(t('tripBudget.budgetUpdated'));
     setEditing(null);
   }
 
   if (budgetsLoading || expensesLoading) return <LoadingBlock />;
-  if (budgetsError || expensesError) return <ErrorState message="Could not load this trip budget. Refresh and try again." onRetry={refreshAll} />;
+  if (budgetsError || expensesError) return <ErrorState message={t('tripBudget.couldNotLoadThisTrip')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-6">
@@ -106,7 +106,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
 
       <TripCrudSection<Expense>
         table="vacation_expenses" vacationId={vacationId} title={t('tripBudget.expenses')} icon={Receipt}
-        fields={expenseFields} emptyText="No expenses logged" addLabel="Log expense"
+        fields={expenseFields} emptyText={t('tripBudget.noExpensesLogged')} addLabel="Log expense"
         orderBy={(a, b) => b.spent_on.localeCompare(a.spent_on)}
         renderRow={(x, members) => {
           const who = x.paid_by_member_id ? members.get(x.paid_by_member_id)?.display_name : null;

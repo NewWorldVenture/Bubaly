@@ -112,16 +112,16 @@ export default async function ProposalsPage() {
                         <div className="flex items-center justify-end gap-1">
                           {qt.status === 'draft' && (
                             <form action={setQuoteStatusAction.bind(null, qt.id, 'sent')}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">Send</button>
+                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{t('proposals.send')}</button>
                             </form>
                           )}
                           {(qt.status === 'sent') && (
                             <>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'accepted')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">Accept</button>
+                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('proposals.accept')}</button>
                               </form>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'declined')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">Decline</button>
+                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">{t('proposals.decline')}</button>
                               </form>
                             </>
                           )}
@@ -142,15 +142,16 @@ export default async function ProposalsPage() {
   );
 }
 
-function AdminProposalsReadError() {
+async function AdminProposalsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Proposals &amp; Quotes</h1>
-        <p className="mt-1 text-sm text-muted">Create and track quotes from draft through acceptance.</p>
+        <p className="mt-1 text-sm text-muted">{t('proposals.createAndTrackQuotesFrom')}</p>
       </div>
-      <ErrorState message="Could not load proposals from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/proposals" className="text-sm font-medium text-brand-text underline">Refresh proposals</Link>
+      <ErrorState message={t('proposals.couldNotLoadProposalsFrom')} />
+      <Link href="/admin/marketing/proposals" className="text-sm font-medium text-brand-text underline">{t('proposals.refreshProposals')}</Link>
     </div>
   );
 }

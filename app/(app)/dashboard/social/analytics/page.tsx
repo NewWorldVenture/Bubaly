@@ -50,10 +50,7 @@ export default async function AnalyticsPage() {
 
       {!hasData && (
         <Card>
-          <p className="text-sm text-muted">
-            No analytics snapshots yet. Metrics are written from each platform’s analytics API once accounts are connected and
-            credentialed — nothing here is invented. The totals above reflect real stored snapshots (currently zero).
-          </p>
+          <p className="text-sm text-muted">{t('analytics.noAnalyticsSnapshotsYetMetrics')}</p>
         </Card>
       )}
 
@@ -70,10 +67,10 @@ export default async function AnalyticsPage() {
                 {def.analytics.supported ? (
                   <>
                     <span className="text-muted">{impressions.toLocaleString()} impressions</span>
-                    {!connectedPlatforms.has(p) && <Badge tone="neutral" className="ml-auto">not connected</Badge>}
+                    {!connectedPlatforms.has(p) && <Badge tone="neutral" className="ml-auto">{t('analytics.notConnected')}</Badge>}
                   </>
                 ) : (
-                  <Badge tone="neutral" className="ml-auto" title={def.analytics.limitation}>Analytics unavailable</Badge>
+                  <Badge tone="neutral" className="ml-auto" title={def.analytics.limitation}>{t('analytics.analyticsUnavailable')}</Badge>
                 )}
               </div>
             );

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
@@ -8,8 +9,9 @@ export const runtime = 'nodejs';
 // subscribed feed and upserts its events (deduped by feed_id + external_uid),
 // so Bubaly mirrors the source calendar without ever duplicating events.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('calendarFeeds.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
     .select('id, family_id, url');
   if (error) {
     console.error('Calendar-feed cron read failed:', error);
-    return NextResponse.json({ error: 'Calendar-feed processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('calendarFeeds.calendarFeedProcessingFailed') }, { status: 500 });
   }
 
   let synced = 0;

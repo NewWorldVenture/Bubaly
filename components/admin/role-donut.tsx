@@ -1,11 +1,13 @@
 import { ROLE_LABELS, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
+import { getTranslations } from '@/lib/i18n/server';
 
 const COLORS: Record<MemberRole, string> = {
   parent: '#a78bfa', adult: '#34d399', teen: '#60a5fa', child: '#fbbf24', caregiver: '#f472b6', guest: '#94a3b8',
 };
 
 /** Real role-distribution donut — same stroke-dasharray technique used across billing/health modules. */
-export function RoleDonut({ counts, total }: { counts: Map<MemberRole, number>; total: number }) {
+export async function RoleDonut({ counts, total }: { counts: Map<MemberRole, number>; total: number }) {
+  const t = await getTranslations();
   const circ = 2 * Math.PI * 40;
   let offset = 0;
   const arcs = ROLE_ORDER.map((role) => {
@@ -28,7 +30,7 @@ export function RoleDonut({ counts, total }: { counts: Map<MemberRole, number>; 
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-lg font-black">{total.toLocaleString()}</span>
-          <span className="text-[9px] text-muted">Total</span>
+          <span className="text-[9px] text-muted">{t('roleDonut.total')}</span>
         </div>
       </div>
       <ul className="flex-1 space-y-1.5 text-sm">

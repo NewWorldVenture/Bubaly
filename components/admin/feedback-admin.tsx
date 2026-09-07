@@ -290,7 +290,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           <button
             type="button" disabled={busy !== null}
             onClick={() => {
-              if (window.confirm('Delete this idea? This removes it and all its votes and comments. This cannot be undone.')) {
+              if (window.confirm(t('feedbackAdmin.deleteThisIdeaThisRemoves'))) {
                 void run('delete', () => deleteIdeaAction({ ideaId: idea.id }), 'Idea deleted.');
               }
             }}
@@ -336,7 +336,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
               <p className="text-xs font-semibold text-muted">{t('feedbackAdmin.conversation')}</p>
               {comments.map((c) => (
                 <div key={c.id} className={cn('rounded-lg border p-2.5 text-xs', c.is_team ? 'border-brand/25 bg-brand/5' : 'border-border bg-bg')}>
-                  <p className="font-semibold text-fg">{c.author_name}{c.is_team && <span className="ml-1 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-text">Team</span>}</p>
+                  <p className="font-semibold text-fg">{c.author_name}{c.is_team && <span className="ml-1 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-text">{t('feedbackAdmin.team')}</span>}</p>
                   <p className="mt-0.5 text-muted">{c.body}</p>
                 </div>
               ))}

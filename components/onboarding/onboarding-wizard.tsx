@@ -313,7 +313,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
     const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined });
     setLoading(null);
     if (!res.ok) { toastError(res.error); return; }
-    if (!res.data) { toastError('Could not read that calendar'); return; }
+    if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }
     setBrief(res.data.brief);
     update({ importedEvents: res.data.events, importSource: res.data.source });
     trackOnboarding('value', 'step');
@@ -539,7 +539,7 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
                 <p className="truncate text-sm font-medium">{draftMemberLabel(m)}</p>
                 <p className="text-xs text-muted">{m.kind === 'invite' ? 'Invite' : ROLE_LABELS[m.role]}{m.kind === 'invite' ? ` · ${ROLE_LABELS[m.role]}` : ''}</p>
               </div>
-              <button type="button" aria-label="Remove" onClick={() => update({ members: removeMember(draft.members, m.id) })}
+              <button type="button" aria-label={tr('onboardingWizard.remove')} onClick={() => update({ members: removeMember(draft.members, m.id) })}
                 className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-danger">
                 <X className="h-4 w-4" />
               </button>

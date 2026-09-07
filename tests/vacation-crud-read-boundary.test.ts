@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 const shared = readFileSync('components/vacations/shared.tsx', 'utf8');
@@ -16,7 +17,7 @@ describe('vacation CRUD read boundaries', () => {
     expect(budget).toContain('expensesLoading');
     expect(budget).toContain('budgetsError');
     expect(budget).toContain('expensesError');
-    expect(budget).toContain('Could not load this trip budget. Refresh and try again.');
+    expectSays(budget, 'tripBudget.couldNotLoadThisTrip', 'Could not load this trip budget. Refresh and try again.');
     expect(budget).toContain('onRetry={refreshAll}');
   });
 });

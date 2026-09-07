@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -8,6 +9,7 @@ import { BabysittersView, type BabysitterRow, type PaymentRow } from '@/componen
 export const metadata: Metadata = { title: 'Babysitters' };
 
 export default async function WalletBabysittersPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -22,7 +24,7 @@ export default async function WalletBabysittersPage() {
   ]);
   if (profilesError || paymentsError) {
     console.error('[wallet-babysitters] Read failed', profilesError ?? paymentsError);
-    return <ErrorState message="Could not load babysitter payments. Refresh and try again." />;
+    return <ErrorState message={t('babysitters.couldNotLoadBabysitterPayments')} />;
   }
 
   const sitters: BabysitterRow[] = (profiles ?? []).map((p) => ({

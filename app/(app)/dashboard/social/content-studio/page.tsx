@@ -41,7 +41,7 @@ export default async function ContentStudioPage() {
         <div className="space-y-4 lg:col-span-2">
           <div>
             <h3 className="mb-2 text-sm font-semibold">{tr('dashboardSocialContentStudio.yourDrafts')}</h3>
-            <PostsList posts={drafts} emptyLabel="No drafts yet" />
+            <PostsList posts={drafts} emptyLabel={tr('contentStudio.noDraftsYet')} />
           </div>
         </div>
 

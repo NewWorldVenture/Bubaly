@@ -38,19 +38,19 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
 
   async function refresh() {
     const loc = (location || trip?.destination || '').trim();
-    if (!loc) return toastError('Enter a destination to fetch weather');
+    if (!loc) return toastError(t('tripWeather.enterADestinationToFetch'));
     setBusy(true);
     try {
       const res = await fetch('/api/vacations/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vacationId, location: loc }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed to fetch weather');
       else success(data.note || `Updated forecast for ${data.location}`);
-    } catch { toastError('Network error'); }
+    } catch { toastError(t('tripWeather.networkError')); }
     setBusy(false);
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load trip weather. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={t('tripWeather.couldNotLoadTripWeather')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -74,7 +74,7 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
       )}
 
       {days.length === 0 ? (
-        <EmptyState icon={CloudSun} title={t('tripWeather.noForecastYet')} description="Enter your destination and tap Fetch to pull a real forecast (available up to ~16 days out)." />
+        <EmptyState icon={CloudSun} title={t('tripWeather.noForecastYet')} description={t('tripWeather.enterYourDestinationAndTap')} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {days.map((d) => {

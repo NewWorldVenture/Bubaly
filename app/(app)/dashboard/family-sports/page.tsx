@@ -39,7 +39,7 @@ export default async function FamilySportsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (sportsError) {
     console.error('[dashboard/family-sports] sports read failed', sportsError);
-    return <ErrorState message="Could not load your family sports hub from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('familySports.couldNotLoadYourFamily')} />;
   }
 
   const members = membersRes.data;
@@ -53,7 +53,7 @@ export default async function FamilySportsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={tr('dashboardFamilySports.familySportsHub')} description="Practices, games, teams and logistics for every athlete in the house." />
+      <PageHeader title={tr('dashboardFamilySports.familySportsHub')} description={tr('familySports.practicesGamesTeamsAndLogistics')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile href="/dashboard/sports" label={tr('dashboardFamilySports.activeTeams')} value={teams?.length ?? 0} icon={Users} accent="bg-teal-600" sublabel="Teams" />
@@ -63,7 +63,7 @@ export default async function FamilySportsPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title={tr('dashboardFamilySports.practicesGames')} description="Next 14 days" viewAllHref="/dashboard/sports">
+        <SectionCard title={tr('dashboardFamilySports.practicesGames')} description={tr('familySports.next14Days')} viewAllHref="/dashboard/sports">
           {events && events.length > 0 ? (
             <ul className="divide-y divide-border">
               {events.map((e) => (
@@ -80,7 +80,7 @@ export default async function FamilySportsPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarClock} text="No practices or games scheduled." />}
+          ) : <MiniEmpty icon={CalendarClock} text={tr('familySports.noPracticesOrGamesScheduled')} />}
         </SectionCard>
 
         <SectionCard title={tr('dashboardFamilySports.recentResults')} viewAllHref="/dashboard/sports">
@@ -97,7 +97,7 @@ export default async function FamilySportsPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Flag} text="No game results logged yet." />}
+          ) : <MiniEmpty icon={Flag} text={tr('familySports.noGameResultsLoggedYet')} />}
         </SectionCard>
       </div>
 
@@ -112,7 +112,7 @@ export default async function FamilySportsPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={Users} text="No teams added yet." />}
+        ) : <MiniEmpty icon={Users} text={tr('familySports.noTeamsAddedYet')} />}
       </SectionCard>
     </div>
   );

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stripeFromKey, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
@@ -11,12 +12,13 @@ import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     // PAY-3: only a family admin (parent) may start a paid subscription — the
     // same gate change-plan/cancel already enforce.
     if (!isAdmin(ctx.active.role)) {
-      return NextResponse.json({ error: 'Only a parent can start a subscription.' }, { status: 403 });
+      return NextResponse.json({ error: t('checkout.onlyAParentCanStart') }, { status: 403 });
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
@@ -32,11 +34,11 @@ export async function POST(req: NextRequest) {
     }
     const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: StripePlan };
     const priceId = plan ? STRIPE_PLANS[plan] : undefined;
-    if (!priceId) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+    if (!priceId) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
 
     const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many billing requests. Please try again shortly.' },
+      { error: t('checkout.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (existingError) {
       console.error('[billing-checkout] Billing customer read failed', existingError);
-      return NextResponse.json({ error: 'Billing account status is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
 
     let customerId = existing?.customer_ref ?? null;
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
       });
       if (customerWriteError) {
         console.error('[billing-checkout] Billing customer write failed', customerWriteError);
-        return NextResponse.json({ error: 'Could not save the billing account. Please try again.' }, { status: 503 });
+        return NextResponse.json({ error: t('checkout.couldNotSaveTheBilling') }, { status: 503 });
       }
     }
 
@@ -113,6 +115,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url });
   } catch (err) {
     console.error('Checkout error:', err);
-    return NextResponse.json({ error: 'Could not create checkout session' }, { status: 500 });
+    return NextResponse.json({ error: t('checkout.couldNotCreateCheckoutSession') }, { status: 500 });
   }
 }

@@ -52,7 +52,7 @@ export default async function FamilyMembersPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={UsersRound} text="No members yet." />}
+        ) : <MiniEmpty icon={UsersRound} text={t('members.noMembersYet')} />}
       </SectionCard>
     </div>
   );

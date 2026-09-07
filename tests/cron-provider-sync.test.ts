@@ -11,7 +11,7 @@ describe('provider sync cron response contract', () => {
   });
 
   it('keeps the provider failure response sanitized', () => {
-    expect(source).toContain("error: 'Provider synchronization failed.'");
+    expect(source).toContain("error: t('providerSync.providerSynchronizationFailed')");
     expect(source).not.toContain('error: e.message');
     expect(source).not.toContain('error: error.message');
   });

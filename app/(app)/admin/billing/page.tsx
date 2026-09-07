@@ -119,7 +119,7 @@ export default async function AdminBillingPage() {
       <Card className="p-0">
         <h2 className="px-4 pt-4 text-base font-semibold">{tr('adminBilling.recentSubscriptions')}</h2>
         {recent.length === 0 ? (
-          <div className="p-4"><EmptyState icon={RefreshCw} title={tr('adminBilling.noSubscriptionsYet')} description="Subscriptions appear here as families subscribe." /></div>
+          <div className="p-4"><EmptyState icon={RefreshCw} title={tr('adminBilling.noSubscriptionsYet')} description={tr('billing.subscriptionsAppearHereAsFamilies')} /></div>
         ) : (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
@@ -157,15 +157,16 @@ export default async function AdminBillingPage() {
   );
 }
 
-function AdminBillingReadError() {
+async function AdminBillingReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Billing &amp; Payments</h1>
-        <p className="mt-1 text-sm text-muted">Live subscription revenue across every family.</p>
+        <p className="mt-1 text-sm text-muted">{tr('billing.liveSubscriptionRevenueAcrossEvery')}</p>
       </div>
-      <ErrorState message="Could not load billing data from Supabase. Refresh and try again." />
-      <a href="/admin/billing" className="text-sm font-medium text-brand-text underline">Refresh billing</a>
+      <ErrorState message={tr('billing.couldNotLoadBillingData')} />
+      <a href="/admin/billing" className="text-sm font-medium text-brand-text underline">{tr('billing.refreshBilling')}</a>
     </div>
   );
 }
