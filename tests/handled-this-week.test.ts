@@ -11,7 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { countHandledThisWeek, loadTimeSaved } from '@/lib/metric/time-saved-server';
-import { HANDLED_RUN_STATES, isHandledRun } from '@/lib/metric/time-saved';
+import { HANDLED_LEGACY_RUN_STATUSES, HANDLED_RUN_STATES, isHandledRun } from '@/lib/metric/time-saved';
+import { legacyStatusFor, type RunState } from '@/lib/ai/runs/states';
 import { buildBrief, type BriefInput } from '@/lib/briefing/build';
 
 const FAMILY = 'family-1';
@@ -27,8 +28,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
+/**
+ * A run row with BOTH state columns filled in the way a real writer fills them:
+ * `legacyStatusFor` is the repo's own translation, so a seeded `failed` run
+ * does not accidentally carry `status = 'executed'` and count itself.
+ */
 const run = (id: string, state: string, extra: Record<string, unknown> = {}) => ({
-  id, family_id: FAMILY, state, status: 'executed', trigger_type: 'plan_accepted',
+  id, family_id: FAMILY, state, status: legacyStatusFor(state as RunState), trigger_type: 'plan_accepted',
   created_at: inWindow, ...extra,
 });
 
@@ -47,6 +53,39 @@ describe('countHandledThisWeek', () => {
     const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
     expect(parts.run).toBe(3);
     expect(total).toBe(3);
+  });
+
+  it('counts the run a manager approved by hand, whose `state` never moved', async () => {
+    // THE REGRESSION THIS PINS: `executeQueuedRunAction` materialises the plan
+    // and stamps only the legacy `status = 'executed'`, leaving the row at the
+    // `state = 'awaiting_approval'` it was inserted with. The Autopilot panel
+    // lists exactly this row under "Done for you"; a count filtered on `state`
+    // alone read zero directly above it.
+    db.seed('family_automation_runs', [
+      { id: 'approved', family_id: FAMILY, state: 'awaiting_approval', status: 'executed', trigger_type: 'plan_accepted', created_at: inWindow },
+    ]);
+    const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
+    expect(parts.run).toBe(1);
+    expect(total).toBe(1);
+  });
+
+  it('counts a pre-0250 row that only ever had a `status`', async () => {
+    // 0250 added `state` beside `status`; every row written before it keeps the
+    // default 'queued' and says what happened in the old column.
+    db.seed('family_automation_runs', [
+      { id: 'legacy', family_id: FAMILY, state: 'queued', status: 'executed', trigger_type: 'routine', created_at: inWindow },
+      { id: 'legacy-pending', family_id: FAMILY, state: 'queued', status: 'pending', trigger_type: 'routine', created_at: inWindow },
+    ]);
+    const { parts } = await countHandledThisWeek(db, FAMILY, NOW);
+    expect(parts.run).toBe(1);
+  });
+
+  it('counts a run whose two columns BOTH say handled exactly once', async () => {
+    db.seed('family_automation_runs', [
+      { id: 'both', family_id: FAMILY, state: 'completed', status: 'executed', trigger_type: 'plan_accepted', created_at: inWindow },
+    ]);
+    const { parts } = await countHandledThisWeek(db, FAMILY, NOW);
+    expect(parts.run).toBe(1);
   });
 
   it('counts each run exactly once', async () => {
@@ -124,7 +163,7 @@ describe('loadTimeSaved', () => {
     const original = db.from.bind(db);
     vi.spyOn(db, 'from').mockImplementation(((table: string) => {
       if (table === 'family_automation_runs') {
-        return { select: () => ({ eq: () => ({ in: () => ({ gte: () => Promise.resolve({ count: null, error: { message: 'boom' } }) }) }) }) };
+        return { select: () => ({ eq: () => ({ or: () => ({ gte: () => Promise.resolve({ count: null, error: { message: 'boom' } }) }) }) }) };
       }
       return original(table as never);
     }) as typeof db.from);
@@ -152,6 +191,14 @@ describe('the shared vocabulary', () => {
     expect(isHandledRun({ state: 'failed' })).toBe(false);
     expect(isHandledRun({ state: null })).toBe(false);
     expect(isHandledRun({})).toBe(false);
+  });
+
+  it('reads the legacy column too, through the repo\'s one mapping', () => {
+    expect([...HANDLED_LEGACY_RUN_STATUSES]).toEqual(['executed']);
+    expect(isHandledRun({ state: 'awaiting_approval', status: 'executed' })).toBe(true);
+    expect(isHandledRun({ state: 'queued', status: 'executed' })).toBe(true);
+    expect(isHandledRun({ state: 'queued', status: 'pending' })).toBe(false);
+    expect(isHandledRun({ status: 'dismissed' })).toBe(false);
   });
 });
 

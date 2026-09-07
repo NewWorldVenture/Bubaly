@@ -91,4 +91,14 @@ describe('the handled-run vocabulary', () => {
       expect(isHandledRun({ state })).toBe(false);
     }
   });
+
+  it('reads the legacy `status` column when `state` never moved', () => {
+    // The concierge approval path writes only `status`; a definition that
+    // ignored it told a family "0 handled" beside a plan it had just run.
+    expect(isHandledRun({ state: 'awaiting_approval', status: 'executed' })).toBe(true);
+    expect(isHandledRun({ state: 'queued', status: 'executed' })).toBe(true);
+    for (const status of ['pending', 'approved', 'skipped', 'dismissed', 'failed']) {
+      expect(isHandledRun({ state: 'queued', status })).toBe(false);
+    }
+  });
 });
