@@ -61,24 +61,62 @@ order by c.relname, p.polcmd, p.polname;
 -- them, whatever it is called. 0254 put them on the wallet tables; 0275 adds
 -- them to the finance tables, which have never had any.
 --
--- WHAT A GOOD RESULT LOOKS LIKE: 3 for every one of the ten tables
--- (insert + update + delete).
+-- Three things are checked, not one. An earlier version of this query counted
+-- restrictive policies and called three of them "guarded", and that was wrong
+-- in two ways worth spelling out because both produce a FALSE ALL-CLEAR:
+--
+--   1. It joined pg_class on relname alone. The schema filter sat in the
+--      pg_namespace join condition, which only nulls the namespace row — the
+--      table and its policies still join. A same-named table in another schema
+--      would have had its policies counted toward public's total.
+--
+--   2. It never checked whether RLS was ENABLED. A table can carry three
+--      immaculate restrictive policies with row security switched off, in which
+--      case every one of them is inert and the table is wide open. Counting
+--      policies on such a table reports "guarded" while nothing is guarded.
+--
+-- It also never checked what the guards actually SAY, so a restrictive policy
+-- with a permissive rule would have counted. This checks the rule, the RLS
+-- flag, and that all three commands are covered rather than any three policies.
+--
+-- WHAT A GOOD RESULT LOOKS LIKE: every row 'guarded'.
 
 select
   t.table_name,
-  count(p.polname) filter (where not p.polpermissive and p.polcmd in ('a','w','d')) as restrictive_write_guards,
+  c.oid is not null                                              as exists_in_public,
+  coalesce(c.relrowsecurity, false)                              as rls_enabled,
+  count(p.polname) filter (
+    where not p.polpermissive
+      and p.polcmd in ('a','w','d')
+      and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+          coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%can_manage_family%'
+  )                                                              as manager_write_guards,
+  count(distinct p.polcmd) filter (
+    where not p.polpermissive
+      and p.polcmd in ('a','w','d')
+      and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+          coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%can_manage_family%'
+  )                                                              as commands_covered,
   case
-    when count(p.polname) filter (where not p.polpermissive and p.polcmd in ('a','w','d')) >= 3
-      then 'guarded'
+    when c.oid is null                    then 'TABLE NOT IN public'
+    when not coalesce(c.relrowsecurity, false)
+                                          then 'RLS DISABLED - policies are inert'
+    when count(distinct p.polcmd) filter (
+      where not p.polpermissive
+        and p.polcmd in ('a','w','d')
+        and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+            coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') like '%can_manage_family%'
+    ) = 3                                 then 'guarded'
     else 'NO BACKSTOP'
-  end as verdict
+  end                                                            as verdict
 from (
   select unnest(array[
     'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
     'financial_accounts','transactions','budgets','bills','savings_goals']) as table_name
 ) t
-left join pg_class c     on c.relname = t.table_name
-left join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
-left join pg_policy p    on p.polrelid = c.oid
-group by t.table_name
-order by restrictive_write_guards, t.table_name;
+-- to_regclass resolves against the search_path and returns exactly one oid, so
+-- there is no way for a same-named table in another schema to be counted here.
+left join pg_class  c on c.oid = to_regclass('public.' || t.table_name)
+left join pg_policy p on p.polrelid = c.oid
+group by t.table_name, c.oid, c.relrowsecurity
+order by verdict, t.table_name;
