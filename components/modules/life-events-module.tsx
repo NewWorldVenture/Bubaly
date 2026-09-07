@@ -86,8 +86,15 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    // A move launches the Move Planner rather than a checklist here, so say where it went.
-    success(res.moveId ? tr('lifeEventsModule.moveOnFile') : tr('lifeEventsModule.playbookStartedYourChecklistIs'));
+    // A move launches the Move Planner rather than a checklist here, so say
+    // where it went — and when the family already had a move under way, say
+    // which date is on file rather than implying the one just picked was
+    // recorded, because the existing move keeps its own date.
+    success(
+      !res.moveId ? tr('lifeEventsModule.playbookStartedYourChecklistIs')
+      : res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: res.moveDate ?? '' })
+      : tr('lifeEventsModule.moveOnFile'),
+    );
     setStartTemplate(null);
   }
 

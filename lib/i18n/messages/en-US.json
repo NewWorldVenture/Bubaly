@@ -5901,6 +5901,7 @@
   "lifeEvents.yourPlaybooks": "Your playbooks",
   "lifeEventsModule.addALabelAndA": "Add a label and a value",
   "lifeEventsModule.couldNotLoadLifeAnd": "Could not load life and milestones data. Refresh and try again.",
+  "lifeEventsModule.moveAlreadyOnFile": "A move is already on file for {date} — the checklist is in the Move Planner, where the date can be changed.",
   "lifeEventsModule.moveOnFile": "Your move is on file — the dated checklist is in the Move Planner.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Playbook started — your checklist is ready",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "Preferences, routines and traditions you save here show up across the app — add the first thing your family always does.",

@@ -16,6 +16,13 @@ type LaunchResult = {
   planId?: string;
   /** Set when the template launched the Move Planner instead of a checklist. */
   moveId?: string;
+  /** False when the family already had a move under way and it was returned
+   *  untouched — the chosen date was NOT applied to it, so the caller must not
+   *  say it was. */
+  moveCreated?: boolean;
+  /** The date actually on file for that move: the chosen one only when
+   *  `moveCreated` is true, otherwise the existing move's own date. */
+  moveDate?: string;
   href?: string;
   error?: string;
 };
@@ -44,14 +51,25 @@ export async function launchLifeEventAction(templateKey: string, eventDate?: str
   // A move is not a parallel checklist: the Move Planner already owns the
   // ten-week timeline, the boxes and the reviewed date change, so "Moving
   // Home" puts a `moves` row on file and lays its tasks out there. A family
-  // that already has a move under way gets that move back rather than a second one.
+  // that already has a move under way gets that move back rather than a second
+  // one — and `createMove` returns it untouched, so the date picked in the
+  // Start dialog is not applied. That is why `created` and the date actually on
+  // file both travel back to the caller: changing an existing move's date
+  // shifts every relative task with it, which is a reviewed change a parent
+  // makes in the Move Planner, not a side effect of tapping a playbook.
   if (template.key === 'moving') {
     const scope = scopeFromUserContext(ctx, supabase);
     const move = await createMove(scope, { title: template.title, moveDate: anchor });
     if (!move.ok) return { ok: false, error: move.error };
     const tasks = await planTasks(scope, { moveId: move.data.move.id });
     if (!tasks.ok) return { ok: false, error: tasks.error };
-    return { ok: true, moveId: move.data.move.id, href: '/dashboard/moving' };
+    return {
+      ok: true,
+      moveId: move.data.move.id,
+      moveCreated: move.data.created,
+      moveDate: move.data.move.move_date,
+      href: '/dashboard/moving',
+    };
   }
 
   const { data: plan, error: planErr } = await supabase

@@ -103,6 +103,37 @@ describe('getMove', () => {
     expect(res.ok && res.data?.tasks).toHaveLength(1);
     expect(res.ok && res.data?.summary).toMatchObject({ daysToMove: 28, total: 1, done: 1 });
   });
+
+  // The burn-down sentence names a box count, and the assistant repeats that
+  // sentence to the family, so the boxes have to come from `move_boxes` — this
+  // family's rows only — rather than from an assumed empty list.
+  it('counts the boxes it read for the burn-down, and refuses when that read fails', async () => {
+    const db = makeDb();
+    seedMove(db, { move_date: '2026-09-01', status: 'settling' });
+    const box = (over: Row): Row => ({ id: randomUUID(), family_id: FAMILY, move_id: MOVE, label: 'Box', to_room: null, is_fragile: false, is_essential: false, contents: [], ...over });
+    db.seed('move_boxes', [
+      box({ box_number: 1, status: 'unpacked' }),
+      box({ box_number: 2, status: 'delivered' }),
+      box({ box_number: 3, status: 'unpacked', family_id: OTHER_FAMILY, move_id: randomUUID() }),
+    ]);
+    const res = await getMove(scopeWith(db));
+    expect(res.ok && res.data?.boxes.map((b) => b.box_number)).toEqual([1, 2]);
+    expect(res.ok && res.data?.summary.boxes).toMatchObject({ total: 2, packed: 2, unpacked: 1 });
+    expect(res.ok && res.data?.summary.text).toBe('4 days in · 1/2 boxes unpacked');
+
+    // A boxes read that fails is a refusal, not "0/0 boxes unpacked".
+    const failing = {
+      from: (table: string) => {
+        if (table !== 'move_boxes') return (db as unknown as { from: (t: string) => unknown }).from(table);
+        const c: Record<string, unknown> = {};
+        const self = () => c;
+        Object.assign(c, { select: self, eq: self, order: self, limit: self, then: (r: (v: unknown) => void) => r({ data: null, error: { code: 'XX000', message: 'boom' } }) });
+        return c;
+      },
+    } as unknown as SupabaseClient<Database>;
+    expect(await getMove(scopeWith(db, { db: failing }))).toMatchObject({ ok: false, code: 'db' });
+    expect((console.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]))).toContain('[service:moving] boxes read failed');
+  });
 });
 
 describe('createMove', () => {
@@ -283,5 +314,23 @@ describe('the "Moving Home" life event launches the Move Planner', () => {
     expect(branch).toContain("href: '/dashboard/moving'");
     expect(branch).toMatch(/if \(!move\.ok\) return \{ ok: false, error: move\.error \}/);
     expect(branch).toMatch(/if \(!tasks\.ok\) return \{ ok: false, error: tasks\.error \}/);
+  });
+
+  // `createMove` hands back an existing open move untouched, so the date picked
+  // in the Start dialog is NOT applied to it. Both facts travel to the caller,
+  // and the toast says which date is on file instead of implying the chosen one
+  // was recorded.
+  it('carries the created flag and the date actually on file back to the dialog', () => {
+    const action = readFileSync('app/(app)/dashboard/life-event-actions.ts', 'utf8');
+    const branch = action.slice(action.indexOf("template.key === 'moving'"), action.indexOf("from('life_event_plans')"));
+    expect(branch).toContain('moveCreated: move.data.created');
+    expect(branch).toContain('moveDate: move.data.move.move_date');
+
+    const moduleSrc = readFileSync('components/modules/life-events-module.tsx', 'utf8');
+    const launch = moduleSrc.slice(moduleSrc.indexOf('async function launch('), moduleSrc.indexOf('async function toggleItem('));
+    expect(launch).toContain("res.moveCreated === false ? tr('lifeEventsModule.moveAlreadyOnFile', { date: res.moveDate ?? '' })");
+    const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
+    expect(en['lifeEventsModule.moveAlreadyOnFile']).toContain('{date}');
+    expect(en['lifeEventsModule.moveAlreadyOnFile']).toMatch(/already/i);
   });
 });

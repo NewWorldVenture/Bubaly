@@ -58,7 +58,7 @@ export const movingTools: ToolDefinition[] = [
   defineTool({
     name: 'moving.getMove',
     aliases: ['get_move', 'move_status', 'move_plan'],
-    description: 'The family\'s move on file (or a specific one by id) with its dated tasks and how far along it is. Use it before planning or changing anything about the move.',
+    description: 'The family\'s move on file (or a specific one by id) with its dated tasks, its boxes and how far along it is. Use it before planning or changing anything about the move.',
     domain: 'home_maintenance',
     capability: 'view',
     risk: 'low',
@@ -72,17 +72,22 @@ export const movingTools: ToolDefinition[] = [
       open: z.number().int(),
       done: z.number().int(),
       overdue: z.number().int(),
+      // The counts behind the burn-down sentence, read from `move_boxes` — so
+      // "2/14 boxes unpacked" can be repeated with the rows to back it.
+      boxes: z.object({ total: z.number().int(), packed: z.number().int(), unpacked: z.number().int() }),
       summary: z.string(),
     }),
     summarize: (_input, output) => (output.found && output.move ? `${output.move.title}: ${output.summary}` : 'No move on file'),
     execute: async (scope, input) => {
       const res = await getMove(scope, { moveId: input.move_id ?? null });
       if (!res.ok) return res;
-      if (!res.data) return ok({ found: false, move: null, tasks: [], days_to_move: null, open: 0, done: 0, overdue: 0, summary: 'No move on file' });
+      if (!res.data) return ok({ found: false, move: null, tasks: [], days_to_move: null, open: 0, done: 0, overdue: 0, boxes: { total: 0, packed: 0, unpacked: 0 }, summary: 'No move on file' });
       const { move, tasks, summary } = res.data;
       return ok({
         found: true, move: toMove(move), tasks: tasks.map(toTask),
-        days_to_move: summary.daysToMove, open: summary.total - summary.done, done: summary.done, overdue: summary.overdue, summary: summary.text,
+        days_to_move: summary.daysToMove, open: summary.total - summary.done, done: summary.done, overdue: summary.overdue,
+        boxes: { total: summary.boxes.total, packed: summary.boxes.packed, unpacked: summary.boxes.unpacked },
+        summary: summary.text,
       });
     },
   }),
