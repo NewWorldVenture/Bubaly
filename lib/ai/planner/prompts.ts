@@ -20,17 +20,20 @@ import { BUBALY_CHIEF_OF_STAFF_PRINCIPLE, CHIEF_OF_STAFF_QUESTIONS, VOICE_RULES 
 import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { UnsupportedSchemaError, zodToStrictJsonSchema, type JsonSchema } from '@/lib/ai/schema-to-json';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
-import type { AutonomyBehavior, TrustDomain } from '@/lib/trust/engine';
+import { TRUST_DOMAINS, type AutonomyBehavior, type TrustDomain } from '@/lib/trust/engine';
 import { PLAN_STEP_TYPES, type Plan } from './schema';
 import type { WorkflowTemplate } from './templates/index';
 
-export const PLANNER_PROMPT_VERSION = 'planner-2026-09-05.1';
+export const PLANNER_PROMPT_VERSION = 'planner-2026-09-07.1';
 
 /**
  * Which trust domains' tools each intent is offered. `family`, `memory` and
  * `notifications` (messaging) ride along everywhere because every plan may
  * need to name a person, recall a fact or tell someone. `other` gets the
  * broad set: it is the intent for requests nothing recognised.
+ * `chief_of_staff` gets EVERY domain — the whole catalogue — because it is the
+ * intent for a request that reaches across the household, and a catalogue
+ * that stops at twelve domains would quietly stop the plan there too.
  */
 export const INTENT_TOOL_DOMAINS: Record<IntentKey, TrustDomain[]> = {
   plan_meals: ['meal_planning', 'shopping', 'calendar', 'tasks', 'scheduling', 'finances', 'messaging'],
@@ -46,6 +49,7 @@ export const INTENT_TOOL_DOMAINS: Record<IntentKey, TrustDomain[]> = {
   capture: ['calendar', 'tasks', 'chores', 'scheduling', 'shopping', 'messaging'],
   navigate: [],
   other: ['calendar', 'education', 'tasks', 'chores', 'scheduling', 'meal_planning', 'shopping', 'travel', 'home_maintenance', 'documents', 'finances', 'messaging'],
+  chief_of_staff: [...TRUST_DOMAINS],
 };
 
 /** Domains offered to every intent regardless of the table above. */
@@ -100,7 +104,8 @@ export function renderToolCatalogue(tools: ToolDefinition[]): string {
 
 const STEP_TYPE_RULES = [
   `Step types: ${PLAN_STEP_TYPES.join(', ')}.`,
-  'retrieve = a read-only tool. act = a tool that changes something. verify = re-check what an act step wrote (input is a verification spec). notify = tell people (input: {recipients:"family"|"managers"|[member ids], type, title, body}). approval = wait for a person before the steps after it. followup = pause the whole run until a later time (input: {runAfter: ISO} or {delayMinutes: n}).',
+  'retrieve = a read-only tool. act = a tool that changes something. verify = re-check what an act step wrote (input is a verification spec). notify = tell people (input: {recipients:"family"|"managers"|[member ids], type, title, body}). approval = wait for a person before the steps after it. followup = pause the whole run until a later time (input: {runAfter: ISO} or {delayMinutes: n}). replan = stop and plan the rest with what the earlier steps found (input: {prompt: what to decide}).',
+  'Use replan only when the right actions depend on what a read returns and a condition cannot express it. At most one per plan; it must depend on the reads it decides from; nothing may depend on it, because the re-plan itself plans what comes after. Prefer planning the actions directly.',
   'Retrieve steps that do not need each other must have an empty depends_on so they run in parallel. Act steps depend on the reads they need. Verify and notify steps depend on the acts they confirm or announce.',
   'Every act and retrieve step names a tool from the catalogue exactly; a step that names anything else is discarded. Write each step\'s input as a JSON object string whose fields match that tool\'s Input.',
   'Times are ISO 8601 in the family\'s time zone, e.g. 2026-09-12T09:00:00. Day keys are YYYY-MM-DD. Resolve "tomorrow", "next Friday", "this weekend" against the date in the context.',

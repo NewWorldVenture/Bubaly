@@ -23,13 +23,15 @@
 import { z } from 'zod';
 
 /**
- * The step kinds a model may emit. `replan` exists in the executor's vocabulary
- * (0250's CHECK) but is deliberately NOT offered here: the run executor in this
- * checkout has no re-planning port wired, so a model-emitted replan step would
- * block honestly instead of running. `lib/ai/planner/index.ts replanRun` is
- * the implementation for when the port is connected.
+ * The step kinds a model may emit — the executor's whole vocabulary (0250's
+ * CHECK). `replan` is offered because the executor's re-planning port is wired
+ * (`lib/ai/planner/index.ts replanRun` through `replanPortFor`, which
+ * lib/ai/runs/continue.ts and the cron hand to `runGraph`): a replan step
+ * plans the rest of the run with what the earlier steps found, as a new plan
+ * version. The validator keeps it to one per plan and the executor caps
+ * re-plans per run, so a model cannot loop on it.
  */
-export const PLAN_STEP_TYPES = ['retrieve', 'act', 'verify', 'notify', 'approval', 'followup'] as const;
+export const PLAN_STEP_TYPES = ['retrieve', 'act', 'verify', 'notify', 'approval', 'followup', 'replan'] as const;
 export type PlanStepType = (typeof PLAN_STEP_TYPES)[number];
 
 export const PLAN_RISK_LEVELS = ['low', 'medium', 'high'] as const;
@@ -50,7 +52,7 @@ export const PlanConditionSchema = z.object({
 
 export const PlanStepSchema = z.object({
   key: z.string().describe('Short unique handle for this step, e.g. "food_profile" or "grocery_list"; other steps refer to it in depends_on'),
-  step_type: z.enum(PLAN_STEP_TYPES).describe('retrieve = read-only tool; act = tool that changes something; verify = re-check the result; notify = tell people; approval = wait for a person before continuing; followup = pause and continue later'),
+  step_type: z.enum(PLAN_STEP_TYPES).describe('retrieve = read-only tool; act = tool that changes something; verify = re-check the result; notify = tell people; approval = wait for a person before continuing; followup = pause and continue later; replan = stop and plan the rest with what the earlier steps found (input: {"prompt": what to decide}); at most one, it must depend on the reads it needs, and nothing may depend on it'),
   tool_name: z.string().nullable().describe('The exact tool name from the catalogue for retrieve/act steps; null for other step types'),
   description: z.string().describe('One plain sentence a family member reads on the run timeline, e.g. "Plan seven dinners around soccer nights"'),
   input: z.string().describe('The step\'s arguments as a JSON object encoded as a string, e.g. "{\\"title\\":\\"Dentist\\",\\"starts_at\\":\\"2026-09-12T09:00:00\\"}". Use "{}" when there are none. To use what an earlier step produced, put {"$fromStep":"<that step\'s key>","path":"id"} where the value goes — and list that key in depends_on'),
@@ -95,6 +97,13 @@ export const MAX_REASONING_CHARS = 700;
 export const MAX_OBJECTIVE_CHARS = 200;
 export const MAX_STEPS = 40;
 export const MAX_FOLLOWUPS = 5;
+/**
+ * Replan steps per plan. One is a decision point; two would be a plan that
+ * defers the same decision twice. The per-RUN ceiling is the executor's
+ * (`MAX_REPLANS_PER_RUN` in lib/ai/runs/executor.ts): each re-plan may ask
+ * for one more, and the executor stops the chain.
+ */
+export const MAX_REPLAN_STEPS = 1;
 
 export type StepInputParse =
   | { ok: true; value: Record<string, unknown> }
