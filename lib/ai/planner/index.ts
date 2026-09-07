@@ -34,7 +34,6 @@ import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/conte
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
 import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, updateRequestWhereStatus, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
-import type { ExecutorPort } from '@/lib/ai/runs/executor';
 import { legacyStatusFor, TERMINAL_STEP_STATES } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
@@ -514,10 +513,10 @@ function describeOutcome(step: StepLike): string {
 
 /**
  * Plan the rest of a run with what it has learned so far — the implementation
- * behind a `replan` step. `replanPortFor` binds a ledger client to it so it is
- * exactly `ExecutorPort['replan']`; lib/ai/runs/continue.ts and the cron hand
- * that to `runGraph`, and a port built without it blocks a replan step
- * honestly instead of pretending.
+ * behind a `replan` step. `replanPortFor` (./replan-port.ts) binds a ledger
+ * client to it so it is exactly `ExecutorPort['replan']`; lib/ai/runs/
+ * continue.ts and the cron hand that to `runGraph`, and a port built without
+ * it blocks a replan step honestly instead of pretending.
  *
  * Version N+1 carries every step that already RAN or was DECIDED — the
  * terminal states (completed, skipped, partially_completed, failed,
@@ -650,17 +649,4 @@ export async function replanRun(
   }, { db: ledger });
   if (!saved.ok) return saved;
   return ok({ planId: saved.data.planId });
-}
-
-/**
- * The executor's re-planning port over a ledger client — `replan:
- * replanPortFor(db)` in `runGraph`'s options, which lib/ai/runs/continue.ts
- * and app/api/cron/ai-runs pass so a replan step plans instead of blocking.
- * Injected rather than imported by the executor: the validator already
- * imports the executor (`parseNotifyInput`), and a static import back would
- * make the two a cycle. `db` is the service client the caller already holds;
- * without one the store opens its own.
- */
-export function replanPortFor(db?: SupabaseClient<Database>): NonNullable<ExecutorPort['replan']> {
-  return (scope, run, step, steps) => replanRun(scope, run, step, steps, db ? { db } : {});
 }

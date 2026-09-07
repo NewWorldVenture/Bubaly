@@ -18,7 +18,7 @@ import 'server-only';
 import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { replanPortFor } from '@/lib/ai/planner/index';
+import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGraph, type RunGraphResult } from './executor';
 import { claimRun, releaseRun } from './store';

@@ -35,7 +35,8 @@ vi.mock('@/lib/ai/context/builder', async (importOriginal) => {
   };
 });
 
-const { replanPortFor, replanRun } = await import('@/lib/ai/planner/index');
+const { replanRun } = await import('@/lib/ai/planner/index');
+const { replanPortFor } = await import('@/lib/ai/planner/replan-port');
 
 const NOW = new Date('2026-09-05T16:00:00Z');
 

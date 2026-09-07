@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
-import { replanPortFor } from '@/lib/ai/planner/index';
+import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { runGraph } from '@/lib/ai/runs/executor';
 import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
