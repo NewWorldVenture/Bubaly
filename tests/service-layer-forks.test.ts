@@ -56,7 +56,6 @@ const KNOWN_FORKS: Record<string, string> = {
   // implied, and so converting one is a deliberate edit to this file.
   family_announcements: 'not yet converted',
   family_conversations: 'not yet converted',
-  family_facts: 'not yet converted',
   family_messages: 'not yet converted',
   family_recipes: 'not yet converted',
   home_assets: 'not yet converted',

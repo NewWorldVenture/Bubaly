@@ -618,3 +618,120 @@ export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<
   await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Cleared ${counts.facts + counts.suggestions} things Bubaly had learned`, href: '/dashboard/knowledge' });
   return ok(counts);
 }
+
+/**
+ * Edit a stored fact BY ID.
+ *
+ * Distinct from `rememberFact`, which upserts by `key`: editing a fact whose
+ * label changed would create a second memory there rather than rename the first.
+ * The knowledge-base and life-events editors both edit a specific row, so they
+ * need this.
+ *
+ * IT CARRIES THE RULE `forgetFact` ALREADY HAD, and the browser path did not:
+ * only a parent or adult may change a memory about someone else. RLS gates
+ * `medical` and `account` to managers (0264) and nothing else, so on every other
+ * category — a preference, a size, a milestone — a CHILD could edit or delete a
+ * memory about a sibling straight from the module. Verified against the replayed
+ * schema, not inferred: the delete removed one row.
+ */
+export type UpdateFactInput = {
+  category?: FactCategory | string | null;
+  label?: string;
+  value?: string;
+  notes?: string | null;
+  memberId?: string | null;
+  pinned?: boolean;
+};
+
+async function factForWrite(scope: ServiceScope, factId: string): Promise<ServiceResult<FamilyFact>> {
+  if (!factId?.trim()) return fail('Which memory?', { code: SERVICE_CODES.invalidInput });
+
+  const { data, error } = await scope.db
+    .from('family_facts')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .eq('id', factId)
+    .maybeSingle();
+  if (error) {
+    console.error('[service:memory] fact read failed', error);
+    return fail(describeDbError(error, 'Could not read that memory.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That memory could not be found.', { code: SERVICE_CODES.notFound });
+  if (!canManage(scope) && data.member_id !== scope.memberId) {
+    return fail('Only a parent or adult can change a memory about someone else.', { code: SERVICE_CODES.denied });
+  }
+  return ok(data);
+}
+
+export async function updateFact(
+  scope: ServiceScope,
+  factId: string,
+  input: UpdateFactInput,
+): Promise<ServiceResult<FamilyFact>> {
+  const existing = await factForWrite(scope, factId);
+  if (!existing.ok) return existing;
+
+  const patch: Partial<{
+    category: string; label: string; value: string; notes: string | null;
+    member_id: string | null; is_pinned: boolean;
+  }> = {};
+
+  if (input.label !== undefined) {
+    const label = input.label.trim();
+    if (!label) return fail('A memory needs a label.', { code: SERVICE_CODES.invalidInput });
+    patch.label = label;
+  }
+  if (input.value !== undefined) {
+    const value = input.value.trim();
+    if (!value) return fail('A memory needs a value.', { code: SERVICE_CODES.invalidInput });
+    patch.value = value;
+  }
+  if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
+  if (input.memberId !== undefined) patch.member_id = input.memberId || null;
+  if (input.pinned !== undefined) patch.is_pinned = input.pinned;
+  if (input.category !== undefined && input.category) patch.category = input.category;
+
+  if (Object.keys(patch).length === 0) {
+    return fail('There is nothing to change on that memory.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  // Moving a fact INTO a sensitive category is a manager's call: 0264 gates
+  // those rows, so a member could otherwise file something they then cannot see.
+  const nextCategory = patch.category ?? existing.data.category;
+  const nextLabel = patch.label ?? existing.data.label;
+  const nextValue = patch.value ?? existing.data.value;
+  if (!canManage(scope) && isSensitiveMemory({ category: nextCategory, key: nextLabel, content: nextValue })) {
+    return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
+  }
+
+  // The family filter here is belt-and-braces and NO TEST DISTINGUISHES IT:
+  // `factForWrite` already read the row family-scoped and returned not-found for
+  // a foreign one, so this clause cannot be reached with a foreign id. It stays
+  // because this table carries the household's private facts and a later
+  // refactor of that read should not silently widen the write — but it is
+  // recorded as untested rather than left to look like a proven guard.
+  const { data, error } = await scope.db
+    .from('family_facts')
+    .update(patch)
+    .eq('family_id', scope.familyId)
+    .eq('id', factId)
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:memory] fact update failed', error);
+    return fail(describeDbError(error, 'Could not update that memory.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That memory could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, {
+    agent: 'memory',
+    action: 'update',
+    title: input.pinned !== undefined && Object.keys(patch).length === 1
+      ? `${input.pinned ? 'Pinned' : 'Unpinned'} ${data.label}`
+      : `Updated what I remember about ${data.label}`,
+    href: '/dashboard/knowledge',
+    memberId: data.member_id,
+    resourceId: data.id,
+  });
+  return ok(data);
+}

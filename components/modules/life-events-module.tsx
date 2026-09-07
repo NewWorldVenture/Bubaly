@@ -15,6 +15,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -98,13 +99,13 @@ export function LifeEventsModule() {
     if (!res.ok) toastError(res.error ?? 'Could not update'); else success(status === 'archived' ? 'Archived' : status === 'completed' ? 'Marked complete' : 'Reopened');
   }
   async function togglePin(f: Fact) {
-    const { error } = await createClient().from('family_facts').update({ is_pinned: !f.is_pinned }).eq('id', f.id);
-    if (error) toastError(describeDbError(error));
+    const res = await setFactPinnedAction(f.id, !f.is_pinned);
+    if (!res.ok) toastError(res.error);
   }
   async function removeFact(f: Fact) {
     if (!confirm('Remove this?')) return;
-    const { error } = await createClient().from('family_facts').delete().eq('id', f.id);
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    const res = await forgetFactAction(f.id);
+    if (!res.ok) toastError(res.error); else success('Removed');
   }
 
   if (loading) return <SkeletonList count={5} />;
@@ -301,13 +302,11 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
     e.preventDefault();
     if (!label.trim() || !value.trim()) { onError('Add a label and a value'); return; }
     setSaving(true);
-    const sb = createClient();
-    const payload = { label: label.trim(), value: value.trim(), category, notes: notes.trim() || null };
-    const { error } = editing
-      ? await sb.from('family_facts').update(payload).eq('id', editing.id)
-      : await sb.from('family_facts').insert({ family_id: familyId, ...payload, created_by: userId });
+    const res = await saveFactAction(editing?.id ?? null, {
+      label: label.trim(), value: value.trim(), category, notes: notes.trim() || null,
+    });
     setSaving(false);
-    if (error) { onError(describeDbError(error)); return; }
+    if (!res.ok) { onError(res.error); return; }
     onSaved();
   }
   return (
