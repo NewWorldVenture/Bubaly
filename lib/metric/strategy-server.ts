@@ -139,7 +139,9 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
     );
   }
 
-  // X12 — new households per existing household.
+  // X12 — new households per existing household. `invites` is read for the
+  // members-invited figure only: accepting one adds a person to a family that
+  // already exists, so it never reaches the coefficient's numerator.
   let referrals: ReferralCoefficient | null = null;
   if (referralRes.error || inviteRes.error || householdCount === null) {
     console.error('[metric] referral coefficient read failed', referralRes.error ?? inviteRes.error ?? 'household count read failed');
