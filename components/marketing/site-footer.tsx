@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Logo } from '@/components/brand/logo';
 import { ConsentReopenLink } from '@/components/marketing/consent-manager';
 import { LanguageBar } from '@/components/i18n/language-picker';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { SOCIAL_PLATFORMS, type SocialPlatform } from '@/lib/marketing/social-links';
 import { getSocialLinks } from '@/lib/server/social-links';
@@ -24,46 +25,61 @@ const SOCIAL_ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Ele
   tiktok: TiktokIcon,
 };
 
+// Every label here is a catalogue key, not a literal. The footer is the one
+// component on every marketing page AND the home of the language control: a
+// visitor who switches language is looking straight at it when the page
+// repaints, so English left here is English in the most conspicuous place on
+// the site. `labelKey` mirrors the convention in lib/constants/navigation.ts.
 const GROUPS = [
   {
-    title: 'Product',
+    titleKey: 'marketing.footer.group.product',
     links: [
-      { href: '/features', label: 'Features' },
-      { href: '/how-it-works', label: 'How it works' },
-      { href: '/pricing', label: 'Pricing' },
-      { href: '/mobile', label: 'Mobile app' },
-      { href: '/ai', label: 'AI assistant' },
+      { href: '/features', labelKey: 'marketing.footer.link.features' },
+      { href: '/how-it-works', labelKey: 'marketing.footer.link.howItWorks' },
+      { href: '/pricing', labelKey: 'marketing.footer.link.pricing' },
+      { href: '/mobile', labelKey: 'marketing.footer.link.mobileApp' },
+      { href: '/ai', labelKey: 'marketing.footer.link.aiAssistant' },
     ],
   },
   {
-    title: 'Company',
+    titleKey: 'marketing.footer.group.company',
     links: [
-      { href: '/security', label: 'Security' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/contact', label: 'Contact' },
-      { href: '/faq', label: 'FAQ' },
+      { href: '/security', labelKey: 'marketing.footer.link.security' },
+      { href: '/blog', labelKey: 'marketing.footer.link.blog' },
+      { href: '/contact', labelKey: 'marketing.footer.link.contact' },
+      { href: '/faq', labelKey: 'marketing.footer.link.faq' },
     ],
   },
   {
-    title: 'Get started',
+    titleKey: 'marketing.footer.group.getStarted',
     links: [
-      { href: '/signup', label: 'Create account' },
-      { href: '/login', label: 'Log in' },
+      { href: '/signup', labelKey: 'marketing.footer.link.createAccount' },
+      { href: '/login', labelKey: 'marketing.footer.link.logIn' },
     ],
   },
   {
-    title: 'Legal',
+    titleKey: 'marketing.footer.group.legal',
     links: [
-      { href: '/privacy', label: 'Privacy Policy' },
-      { href: '/terms', label: 'Terms of Service' },
-      { href: '/acceptable-use', label: 'Acceptable Use' },
-      { href: '/cookies', label: 'Cookie Policy' },
+      { href: '/privacy', labelKey: 'marketing.footer.link.privacyPolicy' },
+      { href: '/terms', labelKey: 'marketing.footer.link.termsOfService' },
+      { href: '/acceptable-use', labelKey: 'marketing.footer.link.acceptableUse' },
+      { href: '/cookies', labelKey: 'marketing.footer.link.cookiePolicy' },
     ],
   },
 ];
 
+const LEGAL_BAR = [
+  { href: '/privacy', labelKey: 'marketing.footer.legal.privacy' },
+  { href: '/terms', labelKey: 'marketing.footer.legal.terms' },
+  { href: '/acceptable-use', labelKey: 'marketing.footer.legal.acceptableUse' },
+  { href: '/cookies', labelKey: 'marketing.footer.legal.cookies' },
+];
+
 export async function SiteFooter() {
-  const social = await getSocialLinks(createServiceClient());
+  const [t, social] = await Promise.all([
+    getTranslations(),
+    getSocialLinks(createServiceClient()),
+  ]);
   const configured = SOCIAL_PLATFORMS.filter((p) => social[p.key]);
 
   return (
@@ -72,23 +88,23 @@ export async function SiteFooter() {
         <div className="col-span-2 md:col-span-3 lg:col-span-2">
           <Logo />
           <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">
-            Less Managing Life. More Living It.
+            {t('marketing.footer.tagline')}
           </p>
           <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">
-            The AI operating system for family life.
+            {t('marketing.footer.description')}
           </p>
           <div className="mt-5">
             <LanguageBar />
           </div>
         </div>
         {GROUPS.map((g) => (
-          <div key={g.title}>
-            <h4 className="text-[11px] font-semibold text-fg">{g.title}</h4>
+          <div key={g.titleKey}>
+            <h4 className="text-[11px] font-semibold text-fg">{t(g.titleKey)}</h4>
             <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-[10px] text-muted transition hover:text-fg">
-                    {l.label}
+                    {t(l.labelKey)}
                   </Link>
                 </li>
               ))}
@@ -100,12 +116,12 @@ export async function SiteFooter() {
       {/* Bottom legal bar */}
       <div className="border-t border-border/60">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-3 px-5 py-5 text-[11px] text-muted sm:flex-row sm:px-8 lg:px-10">
-          <p>© {new Date().getFullYear()} Bubaly. All rights reserved.</p>
+          <p>{t('marketing.footer.copyright', { year: new Date().getFullYear() })}</p>
 
           {/* Only the accounts an admin has actually filled in — an empty set
               renders nothing rather than a row of links to nowhere. */}
           {configured.length > 0 && (
-            <nav aria-label="Bubaly on social media" className="flex items-center gap-2">
+            <nav aria-label={t('marketing.footer.socialNavLabel')} className="flex items-center gap-2">
               {configured.map(({ key, label }) => {
                 const Icon = SOCIAL_ICONS[key];
                 return (
@@ -114,7 +130,7 @@ export async function SiteFooter() {
                     href={social[key]}
                     target="_blank"
                     rel="me noopener noreferrer"
-                    aria-label={`Bubaly on ${label}`}
+                    aria-label={t('marketing.footer.socialLinkLabel', { platform: label })}
                     className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg focus-ring"
                   >
                     <Icon className="h-4 w-4" />
@@ -124,11 +140,12 @@ export async function SiteFooter() {
             </nav>
           )}
 
-          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            <Link href="/privacy" className="transition hover:text-fg">Privacy</Link>
-            <Link href="/terms" className="transition hover:text-fg">Terms</Link>
-            <Link href="/acceptable-use" className="transition hover:text-fg">Acceptable Use</Link>
-            <Link href="/cookies" className="transition hover:text-fg">Cookies</Link>
+          <nav aria-label={t('marketing.footer.legalNavLabel')} className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            {LEGAL_BAR.map((l) => (
+              <Link key={l.href} href={l.href} className="transition hover:text-fg">
+                {t(l.labelKey)}
+              </Link>
+            ))}
             <ConsentReopenLink />
           </nav>
         </div>

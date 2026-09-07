@@ -32,6 +32,11 @@ export const GATED_SURFACES = {
   'app-shell': ['components/app/app-shell.tsx'],
   // The public marketing header, on every unauthenticated page.
   'marketing-header': ['components/marketing/site-header.tsx'],
+  // The public marketing footer — on every unauthenticated page, and the home
+  // of the language control. Someone who has just switched language is looking
+  // straight at this block when the page repaints, so English surviving here is
+  // English in the most conspicuous place on the site.
+  'marketing-footer': ['components/marketing/site-footer.tsx'],
 };
 
 const IGNORE_DIRS = new Set([
