@@ -4,7 +4,9 @@
 or a person: you should be able to read this and start on a section without
 having seen the conversation any of it came from.
 
-- **Status as of:** 2026-09-07, main at `a276527` (PR #421 merged).
+- **Status as of:** 2026-09-07 23:45 UTC. main at `d88978f`; PR #421 merged; PR #424
+  (`claude/roadmap-implementation-ld8bon` at `452a297`) carries fourteen further
+  sections and is the integration head to branch from until it merges.
 - **The per-item evidence** — reachability, persistence, tests, mock risk, gap,
   build plan, file-and-line proof for each of the 60 items — is
   `docs/MARKET_DOMINATION_AUDIT.md`. That file is the authority on *what the
@@ -269,8 +271,14 @@ real drive-time estimate, driver and shared-vehicle conflicts, dinner timing,
 care gaps), M21 (every notification actionable; the quiet half folds into the
 brief's "Also today" so it is said once).
 
-**Still open:** M2/M20 (the inbox needs the migration in §6 to name its request),
-M3 (graph provenance and the extended projection).
+**Landed in #424:** M2/M20 (one household inbox; inbound mail reaches the
+planner; a redelivered email files nothing twice; a bill the router declines is
+still filed as paperwork; the badge says "Filed with Bubaly", not "Handled"),
+M3 (the graph projects events, assets, obligations and preferences — and a
+truncated read no longer authorises a prune).
+
+**Still open:** the `request_id` link the inbox cannot claim without the
+migration in §6.
 
 ### Phase 2 — Automate
 Autopilot, the meals→grocery loop, school and sports front desk, household
@@ -284,7 +292,11 @@ autonomy dials beside the policies, and per request the *names* of what was read
 and what was withheld, never contents), M26 (the call queue stops claiming a
 call; `compareQuotes` ranks real `project_quotes` with reasons).
 
-**Still open:** M10, M9, M33.
+**Landed in #424:** M10 (calendar-aware meals, allergy-aware substitutions,
+retailer hand-off, Bought → pantry), M33 (household search across eleven
+sources with evidence; the command bar reserves room for record hits).
+
+**Still open:** M9 (school + sports front desk).
 
 ### Phase 3 — Deepen
 Family CFO, home twin, inventory, travel, moving, care.
@@ -293,7 +305,16 @@ Family CFO, home twin, inventory, travel, moving, care.
 (both became assistant tools, with a `plan_move` template and a
 confirm-it's-here signal).
 
-**Still open:** M12, M15, M16, M17.
+**Landed in #424:** M15 (pet-aware trip prep and a disruption re-flow), M16/M23
+(a grandparent sees every family they belong to; sharing presets), M17 (before
+you buy, grounded in what the household owns), M19 (one mic on every Ask
+surface), M22 (one view of what Bubaly believes, with a reset), M25/M34
+(launchable outcome templates; life-event detection; the Moving Home handoff
+lays out its tasks and never deletes a move it only found), M29/M30 (contacts
+import with a review step; onboarding answers remembered).
+
+**Still open:** M12 (home twin history), the dd9-13 inventory/moving CRUD
+conversion (its review returned `approved=false`; being re-reviewed).
 
 ### Phase 4 — Expand
 Front-desk identity, marketplace, partner API, network effects, hardware.
@@ -302,7 +323,11 @@ Front-desk identity, marketplace, partner API, network effects, hardware.
 AAL2 step-up on money/document/trust routes for users who have a factor, and a
 Privacy Center that streams a role-scoped export).
 
-**Still open:** M27, M28, M32, M37, M38, M39.
+**Landed in #424:** M38 (privacy-safe benchmarks, bands translated, the public
+page gated on publication), M39 (the referral flywheel: signup capture,
+Stripe-confirmed reward, prompts), X3/X5/X10/X12 (error-aware metric tiles).
+
+**Still open:** M27, M32, M37 — each needs a migration in §6.
 
 ### Public site
 **Landed in #421 (stage 1):** an outcome-first homepage — the Bubaly-Handled
@@ -312,8 +337,11 @@ reorganised around outcomes. Every illustrative element is badged; aggregate
 lines hide rather than render a zero; the social-proof band returns null when
 nothing is published.
 
-**Still open:** W3, W4 (still `mock` — the highest-value single fix on the public
-site, since it is the one claiming what it cannot prove), W6, W7.
+**Still open:** W3 and W4 are BUILT but held back: their branches carry 90 and
+217 English literals on the gated `marketing-pages` surface, and merging either
+turns `i18n-gate` red. They are being re-applied with every string keyed (see
+§7). W4 remains the highest-value single fix on the public site — it is the one
+claiming what it cannot prove. W6, W7 remain.
 
 ### What the adversarial review caught in #421
 
@@ -387,35 +415,31 @@ exactly which DDL is missing and what is therefore not claimed.
 
 ## 7. Where the remaining work physically is
 
-PR #421 merged the parts needing no new schema. A second tranche exists as
-**local branches produced by parallel agents that have not yet been merged** —
-they were built against an older base and each needs a conflict pass. If you are
-starting a section, check here first so you extend that work instead of
-duplicating it.
+**Fourteen sections have landed on PR #424** and need no further work from
+anyone: M2/M20, M3, M10, M15, M16/M23, M17, M19, M22, M25/M34, M29/M30, M33,
+M38, M39, and the X3/X5/X10/X12 metric tiles. Do not re-land them; the audit
+in `docs/MARKET_DOMINATION_AUDIT.md` predates them and still says `partial`.
 
-| Section | Branch (worktree) | Item |
+**Three are in progress and claimed — do not start them:**
+
+| Section | Where | State |
 |---|---|---|
-| Household inbox | `worktree-wf_80ffc3db-358-1` | M2 / M20 |
-| Family graph projection | `worktree-wf_58fbbfcb-de4-1` | M3 |
-| Household search | `worktree-wf_58fbbfcb-de4-2` | M33 |
-| Memory / twin beliefs + reset | `worktree-wf_58fbbfcb-de4-3` | M22 |
-| Strategy metric tiles | `worktree-wf_58fbbfcb-de4-4` | X3 / X5 / X10 / X12 |
-| Meals → grocery loop | `worktree-wf_80ffc3db-358-2` | M10 |
-| Travel disruption re-flow | `worktree-wf_80ffc3db-358-3` | M15 |
-| Moving dates / box counts | `worktree-wf_67303136-dd9-13` | M14 |
-| Voice everywhere | `worktree-wf_67303136-dd9-15` | M19 |
-| Outcome cards + life events | `worktree-wf_67303136-dd9-3` | M25 / M34 |
-| Before-you-buy | `worktree-wf_67303136-dd9-17` | M17 |
-| Contacts import + onboarding | `worktree-wf_1d216cac-323-15` | M29 / M30 |
-| Household sharing | `worktree-wf_1d216cac-323-3` | M16 / M23 |
-| Benchmarks | `worktree-wf_9fc0af7c-543-1` | M38 |
-| Referral flywheel | `worktree-wf_9fc0af7c-543-2` | M39 |
-| Trust ledger claims | `worktree-wf_9fc0af7c-543-3` | W4 |
-| Pricing value block | `worktree-wf_9fc0af7c-543-4` | W3 |
+| S-19 · W4 Trust Center | branch `worktree-wf_9fc0af7c-543-3` | built; 217 literals being lifted into the seven catalogues |
+| S-20 · W3 pricing value | branch `worktree-wf_9fc0af7c-543-4` | built; 90 literals being lifted into the seven catalogues |
+| dd9-13 · M13/M14 CRUD | branch `worktree-wf_67303136-dd9-13` | review returned `approved=false`; being re-reviewed against its fix commits |
 
-**These live only in one working container and are not on the remote.** If you
-have access to them, merge before you rebuild. If you do not, treat the section
-as unclaimed and build it from the queue's spec — that is what the spec is for.
+Those three live only in one working container. If you can reach them, merge
+before you rebuild; if you cannot, they are claimed anyway — pick a different
+section.
+
+**Genuinely unclaimed** — build these from the queue's spec: M9, M12, W6, W7,
+and everything in §6 that waits on a migration.
+
+**A lesson the integrator paid for, so you do not have to:** when a review
+returns fixes, they are usually on a *different* branch than the one first
+merged — the harness placed reviewing agents in fresh worktrees. Before
+merging any section, check that the branch you are holding is the one carrying
+the review's fix commits, not the one the review was written against.
 
 ---
 
