@@ -35,17 +35,17 @@ export function filenameForRecording(rec: Recording): string {
 }
 
 /**
- * The multipart request for one recording. React Native's fetch accepts a
- * `{ uri, name, type }` part in FormData and streams the file itself, which is
- * why nothing here reads the file into memory.
+ * The multipart part React Native's fetch understands: a file reference, not
+ * bytes — which is why nothing here reads the recording into memory.
  */
+export function transcribeFilePart(rec: Recording): { uri: string; name: string; type: string } {
+  return { uri: rec.uri, name: filenameForRecording(rec), type: mimeForRecording(rec) };
+}
+
+/** The multipart request for one recording, addressed to the transcribe route. */
 export function buildTranscribeRequest(args: { apiUrl: string; token: string; recording: Recording }): { url: string; init: RequestInit } {
   const form = new FormData();
-  form.append('audio', {
-    uri: args.recording.uri,
-    name: filenameForRecording(args.recording),
-    type: mimeForRecording(args.recording),
-  } as unknown as Blob);
+  form.append('audio', transcribeFilePart(args.recording) as unknown as Blob);
   return {
     url: `${args.apiUrl.replace(/\/+$/, '')}/api/ai/voice/transcribe`,
     init: {
