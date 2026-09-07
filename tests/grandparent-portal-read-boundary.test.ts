@@ -28,4 +28,28 @@ describe('grandparent-portal read boundary', () => {
     expect(guardIdx).toBeGreaterThan(-1);
     expect(deriveIdx).toBeGreaterThan(guardIdx);
   });
+
+  // M28 made the portal cross-household: a grandparent invited into two of
+  // their children's families sees both. The fail-closed rule above did not
+  // change — it moved INSIDE the per-household body, so one family's outage
+  // costs that family's card and nothing else. A guard hoisted back up to the
+  // page would blank every household over one failure, which is the reassuring
+  // half-truth this file exists to prevent.
+  it('reads every household the member belongs to, one at a time', () => {
+    expect(page).toContain('ctx.memberships.map((m) => ({ familyId: m.familyId, familyName: m.family.name }))');
+    expect(page).toContain('async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef)');
+    expect(page).toContain('const familyId = household.familyId;');
+  });
+
+  it('scopes the fail-closed guard to the household that failed', () => {
+    const bodyIdx = page.indexOf('async function householdBody');
+    const guardIdx = page.indexOf('if (membersRes.error) {');
+    expect(bodyIdx).toBeGreaterThan(-1);
+    // The guard is inside the per-household function, not in the page above it.
+    expect(guardIdx).toBeGreaterThan(bodyIdx);
+    // Every household is rendered, so a failing one renders its own notice
+    // beside the others rather than replacing them.
+    expect(page).toContain('body: await householdBody(supabase, t, household),');
+    expect(page).toContain('{sections.map(({ household, body }) => (');
+  });
 });

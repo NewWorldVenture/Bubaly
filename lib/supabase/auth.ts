@@ -38,6 +38,12 @@ function isSessionMissing(error: unknown): boolean {
   return e.name === 'AuthSessionMissingError' || e.code === 'session_missing' || (typeof e.message === 'string' && /auth session missing/i.test(e.message));
 }
 
+// Role-aware landing (M28) lives in `lib/auth/landing` — pure and free of this
+// module's imports, so a route handler can ask where a member belongs without
+// pulling in the whole auth stack. Re-exported here because this is where the
+// rest of the app already looks for account context.
+export { GUEST_LANDING_PATH, DEFAULT_LANDING_PATH, landingPathForRole } from '@/lib/auth/landing';
+
 /** Returns the signed-in user or null. */
 export async function getUser() {
   const supabase = await createServer();

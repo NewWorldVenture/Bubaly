@@ -1,33 +1,97 @@
 import type { Metadata } from 'next';
-import { Heart, Users, Camera, Award, Megaphone, Cake, BookHeart } from 'lucide-react';
+import { Heart, Users, Camera, Award, Megaphone, Cake } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { buildGrandparentDigest, digestSummary, celebrationCountdown } from '@/lib/grandparent/digest';
+import {
+  buildGrandparentDigest, digestSummary, celebrationCountdown, orderHouseholds,
+  type HouseholdRef,
+} from '@/lib/grandparent/digest';
 import { daysUntilNext } from '@/lib/celebrations/dates';
 import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
-import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Grandparent Portal' };
 export const dynamic = 'force-dynamic';
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+type Supabase = Awaited<ReturnType<typeof createServer>>;
+
 export default async function GrandparentPortalPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
+  // M28: a grandparent invited into two of their children's families belongs to
+  // both. The portal used to show the ACTIVE family only, so the other
+  // grandchildren were one household switch away. Every membership renders,
+  // through the same RLS-bound client — the database still decides what each
+  // family will hand over; iterating memberships only stops the page from
+  // hiding families the reader is already entitled to see.
+  const households = orderHouseholds(
+    ctx.memberships.map((m) => ({ familyId: m.familyId, familyName: m.family.name })),
+    ctx.active.familyId,
+  );
+  const multi = households.length > 1;
+
+  // Each household is read and rendered independently and a failure is confined
+  // to its own card: one family's outage must not blank out the others, and it
+  // must not look like that family simply has nothing to share.
+  const sections = await Promise.all(
+    households.map(async (household) => ({
+      household,
+      body: await householdBody(supabase, t, household),
+    })),
+  );
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-8 py-4">
+      <div className="text-center">
+        <Heart className="mx-auto h-8 w-8 text-rose-400" />
+        <h1 className="mt-2 text-2xl font-bold">
+          {multi ? t('dashboardGrandparentPortal.yourFamilies') : households[0]?.familyName}
+        </h1>
+        {multi && (
+          <p className="mt-1 text-sm text-muted">
+            {t('dashboardGrandparentPortal.familiesYoureConnectedTo', { count: households.length })}
+          </p>
+        )}
+      </div>
+
+      {sections.map(({ household, body }) => (
+        <div key={household.familyId} className="space-y-8">
+          {multi && (
+            <h2 className="border-b border-border pb-2 text-lg font-bold">{household.familyName}</h2>
+          )}
+          {body}
+        </div>
+      ))}
+
+      <p className="text-center text-xs text-muted">
+        {t('dashboardGrandparentPortal.simplifiedViewForGrandparentsAndExtended')}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One household's digest, or a retryable error card for that household alone.
+ *
+ * A plain async function rather than an async component so the whole tree is
+ * resolved before it is rendered (React 18 cannot render a promise child), and
+ * so a test can render the page and see every card.
+ */
+async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef) {
+  const familyId = household.familyId;
+
   const [
-    { data: family },
     membersRes,
     { data: photos },
     { data: milestones },
     { data: announcements },
     { data: dates },
   ] = await Promise.all([
-    supabase.from('families').select('name').eq('id', familyId).single(),
     supabase.from('family_members').select('id, display_name, birthday, color, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_photos').select('url, caption, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(12),
     supabase.from('family_milestones').select('id, title, description, milestone_date, member_id').eq('family_id', familyId).order('milestone_date', { ascending: false }).limit(10),
@@ -38,8 +102,10 @@ export default async function GrandparentPortalPage() {
   // The member roster is the spine of the portal — every section (family grid,
   // milestone/announcement author names, birthday celebrations) builds off it.
   // A dropped error would render an empty portal for a grandparent. Fail closed
-  // on the roster; family name + the photo/milestone/announcement/date
-  // enrichment reads stay best-effort (each degrades to a hidden section).
+  // on the roster; the photo/milestone/announcement/date enrichment reads stay
+  // best-effort (each degrades to a hidden section). With several households on
+  // the page the failure is scoped to THIS family's card — the others still
+  // render, and this one says so rather than showing an empty family.
   if (membersRes.error) {
     console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);
     return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
@@ -50,7 +116,8 @@ export default async function GrandparentPortalPage() {
 
   const celebrationInputs = [
     ...(members ?? []).filter((m) => m.birthday).map((m) => ({
-      title: `${m.display_name}'s birthday`, date: m.birthday as string,
+      title: t('dashboardGrandparentPortal.someonesBirthday', { name: m.display_name }),
+      date: m.birthday as string,
       daysUntil: daysUntilNext(m.birthday as string) ?? 999,
     })),
     ...(dates ?? []).map((d) => ({
@@ -60,7 +127,7 @@ export default async function GrandparentPortalPage() {
   ];
 
   const digest = buildGrandparentDigest({
-    familyName: family?.name ?? 'Your Family',
+    familyName: household.familyName,
     members: (members ?? []).map((m) => ({
       name: m.display_name, birthday: m.birthday, color: m.color, role: m.role,
     })),
@@ -80,12 +147,8 @@ export default async function GrandparentPortalPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 py-4">
-      <div className="text-center">
-        <Heart className="mx-auto h-8 w-8 text-rose-400" />
-        <h1 className="mt-2 text-2xl font-bold">{digest.familyName}</h1>
-        <p className="mt-1 text-sm text-muted">{digestSummary(digest)}</p>
-      </div>
+    <div className="space-y-8">
+      <p className="text-center text-sm text-muted">{digestSummary(digest)}</p>
 
       {/* Family members */}
       <section>
@@ -115,7 +178,7 @@ export default async function GrandparentPortalPage() {
             {digest.recentPhotos.map((p, i) => (
               <div key={i} className="overflow-hidden rounded-2xl border border-border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={p.caption ?? 'Photo'} className="aspect-square w-full object-cover" />
+                <img src={p.url} alt={p.caption ?? t('dashboardGrandparentPortal.photo')} className="aspect-square w-full object-cover" />
                 {p.caption && (
                   <div className="p-2">
                     <p className="truncate text-xs">{p.caption}</p>
@@ -159,7 +222,7 @@ export default async function GrandparentPortalPage() {
                 <p className="font-semibold">{a.title}</p>
                 {a.body && <p className="mt-1 text-sm text-fg/90">{a.body}</p>}
                 <p className="mt-1 text-xs text-muted">
-                  {a.authorName ?? 'Family'} · {fmtDate(a.date)}
+                  {a.authorName ?? t('dashboardGrandparentPortal.familyAuthor')} · {fmtDate(a.date)}
                 </p>
               </li>
             ))}
@@ -188,10 +251,6 @@ export default async function GrandparentPortalPage() {
           </ul>
         </section>
       )}
-
-      <p className="text-center text-xs text-muted">
-        {t('dashboardGrandparentPortal.simplifiedViewForGrandparentsAndExtended')}
-      </p>
     </div>
   );
 }

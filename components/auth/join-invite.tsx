@@ -7,6 +7,7 @@ import { PartyPopper, AlertTriangle, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock } from '@/components/ui/states';
 import { createClient } from '@/lib/supabase/client';
+import { resolveLandingPathAction } from '@/app/(auth)/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type State =
@@ -47,8 +48,13 @@ export function JoinInvite() {
         return;
       }
       setState({ phase: 'done' });
+      // M28: a guest — the role an extended-family invite uses — belongs on the
+      // simplified Grandparent Portal rather than the full concierge Home. The
+      // role is read on the server from the membership the RPC just created, so
+      // the browser cannot choose its own landing.
+      const landing = await resolveLandingPathAction().catch(() => '/home');
       setTimeout(() => {
-        router.push('/home');
+        router.push(landing);
         router.refresh();
       }, 1400);
     })();
