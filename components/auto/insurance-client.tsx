@@ -38,7 +38,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
       </div>
 
       {policies.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={t('insuranceClient.noPoliciesYet')} description="Add your auto policy so claim and roadside numbers are one tap away in an emergency." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>} />
+        <EmptyState icon={ShieldCheck} title={t('insuranceClient.noPoliciesYet')} description={t('insuranceClient.addYourAutoPolicySo')} action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>} />
       ) : (
         <div className="space-y-3">
           {policies.map((p) => {

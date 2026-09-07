@@ -21,8 +21,8 @@ async function ReadFailure() {
   const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title={t('deals.deals')} description="Deal discovery is temporarily unavailable." />
-      <ErrorState message="Could not load marketplace deals from Supabase. Refresh and try again." />
+      <PageHeader title={t('deals.deals')} description={t('deals.dealDiscoveryIsTemporarilyUnavailable')} />
+      <ErrorState message={t('deals.couldNotLoadMarketplaceDeals')} />
       <Link href="/marketplace/deals" className="text-sm font-medium text-brand-text underline">{t('deals.refreshDeals')}</Link>
     </div>
   );
@@ -74,7 +74,7 @@ export default async function DealsPage() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('marketplaceDeals.deals')} description="Items priced below what similar things go for right now — biggest savings first, based on comparable listings." />
+      <PageHeader title={t('marketplaceDeals.deals')} description={t('deals.itemsPricedBelowWhatSimilar')} />
 
       {deals.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">

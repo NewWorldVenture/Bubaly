@@ -29,7 +29,7 @@ async function ReadFailure() {
   return (
     <div className="module-page space-y-4">
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('agents.familyAssistant')}</h1>
-      <ErrorState message="Could not load Family Assistant context from Supabase. Refresh and try again." />
+      <ErrorState message={t('agents.couldNotLoadFamilyAssistant')} />
       <Link href="/dashboard/agents" className="text-sm font-medium text-brand-text underline">{t('agents.refreshFamilyAssistant')}</Link>
     </div>
   );

@@ -86,7 +86,7 @@ export function PlaybookModule() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title={t('playbook.familyPlaybook')}
-        description="Bubaly learns what matters to your family and suggests it here. Confirm the ones worth keeping — they save to your Knowledge Base."
+        description={t('playbookModule.bubalyLearnsWhatMattersTo')}
         action={
           <Button onClick={onRefresh} disabled={refreshing} variant="secondary">
             <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
@@ -119,7 +119,7 @@ export function PlaybookModule() {
         <EmptyState
           icon={Sparkles}
           title={t('playbook.nothingToReviewRightNow')}
-          description="As your family plans meals, shops, and celebrates, Bubaly spots the patterns worth remembering. Tap “Find new insights” to look now."
+          description={t('playbookModule.asYourFamilyPlansMeals')}
           action={
             <Button onClick={onRefresh} disabled={refreshing}>
               <Wand2 className="h-4 w-4" />

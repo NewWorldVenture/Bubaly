@@ -60,7 +60,7 @@ export default async function SeoPage() {
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
-        {t('adminMarketingSeo.seoHereUses')} <strong className="text-fg">{t('adminMarketingSeo.firstPartyDataOnly')}</strong>. Rankings, search volume, and backlinks are never invented — connect Google Search Console for those. AI keyword ideas are clearly labeled as suggestions.
+        {t('adminMarketingSeo.seoHereUses')} <strong className="text-fg">{t('adminMarketingSeo.firstPartyDataOnly')}</strong>{t('adminMarketingSeo.rankingsSearchVolumeAndBacklinks')}
       </div>
 
       <SeoTabs
@@ -97,7 +97,7 @@ export default async function SeoPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="font-semibold">{t('adminMarketingSeo.seoPageRegistry')}</h2>
-                    <p className="mt-1 text-xs text-muted">The stored title, description, audit score, and index policy for each public route — the source that drives page metadata.</p>
+                    <p className="mt-1 text-xs text-muted">{t('seo.theStoredTitleDescriptionAudit')}</p>
                   </div>
                   <span className="text-xs text-muted">{seoPages.length} tracked</span>
                 </div>
@@ -116,15 +116,15 @@ export default async function SeoPage() {
                         <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
                           <input type="hidden" name="id" value={page.id} />
                           <input name="path" required defaultValue={page.path} className={inputCls} />
-                          <input name="title" defaultValue={page.title ?? ''} placeholder="SEO title" className={inputCls} />
-                          <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder="Meta description" className={`${inputCls} sm:col-span-2`} />
-                          <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder="Score 0–100" className={inputCls} />
+                          <input name="title" defaultValue={page.title ?? ''} placeholder={t('seo.seoTitle')} className={inputCls} />
+                          <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder={t('seo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
+                          <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder={t('seo.score0100')} className={inputCls} />
                           <select name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                          <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">Save page audit</button>
+                          <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('seo.savePageAudit')}</button>
                         </form>
                         <form action={archiveSeoPage} className="mt-2">
                           <input type="hidden" name="id" value={page.id} />
-                          <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive audit</button>
+                          <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('seo.archiveAudit')}</button>
                         </form>
                       </details>
                     ))}
@@ -158,7 +158,7 @@ export default async function SeoPage() {
                     )}
                   </div>
                   {keywordTotal === 0 ? (
-                    <EmptyState icon={Search} title={t('adminMarketingSeo.noKeywordsTracked')} description="Add target keywords in the panel on the right." />
+                    <EmptyState icon={Search} title={t('adminMarketingSeo.noKeywordsTracked')} description={t('seo.addTargetKeywordsInThe')} />
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -171,21 +171,21 @@ export default async function SeoPage() {
                               <td className="px-3 py-2 font-medium">{k.keyword}</td>
                               <td className="px-3 py-2 text-muted capitalize">{k.intent ?? '—'}</td>
                               <td className="px-3 py-2 font-mono text-xs text-muted">{k.target_path ?? '—'}</td>
-                              <td className="px-3 py-2">{k.source === 'ai_suggestion' ? <Badge tone="accent">AI idea</Badge> : <Badge tone="neutral">{k.source}</Badge>}</td>
+                              <td className="px-3 py-2">{k.source === 'ai_suggestion' ? <Badge tone="accent">{t('seo.aiIdea')}</Badge> : <Badge tone="neutral">{k.source}</Badge>}</td>
                               <td className="px-3 py-2">
                                 <details>
-                                  <summary className="cursor-pointer text-xs text-brand-text">Edit</summary>
+                                  <summary className="cursor-pointer text-xs text-brand-text">{t('seo.edit')}</summary>
                                   <form action={updateSeoKeyword} className="mt-2 min-w-64 space-y-2">
                                     <input type="hidden" name="id" value={k.id} />
                                     <input name="keyword" required defaultValue={k.keyword} className={inputCls} />
-                                    <select name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">Intent</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
-                                    <select name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">Target page</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
+                                    <select name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">{t('seo.intent')}</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
+                                    <select name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">{t('seo.targetPage')}</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
                                     <select name="status" defaultValue={k.status} className={inputCls}>{KEYWORD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                                    <button type="submit" className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90">Save keyword</button>
+                                    <button type="submit" className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90">{t('seo.saveKeyword')}</button>
                                   </form>
                                   <form action={archiveSeoKeyword} className="mt-2">
                                     <input type="hidden" name="id" value={k.id} />
-                                    <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive keyword</button>
+                                    <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('seo.archiveKeyword')}</button>
                                   </form>
                                 </details>
                               </td>
@@ -215,15 +215,16 @@ export default async function SeoPage() {
   );
 }
 
-function AdminSeoReadError() {
+async function AdminSeoReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SEO</h1>
-        <p className="mt-1 text-sm text-muted">Track search intent and indexable marketing pages.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('seo.marketingSeo')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('seo.trackSearchIntentAndIndexable')}</p>
       </div>
-      <ErrorState message="Could not load SEO keywords from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text underline">Refresh SEO</Link>
+      <ErrorState message={t('seo.couldNotLoadSeoKeywords')} />
+      <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text underline">{t('seo.refreshSeo')}</Link>
     </div>
   );
 }

@@ -32,7 +32,7 @@ export function TripDocuments({ vacationId }: { vacationId: string }) {
   return (
     <TripCrudSection<Doc>
       table="vacation_documents" vacationId={vacationId} title={t('tripDocuments.travelDocuments')} icon={FolderLock}
-      fields={fields} emptyText="No documents yet" addLabel="Add document"
+      fields={fields} emptyText={t('tripDocuments.noDocumentsYet')} addLabel="Add document"
       orderBy={(a, b) => a.title.localeCompare(b.title)}
       renderRow={(d, members) => {
         const k = lookup(DOC_KINDS, d.kind);

@@ -115,9 +115,9 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load health visits. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('healthVisitsModule.couldNotLoadHealthVisits')} onRetry={refresh} />
       ) : scoped.length === 0 ? (
-        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
+        <EmptyState icon={Stethoscope} title={t('healthVisits.noVisitsLogged')} description={t('healthVisitsModule.addADoctorDentistOr')} />
       ) : (
         <ul className="space-y-2">
           {scoped.map((v) => {

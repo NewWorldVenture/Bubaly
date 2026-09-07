@@ -85,7 +85,7 @@ export function ProjectsModule() {
   const error = projects.error || materials.error || quotes.error;
   const refresh = () => { void projects.refresh(); void materials.refresh(); void quotes.refresh(); void contractors.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load your projects. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('projectsModule.couldNotLoadYourProjects')} onRetry={refresh} />;
 
   const Card = ({ p }: { p: Project }) => {
   const tr = useTranslations();
@@ -158,7 +158,7 @@ export function ProjectsModule() {
       </div>
 
       {projects.data.length === 0 ? (
-        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description="Start with the thing you keep meaning to do. Type it and the planner suggests a materials list and whether to DIY or hire." action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
+        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description={tr('projectsModule.startWithTheThingYou')} action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-4">
           {BOARD.map((col) => {
@@ -235,7 +235,7 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   }
 
   return (
-    <Modal open title={project ? 'Edit project' : 'New project'} description="Describe it in a sentence. Matching starter scopes appear below." onClose={onClose}>
+    <Modal open title={project ? 'Edit project' : 'New project'} description={tr('projectsModule.describeItInASentence')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('projects.project')} required>{(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('projects.paintTheKidsRoom')} autoFocus />}</Field>
         <Field label={tr('projects.scopeDescription')}>{(id) => <Textarea id={id} name="description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr('projects.twoWallsLightBlueCeilingWhite')} />}</Field>
@@ -536,7 +536,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
   }
 
   return (
-    <Modal open title={quote ? 'Edit quote' : 'Log a quote'} description="From your contractor book or anyone new. Log requested quotes too, so you know who owes you a number." onClose={onClose}>
+    <Modal open title={quote ? 'Edit quote' : 'Log a quote'} description={tr('projectsModule.fromYourContractorBookOr')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('projects.fromYourContractorBook')}>{(id) => <Select id={id} name="contractor_id" value={contractorId} onChange={(e) => setContractorId(e.target.value)}><option value="">{tr('projects.someoneNew')}</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.is_preferred ? '⭐ ' : ''}{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>
         <Field label={tr('projects.contractorName')} required={!chosen}>{(id) => <Input id={id} name="contractor_name" defaultValue={quote?.contractor_name ?? ''} placeholder={chosen?.name ?? 'Bell Plumbing'} />}</Field>

@@ -95,14 +95,14 @@ export function DecisionsModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('decisions.decisionEngine')}
-        description="Weigh the trade-offs, see the reasoning, then decide together — the AI recommends, your family chooses."
+        description={t('decisionsModule.weighTheTradeOffsSee')}
         action={<Button onClick={() => setAddDecision(true)}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>}
       />
 
       {loading ? (
         <SkeletonList count={4} />
       ) : readError ? (
-        <ErrorState message="Could not load decision data. Refresh and try again." onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
+        <ErrorState message={t('decisionsModule.couldNotLoadDecisionData')} onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
       ) : (decisions ?? []).length === 0 ? (
         <EmptyState onAdd={() => setAddDecision(true)} />
       ) : (

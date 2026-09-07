@@ -43,7 +43,7 @@ export function RegistrationClient({
           <Button onClick={() => { setRegEdit(null); setRegOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {registrations.length === 0 ? (
-          <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description="Track each vehicle's registration renewal date." />
+          <EmptyState icon={FileText} title={tr('registrationClient.noRegistrations')} description={tr('registrationClient.trackEachVehicleSRegistration')} />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {registrations.map((r) => {
@@ -72,7 +72,7 @@ export function RegistrationClient({
           <Button onClick={() => { setInspEdit(null); setInspOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {inspections.length === 0 ? (
-          <EmptyState icon={ClipboardCheck} title={tr('registrationClient.noInspections')} description="Track safety/emissions sticker expiry." />
+          <EmptyState icon={ClipboardCheck} title={tr('registrationClient.noInspections')} description={tr('registrationClient.trackSafetyEmissionsStickerExpiry')} />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {inspections.map((i) => {

@@ -28,8 +28,8 @@ async function ReadFailure() {
   const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title={t('selling.selling')} description="Your seller cockpit is temporarily unavailable." />
-      <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
+      <PageHeader title={t('selling.selling')} description={t('selling.yourSellerCockpitIsTemporarily')} />
+      <ErrorState message={t('selling.couldNotLoadSellerActivity')} />
       <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">{t('selling.refreshSelling')}</Link>
     </div>
   );
@@ -131,7 +131,7 @@ export default async function SellingPage() {
     <div className="module-page">
       <PageHeader
         title={tr('marketplaceSelling.selling')}
-        description="Everything you're selling, ranked by what needs you — answer questions, reply to offers, confirm pickups, chase returns."
+        description={t('selling.everythingYouReSellingRanked')}
         action={
           <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
             <Plus className="h-4 w-4" /> {tr('marketplaceSelling.postAnItem')}

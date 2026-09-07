@@ -296,7 +296,7 @@ export function DocumentsModule() {
       <div className="module-main space-y-5">
         <PageHeader
           title={tr('documents.files')}
-          description="Store, organize, and share important documents with your family."
+          description={tr('documentsModule.storeOrganizeAndShareImportant')}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={() => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> {tr('documents.upload')}</Button>
@@ -624,7 +624,7 @@ export function DocumentsModule() {
             )}
           </div>
           <Field label={tr('documents.fileName')}>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('documents.eGPassportEmmaPdf')} />}</Field>
-          <Field label={tr('documents.folder')} hint="Type a new name to create a folder, or reuse an existing one.">{(id) => (
+          <Field label={tr('documents.folder')} hint={tr('documentsModule.typeANewNameTo')}>{(id) => (
             <>
               <Input id={id} list="folder-options" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} placeholder={tr('documents.eGSchoolFinancesVacation2025')} />
               <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
@@ -636,7 +636,7 @@ export function DocumentsModule() {
               {members.map((m) => <option key={m.id} value={m.id}>{tr('documents.private')} {m.display_name}</option>)}
             </Select>
           )}</Field>
-          <Field label={tr('documents.expiresOptional')} hint="For passports, insurance, registrations — Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
+          <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
           <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload File'}</Button>
         </div>
       </Modal>

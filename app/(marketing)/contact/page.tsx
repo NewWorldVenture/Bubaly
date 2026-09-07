@@ -23,7 +23,7 @@ export default async function ContactPage() {
   return (
     <>
     <Section className="pt-20">
-      <SectionHeading eyebrow="Contact" title={t('contact.wedLoveToHearFromYou')} description="Questions, feedback, or just saying hi — send us a note." />
+      <SectionHeading eyebrow="Contact" title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[
@@ -83,7 +83,7 @@ export default async function ContactPage() {
         <ContactForm />
       </div>
     </Section>
-    <MarketingAeoSection path="/contact" name="Contact Bubaly" description="Get in touch with the Bubaly team for questions, feedback, or support." />
+    <MarketingAeoSection path="/contact" name="Contact Bubaly" description={t('contact.getInTouchWithThe')} />
     </>
   );
 }

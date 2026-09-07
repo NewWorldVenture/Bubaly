@@ -56,9 +56,9 @@ export default async function OnboardingFunnelPage() {
 
       <SectionCard title={t('dashboardOnboardingFunnel.stepByStepFunnel')}>
         {funnelError ? (
-          <MiniError text="Couldn’t load onboarding telemetry. Refresh to try again." />
+          <MiniError text={t('onboardingFunnel.couldnTLoadOnboardingTelemetry')} />
         ) : funnel.startedSessions === 0 ? (
-          <MiniEmpty icon={Activity} text="No onboarding activity yet." />
+          <MiniEmpty icon={Activity} text={t('onboardingFunnel.noOnboardingActivityYet')} />
         ) : (
           <ul className="space-y-3">
             {funnel.steps.map((s) => (
@@ -101,9 +101,9 @@ export default async function OnboardingFunnelPage() {
 
       <SectionCard title={t('dashboardOnboardingFunnel.timeToFirstValue')}>
         {actError ? (
-          <MiniError text="Couldn’t load activation telemetry. Refresh to try again." />
+          <MiniError text={t('onboardingFunnel.couldnTLoadActivationTelemetry')} />
         ) : activation.cohorts === 0 ? (
-          <MiniEmpty icon={Rocket} text="No activation events yet — value milestones fire once a family views an outcome, briefing, or imports a calendar." />
+          <MiniEmpty icon={Rocket} text={t('onboardingFunnel.noActivationEventsYetValue')} />
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

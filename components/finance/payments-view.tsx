@@ -63,7 +63,7 @@ export function PaymentsView() {
 
   return (
     <div className="module-page">
-      <PageHeader title={tr('payments.paymentHistory')} description="Every transaction across your family's accounts." />
+      <PageHeader title={tr('payments.paymentHistory')} description={tr('paymentsView.everyTransactionAcrossYourFamily')} />
 
       {/* This month at a glance */}
       <div className="grid-stats">

@@ -143,13 +143,13 @@ export function LanguageModule() {
   const error = goals.error || sessions.error || cards.error;
   const refresh = () => { void goals.refresh(); void sessions.refresh(); void cards.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load language practice. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('languageModule.couldNotLoadLanguagePractice')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={tr('language.languagePractice')}
-        description="Kids and parents learning a language together: spaced-repetition vocabulary, weekly minutes and streaks, a realistic hours-to-level estimate, and an AI tutor that answers in the language with gentle corrections."
+        description={tr('languageModule.kidsAndParentsLearningA')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="language" iconOnly />
@@ -161,7 +161,7 @@ export function LanguageModule() {
       />
 
       {goals.data.length === 0 || !goal || !deck || !week || !level || !suggestion ? (
-        <EmptyState icon={Languages} title={tr('language.noLanguageGoalsYet')} description="Pick who is learning what and how many minutes a week. A starter deck of twenty words comes with the goal." action={<Button onClick={() => setGoalForm({ open: true, goal: null })}><Languages className="h-4 w-4" /> {tr('language.startALanguage')}</Button>} />
+        <EmptyState icon={Languages} title={tr('language.noLanguageGoalsYet')} description={tr('languageModule.pickWhoIsLearningWhat')} action={<Button onClick={() => setGoalForm({ open: true, goal: null })}><Languages className="h-4 w-4" /> {tr('language.startALanguage')}</Button>} />
       ) : (
         <>
           {goals.data.length > 1 && (
@@ -279,7 +279,7 @@ export function LanguageModule() {
 
           {tab === 'sessions' && (
             mySessions.length === 0 ? (
-              <EmptyState icon={Timer} title={tr('language.nothingLoggedYet')} description="Log anything: a class, ten minutes with the tutor, a film with subtitles. Minutes add up to the level estimate." action={<Button onClick={() => setSessionOpen(true)}><Timer className="h-4 w-4" /> {tr('language.logPractice')}</Button>} />
+              <EmptyState icon={Timer} title={tr('language.nothingLoggedYet')} description={tr('languageModule.logAnythingAClassTen')} action={<Button onClick={() => setSessionOpen(true)}><Timer className="h-4 w-4" /> {tr('language.logPractice')}</Button>} />
             ) : (
               <ul className="space-y-2">
                 {mySessions.slice(0, 40).map((s) => (
@@ -440,7 +440,7 @@ function SessionForm({ familyId, userId, goal, suggested, onClose, onSaved }: { 
   }
 
   return (
-    <Modal open title={tr('language.logPractice')} description="Anything counts: class, tutor chat, a show with subtitles, dinner in the language." onClose={onClose}>
+    <Modal open title={tr('language.logPractice')} description={tr('languageModule.anythingCountsClassTutorChat')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('language.what')}>{(id) => <Select id={id} name="kind" defaultValue={suggested?.kind ?? 'vocab'}>{SESSION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>

@@ -709,7 +709,7 @@ export function MessagesModule() {
                 <SkeletonList />
               ) : messages.length === 0 ? (
                 <EmptyState icon={MessageCircle} title={tr('messages.noMessagesYet')}
-                  description="Say hello to your family!" />
+                  description={tr('messagesModule.sayHelloToYourFamily')} />
               ) : (
                 grouped.map(({ label, msgs }) => (
                   <div key={label}>

@@ -150,7 +150,7 @@ export function SignupsModule() {
     <div>
       <PageHeader
         title={t('signups.registrationsSignups')}
-        description="Never miss a camp, school, or activity registration deadline again."
+        description={t('signupsModule.neverMissACampSchool')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="signups" iconOnly />

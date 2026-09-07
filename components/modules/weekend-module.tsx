@@ -214,8 +214,8 @@ export function WeekendModule() {
       )}
 
       {/* discovered events grouped by day */}
-      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load weekend planner data. Refresh and try again." onRetry={refresh} /> : grouped.length === 0 ? (
-        <EmptyState icon={Sparkles} title={t('weekend.noUpcomingEventsYet')} description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
+      {loading ? <SkeletonList /> : error ? <ErrorState message={t('weekendModule.couldNotLoadWeekendPlanner')} onRetry={refresh} /> : grouped.length === 0 ? (
+        <EmptyState icon={Sparkles} title={t('weekend.noUpcomingEventsYet')} description={t('weekendModule.enterYourZipCodeAnd')} />
       ) : (
         <div className="space-y-6">
           {grouped.map(([day, dayEvents]) => (

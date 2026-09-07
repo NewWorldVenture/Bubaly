@@ -153,7 +153,7 @@ export function VotingModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family voting data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('votingModule.couldNotLoadFamilyVoting')} onRetry={refresh} />;
   const all = polls ?? [];
   const budgetRows = budgets ?? [];
 
@@ -171,7 +171,7 @@ export function VotingModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Vote} title={tr('voting.noPollsYet')} description="Create a poll to make a collaborative family decision — a trip, a restaurant, a movie night. Add each option's cost and Bubaly will facilitate consensus." />
+        <EmptyState icon={Vote} title={tr('voting.noPollsYet')} description={tr('votingModule.createAPollToMake')} />
       ) : all.map((p) => {
         const opts = (optionsByPoll.get(p.id) ?? []) as Option[];
         const pollVotes = (votesByPoll.get(p.id) ?? []) as VoteRow[];

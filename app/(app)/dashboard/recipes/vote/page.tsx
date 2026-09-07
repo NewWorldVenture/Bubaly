@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -9,6 +10,7 @@ export const metadata: Metadata = { title: 'Meal Voting' };
 export const dynamic = 'force-dynamic';
 
 export default async function MealVotePage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -29,7 +31,7 @@ export default async function MealVotePage() {
     .find((e) => e && !isMissingTableError(e));
   if (voteError) {
     console.error('[dashboard/recipes/vote] meal vote read failed', voteError);
-    return <ErrorState message="Could not load meal voting from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('vote.couldNotLoadMealVoting')} />;
   }
 
   const votes = votesRes.data;

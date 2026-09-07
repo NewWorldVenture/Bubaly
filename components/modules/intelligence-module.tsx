@@ -67,11 +67,11 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
     persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
 
   if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
-  if (error) return <ErrorState message="Could not load intelligence preferences. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('intelligence.intelligenceNetwork')} description="Opt in to learn from anonymized patterns across similar families — or stay fully private. Your choice, always reversible." />
+      <PageHeader title={t('intelligence.intelligenceNetwork')} description={t('intelligenceModule.optInToLearnFrom')} />
 
       {/* Privacy promise */}
       <div className="rounded-xl border border-border bg-card p-4">

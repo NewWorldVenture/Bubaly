@@ -159,7 +159,7 @@ export function SignupForm() {
           <Field label={t('signup.email')} error={errors.email} required>
             {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
           </Field>
-          <Field label={t('signup.password')} error={errors.password} hint="At least 8 characters" required>
+          <Field label={t('signup.password')} error={errors.password} hint={t('signupForm.atLeast8Characters')} required>
             {(id) => <Input id={id} name="password" type="password" autoComplete="new-password" placeholder="••••••••" />}
           </Field>
           <Button type="submit" loading={loading} className="w-full">{t('signup.createAccount')}</Button>

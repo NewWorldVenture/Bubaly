@@ -36,7 +36,7 @@ export default async function SocialSettingsPage() {
     .find((e) => e && !isMissingTableError(e));
   if (socialError) {
     console.error('[dashboard/social/settings] social settings read failed', socialError);
-    return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('settings.couldNotLoadYourSocial')} />;
   }
 
   const settings = settingsRes.data;

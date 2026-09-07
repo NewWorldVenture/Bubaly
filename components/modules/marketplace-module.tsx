@@ -234,7 +234,7 @@ export function MarketplaceModule({
     <div>
       <PageHeader
         title={t('marketplace.familyMarketplace')}
-        description="Buy, sell, rent, borrow or give away within the family. Post an item and everyone can claim it."
+        description={t('marketplaceModule.buySellRentBorrowOr')}
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
@@ -270,7 +270,7 @@ export function MarketplaceModule({
 
       {visible.length === 0 ? (
         <EmptyState icon={Store} title={t('marketplace.nothingOnTheBoardYet')}
-          description="Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs."
+          description={t('marketplaceModule.postTheFirstItemSell')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('marketplace.postAListing')}</Button>} />
       ) : (
         <>

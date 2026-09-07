@@ -38,10 +38,10 @@ export function FindPhoneView() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('findPhone.findPhone')} description="See each family member's last known device location."
+      <PageHeader title={t('findPhone.findPhone')} description={t('findPhoneView.seeEachFamilyMemberS')}
         action={<Link href="/dashboard/locator" className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-elevated px-5 text-sm font-semibold transition hover:bg-elevated/70"><MapPinned className="h-4 w-4" /> {t('findPhone.familyMap')}</Link>} />
 
-      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load phone locations. Refresh and try again." onRetry={refresh} /> : (
+      {loading ? <SkeletonList /> : error ? <ErrorState message={t('findPhoneView.couldNotLoadPhoneLocations')} onRetry={refresh} /> : (
         <div className="grid gap-3 sm:grid-cols-2">
           {activeMembers.map((m) => {
             const loc = locByMember.get(m.id);

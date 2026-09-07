@@ -138,7 +138,7 @@ export function AutopilotModule() {
     <div className="module-page">
       <PageHeader
         title={t('autopilot.familyAutopilot')}
-        description="Mission control. Bubaly predicts what your family needs and quietly handles what it can."
+        description={t('autopilotModule.missionControlBubalyPredictsWhat')}
         action={
           <Button variant="ghost" onClick={runScan} loading={scanning}>
             <RefreshCw className={cn('h-4 w-4', scanning && 'animate-spin')} /> Re-scan
@@ -173,7 +173,7 @@ export function AutopilotModule() {
 
       {open.length === 0 && handled.length === 0 ? (
         <EmptyState icon={Rocket} title={t('autopilot.allClear')}
-          description="Autopilot scanned your family and found nothing that needs you right now. We'll keep watching."
+          description={t('autopilotModule.autopilotScannedYourFamilyAnd')}
           action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> {t('autopilot.scanAgain')}</Button>} />
       ) : (
         <div className="space-y-6">

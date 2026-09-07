@@ -105,7 +105,7 @@ export function TripMemoriesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load trip memories. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('tripMemoriesModule.couldNotLoadTripMemories')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -118,7 +118,7 @@ export function TripMemoriesModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={BookHeart} title={t('tripMemories.noMemoriesYet')} description="Capture moments from your trips — a photo, a note, a place you loved." />
+        <EmptyState icon={BookHeart} title={t('tripMemories.noMemoriesYet')} description={t('tripMemoriesModule.captureMomentsFromYourTrips')} />
       ) : groups.map((g) => (
         <div key={g.vacationId || 'general'}>
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">

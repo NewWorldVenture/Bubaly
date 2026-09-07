@@ -103,7 +103,7 @@ export function GraphModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('graph.knowledgeGraph')}
-        description="The household modelled as linked, typed relationships — so the AI can reason, not just retrieve."
+        description={t('graphModule.theHouseholdModelledAsLinked')}
         action={
           <>
             <Button onClick={rebuildFromData} disabled={projecting}>
@@ -120,7 +120,7 @@ export function GraphModule() {
       {loading ? (
         <SkeletonList count={4} />
       ) : error ? (
-        <ErrorState message="Could not load the knowledge graph. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('graphModule.couldNotLoadTheKnowledge')} onRetry={refresh} />
       ) : graph.entities.length === 0 ? (
         <EmptyState onAdd={() => setAddEntity(true)} onRebuild={rebuildFromData} projecting={projecting} />
       ) : (

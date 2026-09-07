@@ -271,13 +271,13 @@ export function MedicationsModule() {
   const loading = medsLoading || schedulesLoading || dosesLoading;
   const readError = medsError || schedulesError || dosesError;
   if (loading) return <SkeletonList count={5} />;
-  if (readError) return <ErrorState message="Could not load medication data. Refresh and try again." onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
+  if (readError) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
 
   return (
     <div>
       <PageHeader
         title={t('medications.medications')}
-        description="Track medications, dosing schedules, and adherence for the whole family."
+        description={t('medicationsModule.trackMedicationsDosingSchedulesAnd')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medications" />
@@ -460,7 +460,7 @@ export function MedicationsModule() {
             {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder={t('medications.eGTakeWithFood')} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t('medications.refillDue')} hint="Bubaly reminds you before it runs out.">
+            <Field label={t('medications.refillDue')} hint={t('medicationsModule.bubalyRemindsYouBeforeIt')}>
               {(id) => <Input id={id} type="date" value={medForm.refill_on} onChange={(e) => setMedForm((f) => ({ ...f, refill_on: e.target.value }))} />}
             </Field>
             <Field label={t('medications.remindDaysAhead')}>

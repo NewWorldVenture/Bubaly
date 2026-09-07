@@ -37,7 +37,7 @@ export default async function MarketplaceQuestionsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('marketplaceQuestions.questions')} description="Questions on your listings, and the ones you’ve asked." />
+      <PageHeader title={t('marketplaceQuestions.questions')} description={t('questions.questionsOnYourListingsAnd')} />
 
       <section className="space-y-2">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold"><MessageSquare className="h-4 w-4 text-brand-text" /> {t('marketplaceQuestions.needsYourAnswer')} <span className="text-muted">({toAnswer.length})</span></h2>

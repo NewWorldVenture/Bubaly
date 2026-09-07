@@ -780,7 +780,7 @@ export function ChildDetailView({
         </div>
         {history.length === 0 ? (
           <div className="py-4">
-            <EmptyState icon={Receipt} title={t('childDetail.noTransactionsYet')} description="Top-ups, allowance, chores and gifts will show here." />
+            <EmptyState icon={Receipt} title={t('childDetail.noTransactionsYet')} description={t('childDetailView.topUpsAllowanceChoresAnd')} />
           </div>
         ) : (
           <div className="divide-y divide-border/50">

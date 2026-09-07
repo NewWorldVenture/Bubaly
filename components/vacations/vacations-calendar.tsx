@@ -62,7 +62,7 @@ export function VacationsCalendar() {
     return (
       <div className="space-y-5">
         <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> {tr('vacationsCalendar.vacationCalendar')}</h1>
-        <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={tr('vacationsCalendar.couldNotLoadYourTrips')} onRetry={refresh} />
       </div>
     );
   }

@@ -251,7 +251,7 @@ export function RemindersModule() {
   }
 
   if (combinedLoading) return <SkeletonList />;
-  if (combinedError) return <ErrorState message="Could not load reminders. Refresh and try again." onRetry={retry} />;
+  if (combinedError) return <ErrorState message={tr('remindersModule.couldNotLoadRemindersRefresh')} onRetry={retry} />;
 
   return (
     <div className="module-page">
@@ -405,11 +405,11 @@ export function RemindersModule() {
       {filtered.length === 0 ? (
         filtersActive ? (
           <EmptyState icon={Bell} title={tr('reminders.noMatchingReminders')}
-            description="Nothing matches the current filters. Clear them to see everything."
+            description={tr('remindersModule.nothingMatchesTheCurrentFilters')}
             action={<Button variant="outline" onClick={clearFilters}><X className="h-4 w-4" /> {tr('reminders.clearFilters')}</Button>} />
         ) : (
           <EmptyState icon={Bell} title={tr('reminders.noReminders')}
-            description="Set time-based, location, medication, or recurring reminders for your family."
+            description={tr('remindersModule.setTimeBasedLocationMedication')}
             action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
         )
       ) : (

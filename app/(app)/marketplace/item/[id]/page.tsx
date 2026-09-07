@@ -55,7 +55,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     .eq('id', id).eq('family_id', familyId).maybeSingle();
   if (listingError) {
     reportRead('Listing', listingError);
-    return <ErrorState message="Could not load this listing from the marketplace. Refresh and try again." />;
+    return <ErrorState message={t('item.couldNotLoadThisListing')} />;
   }
   if (!listing) notFound();
 

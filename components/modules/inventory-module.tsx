@@ -112,13 +112,13 @@ export function InventoryModule() {
   const error = locations.error || items.error || moves.error;
   const refresh = () => { void locations.refresh(); void items.refresh(); void moves.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the home inventory. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('inventoryModule.couldNotLoadTheHome')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={tr('inventory.homeInventory')}
-        description="Where everything lives. Ask “where is the…?”, track what’s lent out, keep serials and warranties, and know what the home is worth."
+        description={tr('inventoryModule.whereEverythingLivesAskWhere')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="inventory" iconOnly />
@@ -230,7 +230,7 @@ export function InventoryModule() {
             <span className="text-xs text-muted">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
           </div>
           {items.data.length === 0 ? (
-            <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description="Start with the things you keep losing: passports, spare keys, seasonal gear. Add a photo and a location and you’ll never hunt again." action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />
+            <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description={tr('inventoryModule.startWithTheThingsYou')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />
           ) : filtered.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{tr('inventory.noItemsMatchTheseFilters')}</p>
           ) : (
@@ -378,12 +378,12 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
           <Field label={tr('inventory.category')}>{(id) => <Select id={id} name="category" defaultValue={item?.category ?? 'other'}>{ITEM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('inventory.where')} hint="Room › container">{(id) => <Select id={id} name="location_id" defaultValue={item?.location_id ?? defaultLocationId ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
+          <Field label={tr('inventory.where')} hint={tr('inventoryModule.roomContainer')}>{(id) => <Select id={id} name="location_id" defaultValue={item?.location_id ?? defaultLocationId ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
           <Field label={tr('inventory.whose')}>{(id) => <Select id={id} name="owner_member_id" defaultValue={item?.owner_member_id ?? ''}><option value="">{tr('inventory.theFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('inventory.quantity')}>{(id) => <Input id={id} name="quantity" type="number" min={0} defaultValue={item?.quantity ?? 1} />}</Field>
-          <Field label={tr('inventory.value')} hint="For insurance">{(id) => <Input id={id} name="value" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.value_cents != null ? (item.value_cents / 100).toFixed(2) : ''} />}</Field>
+          <Field label={tr('inventory.value')} hint={tr('inventoryModule.forInsurance')}>{(id) => <Input id={id} name="value" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.value_cents != null ? (item.value_cents / 100).toFixed(2) : ''} />}</Field>
           <Field label={tr('inventory.purchased')}>{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -447,7 +447,7 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
           <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>
           <Field label={tr('inventory.kind')}>{(id) => <Select id={id} name="kind" defaultValue={location?.kind ?? (parent ? 'box' : 'room')}>{LOCATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
         </div>
-        <Field label={tr('inventory.inside')} hint="Leave empty for a top-level room or area">{(id) => <Select id={id} name="parent_id" defaultValue={location?.parent_id ?? parent?.id ?? ''}><option value="">{tr('inventory.topLevel')}</option>{rooms.map((r) => <option key={r.id} value={r.id}>{locationKindMeta(r.kind).emoji} {r.name}</option>)}</Select>}</Field>
+        <Field label={tr('inventory.inside')} hint={tr('inventoryModule.leaveEmptyForATop')}>{(id) => <Select id={id} name="parent_id" defaultValue={location?.parent_id ?? parent?.id ?? ''}><option value="">{tr('inventory.topLevel')}</option>{rooms.map((r) => <option key={r.id} value={r.id}>{locationKindMeta(r.kind).emoji} {r.name}</option>)}</Select>}</Field>
         <Field label={tr('inventory.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={location?.notes ?? ''} placeholder={tr('inventory.keyIsOnTheHookBy')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>

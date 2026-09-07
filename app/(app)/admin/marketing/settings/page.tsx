@@ -52,12 +52,12 @@ export default async function MarketingSettingsPage() {
             <li key={p.env} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
               <span>{p.name}</span>
               {p.ready
-                ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" /> Connected</span>
+                ? <span className="inline-flex items-center gap-1 text-success"><CheckCircle2 className="h-4 w-4" />{' '}{t('settings.connected')}</span>
                 : <span className="inline-flex items-center gap-1 text-muted"><XCircle className="h-4 w-4" /> Set {p.env}</span>}
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-muted">Provider status reflects server environment variables and the stored admin AI configuration. Connect a provider to enable its channel.</p>
+        <p className="mt-3 text-xs text-muted">{t('settings.providerStatusReflectsServerEnvironment')}</p>
       </Card>
 
       <Card>
@@ -71,7 +71,7 @@ export default async function MarketingSettingsPage() {
                 <label className="flex-1 text-sm">{s.label}
                   <input name="value" defaultValue={current?.text ?? ''} className={`mt-1 ${inputCls}`} />
                 </label>
-                <button className="h-10 shrink-0 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">Save</button>
+                <button className="h-10 shrink-0 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">{t('settings.save')}</button>
               </form>
             );
           })}
@@ -81,15 +81,16 @@ export default async function MarketingSettingsPage() {
   );
 }
 
-function AdminMarketingSettingsReadError() {
+async function AdminMarketingSettingsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Settings</h1>
-        <p className="mt-1 text-sm text-muted">Configure provider status and marketing defaults.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('settings.marketingSettings')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('settings.configureProviderStatusAndMarketing')}</p>
       </div>
-      <ErrorState message="Could not load marketing settings from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/settings" className="text-sm font-medium text-brand-text underline">Refresh settings</Link>
+      <ErrorState message={t('settings.couldNotLoadMarketingSettings')} />
+      <Link href="/admin/marketing/settings" className="text-sm font-medium text-brand-text underline">{t('settings.refreshSettings')}</Link>
     </div>
   );
 }

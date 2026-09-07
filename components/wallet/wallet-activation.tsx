@@ -36,7 +36,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
 
   return (
     <div className="module-page mx-auto max-w-2xl">
-      <PageHeader title={t('walletActivation.familyWallet')} description="A parent-controlled financial operating system for your family." />
+      <PageHeader title={t('walletActivation.familyWallet')} description={t('walletActivation.aParentControlledFinancialOperating')} />
 
       <div className="mb-6 flex flex-col items-center gap-4 rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-8 text-center">
         <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/15">

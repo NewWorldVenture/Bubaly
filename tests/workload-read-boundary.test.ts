@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/workload/page.tsx', 'utf8');
@@ -8,7 +9,7 @@ const moduleSrc = fs.readFileSync('components/modules/workload-module.tsx', 'utf
 describe('workload read and persistence boundaries', () => {
   it('fails visibly when any required workload query fails', () => {
     expect(page).toContain('const failedQuery = queries.find((query) => query.error);');
-    expect(page).toContain('Could not load workload data from Supabase. Refresh and try again.');
+    expectSays(page, 'workload.couldNotLoadWorkloadData', 'Could not load workload data from Supabase. Refresh and try again.');
     expect(page).toContain('<ErrorState message=');
   });
 

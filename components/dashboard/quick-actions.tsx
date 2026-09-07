@@ -223,7 +223,7 @@ function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; on
   return (
     <Modal open onClose={onClose} title={t('quickActions.familyDashboardSettings')}>
       <div className="space-y-3">
-        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label={t('quickActions.allowChildrenToCustomize')} hint="Let kid accounts personalize their own dashboard buttons." />
+        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label={t('quickActions.allowChildrenToCustomize')} hint={t('quickActions.letKidAccountsPersonalizeTheir')} />
         <Toggle on={lockAll} onToggle={() => setLockAll((v) => !v)} label={t('quickActions.useTheFamilyDefaultForEveryone')} hint="Everyone sees the shared default; only parents can change it." />
         <button onClick={resetEveryone} disabled={saving} className="flex w-full items-center gap-2 rounded-xl border border-border p-3 text-left text-sm text-muted hover:border-danger/40 hover:text-danger transition">
           <RotateCcw className="h-4 w-4" /> {t('quickActions.resetAllMembersDashboardsToDefault')}

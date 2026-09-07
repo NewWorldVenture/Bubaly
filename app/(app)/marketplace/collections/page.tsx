@@ -28,7 +28,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   if (collectionsError) {
     console.error('[marketplace-collections] Collections read failed', collectionsError);
-    return <ErrorState message="Could not load your marketplace collections. Refresh and try again." />;
+    return <ErrorState message={t('collections.couldNotLoadYourMarketplace')} />;
   }
 
   const { data: items, error: itemsError } = await sb
@@ -100,7 +100,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
 
   return (
     <div>
-      <PageHeader title={t('marketplaceCollections.collections')} description="Curated sets from the family board — dresses for the wedding, camping season, baby gear." />
+      <PageHeader title={t('marketplaceCollections.collections')} description={t('collections.curatedSetsFromTheFamily')} />
       {dataWarnings.length > 0 && (
         <div role="status" aria-label={t('marketplaceCollections.marketplaceCollectionsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

@@ -60,7 +60,7 @@ export default async function SyncHubPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSync.sync')}</h1>
-        <ErrorState message="Could not load your sync status from Supabase. Refresh and try again." />
+        <ErrorState message={t('sync.couldNotLoadYourSync')} />
         <a href="/dashboard/sync" className="text-sm font-medium text-brand-text underline">{t('dashboardSync.refreshSyncStatus')}</a>
       </div>
     );

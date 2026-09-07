@@ -78,7 +78,7 @@ export default async function LoyaltyPage() {
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.rewardsCatalog')}</h3>
         {rewardRows.length === 0 ? (
-          <EmptyState icon={Gift} title={t('adminMarketingLoyalty.noRewardsYet')} description="Add your first reward so families have something to redeem." />
+          <EmptyState icon={Gift} title={t('adminMarketingLoyalty.noRewardsYet')} description={t('loyalty.addYourFirstRewardSo')} />
         ) : (
           <div className="space-y-2">{rewardRows.map((r) => <RewardRow key={r.id} reward={r} />)}</div>
         )}
@@ -89,7 +89,7 @@ export default async function LoyaltyPage() {
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.redemptions')} {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
         {redemptionView.length === 0 ? (
-          <EmptyState icon={Sparkles} title={t('adminMarketingLoyalty.noRedemptionsYet')} description="Redemptions from families will appear here for you to fulfill." />
+          <EmptyState icon={Sparkles} title={t('adminMarketingLoyalty.noRedemptionsYet')} description={t('loyalty.redemptionsFromFamiliesWillAppear')} />
         ) : (
           <div className="space-y-2">{redemptionView.map((r) => <RedemptionRow key={r.id} redemption={r} />)}</div>
         )}
@@ -99,7 +99,7 @@ export default async function LoyaltyPage() {
       <Card>
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> {t('adminMarketingLoyalty.members')}</h3>
         {accountRows.length === 0 ? (
-          <EmptyState icon={Users} title={t('adminMarketingLoyalty.noMembersYet')} description="Accounts are created automatically when a family first earns points." />
+          <EmptyState icon={Users} title={t('adminMarketingLoyalty.noMembersYet')} description={t('loyalty.accountsAreCreatedAutomaticallyWhen')} />
         ) : (
           <div className="space-y-1">
             {accountRows.map((a) => {
@@ -151,15 +151,16 @@ export default async function LoyaltyPage() {
   );
 }
 
-function AdminLoyaltyReadError() {
+async function AdminLoyaltyReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Loyalty &amp; Rewards</h1>
-        <p className="mt-1 text-sm text-muted">Manage points, rewards, redemptions, and program settings.</p>
+        <p className="mt-1 text-sm text-muted">{t('loyalty.managePointsRewardsRedemptionsAnd')}</p>
       </div>
-      <ErrorState message="Could not load loyalty data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/loyalty" className="text-sm font-medium text-brand-text underline">Refresh loyalty</Link>
+      <ErrorState message={t('loyalty.couldNotLoadLoyaltyData')} />
+      <Link href="/admin/marketing/loyalty" className="text-sm font-medium text-brand-text underline">{t('loyalty.refreshLoyalty')}</Link>
     </div>
   );
 }

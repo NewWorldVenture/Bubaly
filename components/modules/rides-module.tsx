@@ -151,7 +151,7 @@ export function RidesModule() {
     <div>
       <PageHeader
         title={t('rides.ridesCarpool')}
-        description="Coordinate who's driving whom, when, and where — with conflict detection."
+        description={tr('ridesModule.coordinateWhoSDrivingWhom')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rides" iconOnly />

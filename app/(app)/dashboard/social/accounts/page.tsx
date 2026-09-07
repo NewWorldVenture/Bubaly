@@ -36,7 +36,7 @@ export default async function AccountsPage() {
         <EmptyState
           icon={Plug}
           title={t('dashboardSocialAccounts.noAccountsYet')}
-          description="Connect a social account to begin."
+          description={t('accounts.connectASocialAccountTo')}
           action={<Link href="/dashboard/social/accounts/connect" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plug className="h-4 w-4" /> {t('dashboardSocialAccounts.connectAnAccount')}</Link>}
         />
       ) : (

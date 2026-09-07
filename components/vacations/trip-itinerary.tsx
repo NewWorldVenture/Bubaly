@@ -112,7 +112,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load this itinerary. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={t('tripItinerary.couldNotLoadThisItinerary')} onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
@@ -133,7 +133,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {sortedDays.length === 0 ? (
-        <EmptyState icon={CalendarRange} title={t('tripItinerary.noDaysPlannedYet')} description="Set trip dates then click “Build days from dates”, or add days as you go." />
+        <EmptyState icon={CalendarRange} title={t('tripItinerary.noDaysPlannedYet')} description={t('tripItinerary.setTripDatesThenClick')} />
       ) : (
         <div className="space-y-4">
           {sortedDays.map((day, i) => (

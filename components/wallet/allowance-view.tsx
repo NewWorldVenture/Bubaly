@@ -54,7 +54,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
 
   return (
     <div className="module-page">
-      <PageHeader title={t('allowance.familyWallet')} description="Automate weekly, biweekly, or monthly allowances." />
+      <PageHeader title={t('allowance.familyWallet')} description={t('allowanceView.automateWeeklyBiweeklyOrMonthly')} />
       <WalletSubnav />
 
       {enabled && canManage && due.count > 0 && (

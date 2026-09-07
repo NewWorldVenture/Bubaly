@@ -146,7 +146,7 @@ export function TripCrudSection<T extends Row>({
         <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {addLabel}</Button>
       } />
       {loading ? <LoadingBlock /> : error ? <ErrorState message={`Could not load ${title.toLowerCase()}. Refresh and try again.`} onRetry={refresh} /> : rows.length === 0 ? (
-        <EmptyState icon={icon} title={emptyText} description="Add your first one to get started." />
+        <EmptyState icon={icon} title={emptyText} description={t('shared.addYourFirstOneTo')} />
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (

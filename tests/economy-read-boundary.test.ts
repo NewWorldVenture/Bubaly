@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/economy/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('economy page read boundary', () => {
   it('logs and returns an ErrorState on an economy read failure', () => {
     expect(page).toContain('if (economyError) {');
     expect(page).toContain("console.error('[economy] family economy read failed', economyError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family economy from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'economy.couldNotLoadYourFamily', "Could not load your family economy from Supabase. Refresh and try again.");
   });
 
   it('derives the economy data (incl. the ledger txns) only after the guard', () => {

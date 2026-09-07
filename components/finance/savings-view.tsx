@@ -50,11 +50,11 @@ export function SavingsView() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('savings.savingsGoals')} description="Set targets and watch your family's savings grow."
+      <PageHeader title={t('savings.savingsGoals')} description={t('savingsView.setTargetsAndWatchYour')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
 
       {loading ? <SkeletonList /> : rows.length === 0 ? (
-        <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description="Create a goal to start saving toward something special."
+        <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description={t('savingsView.createAGoalToStart')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -125,8 +125,8 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label={t('savings.target')}>{(id) => <Input id={id} type="number" step="0.01" value={v.target_amount} onChange={(e) => setV({ ...v, target_amount: e.target.value })} placeholder="3000" required />}</Field>
-          <Field label={t('savings.saved')} hint="Optional">{(id) => <Input id={id} type="number" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
-          <Field label="By" hint="Optional">{(id) => <Input id={id} type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} />}</Field>
+          <Field label={t('savings.saved')} hint={t('savingsView.optional')}>{(id) => <Input id={id} type="number" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
+          <Field label="By" hint={t('savingsView.optional')}>{(id) => <Input id={id} type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('savings.cancel')}</Button>

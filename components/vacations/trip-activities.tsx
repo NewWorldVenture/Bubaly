@@ -42,7 +42,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
     <div className="space-y-8">
       <TripCrudSection<Activity>
         table="vacation_activities" vacationId={vacationId} title={t('tripActivities.activities')} icon={Ticket}
-        fields={activityFields} emptyText="No activities yet" addLabel="Add activity"
+        fields={activityFields} emptyText={t('tripActivities.noActivitiesYet')} addLabel="Add activity"
         orderBy={(a, b) => (a.scheduled_at ?? '~').localeCompare(b.scheduled_at ?? '~')}
         renderRow={(a) => (
           <div>
@@ -58,7 +58,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
       />
       <TripCrudSection<Reservation>
         table="vacation_reservations" vacationId={vacationId} title={t('tripActivities.reservations')} icon={CalendarCheck}
-        fields={reservationFields} emptyText="No reservations yet" addLabel="Add reservation"
+        fields={reservationFields} emptyText={t('tripActivities.noReservationsYet')} addLabel="Add reservation"
         orderBy={(a, b) => (a.reserved_at ?? '~').localeCompare(b.reserved_at ?? '~')}
         renderRow={(r) => (
           <div>

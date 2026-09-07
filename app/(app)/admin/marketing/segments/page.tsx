@@ -36,7 +36,7 @@ export default async function SegmentsPage() {
       <div className="space-y-3">
         <p className="text-sm text-muted">{t('adminMarketingSegments.dynamicAudiencesRecomputedLiveAgainstYour')}</p>
         {(segments ?? []).length === 0 ? (
-          <EmptyState icon={Layers} title={t('adminMarketingSegments.noSegmentsYet')} description="Create your first audience on the right." />
+          <EmptyState icon={Layers} title={t('adminMarketingSegments.noSegmentsYet')} description={t('segments.createYourFirstAudienceOn')} />
         ) : (
           <div className="space-y-3">
             {(segments ?? []).map((s) => {
@@ -59,7 +59,7 @@ export default async function SegmentsPage() {
                   </div>
                   <form action={archiveSegment}>
                     <input type="hidden" name="id" value={s.id} />
-                    <button className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:bg-elevated hover:text-danger">Archive</button>
+                    <button className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:bg-elevated hover:text-danger">{t('segments.archive')}</button>
                   </form>
                 </Card>
               );
@@ -108,15 +108,16 @@ export default async function SegmentsPage() {
   );
 }
 
-function AdminSegmentsReadError() {
+async function AdminSegmentsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Segments</h1>
-        <p className="mt-1 text-sm text-muted">Build live audiences from customer attributes and activity.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('segments.marketingSegments')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('segments.buildLiveAudiencesFromCustomer')}</p>
       </div>
-      <ErrorState message="Could not load marketing segments from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/segments" className="text-sm font-medium text-brand-text underline">Refresh segments</Link>
+      <ErrorState message={t('segments.couldNotLoadMarketingSegments')} />
+      <Link href="/admin/marketing/segments" className="text-sm font-medium text-brand-text underline">{t('segments.refreshSegments')}</Link>
     </div>
   );
 }

@@ -47,11 +47,11 @@ export function BudgetsView() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('budgets.budgetPlanner')} description="Set category budgets and track spending against them."
+      <PageHeader title={t('budgets.budgetPlanner')} description={t('budgetsView.setCategoryBudgetsAndTrack')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
 
       {loading ? <SkeletonList /> : rows.length === 0 ? (
-        <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description="Create a budget for a spending category to track it."
+        <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description={t('budgetsView.createABudgetForA')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">

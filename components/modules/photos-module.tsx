@@ -191,14 +191,14 @@ export function PhotosModule() {
   }));
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family photos. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('photosModule.couldNotLoadFamilyPhotos')} onRetry={refresh} />;
 
   return (
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">
       {/* Header */}
       <PageHeader
         title={tr('photos.familyPhotosVideos')}
-        description="Memories your family will treasure forever."
+        description={tr('photosModule.memoriesYourFamilyWillTreasure')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="photos" iconOnly />
@@ -239,7 +239,7 @@ export function PhotosModule() {
         <div>
           {albumStats.length === 0 ? (
             <EmptyState icon={ImageIcon} title={tr('photos.noAlbumsYet')}
-              description="Create your first family album to organize your memories."
+              description={tr('photosModule.createYourFirstFamilyAlbum')}
               action={<Button onClick={() => setNewAlbumOpen(true)}><Plus className="h-4 w-4" /> {tr('photos.createAlbum')}</Button>} />
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

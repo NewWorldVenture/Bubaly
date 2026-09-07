@@ -9,12 +9,13 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Marketing · New Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const tr = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <Link href="/admin/marketing/campaigns" className="text-sm text-muted hover:text-fg">&lt;- Back to campaigns</Link>
-      <ErrorState message="Could not load campaign segments from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/campaigns/new" className="text-sm font-medium text-brand-text underline">Refresh campaign form</Link>
+      <ErrorState message={tr('new.couldNotLoadCampaignSegments')} />
+      <Link href="/admin/marketing/campaigns/new" className="text-sm font-medium text-brand-text underline">{tr('new.refreshCampaignForm')}</Link>
     </div>
   );
 }

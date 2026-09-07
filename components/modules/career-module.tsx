@@ -128,7 +128,7 @@ export function CareerModule() {
   const error = profiles.error || apps.error || resumes.error;
   const refresh = () => { void profiles.refresh(); void apps.refresh(); void resumes.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the career hub. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('careerModule.couldNotLoadTheCareer')} onRetry={refresh} />;
 
   const AppRow = ({ a }: { a: Application }) => {
   const tr = useTranslations();
@@ -162,7 +162,7 @@ export function CareerModule() {
     <div className="space-y-6">
       <PageHeader
         title={tr('career.careerHub')}
-        description="The household’s income depends on its careers: a parent’s next role, a teen’s first job. One place for the target, the pipeline with follow-up nudges, resume versions scored against the role’s keywords, and a map from the skills you have to the roles you want."
+        description={tr('careerModule.theHouseholdSIncomeDepends')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="career" iconOnly />
@@ -174,7 +174,7 @@ export function CareerModule() {
       />
 
       {profiles.data.length === 0 || !profile || !stats || !salary ? (
-        <EmptyState icon={Briefcase} title={tr('career.noCareerProfilesYet')} description="Start with who is looking and what for. Applications, resume scoring and the skills map hang off that." action={<Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {tr('career.startAProfile')}</Button>} />
+        <EmptyState icon={Briefcase} title={tr('career.noCareerProfilesYet')} description={tr('careerModule.startWithWhoIsLooking')} action={<Button onClick={() => setProfileForm({ open: true, profile: null })}><Briefcase className="h-4 w-4" /> {tr('career.startAProfile')}</Button>} />
       ) : (
         <>
           {(profiles.data.length > 1) && (
@@ -237,7 +237,7 @@ export function CareerModule() {
 
           {tab === 'pipeline' && (
             myApps.length === 0 ? (
-              <EmptyState icon={Briefcase} title={tr('career.nothingInThePipeline')} description="Save the roles worth applying to, then move each one along: applied → screening → interview → offer. The hub nudges you when something goes quiet." action={<Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.firstApplication')}</Button>} />
+              <EmptyState icon={Briefcase} title={tr('career.nothingInThePipeline')} description={tr('careerModule.saveTheRolesWorthApplying')} action={<Button onClick={() => setAppForm({ open: true, application: null })}><Plus className="h-4 w-4" /> {tr('career.firstApplication')}</Button>} />
             ) : (
               <div className="space-y-5">
                 {nudges.length > 0 && (
@@ -263,7 +263,7 @@ export function CareerModule() {
 
           {tab === 'resumes' && (
             myResumes.length === 0 ? (
-              <EmptyState icon={FileText} title={tr('career.noResumeVersions')} description="Paste the resume text and the target role’s keywords. You get an ATS-style score, what is missing, and a version per role." action={<Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.addAResume')}</Button>} />
+              <EmptyState icon={FileText} title={tr('career.noResumeVersions')} description={tr('careerModule.pasteTheResumeTextAnd')} action={<Button onClick={() => setResumeForm({ open: true, resume: null })}><FileText className="h-4 w-4" /> {tr('career.addAResume')}</Button>} />
             ) : (
               <ul className="grid gap-3 md:grid-cols-2">
                 {myResumes.map((r) => {
@@ -352,7 +352,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
   }
 
   return (
-    <Modal open title={profile ? 'Edit job search' : 'Start a job search'} description="One search per goal — a parent’s next role, a teen’s summer job. Target roles and keywords drive the resume score and the career map." onClose={onClose}>
+    <Modal open title={profile ? 'Edit job search' : 'Start a job search'} description={tr('careerModule.oneSearchPerGoalA')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Who" required>{(id) => <Select id={id} name="member_id" defaultValue={profile?.member_id ?? defaultMember ?? ''} disabled={!!profile}>{!profile && <option value="">Choose…</option>}{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -362,7 +362,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
           <Field label={tr('career.status')}>{(id) => <Select id={id} name="status" defaultValue={profile?.status ?? 'exploring'}>{CAREER_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
           <Field label={tr('career.headline')}>{(id) => <Input id={id} name="headline" defaultValue={profile?.headline ?? ''} placeholder={tr('career.operationsManager8YrsLogistics')} />}</Field>
         </div>
-        <Field label={tr('career.targetRolesCommaSeparated')} hint="e.g. Data Analyst, Project Manager — or Lifeguard, Barista for a first job">{(id) => <Input id={id} name="target_roles" defaultValue={profile?.target_roles.join(', ') ?? ''} />}</Field>
+        <Field label={tr('career.targetRolesCommaSeparated')} hint={tr('careerModule.eGDataAnalystProject')}>{(id) => <Input id={id} name="target_roles" defaultValue={profile?.target_roles.join(', ') ?? ''} />}</Field>
         <Field label={tr('career.skillsYouHaveCommaSeparated')}>{(id) => <Textarea id={id} name="skills" rows={2} defaultValue={profile?.skills.join(', ') ?? ''} placeholder={tr('career.sqlExcelTeamLeadershipCpr')} />}</Field>
         <Field label={tr('career.keywordsTheTargetRolesAskFor')} hint="Copy from real postings; resumes are scored against these">{(id) => <Textarea id={id} name="target_keywords" rows={2} defaultValue={profile?.target_keywords.join(', ') ?? ''} />}</Field>
         <div className="grid grid-cols-3 gap-3">
@@ -493,7 +493,7 @@ function ResumeForm({ familyId, userId, profile, resume, isFirst, onClose, onSav
   }
 
   return (
-    <Modal open title={resume ? 'Edit resume version' : 'New resume version'} description="One version per target role. The score updates as you type." onClose={onClose} className="max-w-3xl">
+    <Modal open title={resume ? 'Edit resume version' : 'New resume version'} description={tr('careerModule.oneVersionPerTargetRole')} onClose={onClose} className="max-w-3xl">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.versionName')} required>{(id) => <Input id={id} name="title" defaultValue={resume?.title ?? ''} placeholder={tr('career.opsManagerLogistics')} autoFocus />}</Field>

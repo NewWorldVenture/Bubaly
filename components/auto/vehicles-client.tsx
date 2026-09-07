@@ -33,7 +33,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
       </div>
 
       {vehicles.length === 0 ? (
-        <EmptyState icon={Car} title={t('vehiclesClient.noVehiclesYet')} description="Add your cars to track registration, inspection, insurance, and service." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('vehiclesClient.addVehicle')}</Button>} />
+        <EmptyState icon={Car} title={t('vehiclesClient.noVehiclesYet')} description={tr('vehiclesClient.addYourCarsToTrack')} action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('vehiclesClient.addVehicle')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {vehicles.map((v) => (

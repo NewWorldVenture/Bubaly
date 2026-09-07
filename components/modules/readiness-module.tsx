@@ -33,7 +33,7 @@ export async function ReadinessModule({ cards, overall }: { cards: ReadinessCard
   const t = await getTranslations();
   return (
     <div className="space-y-6">
-      <PageHeader title={t('readinessModule.lifeReadiness')} description="Not another list of data — a straight answer to “are we ready?”, and what to close if not." />
+      <PageHeader title={t('readinessModule.lifeReadiness')} description={t('readinessModule.notAnotherListOfData')} />
       <ReadinessHorizons cards={cards} overall={overall} />
     </div>
   );

@@ -1120,7 +1120,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add</Button>
       </div>
       {transactions.length === 0 ? (
-        <EmptyState icon={Receipt} title={tr('billing.noTransactions')} description="Add your first transaction to start tracking your finances."
+        <EmptyState icon={Receipt} title={tr('billing.noTransactions')} description={tr('billingModule.addYourFirstTransactionTo')}
           action={<Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>} />
       ) : (
         <div className="rounded-2xl border border-border bg-surface/40 divide-y divide-border">
@@ -1153,7 +1153,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>
       </div>
       {budgetProgress.length === 0 ? (
-        <EmptyState icon={Wallet} title={tr('billing.noBudgets')} description="Set spending limits by category to stay on track."
+        <EmptyState icon={Wallet} title={tr('billing.noBudgets')} description={tr('billingModule.setSpendingLimitsByCategory')}
           action={<Button onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>} />
       ) : (
         <div className="space-y-4">
@@ -1198,7 +1198,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>
       </div>
       {bills.length === 0 ? (
-        <EmptyState icon={Receipt} title={tr('billing.noBills')} description="Track your recurring bills and due dates."
+        <EmptyState icon={Receipt} title={tr('billing.noBills')} description={tr('billingModule.trackYourRecurringBillsAnd')}
           action={<Button onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>} />
       ) : (
         <div className="space-y-3">
@@ -1243,7 +1243,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>
       </div>
       {savingsGoals.length === 0 ? (
-        <EmptyState icon={PiggyBank} title={tr('billing.noSavingsGoals')} description="Set a savings goal to track your progress."
+        <EmptyState icon={PiggyBank} title={tr('billing.noSavingsGoals')} description={tr('billingModule.setASavingsGoalTo')}
           action={<Button onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1360,7 +1360,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="module-main module-page">
         <PageHeader
           title={tr('billing.finances')}
-          description="Stay on top of your family's money, budgets, and goals."
+          description={tr('billingModule.stayOnTopOfYour')}
           action={
             <div className="flex items-center gap-2">
               <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>

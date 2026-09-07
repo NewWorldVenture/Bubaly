@@ -37,7 +37,7 @@ export default async function MarketplaceSavedPage() {
 
   return (
     <div>
-      <PageHeader title={t('marketplaceSaved.saved')} description="The listings you’ve ♥’d — they’re here whenever you’re ready." />
+      <PageHeader title={t('marketplaceSaved.saved')} description={t('saved.theListingsYouVeD')} />
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Heart className="mx-auto mb-2 h-6 w-6" />

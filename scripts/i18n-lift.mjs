@@ -38,7 +38,7 @@
 //     them has to resolve each one — the tool lists them so that wiring is a
 //     task rather than a surprise.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { scanPaths } from './i18n-scan.mjs';
+import { scanPaths, withoutComments } from './i18n-scan.mjs';
 
 const file = process.argv[2];
 const apply = process.argv.includes('--apply');
@@ -145,48 +145,85 @@ function translatorName(text) {
 }
 const T = translatorName(src);
 
+// Positions are found in a COMMENT-BLANKED copy, never in the raw source. Two
+// bugs came from not doing that, both from one file:
+//
+//   // would render "No open tasks — nicely done." (family thinks chores are done)
+//   …
+//   <MiniEmpty icon={CheckSquare} text="No open tasks — nicely done." />
+//
+// `indexOf` found the COMMENT first, so the form was read from the words before
+// it ("would render ") and came out as an expression rather than an attribute —
+// and then `split().join()` rewrote the comment too, producing `text=tr(…)`
+// with no braces and a file that would not parse.
+//
+// The mask keeps every byte in place, so an offset into it is an offset into
+// the real source. Edits are then applied BY POSITION, back to front, which
+// also means two occurrences of the same sentence each get the form that suits
+// where they actually sit.
+const masked = withoutComments(src);
+
+/** Every index at which `needle` occurs. */
+function occurrences(hay, needle) {
+  const out = [];
+  for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) out.push(i);
+  return out;
+}
+
 const ns = namespaceFor(file);
 const seen = new Map();
-const plan = [];
+const edits = [];      // { start, end, to }
+const placed = [];     // one row per key, for the report
 
 for (const { text } of result.findings) {
   if (seen.has(text)) continue;
+
+  let key = `${ns}.${slugFor(text)}`;
+  let n = 2;
+  while ([...seen.values()].includes(key)) key = `${ns}.${slugFor(text)}${n++}`;
+
+  const mine = [];
+  const note = (start, end, to, kind) => mine.push({ start, end, to, kind });
+
   // Prefer the quoted form: a string literal in a data array is the common case
   // and the replacement is `t('key')` with no braces.
-  const single = `'${text.replace(/'/g, "\\'")}'`;
-  const singlePlain = `'${text}'`;
-  const double = `"${text}"`;
-  let form = null;
-  for (const q of [singlePlain, single, double]) {
-    const at = src.indexOf(q);
-    if (at === -1) continue;
-    // A JSX ATTRIBUTE needs braces — `title={t(key)}` — while the same quoted
-    // string inside an object or array literal must not have them. Telling them
-    // apart is the difference between a working page and a syntax error, so it
-    // is decided by what precedes the quote, not guessed: `name=` immediately
-    // before it means an attribute.
-    form = { from: q, kind: /[A-Za-z0-9_$]+=$/.test(src.slice(Math.max(0, at - 40), at)) ? 'attr' : 'expr' };
-    break;
+  const quoted = [...new Set([`'${text}'`, `'${text.replace(/'/g, "\\'")}'`, `"${text}"`])];
+  for (const q of quoted) {
+    for (const at of occurrences(masked, q)) {
+      // A JSX ATTRIBUTE needs braces — `title={t(key)}` — while the same quoted
+      // string inside an object or array literal must not have them. Telling
+      // them apart is the difference between a working page and a syntax error,
+      // so it is decided by what precedes the quote, not guessed: `name=`
+      // immediately before it means an attribute.
+      const isAttr = /[A-Za-z0-9_$]+=$/.test(masked.slice(Math.max(0, at - 40), at));
+      // A module-level data array holds the BARE KEY: `t` is not in scope there,
+      // and whatever renders the row calls it.
+      const to = atModuleScope(at) ? `'${key}'` : isAttr ? `{${T}('${key}')}` : `${T}('${key}')`;
+      note(at, at + q.length, to, atModuleScope(at) ? 'KEY' : isAttr ? 'attr' : 'expr');
+    }
   }
+
   // `>text<` is only JSX TEXT if it reads like prose. The same shape occurs
   // inside a TypeScript generic — `async <T,>(label: string, q: PromiseLike<…`
   // — where rewriting it produces a syntax error rather than a translation.
-  // Punctuation that belongs to code and not to a sentence rules it out.
   // `:\s*[A-Za-z]` used to stand in for "a type annotation" and swallowed real
   // prose with a colon in it — "Make it your family's for real: pick a plan to
-  // keep going" was skipped for years on that basis. A type annotation is a
-  // colon followed by a PRIMITIVE, or by a capitalised name that is then
-  // subscripted or generic; a sentence's colon is followed by an ordinary word.
+  // keep going" was skipped on that basis. A type annotation is a colon followed
+  // by a PRIMITIVE, or by a capitalised name that is then subscripted or
+  // generic; a sentence's colon is followed by an ordinary word.
   const TYPE_AFTER_COLON = /:\s*(?:string|number|boolean|unknown|any|void|never|Promise|React\b|[A-Z]\w*(?:\[\]|<|\s*\|))/;
   const looksLikeCode = /[{}|;=<>]|=>/.test(text) || TYPE_AFTER_COLON.test(text);
+
   // `>text<` is a JSX text node only if that `>` really closes a tag. In
   // `(fn: () => Promise<{ ok: boolean }>)` the `>` belongs to an ARROW, and the
-  // scanner reports `Promise` as prose — so the naive check rewrote a type
-  // annotation into JSX. A closing tag's `>` is never preceded by `=`.
-  const literal = `>${text}<`;
-  const litAt = src.indexOf(literal);
-  if (!form && !looksLikeCode && litAt > 0 && src[litAt - 1] !== '=' && src[litAt - 1] !== '-') {
-    form = { from: literal, kind: 'jsxText' };
+  // scanner reports `Promise` as prose. A closing tag's `>` is never preceded
+  // by `=` or `-`.
+  if (!mine.length && !looksLikeCode) {
+    const literal = `>${text}<`;
+    for (const at of occurrences(masked, literal)) {
+      if (at === 0 || masked[at - 1] === '=' || masked[at - 1] === '-') continue;
+      note(at, at + literal.length, `>{${T}('${key}')}<`, 'jsxText');
+    }
   }
 
   // JSX prose is usually WRAPPED, so the sentence the scanner reports on one
@@ -194,63 +231,44 @@ for (const { text } of result.findings) {
   // it needs every run of whitespace to be flexible; matching it literally is
   // why this tool used to leave the longest, most visible copy on the page
   // behind and lift only the short labels around it.
-  // This path used to be narrow to the point of uselessness — capitalised, three
-  // words or more — because a looser rule had matched a lint directive
-  // (`eslint-disable-next-line @next/next/no-img-element`) and a set of object
-  // keys and rewritten both into JSX. Both of those causes are gone: the
-  // scanner now strips comments before it matches anything, and excludes
-  // snake_case. So the rule can be what it should always have been — reads like
-  // words, not like code — which is what finally reaches `<Phone /> Call` and
-  // the forty other short labels sitting next to an icon.
   //
-  // The pattern stays tightly bounded whatever the text: `>`, whitespace, the
-  // text, whitespace, `<`. It cannot run away across a file.
+  // The rule for what may go through here is "reads like words, not like code".
+  // It was once far narrower — capitalised, three words or more — as a reaction
+  // to a lint directive and a set of object keys it had mangled, and both of
+  // those causes are gone: the scanner strips comments before it matches
+  // anything, and excludes snake_case.
   const readsAsCopy = /^[A-Za-z]/.test(text) && !/[_@\\]|--/.test(text);
-  if (!form && !looksLikeCode && readsAsCopy) {
-    // The whitespace around the sentence is CAPTURED rather than swallowed. In
-    // JSX a run of whitespace that contains a newline is stripped by the
-    // compiler, but a plain space is a rendered word gap — and `The magic is in
-    // the <GradientText>AI</GradientText>` loses its only space if the match
-    // eats it, so the heading renders "The magic is in theAI".
-    // `(?<![=-])` is the same arrow-versus-tag guard the literal path has, and
-    // the loose path needs it just as much: `const Cell = ({ on }) =>\n  on ? <Check …`
-    // has an `on ?` sitting between a `>` and a `<` exactly the way a label
-    // beside an icon does. Rewriting it produced a file that would not parse.
+  if (!mine.length && !looksLikeCode && readsAsCopy) {
+    // `(?<![=-])` is the arrow-versus-tag guard again: `({ on }) =>\n  on ? <Check`
+    // has an `on ?` between a `>` and a `<` exactly the way a label beside an
+    // icon does, and rewriting it produced a file that would not parse.
     const loose = new RegExp(
       `(?<![=-])>([^\\S\\n]*\\s*)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(\\s*)<`,
+      'g',
     );
-    if (loose.test(src)) form = { from: loose, kind: 'jsxText' };
+    for (const m of masked.matchAll(loose)) {
+      // Re-emit a `{' '}` for whatever significant whitespace the match ate:
+      // significant means "a space with no newline in it", which is exactly the
+      // whitespace JSX would have rendered. `The magic is in the
+      // <GradientText>AI</GradientText>` loses its only space otherwise.
+      const gap = (ws) => (ws && !ws.includes('\n') ? "{' '}" : '');
+      note(m.index, m.index + m[0].length, `>${gap(m[1])}{${T}('${key}')}${gap(m[2])}<`, 'jsxText');
+    }
   }
-  if (!form) continue; // nothing that can be placed safely — leave it.
 
-  let key = `${ns}.${slugFor(text)}`;
-  let n = 2;
-  while ([...seen.values()].includes(key)) key = `${ns}.${slugFor(text)}${n++}`;
+  if (!mine.length) continue; // nothing that can be placed safely — leave it.
   seen.set(text, key);
-  const at = form.from instanceof RegExp ? src.search(form.from) : src.indexOf(form.from);
-  plan.push({ text, key, ...form, moduleScope: atModuleScope(at) });
+  edits.push(...mine);
+  placed.push({ text, key, kind: mine[0].kind, moduleScope: mine.some((e) => e.kind === 'KEY') });
 }
 
+// Back to front, so every earlier offset stays valid.
 let out = src;
-for (const p of plan) {
-  if (p.from instanceof RegExp) {
-    // Re-emit a `{' '}` for whatever significant whitespace the match consumed:
-    // significant means "a space with no newline in it", which is exactly the
-    // whitespace JSX would have rendered.
-    const gap = (ws) => (ws && !ws.includes('\n') ? "{' '}" : '');
-    out = out.replace(p.from, (_m, lead, trail) => `>${gap(lead)}{${T}('${p.key}')}${gap(trail)}<`);
-    continue;
-  }
-  const to = p.moduleScope
-    ? `'${p.key}'`
-    : p.kind === 'attr'
-      ? `{${T}('${p.key}')}`
-      : p.kind === 'jsxText'
-        ? `>{${T}('${p.key}')}<`
-        : `${T}('${p.key}')`;
-  out = out.split(p.from).join(to);
+for (const e of [...edits].sort((a, b) => b.start - a.start)) {
+  out = out.slice(0, e.start) + e.to + out.slice(e.end);
 }
 
+const plan = placed;
 console.log(`${file}: ${plan.length} of ${result.findings.length} finding(s) liftable`);
 for (const p of plan) {
   console.log(`  ${p.moduleScope ? 'KEY ' : '    '}${p.key.padEnd(52)} ${JSON.stringify(p.text).slice(0, 80)}`);

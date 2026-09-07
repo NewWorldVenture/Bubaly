@@ -93,7 +93,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const contentError = [albumsRes.error, photosRes.error].find((e) => e && !isMissingTableError(e));
   if (contentError) {
     console.error('[dashboard/memories] memories read failed', contentError);
-    return <ErrorState message="Could not load your memories from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('memories.couldNotLoadYourMemories')} />;
   }
 
   const albums = (albumsRes.data ?? []) as AlbumRow[];

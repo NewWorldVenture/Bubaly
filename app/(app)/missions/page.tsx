@@ -43,7 +43,7 @@ export default async function MissionsPage() {
             <p className="text-xs text-muted">{t('missions.reviewProofApproveRewardsAndKeep')}</p>
           </div>
         </div>
-        <ErrorState message="Couldn’t load the approval queue. Refresh and try again." />
+        <ErrorState message={t('missions.couldnTLoadTheApproval')} />
       </div>
     );
   }
@@ -126,7 +126,7 @@ export default async function MissionsPage() {
           <ClipboardCheck className="h-4 w-4 text-brand-text" /> {t('missions.approvalQueue')}
         </h2>
         {items.length === 0 ? (
-          <EmptyState icon={Sparkles} title={t('missions.allCaughtUp')} description="No submissions are waiting for your review." />
+          <EmptyState icon={Sparkles} title={t('missions.allCaughtUp')} description={t('missions.noSubmissionsAreWaitingFor')} />
         ) : (
           <div className="space-y-3">{items.map((i) => <ReviewCard key={i.submissionId} item={i} />)}</div>
         )}

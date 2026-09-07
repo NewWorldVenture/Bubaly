@@ -279,7 +279,7 @@ export function SchoolModule() {
       <div className="module-main module-page">
         <PageHeader
           title={tr('school.school')}
-          description="Stay on top of classes, assignments, and school events."
+          description={tr('schoolModule.stayOnTopOfClasses')}
           action={
             <div className="flex items-center gap-2">
               <AiInsight kind="school" iconOnly />
@@ -326,7 +326,7 @@ export function SchoolModule() {
             </div>
             {assignments.length === 0 ? (
               <div className="p-5 pt-0">
-                <EmptyState icon={BookOpen} title={tr('school.noAssignmentsYet')} description="Add assignment events to track due dates." action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addAssignment')}</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noAssignmentsYet')} description={tr('schoolModule.addAssignmentEventsToTrack')} action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addAssignment')}</Button>} />
               </div>
             ) : (
               <>
@@ -381,7 +381,7 @@ export function SchoolModule() {
               <Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>
             </div>
             {classes.length === 0 ? (
-              <EmptyState icon={BookOpen} title={tr('school.noClassesAdded')} description="Add your classes to see schedules." action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
+              <EmptyState icon={BookOpen} title={tr('school.noClassesAdded')} description={tr('schoolModule.addYourClassesToSee')} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
             ) : (
               <div className="space-y-2">
                 {classes.map((c) => {
@@ -412,7 +412,7 @@ export function SchoolModule() {
               <Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addGrade')}</Button>
             </div>
             {grades.length === 0 ? (
-              <EmptyState icon={GraduationCap} title={tr('school.noGradesRecorded')} description="Add grades to track academic performance." action={<Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addGrade')}</Button>} />
+              <EmptyState icon={GraduationCap} title={tr('school.noGradesRecorded')} description={tr('schoolModule.addGradesToTrackAcademic')} action={<Button onClick={() => setGradeOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addGrade')}</Button>} />
             ) : (
               <div className="table-responsive overflow-x-auto">
                 <table className="w-full text-sm">
@@ -492,7 +492,7 @@ export function SchoolModule() {
                 <h2 className="font-semibold">{tr('school.schoolAnnouncements')}</h2>
               </div>
               {announcements.length === 0 ? (
-                <EmptyState icon={BookOpen} title={tr('school.noAnnouncements')} description="Announcements will appear here when added." action={<Button onClick={() => { setEventForm((f) => ({ ...f, event_type: 'announcement' })); setEventOpen(true); }}><Plus className="h-4 w-4" /> {tr('school.addAnnouncement')}</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noAnnouncements')} description={tr('schoolModule.announcementsWillAppearHereWhen')} action={<Button onClick={() => { setEventForm((f) => ({ ...f, event_type: 'announcement' })); setEventOpen(true); }}><Plus className="h-4 w-4" /> {tr('school.addAnnouncement')}</Button>} />
               ) : (
                 <div className="space-y-4">
                   {announcements.map((a) => (

@@ -99,7 +99,7 @@ export function ScreenTimeModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load screen time data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('screenTimeModule.couldNotLoadScreenTime')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -171,7 +171,7 @@ export function ScreenTimeModule() {
       {/* Recent entries */}
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={MonitorSmartphone} title={t('screenTime.noScreenTimeLogged')} description="Log time by category to track balance and limits." />
+          <EmptyState icon={MonitorSmartphone} title={t('screenTime.noScreenTimeLogged')} description={t('screenTimeModule.logTimeByCategoryTo')} />
         ) : all.slice(0, 50).map((e) => {
           const m = e.member_id ? memberById.get(e.member_id) : null;
           return (

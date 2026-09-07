@@ -87,7 +87,7 @@ export function SecurityModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load security events. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('securityModule.couldNotLoadSecurityEvents')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -141,7 +141,7 @@ export function SecurityModule() {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={tr('security.noSecurityEvents')} description="Log alarm triggers, camera events, sensor alerts and tests to keep a clear safety record." />
+        <EmptyState icon={ShieldCheck} title={tr('security.noSecurityEvents')} description={tr('securityModule.logAlarmTriggersCameraEvents')} />
       ) : (
         <div className="space-y-2">
           {visible.map((ev) => {

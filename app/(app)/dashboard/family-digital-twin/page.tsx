@@ -40,7 +40,7 @@ export default async function FamilyDigitalTwinPage() {
   // stay best-effort — each legitimately degrades to an empty section.
   if (membersRes.error) {
     console.error('[dashboard/family-digital-twin] member read failed', membersRes.error);
-    return <ErrorState message="Could not load your family from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('familyDigitalTwin.couldNotLoadYourFamily')} />;
   }
   const members = membersRes.data;
   const { data: savedSimRows } = await supabase
@@ -70,7 +70,7 @@ export default async function FamilyDigitalTwinPage() {
     <div className="space-y-5">
       <PageHeader
         title={tr('dashboardFamilyDigitalTwin.familyDigitalTwin')}
-        description="A living model of each family member — preferences, responsibilities and AI insights that power the whole platform."
+        description={tr('familyDigitalTwin.aLivingModelOfEach')}
       />
 
       {memberList.length > 0 && <DecisionSimulator members={memberList} budgetCategories={budgetCategories} />}
@@ -111,13 +111,13 @@ export default async function FamilyDigitalTwinPage() {
             </SectionCard>
           );
         })}
-        {(members ?? []).length === 0 && <MiniEmpty icon={Brain} text="No family members yet." />}
+        {(members ?? []).length === 0 && <MiniEmpty icon={Brain} text={tr('familyDigitalTwin.noFamilyMembersYet')} />}
       </div>
 
       {manager && (
         <SectionCard
           title={tr('dashboardFamilyDigitalTwin.captureAnInsight')}
-          description="Add what you know about a member — it sharpens recommendations everywhere."
+          description={tr('familyDigitalTwin.addWhatYouKnowAbout')}
         >
           <QuickAdd
             table="family_digital_twin_profiles"
@@ -140,7 +140,7 @@ export default async function FamilyDigitalTwinPage() {
               <li key={g.id} className="flex items-center gap-2 rounded-xl bg-surface/40 p-3 text-sm"><Target className="h-4 w-4 text-violet-400" /> {g.title}</li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={Target} text="No active goals." />}
+        ) : <MiniEmpty icon={Target} text={tr('familyDigitalTwin.noActiveGoals')} />}
       </SectionCard>
     </div>
   );

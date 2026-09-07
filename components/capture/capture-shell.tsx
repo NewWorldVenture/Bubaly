@@ -272,7 +272,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
 
         {/* Quick route shortcuts — the member's own picks; customize to edit.
             Shared component = identical behavior in the Quick-capture modal. */}
-        <CaptureShortcuts initialKeys={initialShortcuts} heading="Or jump directly to" columns={3} />
+        <CaptureShortcuts initialKeys={initialShortcuts} heading={t('captureShell.orJumpDirectlyTo')} columns={3} />
       </div>
     </div>
   );

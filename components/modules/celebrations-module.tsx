@@ -88,7 +88,7 @@ export function CelebrationsModule() {
     <div className="space-y-5">
       <PageHeader
         title={t('celebrations.celebrations')}
-        description="Never miss a birthday or anniversary."
+        description={t('celebrationsModule.neverMissABirthdayOr')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="celebrations" iconOnly />
@@ -100,9 +100,9 @@ export function CelebrationsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load celebrations. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('celebrationsModule.couldNotLoadCelebrationsRefresh')} onRetry={refresh} />
       ) : upcoming.length === 0 ? (
-        <EmptyState icon={Gift} title={t('celebrations.noUpcomingCelebrations')} description="Add birthdays in family member profiles, or add a custom date here." />
+        <EmptyState icon={Gift} title={t('celebrations.noUpcomingCelebrations')} description={t('celebrationsModule.addBirthdaysInFamilyMember')} />
       ) : (
         <ul className="space-y-2">
           {upcoming.map((c) => {

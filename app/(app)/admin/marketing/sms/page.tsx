@@ -43,7 +43,7 @@ export default async function SmsPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
           {(sms ?? []).length === 0 ? (
-            <EmptyState icon={MessageSquare} title={t('adminMarketingSms.noSmsCampaignsYet')} description="Draft your first message on the right." />
+            <EmptyState icon={MessageSquare} title={t('adminMarketingSms.noSmsCampaignsYet')} description={t('sms.draftYourFirstMessageOn')} />
           ) : (
             (sms ?? []).map((s) => (
               <Card key={s.id} className="flex items-start justify-between gap-3">
@@ -74,15 +74,16 @@ export default async function SmsPage() {
   );
 }
 
-function AdminSmsReadError() {
+async function AdminSmsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SMS</h1>
-        <p className="mt-1 text-sm text-muted">Draft and manage consent-aware SMS campaigns.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('sms.marketingSms')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('sms.draftAndManageConsentAware')}</p>
       </div>
-      <ErrorState message="Could not load marketing SMS data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/sms" className="text-sm font-medium text-brand-text underline">Refresh SMS</Link>
+      <ErrorState message={t('sms.couldNotLoadMarketingSms')} />
+      <Link href="/admin/marketing/sms" className="text-sm font-medium text-brand-text underline">{t('sms.refreshSms')}</Link>
     </div>
   );
 }

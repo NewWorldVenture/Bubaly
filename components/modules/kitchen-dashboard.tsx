@@ -67,7 +67,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
     <div className="module-page">
       <PageHeader
         title={tr('kitchenDashboard.smartKitchen')}
-        description="Your family's food, all in one place — tonight's plan, what's expiring, and your AI Chef."
+        description={tr('kitchenDashboard.yourFamilySFoodAll')}
         action={<Button onClick={() => setChefOpen(true)}><ChefHat className="h-4 w-4" /> {tr('kitchenDashboard.askTheChef')}</Button>}
       />
 

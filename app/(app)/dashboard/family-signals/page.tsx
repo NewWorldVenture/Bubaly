@@ -13,7 +13,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{t('familySignals.familyIntelligence')}</h1>
-      <ErrorState message="Could not load family intelligence from Supabase. Refresh and try again." />
+      <ErrorState message={t('familySignals.couldNotLoadFamilyIntelligence')} />
       <Link href="/dashboard/family-signals" className="text-sm font-medium text-brand-text underline">{t('familySignals.refreshFamilyIntelligence')}</Link>
     </div>
   );

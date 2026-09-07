@@ -33,7 +33,7 @@ export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; 
   const t = useTranslations();
   return (
     <div className="module-page">
-      <PageHeader title={t('walletSettings.familyWallet')} description="Set how each child's money is split and when you're asked to approve." />
+      <PageHeader title={t('walletSettings.familyWallet')} description={t('walletSettingsView.setHowEachChildS')} />
       <WalletSubnav />
 
       {rows.length === 0 ? (

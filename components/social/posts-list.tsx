@@ -19,7 +19,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning' | 
 export async function PostsList({ posts, emptyLabel }: { posts: Tables<'social_posts'>[]; emptyLabel?: string }) {
   const t = await getTranslations();
   if (posts.length === 0) {
-    return <EmptyState icon={FileText} title={emptyLabel ?? 'No posts yet'} description="Create content in the studio to see it here." />;
+    return <EmptyState icon={FileText} title={emptyLabel ?? 'No posts yet'} description={t('postsList.createContentInTheStudio')} />;
   }
   return (
     <div className="overflow-x-auto rounded-2xl border border-border">

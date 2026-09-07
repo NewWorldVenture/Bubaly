@@ -147,7 +147,7 @@ export function ConciergeModule() {
   const activePlans  = plans.filter(p => !['completed', 'cancelled'].includes(p.status));
   const pastPlans    = plans.filter(p => ['completed', 'cancelled'].includes(p.status));
 
-  return plansLoading ? <SkeletonList /> : plansError ? <ErrorState message="Could not load concierge plans. Refresh and try again." onRetry={refreshPlans} /> : (
+  return plansLoading ? <SkeletonList /> : plansError ? <ErrorState message={tr('conciergeModule.couldNotLoadConciergePlans')} onRetry={refreshPlans} /> : (
     <div className="module-with-sidebar">
       {/* ── Main column ── */}
       <div className="module-main">

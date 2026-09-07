@@ -91,7 +91,7 @@ export function SleepModule() {
   const error = logs.error || routines.error || checkins.error;
   const refresh = () => { void logs.refresh(); void routines.refresh(); void checkins.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load sleep data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('sleepModule.couldNotLoadSleepData')} onRetry={refresh} />;
 
   const TrendIcon = summary.trend === 'improving' ? TrendingUp : summary.trend === 'slipping' ? TrendingDown : Minus;
 
@@ -99,7 +99,7 @@ export function SleepModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('sleep.sleepCoach')}
-        description="Age-aware targets for every family member, bedtime routines, a two-minute check-in, and a coach that builds the week’s plan from your own nights."
+        description={t('sleepModule.ageAwareTargetsForEvery')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="sleep" iconOnly />
@@ -156,7 +156,7 @@ export function SleepModule() {
           <span className="text-xs text-muted">{t('sleep.band')} {summary.target.min}–{summary.target.max}{t('sleep.hTarget')}</span>
         </div>
         {fortnight.length === 0 ? (
-          <EmptyState icon={MoonStar} title={t('sleep.noNightsLogged')} description="Log last night and the chart, consistency score and coach all come alive." action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>} />
+          <EmptyState icon={MoonStar} title={t('sleep.noNightsLogged')} description={t('sleepModule.logLastNightAndThe')} action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>} />
         ) : (
           <div className="relative h-40">
             <div className="absolute inset-x-0 border-t border-dashed border-emerald-400/40" style={{ bottom: `${(summary.target.min * 60 / maxMinutes) * 100}%` }} />
@@ -271,7 +271,7 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
   }
 
   return (
-    <Modal open title={t('sleep.logANight')} description="The night is filed under the morning it ended." onClose={onClose}>
+    <Modal open title={t('sleep.logANight')} description={t('sleepModule.theNightIsFiledUnder')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('sleep.lightsOut')} required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={localInput(defaultBed)} />}</Field>
@@ -381,7 +381,7 @@ function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }:
   );
 
   return (
-    <Modal open title={t('sleep.twoMinuteCheckIn')} description="Today’s habits, so the coach can see what moves your nights." onClose={onClose}>
+    <Modal open title={t('sleep.twoMinuteCheckIn')} description={t('sleepModule.todaySHabitsSoThe')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Scale label={t('sleep.energyToday')} value={energy} onChange={setEnergy} />
         <Scale label={t('sleep.moodToday')} value={mood} onChange={setMood} />

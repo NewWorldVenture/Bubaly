@@ -58,7 +58,7 @@ export function BinderModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load household binder data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('binderModule.couldNotLoadHouseholdBinder')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -74,7 +74,7 @@ export function BinderModule() {
       </div>
 
       {groups.length === 0 ? (
-        <EmptyState icon={FolderLock} title={t('binder.yourBinderIsEmpty')} description="Add the things everyone forgets: Wi-Fi password, alarm code, water shutoff, insurance policy numbers." />
+        <EmptyState icon={FolderLock} title={t('binder.yourBinderIsEmpty')} description={t('binderModule.addTheThingsEveryoneForgets')} />
       ) : groups.map((g) => (
         <div key={g.category}>
           <h4 className="mb-2 text-sm font-semibold">{binderCategoryLabel(g.category)}</h4>

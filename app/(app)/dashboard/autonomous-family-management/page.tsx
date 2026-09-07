@@ -25,7 +25,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{t('autonomousFamilyManagement.autonomousFamilyManagement')}</h1>
-      <ErrorState message="Could not load autonomous family management data from Supabase. Refresh and try again." />
+      <ErrorState message={t('autonomousFamilyManagement.couldNotLoadAutonomousFamily')} />
       <Link href="/dashboard/autonomous-family-management" className="text-sm font-medium text-brand-text underline">{t('autonomousFamilyManagement.refreshAutonomousManagement')}</Link>
     </div>
   );
@@ -69,7 +69,7 @@ export default async function AutonomousManagementPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardAutonomousFamilyManagement.autonomousFamilyManagement')}
-        description="The AI watches your real data, recommends the next move, and only acts on sensitive things with your approval."
+        description={t('autonomousFamilyManagement.theAiWatchesYourReal')}
       />
 
       <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
@@ -96,7 +96,7 @@ export default async function AutonomousManagementPage() {
           </ul>
         </SectionCard>
 
-        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiRecommends')} description="Stored + derived next-best actions" className="lg:col-span-2">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.whatAiRecommends')} description={t('autonomousFamilyManagement.storedDerivedNextBestActions')} className="lg:col-span-2">
           {(recs.data && recs.data.length > 0) || actions.length > 0 ? (
             <ul className="space-y-2.5">
               {(recs.data ?? []).map((r) => (
@@ -119,7 +119,7 @@ export default async function AutonomousManagementPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Sparkles} text="Nothing needs attention — you're on top of it." />}
+          ) : <MiniEmpty icon={Sparkles} text={t('autonomousFamilyManagement.nothingNeedsAttentionYouRe')} />}
         </SectionCard>
       </div>
 
@@ -129,7 +129,7 @@ export default async function AutonomousManagementPage() {
         <StatTile label={t('dashboardAutonomousFamilyManagement.riskAlerts')} value={risks.length} icon={ShieldAlert} accent="bg-rose-500" href="/dashboard/family-stress" sublabel="Stress" />
       </div>
 
-      <SectionCard title={t('dashboardAutonomousFamilyManagement.pendingApprovals')} description="Sensitive actions wait for a parent — never automatic">
+      <SectionCard title={t('dashboardAutonomousFamilyManagement.pendingApprovals')} description={t('autonomousFamilyManagement.sensitiveActionsWaitForA')}>
         {pendingRuns.data && pendingRuns.data.length > 0 ? (
           <ul className="space-y-2.5">
             {pendingRuns.data.map((run) => (
@@ -140,11 +140,11 @@ export default async function AutonomousManagementPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={CheckCircle2} text="No actions waiting on approval." />}
+        ) : <MiniEmpty icon={CheckCircle2} text={t('autonomousFamilyManagement.noActionsWaitingOnApproval')} />}
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title={t('dashboardAutonomousFamilyManagement.weeklyPlan')} description="AI-optimized focus for the week">
+        <SectionCard title={t('dashboardAutonomousFamilyManagement.weeklyPlan')} description={t('autonomousFamilyManagement.aiOptimizedFocusForThe')}>
           <ul className="space-y-2.5 text-sm">
             <li className="flex items-center gap-3"><Gauge className="h-4 w-4 text-violet-400" /> {t('dashboardAutonomousFamilyManagement.keepFamilyLoadAtOrBelow')} <LevelBadge level="moderate" /></li>
             {stress.suggestions.map((s, i) => (
@@ -164,7 +164,7 @@ export default async function AutonomousManagementPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={Zap} text="No automations have run yet." />}
+          ) : <MiniEmpty icon={Zap} text={t('autonomousFamilyManagement.noAutomationsHaveRunYet')} />}
         </SectionCard>
       </div>
     </div>

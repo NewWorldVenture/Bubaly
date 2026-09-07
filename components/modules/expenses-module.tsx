@@ -138,7 +138,7 @@ export function ExpensesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load shared expenses. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('expensesModule.couldNotLoadSharedExpenses')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -176,7 +176,7 @@ export function ExpensesModule() {
       {/* Splits */}
       <div className="space-y-2">
         {allSplits.length === 0 ? (
-          <EmptyState icon={Split} title={tr('expenses.noSharedExpensesYet')} description="Split a bill or purchase across family members and track who owes whom." />
+          <EmptyState icon={Split} title={tr('expenses.noSharedExpensesYet')} description={tr('expensesModule.splitABillOrPurchase')} />
         ) : allSplits.map((sp) => {
           const sh = sharesBySplit.get(sp.id) ?? [];
           return (

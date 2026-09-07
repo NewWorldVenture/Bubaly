@@ -29,7 +29,7 @@ export function TripLodging({ vacationId }: { vacationId: string }) {
   return (
     <TripCrudSection<Lodging>
       table="vacation_lodging" vacationId={vacationId} title={t('tripLodging.lodging')} icon={BedDouble}
-      fields={fields} emptyText="No lodging yet" addLabel="Add lodging"
+      fields={fields} emptyText={t('tripLodging.noLodgingYet')} addLabel="Add lodging"
       orderBy={(a, b) => (a.check_in ?? '').localeCompare(b.check_in ?? '')}
       renderRow={(l) => {
         const k = lookup(LODGING_KINDS, l.kind);

@@ -95,7 +95,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
     <div className="space-y-5 pb-28">
       <PageHeader
         title={t('dining.diningOut')}
-        description="Discover restaurants, save favorites, and track your dining-out history."
+        description={t('diningModule.discoverRestaurantsSaveFavoritesAnd')}
         action={
           <>
             <Button variant="outline" onClick={() => setLogOpen(true)}><Receipt className="h-4 w-4" /> {t('dining.logVisit')}</Button>

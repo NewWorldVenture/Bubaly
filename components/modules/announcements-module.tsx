@@ -104,7 +104,7 @@ export function AnnouncementsModule() {
     <div className="space-y-5">
       <PageHeader
         title={t('announcements.announcements')}
-        description="Broadcast updates to the whole family."
+        description={t('announcementsModule.broadcastUpdatesToTheWhole')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="announcements" iconOnly />
@@ -116,7 +116,7 @@ export function AnnouncementsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load announcements. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('announcementsModule.couldNotLoadAnnouncementsRefresh')} onRetry={refresh} />
       ) : (announcements ?? []).length === 0 ? (
         <EmptyState
           icon={Megaphone}

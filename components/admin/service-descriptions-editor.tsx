@@ -94,7 +94,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-fg">{it.label}</span>
-                        {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">Custom</span>}
+                        {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">{t('serviceDescriptionsEditor.custom')}</span>}
                       </div>
                       <code className="hidden text-[11px] text-muted/60 sm:block">{it.key}</code>
                     </div>
@@ -114,8 +114,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                             onClick={() => resetToDefault(it.key)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
                           >
-                            <RotateCcw className="h-3 w-3" /> Reset
-                          </button>
+                            <RotateCcw className="h-3 w-3" />{' '}{t('serviceDescriptionsEditor.reset')}</button>
                         )}
                         <button
                           type="button" disabled={!dirty || isBusy}

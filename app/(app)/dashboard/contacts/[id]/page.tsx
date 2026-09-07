@@ -20,7 +20,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{t('contacts.contactTimeline')}</h1>
-      <ErrorState message="Could not load this contact timeline from Supabase. Refresh and try again." />
+      <ErrorState message={t('contacts.couldNotLoadThisContact')} />
       <Link href="/dashboard/contacts" className="text-sm font-medium text-brand-text underline">{t('contacts.backToContacts')}</Link>
     </div>
   );

@@ -120,7 +120,7 @@ export function ContactsModule() {
     <div className="module-page">
       <PageHeader
         title={t('contacts.familyContacts')}
-        description="Your family's people — doctors, teachers, coaches, and everyone else who matters."
+        description={t('contactsModule.yourFamilySPeopleDoctors')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="contacts" iconOnly />

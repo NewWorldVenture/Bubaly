@@ -143,7 +143,7 @@ export function RenewalsModule() {
     <div>
       <PageHeader
         title={t('renewals.renewalsExpirations')}
-        description="Track IDs, licenses, registrations, warranties, and subscriptions before they lapse."
+        description={t('renewalsModule.trackIdsLicensesRegistrationsWarranties')}
         action={<div className="flex items-center gap-2"><AiInsight kind="renewals" iconOnly />{canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('renewals.addRenewal')}</Button>}</div>}
       />
 

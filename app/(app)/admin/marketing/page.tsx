@@ -11,7 +11,7 @@ import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Marketing', robots: { index: false } };
+export const metadata: Metadata = { title: 'marketing.marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketingDashboard() {
@@ -162,15 +162,16 @@ export default async function MarketingDashboard() {
   );
 }
 
-function MarketingDashboardReadError() {
+async function MarketingDashboardReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing</h1>
-        <p className="mt-1 text-sm text-muted">Live customer, campaign, and growth overview.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('marketing.marketing')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('marketing.liveCustomerCampaignAndGrowth')}</p>
       </div>
-      <ErrorState message="Could not load marketing dashboard data from Supabase. Refresh and try again." />
-      <a href="/admin/marketing" className="text-sm font-medium text-brand-text underline">Refresh marketing dashboard</a>
+      <ErrorState message={t('marketing.couldNotLoadMarketingDashboard')} />
+      <a href="/admin/marketing" className="text-sm font-medium text-brand-text underline">{t('marketing.refreshMarketingDashboard')}</a>
     </div>
   );
 }

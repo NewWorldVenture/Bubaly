@@ -67,13 +67,13 @@ export function InsuranceModule() {
   const memberName = (id: string | null) => (id ? members.find((m) => m.id === id)?.display_name ?? null : null);
 
   if (policies.loading) return <SkeletonList />;
-  if (policies.error) return <ErrorState message="Could not load insurance policies. Refresh and try again." onRetry={policies.refresh} />;
+  if (policies.error) return <ErrorState message={tr('insuranceModule.couldNotLoadInsurancePolicies')} onRetry={policies.refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={tr('insurance.insuranceHub')}
-        description="Every household policy in one place, with AI-managed renewal and coverage awareness."
+        description={tr('insuranceModule.everyHouseholdPolicyInOne')}
         action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button></div>}
       />
 
@@ -141,7 +141,7 @@ export function InsuranceModule() {
       )}
 
       {policies.data.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={tr('insurance.noPoliciesYet')} description="Add your health, auto, home, life, and other policies to track renewals, premiums, and coverage." />
+        <EmptyState icon={ShieldCheck} title={tr('insurance.noPoliciesYet')} description={tr('insuranceModule.addYourHealthAutoHome')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {policies.data.map((p) => {
@@ -256,7 +256,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('insurance.effectiveDate')}>{(id) => <Input id={id} name="effective_date" type="date" />}</Field>
-          <Field label={tr('insurance.renewalDate')} hint="Powers renewal reminders">{(id) => <Input id={id} name="renewal_date" type="date" />}</Field>
+          <Field label={tr('insurance.renewalDate')} hint={tr('insuranceModule.powersRenewalReminders')}>{(id) => <Input id={id} name="renewal_date" type="date" />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('insurance.agentName')}>{(id) => <Input id={id} name="agent_name" placeholder={tr('insurance.optional')} />}</Field>

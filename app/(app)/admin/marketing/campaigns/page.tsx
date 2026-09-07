@@ -34,7 +34,7 @@ export default async function CampaignsPage() {
       </div>
 
       {(campaigns ?? []).length === 0 ? (
-        <EmptyState icon={Send} title={t('adminMarketingCampaigns.noCampaignsYet')} description="Create your first marketing campaign to get started." />
+        <EmptyState icon={Send} title={t('adminMarketingCampaigns.noCampaignsYet')} description={t('campaigns.createYourFirstMarketingCampaign')} />
       ) : (
         <div className="space-y-3">
           {(campaigns ?? []).map((c) => (
@@ -63,15 +63,16 @@ export default async function CampaignsPage() {
   );
 }
 
-function AdminCampaignsReadError() {
+async function AdminCampaignsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaigns</h1>
-        <p className="mt-1 text-sm text-muted">Plan and monitor lifecycle campaigns.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaigns')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('campaigns.planAndMonitorLifecycleCampaigns')}</p>
       </div>
-      <ErrorState message="Could not load marketing campaigns from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Refresh campaigns</Link>
+      <ErrorState message={t('campaigns.couldNotLoadMarketingCampaigns')} />
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">{t('campaigns.refreshCampaigns')}</Link>
     </div>
   );
 }

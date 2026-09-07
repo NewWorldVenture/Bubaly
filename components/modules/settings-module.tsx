@@ -173,7 +173,7 @@ export function SettingsModule() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('settings.settings')} description="Manage your profile, family, and members." action={<AiInsight kind="settings" />} />
+      <PageHeader title={t('settings.settings')} description={t('settingsModule.manageYourProfileFamilyAnd')} action={<AiInsight kind="settings" />} />
 
       {/* Tab switcher */}
       <div className="tab-bar" role="tablist" aria-label={t('settings.settingsSections')}>
@@ -232,7 +232,7 @@ export function SettingsModule() {
                   placeholder={t('settings.rivera')} disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label={t('settings.contactPhone')} hint="Optional">
+            <Field label={t('settings.contactPhone')} hint={t('settingsModule.optional')}>
               {() => (
                 profileLoaded ? (
                   <PhoneInput
@@ -247,7 +247,7 @@ export function SettingsModule() {
                 )
               )}
             </Field>
-            <Field label={t('settings.email')} hint="Managed by your sign-in">
+            <Field label={t('settings.email')} hint={t('settingsModule.managedByYourSignIn')}>
               {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="opacity-60" />}
             </Field>
           </div>
@@ -424,7 +424,7 @@ function EditMemberModal({ member, isSelf, onClose }: {
             </Select>
           )}
         </Field>
-        <Field label={t('settings.birthday')} hint="Powers birthday reminders, gift ideas, and celebrations.">
+        <Field label={t('settings.birthday')} hint={t('settingsModule.powersBirthdayRemindersGiftIdeas')}>
           {(id) => <Input id={id} name="birthday" type="date" defaultValue={member.birthday ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
@@ -472,7 +472,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={t('settings.inviteFamilyMember')} description="They'll receive an email with a link to join your family.">
+    <Modal open onClose={onClose} title={t('settings.inviteFamilyMember')} description={t('settingsModule.theyLlReceiveAnEmail')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('settings.emailAddress')} required>
           {(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}

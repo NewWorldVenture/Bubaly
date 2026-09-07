@@ -168,7 +168,7 @@ export function HabitsModule() {
     <div className="module-page">
       <PageHeader
         title={t('habits.habits')}
-        description="Build routines that stick — streaks, check-ins, and an AI coach."
+        description={t('habitsModule.buildRoutinesThatStickStreaks')}
         action={
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={runCoach}>
@@ -189,7 +189,7 @@ export function HabitsModule() {
 
       {habits.length === 0 ? (
         <EmptyState icon={Target} title={t('habits.noHabitsYet')}
-          description="Start small — one habit, checked in daily, builds the routine."
+          description={t('habitsModule.startSmallOneHabitChecked')}
           action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

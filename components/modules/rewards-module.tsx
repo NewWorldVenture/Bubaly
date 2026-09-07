@@ -142,7 +142,7 @@ export function RewardsModule() {
     <div>
       <PageHeader
         title={t('rewards.rewardsAllowance')}
-        description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
+        description={t('rewardsModule.turnChorePointsIntoRewards')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rewards" iconOnly />

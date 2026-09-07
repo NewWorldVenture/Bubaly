@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { CalmModule } from '@/components/modules/calm-module';
@@ -19,6 +20,7 @@ function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<
 }
 
 export default async function CalmPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -41,7 +43,7 @@ export default async function CalmPage() {
   const readError = [agentResult.error, autopilotResult.error, foiResult.error, approvalResult.error, reminderResult.error].find(Boolean);
   if (readError) {
     console.error('[dashboard-calm] inbox read failed', readError);
-    return <ErrorState message="Could not load your Calm inbox from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('calm.couldNotLoadYourCalm')} />;
   }
 
   const agentRows = agentResult.data;
@@ -80,7 +82,7 @@ export default async function CalmPage() {
     reasoning = await loadFamilyContext(supabase, familyId);
   } catch (error) {
     console.error('[dashboard-calm] reasoning context read failed', error);
-    return <ErrorState message="Could not load your Calm inbox from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('calm.couldNotLoadYourCalm')} />;
   }
   for (const ins of reasoningInsights(reasoning)) {
     items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });

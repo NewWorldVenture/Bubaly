@@ -32,6 +32,13 @@ export const GATED_SURFACES = {
   'app-shell': ['components/app/app-shell.tsx'],
   // The public marketing header, on every unauthenticated page.
   'marketing-header': ['components/marketing/site-header.tsx'],
+  // EVERYTHING. This surface only became addable once the count reached zero,
+  // which it now has: every string a person reads in `app/` and `components/`
+  // is a catalogue key. The three surfaces above are kept rather than folded
+  // into this one because they name WHY those files were gated first, and
+  // because a failure that says "app-shell" is more useful than one that says
+  // "everything".
+  everything: ['app', 'components'],
 };
 
 const IGNORE_DIRS = new Set([
@@ -103,6 +110,10 @@ const NOT_COPY = [
   // both real copy in this product ("Record payment", a form field called
   // "Number"), and excluding them cost more than they were worth.
   /^Promise(?:Like)?$/,
+  // A TypeScript assertion, by the type it asserts. Bare `as X` is not usable —
+  // "Download statement as CSV" and "Print / Save as PDF" are both real copy —
+  // so this lists the types that only ever appear in code.
+  /\bas\s+(?:Record|Array|Partial|Readonly|Promise|unknown|any|const)\b/,
   /^\s*:\s.*\?\s*$/,           // `: error ?` — the middle of a ternary
   /\s\?\s*$/,                   // `on ?` — the head of one. English copy does
                                 //   not put a space before its question mark;
@@ -116,8 +127,13 @@ const NOT_COPY = [
   /\)\s*[,)\]]/,                // `isProviderConfigured(p)]), )`
 ];
 
+// Props whose value is COPY. This list is the scanner's biggest blind spot when
+// it is short: `<ErrorState message="Could not load support tickets." />` sat in
+// two admin pages through the whole migration because `message` was not on it,
+// and the count said zero while a person could read English on the screen. If a
+// component takes a string a person reads, its prop name belongs here.
 const PROP_PATTERN =
-  /\b(?:placeholder|aria-label|title|alt|label|emptyLabel|confirmLabel|cancelLabel)="([^"{}]{3,})"/g;
+  /\b(?:placeholder|aria-label|title|alt|label|emptyLabel|confirmLabel|cancelLabel|message|description|text|heading|subheading|subtitle|hint|helper|helperText|tooltip|caption|summary|note|badge|ctaLabel|actionLabel|submitLabel|okLabel|emptyText|errorText|legend)="([^"{}]{3,})"/g;
 // A JSX text node: between > and <, no braces (those are expressions, not copy).
 //
 // Newlines are ALLOWED inside the match on purpose. Copy that trails an inline
@@ -151,7 +167,7 @@ function looksLikeCopy(raw) {
  *
  * `https://` is not a comment. The `:` before it is the whole difference.
  */
-function withoutComments(source) {
+export function withoutComments(source) {
   const blank = (m) => m.replace(/[^\n]/g, ' ');
   return source
     .replace(/\/\*[\s\S]*?\*\//g, blank)

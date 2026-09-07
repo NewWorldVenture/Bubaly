@@ -134,13 +134,13 @@ export function FamilyTreeModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the family tree. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('familyTreeModule.couldNotLoadTheFamily')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('familyTree.familyTree')}
-        description="Map your family history and preserve your heritage."
+        description={t('familyTreeModule.mapYourFamilyHistoryAnd')}
         action={
           <div className="flex items-center gap-2">
             {all.length > 0 && (
@@ -186,7 +186,7 @@ export function FamilyTreeModule() {
         <EmptyState
           icon={GitBranch}
           title={t('familyTree.yourFamilyTreeIsEmpty')}
-          description="Start by adding the oldest generation you know — grandparents, great-grandparents — and build down from there."
+          description={t('familyTreeModule.startByAddingTheOldest')}
           action={<Button onClick={() => { setEditNode(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('familyTree.addFirstPerson')}</Button>}
         />
       ) : view === 'tree' ? (

@@ -54,13 +54,13 @@ export function GoalsView({ goals, childOptions, canManage }: {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('goals.familyWallet')} description="Save toward what matters — together."
+      <PageHeader title={t('goals.familyWallet')} description={t('goalsView.saveTowardWhatMattersTogether')}
         action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       <WalletSubnav />
 
       {goals.length === 0 ? (
         <EmptyState icon={Target} title={t('goals.noGoalsYet')}
-          description="Set a savings goal — a bike, a trip, a giving target — and watch it grow."
+          description={t('goalsView.setASavingsGoalA')}
           action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button> : undefined} />
       ) : (
         <div className="space-y-5">

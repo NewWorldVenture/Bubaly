@@ -91,13 +91,13 @@ export function PetsModule() {
   const refresh = () => { void pets.refresh(); void records.refresh(); };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load pet care data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('petsModule.couldNotLoadPetCare')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('pets.pets')}
-        description="Profiles and complete care operations for every family pet."
+        description={t('petsModule.profilesAndCompleteCareOperations')}
         action={<div className="flex items-center gap-2"><AiInsight kind="pets" iconOnly /><Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> {t('pets.addPet')}</Button></div>}
       />
 
@@ -144,7 +144,7 @@ export function PetsModule() {
 
       {/* Pet grid */}
       {pets.data.length === 0 ? (
-        <EmptyState icon={PawPrint} title={t('pets.noPetsYet')} description="Add your first pet to track vaccinations, vet visits, medications, and grooming." />
+        <EmptyState icon={PawPrint} title={t('pets.noPetsYet')} description={t('petsModule.addYourFirstPetTo')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.data.map((pet) => {
@@ -325,10 +325,10 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
         </div>
         <Field label={t('pets.title')} required>{(id) => <Input id={id} name="title" autoFocus placeholder={t('pets.rabiesBooster')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('pets.nextDue')} hint="Powers care reminders">{(id) => <Input id={id} name="next_due" type="date" />}</Field>
+          <Field label={t('pets.nextDue')} hint={t('petsModule.powersCareReminders')}>{(id) => <Input id={id} name="next_due" type="date" />}</Field>
           <Field label={t('pets.doseAmount')}>{(id) => <Input id={id} name="dose" placeholder={t('pets.1Tablet')} />}</Field>
         </div>
-        <Field label={t('pets.weightKg')} hint="Optional — for weight check-ins">{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
+        <Field label={t('pets.weightKg')} hint={t('petsModule.optionalForWeightCheckIns')}>{(id) => <Input id={id} name="weight_kg" type="number" inputMode="decimal" step="0.1" min="0" />}</Field>
         <Field label={t('pets.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={t('pets.vetRemarksReactions')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{t('pets.cancel')}</Button>

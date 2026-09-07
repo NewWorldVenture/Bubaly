@@ -69,7 +69,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
         title={t('agents.yourFamilyAssistant')}
-        description="One assistant, a team of specialists behind it — each watching its corner of family life."
+        description={t('agentsModule.oneAssistantATeamOf')}
       />
 
       {/* Chief of Staff synthesis */}

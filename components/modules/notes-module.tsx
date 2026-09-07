@@ -150,7 +150,7 @@ export function NotesModule() {
     <div className="module-page">
       <PageHeader
         title={t('notes.notes')}
-        description="Shared family notes, checklists, ideas, and reminders."
+        description={t('notesModule.sharedFamilyNotesChecklistsIdeas')}
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
@@ -186,7 +186,7 @@ export function NotesModule() {
 
       {filtered.length === 0 ? (
         <EmptyState icon={StickyNote} title={t('notes.noNotesYet')}
-          description="Create notes, checklists, meeting minutes, or family announcements."
+          description={t('notesModule.createNotesChecklistsMeetingMinutes')}
           action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('notes.newNote')}</Button>} />
       ) : (
         <div className="space-y-5">

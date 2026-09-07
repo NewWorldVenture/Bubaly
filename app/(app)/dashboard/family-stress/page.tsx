@@ -19,7 +19,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{tr('familyStress.familyStressPrediction')}</h1>
-      <ErrorState message="Could not load family stress data from Supabase. Refresh and try again." />
+      <ErrorState message={tr('familyStress.couldNotLoadFamilyStress')} />
       <Link href="/dashboard/family-stress" className="text-sm font-medium text-brand-text underline">{tr('familyStress.refreshFamilyStress')}</Link>
     </div>
   );
@@ -53,7 +53,7 @@ export default async function FamilyStressPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFamilyStress.familyStressPrediction')}
-        description="A planning signal built from your real schedule — not a medical assessment."
+        description={tr('familyStress.aPlanningSignalBuiltFrom')}
         action={
           <QuickAdd
             table="family_stress_signals"
@@ -84,7 +84,7 @@ export default async function FamilyStressPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title={t('dashboardFamilyStress.riskFactors')} description="What's driving the score" className="lg:col-span-2">
+        <SectionCard title={t('dashboardFamilyStress.riskFactors')} description={tr('familyStress.whatSDrivingTheScore')} className="lg:col-span-2">
           {stress.factors.length > 0 ? (
             <ul className="space-y-2.5">
               {stress.factors.map((f) => (
@@ -101,12 +101,12 @@ export default async function FamilyStressPage() {
               ))}
             </ul>
           ) : (
-            <MiniEmpty icon={Gauge} text="No stress factors detected this week." />
+            <MiniEmpty icon={Gauge} text={tr('familyStress.noStressFactorsDetectedThis')} />
           )}
         </SectionCard>
       </div>
 
-      <SectionCard title={t('dashboardFamilyStress.suggestedFixes')} description="Lighten the week with these reschedules">
+      <SectionCard title={t('dashboardFamilyStress.suggestedFixes')} description={tr('familyStress.lightenTheWeekWithThese')}>
         <ul className="space-y-2.5">
           {stress.suggestions.map((s, i) => (
             <li key={i} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
@@ -117,7 +117,7 @@ export default async function FamilyStressPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title={t('dashboardFamilyStress.loggedSignals')} description="Self-reported inputs that refine the forecast">
+      <SectionCard title={t('dashboardFamilyStress.loggedSignals')} description={tr('familyStress.selfReportedInputsThatRefine')}>
         {signals && signals.length > 0 ? (
           <ul className="divide-y divide-border">
             {signals.map((s) => {
@@ -132,7 +132,7 @@ export default async function FamilyStressPage() {
             })}
           </ul>
         ) : (
-          <MiniEmpty icon={Activity} text="No signals logged yet." />
+          <MiniEmpty icon={Activity} text={tr('familyStress.noSignalsLoggedYet')} />
         )}
       </SectionCard>
     </div>

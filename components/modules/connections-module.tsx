@@ -60,13 +60,13 @@ export function ConnectionsModule() {
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message="Could not load your connections. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('connectionsModule.couldNotLoadYourConnections')} onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title={t('connections.connections')}
-        description="Bubaly connects supported calendar services your family already uses. Link one to bring its events into your hubs."
+        description={t('connectionsModule.bubalyConnectsSupportedCalendarServices')}
       />
 
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">

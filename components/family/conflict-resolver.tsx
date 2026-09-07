@@ -47,7 +47,7 @@ export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
       <EmptyState
         icon={Check}
         title={t('conflictResolver.noScheduleConflicts')}
-        description="Nothing on the calendar overlaps in the next two weeks. Nicely run."
+        description={t('conflictResolver.nothingOnTheCalendarOverlaps')}
       />
     );
   }
@@ -56,7 +56,7 @@ export function ConflictResolver({ conflicts }: { conflicts: ConflictView[] }) {
       <EmptyState
         icon={Check}
         title={t('conflictResolver.allConflictsHandled')}
-        description="You've resolved or dismissed every detected conflict. New ones will appear here automatically."
+        description={t('conflictResolver.youVeResolvedOrDismissed')}
       />
     );
   }

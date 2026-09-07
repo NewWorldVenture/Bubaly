@@ -131,7 +131,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   if (loading) return <LoadingBlock />;
-  if (readError) return <ErrorState message="Could not load this trip overview. Refresh and try again." onRetry={refreshAll} />;
+  if (readError) return <ErrorState message={tr('tripOverview.couldNotLoadThisTrip')} onRetry={refreshAll} />;
 
   const lvlLabel = { not_started: 'Not started', getting_there: 'Getting there', almost_ready: 'Almost ready', ready: 'Ready to go!' }[readiness.level];
 

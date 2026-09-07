@@ -77,12 +77,12 @@ export function GoalsModule() {
     <div className="module-page">
       <PageHeader
         title={t('goals.familyGoals')}
-        description="Set goals, track progress, and celebrate achievements together."
+        description={t('goalsModule.setGoalsTrackProgressAnd')}
         action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button></div>}
       />
 
       {data.length === 0 ? (
-        <EmptyState icon={Target} title={t('goals.noGoalsYet')} description="Set a family goal — save for a trip, read more books, exercise together."
+        <EmptyState icon={Target} title={t('goals.noGoalsYet')} description={t('goalsModule.setAFamilyGoalSave')}
           action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('goals.newGoal')}</Button>} />
       ) : (
         <>

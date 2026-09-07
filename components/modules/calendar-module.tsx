@@ -427,7 +427,7 @@ export function CalendarModule() {
         <div className="module-page flex-shrink-0 border-b border-border">
           <PageHeader
             title={tr('calendar.calendar')}
-            description="Stay on top of your family's schedule."
+            description={tr('calendarModule.stayOnTopOfYour')}
             action={
               <div className="flex items-center gap-2">
                 {gcalConnected === false && (

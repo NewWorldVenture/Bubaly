@@ -112,7 +112,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
   return (
     <div className="module-page">
-      <PageHeader title={tr('walletDashboard.familyWallet')} description="Spend, save, give, and invest — for the whole family."
+      <PageHeader title={tr('walletDashboard.familyWallet')} description={tr('walletDashboard.spendSaveGiveAndInvest')}
         action={hasCoach ? (
           <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> {tr('walletDashboard.moneyCoach')}</Button>
         ) : undefined}
@@ -203,7 +203,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
       {childWallets.length === 0 ? (
         <EmptyState icon={Wallet} title={tr('walletDashboard.noChildWalletsYet')}
-          description="Add children to your family and they'll each get a wallet here." />
+          description={tr('walletDashboard.addChildrenToYourFamily')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {childWallets.map((c) => (

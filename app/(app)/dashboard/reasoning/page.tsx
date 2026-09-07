@@ -41,7 +41,7 @@ export default async function ReasoningPage() {
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <PageHeader
         title={t('dashboardReasoning.familyReasoning')}
-        description="One engine, six questions. Bubaly reasons across your calendar, decisions, signals and graph to answer what matters, what’s slipping, and what to do next."
+        description={t('reasoning.oneEngineSixQuestionsBubaly')}
       />
 
       <section className="mb-5 rounded-2xl border border-border bg-surface/60 p-5">
@@ -70,7 +70,7 @@ export default async function ReasoningPage() {
 
       {hasReadErrors && (
         <div className="mb-5">
-          <ErrorState message="Some Family Reasoning data could not be loaded from Supabase. Results may be incomplete. Refresh and try again." />
+          <ErrorState message={t('reasoning.someFamilyReasoningDataCould')} />
         </div>
       )}
 

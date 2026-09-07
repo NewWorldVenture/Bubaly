@@ -46,11 +46,11 @@ export function NutritionView() {
 
   // A genuine read failure must surface + be retryable, not silently render as an
   // empty tracker. (Missing-table/offline are already degraded to empty by the hook.)
-  if (error) return <ErrorState message="Could not load nutrition logs. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('nutritionView.couldNotLoadNutritionLogs')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
-      <PageHeader title={t('nutrition.nutritionTracker')} description="Log meals and track calories & macros per family member."
+      <PageHeader title={t('nutrition.nutritionTracker')} description={t('nutritionView.logMealsAndTrackCalories')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('nutrition.logFood')}</Button>} />
 
       {/* Member tabs */}
@@ -72,7 +72,7 @@ export function NutritionView() {
       </div>
 
       {loading ? <SkeletonList /> : todayLogs.length === 0 ? (
-        <EmptyState icon={Apple} title={t('nutrition.nothingLoggedToday')} description="Log a meal or snack to start tracking today's nutrition."
+        <EmptyState icon={Apple} title={t('nutrition.nothingLoggedToday')} description={t('nutritionView.logAMealOrSnack')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('nutrition.logFood')}</Button>} />
       ) : (
         <div className="space-y-4">
@@ -147,7 +147,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
           <Field label={t('nutrition.carbs')}>{(id) => <Input id={id} type="number" step="0.1" value={v.carbs_g} onChange={(e) => setV({ ...v, carbs_g: e.target.value })} placeholder="45" />}</Field>
           <Field label="Fat">{(id) => <Input id={id} type="number" step="0.1" value={v.fat_g} onChange={(e) => setV({ ...v, fat_g: e.target.value })} placeholder="8" />}</Field>
         </div>
-        <Field label={t('nutrition.waterMl')} hint="Optional">{(id) => <Input id={id} type="number" value={v.water_ml} onChange={(e) => setV({ ...v, water_ml: e.target.value })} placeholder="250" />}</Field>
+        <Field label={t('nutrition.waterMl')} hint={t('nutritionView.optional')}>{(id) => <Input id={id} type="number" value={v.water_ml} onChange={(e) => setV({ ...v, water_ml: e.target.value })} placeholder="250" />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('nutrition.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.item.trim()}>Log</Button>

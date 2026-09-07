@@ -144,7 +144,7 @@ export function MomentsView() {
     <div className="module-page">
       <PageHeader
         title={t('moments.moments')}
-        description="Your next events, already prepped. Bubaly lines up everything each one needs — you just tap."
+        description={t('momentsView.yourNextEventsAlreadyPrepped')}
       />
 
       {!loading && moments.length > 0 && (
@@ -166,7 +166,7 @@ export function MomentsView() {
         <EmptyState
           icon={Sparkles}
           title={t('moments.nothingOnTheHorizon')}
-          description="When your family has upcoming events, Bubaly will assemble the prep for each one here."
+          description={t('momentsView.whenYourFamilyHasUpcoming')}
           action={<Link href="/dashboard/calendar" className="btn-cta">{t('moments.openCalendar')}</Link>}
         />
       ) : (

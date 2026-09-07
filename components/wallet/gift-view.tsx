@@ -46,7 +46,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('gift.familyWallet')} description="Let grandparents and relatives gift with a simple link."
+      <PageHeader title={t('gift.familyWallet')} description={t('giftView.letGrandparentsAndRelativesGift')}
         action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       <WalletSubnav />
 
@@ -78,7 +78,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
       <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{t('gift.giftLinks')}</h2>
       {links.length === 0 ? (
         <EmptyState icon={Gift} title={t('gift.noGiftLinksYet')}
-          description="Create a link and share it with grandparents — they can gift in seconds."
+          description={t('giftView.createALinkAndShare')}
           action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       ) : (
         <div className="space-y-2">

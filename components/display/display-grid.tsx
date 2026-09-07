@@ -188,7 +188,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             );
           })}
         </ul>
-      ) : <Empty icon={Calendar} text="Nothing scheduled today" />;
+      ) : <Empty icon={Calendar} text={tr('displayGrid.nothingScheduledToday')} />;
     }
 
     case 'upcoming':
@@ -201,7 +201,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             </li>
           ))}
         </ul>
-      ) : <Empty icon={Calendar} text="No upcoming events" />;
+      ) : <Empty icon={Calendar} text={tr('displayGrid.noUpcomingEvents')} />;
 
     case 'calendar': return <MonthCalendar cal={data.calendar} />;
 
@@ -219,7 +219,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             );
           })}
         </ul>
-      ) : <Empty icon={CheckCircle2} text="All done! 🎉" />;
+      ) : <Empty icon={CheckCircle2} text={tr('displayGrid.allDone')} />;
 
     case 'meals':
       return data.meals.length ? (
@@ -236,7 +236,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             </li>
           ))}
         </ul>
-      ) : <Empty icon={UtensilsCrossed} text="No meals planned" />;
+      ) : <Empty icon={UtensilsCrossed} text={tr('displayGrid.noMealsPlanned')} />;
 
     case 'grocery':
       return (
@@ -268,7 +268,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={r.id} className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 shrink-0 text-amber-300" /><span className="min-w-0 flex-1 truncate text-white">{r.title}</span></li>
           ))}
         </ul>
-      ) : <Empty icon={Bell} text="No reminders due" />;
+      ) : <Empty icon={Bell} text={tr('displayGrid.noRemindersDue')} />;
 
     case 'birthdays':
       return data.birthdays.length ? (
@@ -277,7 +277,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span className="text-white">{b.name}</span><span className="ml-auto text-xs text-white/50">{b.date}</span></li>
           ))}
         </ul>
-      ) : <Empty icon={Cake} text="No birthdays this week" />;
+      ) : <Empty icon={Cake} text={tr('displayGrid.noBirthdaysThisWeek')} />;
 
     case 'notes':
       return data.notes.length ? (
@@ -286,7 +286,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/50">{n.body}</p></li>
           ))}
         </ul>
-      ) : <Empty icon={StickyNote} text="No pinned notes" />;
+      ) : <Empty icon={StickyNote} text={tr('displayGrid.noPinnedNotes')} />;
 
     default: return null;
   }

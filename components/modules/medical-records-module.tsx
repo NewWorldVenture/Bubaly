@@ -483,7 +483,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </Modal>
 
       {/* ── Check-in member picker ────────────────────────── */}
-      <Modal open={checkInPicker} title={t('medicalRecords.atTheDoctorCheckIn')} description="Who is this visit for? We'll show everything you need for the intake form." onClose={() => setCheckInPicker(false)}>
+      <Modal open={checkInPicker} title={t('medicalRecords.atTheDoctorCheckIn')} description={t('medicalRecordsModule.whoIsThisVisitFor')} onClose={() => setCheckInPicker(false)}>
         <div className="space-y-2">
           {selfMember && (
             <button onClick={() => { setCheckInMemberId(selfMember.id); setCheckInPicker(false); }} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-elevated">

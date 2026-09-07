@@ -77,7 +77,7 @@ export default async function SurveysPage() {
 
       {/* List */}
       {(surveys ?? []).length === 0 ? (
-        <EmptyState icon={MessagesSquare} title={tr('adminMarketingSurveys.noSurveysYet')} description="Create your first NPS, CSAT, or CES survey above." />
+        <EmptyState icon={MessagesSquare} title={tr('adminMarketingSurveys.noSurveysYet')} description={tr('surveys.createYourFirstNpsCsat')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {(surveys ?? []).map((sv) => {
@@ -109,15 +109,16 @@ export default async function SurveysPage() {
   );
 }
 
-function AdminSurveysReadError() {
+async function AdminSurveysReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Surveys</h1>
-        <p className="mt-1 text-sm text-muted">Create and measure NPS, CSAT, and CES surveys.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('surveys.marketingSurveys')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('surveys.createAndMeasureNpsCsat')}</p>
       </div>
-      <ErrorState message="Could not load survey data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">Refresh surveys</Link>
+      <ErrorState message={tr('surveys.couldNotLoadSurveyData')} />
+      <Link href="/admin/marketing/surveys" className="text-sm font-medium text-brand-text underline">{tr('surveys.refreshSurveys')}</Link>
     </div>
   );
 }

@@ -58,7 +58,7 @@ export default async function CookiesPage() {
     <>
       <LegalPage
         title={t('cookies.cookiePolicy')}
-        summary="The small files that keep you signed in and Bubaly running — and how to control them."
+        summary={t('cookies.theSmallFilesThatKeep')}
         lastUpdated="June 24, 2026"
         path="/cookies"
         sections={SECTIONS}

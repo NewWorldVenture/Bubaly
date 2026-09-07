@@ -43,7 +43,7 @@ export default async function FamilyCfoPage() {
     .find((e) => e && !isMissingTableError(e));
   if (financeError) {
     console.error('[dashboard/family-cfo] finance read failed', financeError);
-    return <ErrorState message="Could not load your family finances from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('familyCfo.couldNotLoadYourFamily')} />;
   }
 
   const accounts = accountsRes.data;
@@ -61,7 +61,7 @@ export default async function FamilyCfoPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={tr('dashboardFamilyCfo.familyCfo')} description="Your household's finances at a glance — every figure is live." />
+      <PageHeader title={tr('dashboardFamilyCfo.familyCfo')} description={tr('familyCfo.yourHouseholdSFinancesAt')} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label={tr('dashboardFamilyCfo.netPosition')} value={usd(netWorth)} icon={Wallet} accent="bg-emerald-600" href="/dashboard/billing" sublabel="Accounts" />
@@ -71,7 +71,7 @@ export default async function FamilyCfoPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <SectionCard title={tr('dashboardFamilyCfo.upcomingBills')} description="Next 30 days" viewAllHref="/dashboard/billing">
+        <SectionCard title={tr('dashboardFamilyCfo.upcomingBills')} description={tr('familyCfo.next30Days')} viewAllHref="/dashboard/billing">
           {bills && bills.length > 0 ? (
             <ul className="divide-y divide-border">
               {bills.map((b) => (
@@ -83,10 +83,10 @@ export default async function FamilyCfoPage() {
                 </li>
               ))}
             </ul>
-          ) : <MiniEmpty icon={CalendarClock} text="No bills due in the next 30 days." />}
+          ) : <MiniEmpty icon={CalendarClock} text={tr('familyCfo.noBillsDueInThe')} />}
         </SectionCard>
 
-        <SectionCard title={tr('dashboardFamilyCfo.spendingVsBudget')} description="This month by category" viewAllHref="/dashboard/billing">
+        <SectionCard title={tr('dashboardFamilyCfo.spendingVsBudget')} description={tr('familyCfo.thisMonthByCategory')} viewAllHref="/dashboard/billing">
           {byCat.size > 0 ? (
             <ul className="space-y-3">
               {[...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([cat, amt]) => {
@@ -105,7 +105,7 @@ export default async function FamilyCfoPage() {
                 );
               })}
             </ul>
-          ) : <MiniEmpty icon={CreditCard} text="No spending recorded this month." />}
+          ) : <MiniEmpty icon={CreditCard} text={tr('familyCfo.noSpendingRecordedThisMonth')} />}
         </SectionCard>
       </div>
 
@@ -123,7 +123,7 @@ export default async function FamilyCfoPage() {
               );
             })}
           </div>
-        ) : <MiniEmpty icon={PiggyBank} text="No savings goals yet." />}
+        ) : <MiniEmpty icon={PiggyBank} text={tr('familyCfo.noSavingsGoalsYet')} />}
       </SectionCard>
     </div>
   );

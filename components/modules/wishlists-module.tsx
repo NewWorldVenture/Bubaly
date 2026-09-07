@@ -127,7 +127,7 @@ export function WishlistsModule() {
     <div>
       <PageHeader
         title={t('wishlists.wishLists')}
-        description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
+        description={t('wishlistsModule.everyoneSWishesInOne')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="wishlists" />

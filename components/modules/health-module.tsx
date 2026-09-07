@@ -503,7 +503,7 @@ export function HealthModule() {
       <div className="module-main space-y-5">
         <PageHeader
           title={tr('health.health')}
-          description="Track fitness, wellness, and health across your whole family."
+          description={tr('healthModule.trackFitnessWellnessAndHealth')}
           action={
             <div className="flex gap-2">
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
@@ -542,7 +542,7 @@ export function HealthModule() {
               <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> {tr('health.setGoals')}</button>
             </div>
             {metrics.length === 0 ? (
-              <EmptyState icon={Activity} title={tr('health.noActivityDataYet')} description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
+              <EmptyState icon={Activity} title={tr('health.noActivityDataYet')} description={tr('healthModule.logYourFirstHealthMetric')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <>
                 <div className="flex items-center gap-6">
@@ -592,7 +592,7 @@ export function HealthModule() {
               <h2 className="font-semibold">{tr('health.familyHealthAtAGlance')}</h2>
             </div>
             {memberStats.every((ms) => ms.steps === 0 && ms.sleep === 0 && ms.hr === 0) ? (
-              <EmptyState icon={Heart} title={tr('health.noMemberHealthData')} description="Log metrics for family members to see their health at a glance." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
+              <EmptyState icon={Heart} title={tr('health.noMemberHealthData')} description={tr('healthModule.logMetricsForFamilyMembers')} action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>} />
             ) : (
               <div className="max-h-[32rem] space-y-3 overflow-y-auto">
                 {memberStats.map(({ member: m, steps, sleep, hr, pct }) => (
@@ -629,7 +629,7 @@ export function HealthModule() {
               <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">{tr('health.logWorkout')}</button>
             </div>
             {workouts.length === 0 ? (
-              <EmptyState icon={Dumbbell} title={tr('health.noWorkoutsLogged')} description="Track runs, swims, bike rides, and more." action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logWorkout')}</Button>} />
+              <EmptyState icon={Dumbbell} title={tr('health.noWorkoutsLogged')} description={tr('healthModule.trackRunsSwimsBikeRides')} action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logWorkout')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {workouts.slice(0, 5).map((w) => {
@@ -686,7 +686,7 @@ export function HealthModule() {
             <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
-            <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />
+            <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />
           ) : (
             <div className="space-y-2.5">
               {sortedSymptoms.slice(0, 12).map((s) => {

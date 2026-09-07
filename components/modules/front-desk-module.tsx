@@ -168,7 +168,7 @@ export function FrontDeskModule() {
         <div className="module-page">
           <PageHeader
             title={tr('frontDesk.aiFrontDesk')}
-            description="Your family's AI receptionist — every call screened, answered, and summarized."
+            description={tr('frontDeskModule.yourFamilySAiReceptionist')}
             action={
               <div className="flex items-center gap-2">
                 {manager && (

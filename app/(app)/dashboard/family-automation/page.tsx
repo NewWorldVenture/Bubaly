@@ -19,7 +19,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{t('familyAutomation.familyLifeAutomation')}</h1>
-      <ErrorState message="Could not load family automation data from Supabase. Refresh and try again." />
+      <ErrorState message={t('familyAutomation.couldNotLoadFamilyAutomation')} />
       <Link href="/dashboard/family-automation" className="text-sm font-medium text-brand-text underline">{t('familyAutomation.refreshFamilyAutomation')}</Link>
     </div>
   );
@@ -82,7 +82,7 @@ export default async function FamilyAutomationPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFamilyAutomation.familyLifeAutomation')}
-        description="Set rules that watch your real data and act — with parent approval for anything sensitive."
+        description={t('familyAutomation.setRulesThatWatchYour')}
         action={manager ? (
           <Link
             href="/dashboard/concierge"
@@ -119,7 +119,7 @@ export default async function FamilyAutomationPage() {
 
       <SectionCard
         title={t('dashboardFamilyAutomation.bubalyRoutines')}
-        description="Things you asked Bubaly to do on a schedule. Each one files a request when it is due — it is planned and gated like anything else you ask for."
+        description={t('familyAutomation.thingsYouAskedBubalyTo')}
       >
         {routines.length > 0 ? (
           <ul className="divide-y divide-border">
@@ -147,7 +147,7 @@ export default async function FamilyAutomationPage() {
 
       <SectionCard
         title={t('dashboardFamilyAutomation.automationRules')}
-        description="Older rules. Their triggers are not evaluated by anything — a routine above is what actually runs."
+        description={t('familyAutomation.olderRulesTheirTriggersAre')}
       >
         {rules && rules.length > 0 ? (
           <ul className="divide-y divide-border">
@@ -165,7 +165,7 @@ export default async function FamilyAutomationPage() {
             ))}
           </ul>
         ) : (
-          <MiniEmpty icon={Plus} text="No older rules." />
+          <MiniEmpty icon={Plus} text={t('familyAutomation.noOlderRules')} />
         )}
       </SectionCard>
 

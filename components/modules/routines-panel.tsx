@@ -123,7 +123,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   const applyIds = useRef<Record<string, string>>({});
 
   if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{tr('routines.loadingRoutines')}</div>;
-  if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
+  if (error) return <ErrorState message={tr('routinesPanel.couldNotLoadRoutinesRefresh')} onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {
     const its = itemsByTemplate.get(t.id) ?? [];

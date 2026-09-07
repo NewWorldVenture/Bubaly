@@ -113,7 +113,7 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title={tr('moneyCards.cards')} description="Spending cards are not enabled for this family yet." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.spendingCardsAreNotEnabled')} />
         <div className="mt-4 rounded-2xl border border-border bg-surface/40 p-6">
           <EmptyState
             icon={CreditCard}
@@ -130,7 +130,7 @@ export function MoneyCardsView({
     return (
       <div>
         <WalletSubnav />
-        <PageHeader title={tr('moneyCards.cards')} description="Set up safe spending cards for your kids in 3 quick steps." />
+        <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.setUpSafeSpendingCards')} />
 
         {/* Progress steps */}
         <div className="mt-4 mb-6">
@@ -186,7 +186,7 @@ export function MoneyCardsView({
   return (
     <div>
       <WalletSubnav />
-      <PageHeader title={tr('moneyCards.cards')} description="Kid-safe spending cards — each purchase checks the Spend balance in real time." />
+      <PageHeader title={tr('moneyCards.cards')} description={t('moneyCardsView.kidSafeSpendingCardsEach')} />
 
       {/* Setup success banner */}
       {showSetupSuccess && (
@@ -215,7 +215,7 @@ export function MoneyCardsView({
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={CreditCard} title={tr('moneyCards.noChildWallets')} description="Add child members to issue cards." />
+        <EmptyState icon={CreditCard} title={tr('moneyCards.noChildWallets')} description={t('moneyCardsView.addChildMembersToIssue')} />
       ) : (
         <div className="space-y-4">
           {childWallets.map((child) => {

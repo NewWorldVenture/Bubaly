@@ -68,7 +68,7 @@ export function JournalModule() {
     <div className="module-page">
       <PageHeader
         title={t('journal.journal')}
-        description="A private space to reflect, process, and grow — just for you."
+        description={t('journalModule.aPrivateSpaceToReflect')}
         action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.newEntry')}</Button>}
       />
 
@@ -76,7 +76,7 @@ export function JournalModule() {
 
       {data.length === 0 ? (
         <EmptyState icon={BookHeart} title={t('journal.yourJournalIsEmpty')}
-          description="Reflection builds self-awareness. Start with today's prompt or a free write."
+          description={t('journalModule.reflectionBuildsSelfAwarenessStart')}
           action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.writeYourFirstEntry')}</Button>} />
       ) : (
         <div className="space-y-3">

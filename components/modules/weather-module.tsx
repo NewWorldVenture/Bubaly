@@ -184,7 +184,7 @@ export function WeatherModule() {
 
   return (
     <div className="module-page space-y-5">
-      <PageHeader title={t('weather.weather')} description="Live conditions and forecasts for your locations." action={<AiInsight kind="weather" />} />
+      <PageHeader title={t('weather.weather')} description={t('weatherModule.liveConditionsAndForecastsFor')} action={<AiInsight kind="weather" />} />
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">

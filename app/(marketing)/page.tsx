@@ -110,7 +110,7 @@ export default async function HomePage() {
       <MarketingAeoSection
         path="/"
         name="Bubaly"
-        description="The AI operating system for family life."
+        description={t('app.theAiOperatingSystemFor')}
       />
     </PageWrap>
   );

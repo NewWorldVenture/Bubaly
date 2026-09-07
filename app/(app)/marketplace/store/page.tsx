@@ -44,7 +44,7 @@ export default async function MarketplaceStorePage() {
     <div>
       <PageHeader
         title={t('marketplaceStore.myStore')}
-        description="Your storefront on the family marketplace — brand your listings and build a following."
+        description={t('store.yourStorefrontOnTheFamily')}
       />
 
       {store && (

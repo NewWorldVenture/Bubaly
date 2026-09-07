@@ -81,15 +81,16 @@ export default async function AdminNotificationsPage() {
   );
 }
 
-function AdminNotificationsReadError() {
+async function AdminNotificationsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Notifications</h1>
-        <p className="mt-1 text-sm text-muted">Every super-admin alert in one place.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('notifications.notifications')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('notifications.everySuperAdminAlertIn')}</p>
       </div>
-      <ErrorState message="Could not load admin notifications from Supabase. Refresh and try again." />
-      <a href="/admin/notifications" className="text-sm font-medium text-brand-text underline">Refresh notifications</a>
+      <ErrorState message={t('notifications.couldNotLoadAdminNotifications')} />
+      <a href="/admin/notifications" className="text-sm font-medium text-brand-text underline">{t('notifications.refreshNotifications')}</a>
     </div>
   );
 }

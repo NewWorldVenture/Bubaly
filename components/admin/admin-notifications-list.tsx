@@ -168,8 +168,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                         <Link
                           href={n.url}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline"
-                        >
-                          Open <ArrowUpRight className="h-3 w-3" />
+                        >{t('adminNotificationsList.open')}{' '}<ArrowUpRight className="h-3 w-3" />
                         </Link>
                       )}
                       {!n.is_read && (
@@ -179,8 +178,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                           disabled={pending}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg disabled:opacity-50"
                         >
-                          <Check className="h-3 w-3" /> Mark read
-                        </button>
+                          <Check className="h-3 w-3" />{' '}{t('adminNotificationsList.markRead')}</button>
                       )}
                     </div>
                   </div>

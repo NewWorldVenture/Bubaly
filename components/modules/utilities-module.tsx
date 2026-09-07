@@ -83,7 +83,7 @@ export function UtilitiesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load utility bills. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('utilitiesModule.couldNotLoadUtilityBills')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -136,7 +136,7 @@ export function UtilitiesModule() {
       )}
 
       {kinds.length === 0 ? (
-        <EmptyState icon={Gauge} title={t('utilities.noUtilityBillsYet')} description="Log bills to monitor costs and spot increases over time." />
+        <EmptyState icon={Gauge} title={t('utilities.noUtilityBillsYet')} description={t('utilitiesModule.logBillsToMonitorCosts')} />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {kinds.map((kind) => {

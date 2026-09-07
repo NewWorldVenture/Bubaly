@@ -90,7 +90,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
     <div className="module-page">
       <PageHeader
         title={tr('tripIntel.tripIntelligence')}
-        description="AI plans your visits and tells you exactly when to head out — with live traffic & weather."
+        description={tr('tripIntelModule.aiPlansYourVisitsAnd')}
       />
 
       {tablesMissing && (
@@ -119,7 +119,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
         </h2>
         {upcoming.length === 0 ? (
           <EmptyState icon={MapPin} title={tr('tripIntel.noUpcomingEventsWithALocation')}
-            description="Add a location to a calendar event (a trip, a dinner) and it'll show up here for AI research and smart-departure planning." />
+            description={tr('tripIntelModule.addALocationToA')} />
         ) : (
           <div className="space-y-2">
             {upcoming.map((e) => (

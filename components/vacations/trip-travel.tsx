@@ -49,7 +49,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
     <div className="space-y-8">
       <TripCrudSection<Flight>
         table="vacation_flights" vacationId={vacationId} title={tr('tripTravel.flights')} icon={Plane}
-        fields={flightFields} emptyText="No flights yet" addLabel="Add flight"
+        fields={flightFields} emptyText={tr('tripTravel.noFlightsYet')} addLabel="Add flight"
         orderBy={(a, b) => (a.depart_at ?? '').localeCompare(b.depart_at ?? '')}
         renderRow={(f) => (
           <div>
@@ -67,7 +67,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
       />
       <TripCrudSection<Transport>
         table="vacation_transportation" vacationId={vacationId} title={tr('tripTravel.groundTransportation')} icon={Car}
-        fields={transportFields} emptyText="No transportation yet" addLabel="Add transport"
+        fields={transportFields} emptyText={tr('tripTravel.noTransportationYet')} addLabel="Add transport"
         orderBy={(a, b) => (a.depart_at ?? '').localeCompare(b.depart_at ?? '')}
         renderRow={(t) => {
           const k = lookup(TRANSPORT_KINDS, t.kind);

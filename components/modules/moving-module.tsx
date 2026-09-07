@@ -150,7 +150,7 @@ export function MovingWorkspace() {
   const error = moves.error || tasks.error || boxes.error;
   const refresh = () => { void moves.refresh(); void tasks.refresh(); void boxes.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load your move. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('movingModule.couldNotLoadYourMove')} onRetry={refresh} />;
 
   const TaskRow = ({ t }: { t: Task }) => {
   const tr = useTranslations();
@@ -203,7 +203,7 @@ export function MovingWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title={tr('moving.movePlanner')}
-        description="One workflow from “we’re moving” to “settled”: an eight-week checklist built for your family, a numbered box inventory you can search on day one, and a budget that counts the mover’s quote before you spend it."
+        description={tr('movingModule.oneWorkflowFromWeRe')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="moving" iconOnly />
@@ -215,7 +215,7 @@ export function MovingWorkspace() {
       />
 
       {moves.data.length === 0 || !move || !summary || !budget ? (
-        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description="Add the move date and whether kids, pets or a rental are involved. The eight-week checklist and box inventory follow." action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
+        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description={tr('movingModule.addTheMoveDateAnd')} action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
       ) : (
         <>
           {moves.data.length > 1 && (
@@ -334,7 +334,7 @@ export function MovingWorkspace() {
               {query.trim() ? (
                 found.length ? <ul className="grid gap-2 sm:grid-cols-2">{found.map((b) => <BoxCard key={b.id} b={b} />)}</ul> : <p className="text-sm text-muted">{tr('moving.nothingLabelledOrListedAs')}{query}”.</p>
               ) : rooms.length === 0 ? (
-                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description="Number every box, name its destination room and list what is inside. On day one, search instead of opening boxes." action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
+                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description={tr('movingModule.numberEveryBoxNameIts')} action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
               ) : (
                 rooms.map(({ room, boxes: list }) => (
                   <section key={room}>
@@ -406,7 +406,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
   );
 
   return (
-    <Modal open title={move ? 'Edit move' : 'Plan a move'} description="The date and the family’s situation decide which checklist steps you get." onClose={onClose}>
+    <Modal open title={move ? 'Edit move' : 'Plan a move'} description={tr('movingModule.theDateAndTheFamily')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
@@ -526,7 +526,7 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
   }
 
   return (
-    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description="Write the number and destination room on two sides of the box. List the contents here, not on the cardboard." onClose={onClose}>
+    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-[6rem_1fr] gap-3">
           <Field label={tr('moving.number')} required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>

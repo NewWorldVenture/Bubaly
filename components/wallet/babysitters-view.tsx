@@ -54,7 +54,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
     <div className="module-page">
       <PageHeader
         title={tr('babysitters.familyWallet')}
-        description="Keep babysitter contacts and track every payment in one place."
+        description={t('babysittersView.keepBabysitterContactsAndTrack')}
         action={canManage ? <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {tr('babysitters.addSitter')}</Button> : undefined}
       />
       <WalletSubnav />

@@ -57,7 +57,7 @@ export default async function VisitorIntelligencePage() {
     return (
       <div className="space-y-5 p-4 sm:p-6">
         <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h1>
-        <ErrorState message="Could not load visitor intelligence from Supabase. Refresh and try again." />
+        <ErrorState message={t('visitorIntelligence.couldNotLoadVisitorIntelligence')} />
         <a href="/admin/marketing/visitor-intelligence" className="text-sm font-medium text-brand-text underline">{t('adminMarketingVisitorIntelligence.refreshVisitorIntelligence')}</a>
       </div>
     );

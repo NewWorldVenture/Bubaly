@@ -9,15 +9,16 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Onboarding Audit', robots: { index: false } };
+export const metadata: Metadata = { title: 'onboarding.onboardingAudit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5 p-4 sm:p-6">
-      <h1 className="text-xl font-black sm:text-2xl">Onboarding Audit</h1>
-      <ErrorState message="Could not load onboarding audit data from Supabase. Refresh and try again." />
-      <a href="/admin/onboarding" className="text-sm font-medium text-brand-text underline">Refresh onboarding audit</a>
+      <h1 className="text-xl font-black sm:text-2xl">{t('onboarding.onboardingAudit')}</h1>
+      <ErrorState message={t('onboarding.couldNotLoadOnboardingAudit')} />
+      <a href="/admin/onboarding" className="text-sm font-medium text-brand-text underline">{t('onboarding.refreshOnboardingAudit')}</a>
     </div>
   );
 }

@@ -138,7 +138,7 @@ export function HomeworkModule() {
     <div>
       <PageHeader
         title={t('homework.homework')}
-        description="Keep every assignment on track — by student, by due date, with overdue alerts."
+        description={t('homeworkModule.keepEveryAssignmentOnTrack')}
         action={<div className="flex items-center gap-2"><AiInsight kind="homework" /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button></div>}
       />
 
@@ -174,7 +174,7 @@ export function HomeworkModule() {
 
       {visible.length === 0 ? (
         <EmptyState icon={BookOpen} title={t('homework.noHomeworkYet')}
-          description="Add assignments to track due dates and progress for each student."
+          description={t('homeworkModule.addAssignmentsToTrackDue')}
           action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('homework.addHomework')}</Button>} />
       ) : (
         <div className="space-y-6">

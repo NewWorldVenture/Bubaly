@@ -382,7 +382,7 @@ export function RelationshipModule() {
         </div>
         {upcoming.length === 0 ? (
           <EmptyState icon={Heart} title={t('relationship.noDatesYet')}
-            description="Add your anniversary, your partner’s birthday, or plan a date night — Bubaly will remind you and suggest gifts."
+            description={t('relationshipModule.addYourAnniversaryYourPartner')}
             action={<Button onClick={() => openNewDate('anniversary')} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addYourFirstDate')}</Button>} />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

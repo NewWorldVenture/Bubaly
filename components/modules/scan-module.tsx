@@ -100,7 +100,7 @@ export function ScanModule() {
     <div className="module-page mx-auto max-w-3xl space-y-5">
       <PageHeader
         title={t('scan.scanFlyerCalendar')}
-        description="Snap a photo of a school flyer, sports schedule, or invitation — or upload a PDF — and AI adds the events to your family calendar."
+        description={t('scanModule.snapAPhotoOfA')}
       />
 
       <input

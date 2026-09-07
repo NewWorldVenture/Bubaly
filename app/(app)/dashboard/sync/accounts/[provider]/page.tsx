@@ -118,7 +118,7 @@ export default async function SyncProviderPage({
           <ArrowLeft className="h-4 w-4" /> {t('dashboardSyncAccounts.allAccounts')}
         </Link>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
-        <ErrorState message="Could not load this provider account from Supabase. Refresh and try again." />
+        <ErrorState message={t('accounts.couldNotLoadThisProvider')} />
         <a href={`/dashboard/sync/accounts/${provider}`} className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshProviderAccount')}</a>
       </div>
     );

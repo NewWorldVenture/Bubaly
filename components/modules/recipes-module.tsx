@@ -232,13 +232,13 @@ export function RecipesModule() {
   };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family recipes. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('recipesModule.couldNotLoadFamilyRecipes')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
       <PageHeader
         title={tr('recipes.familyRecipes')}
-        description="Your family's cookbook — organized, searchable, and always at hand."
+        description={tr('recipesModule.yourFamilySCookbookOrganized')}
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
@@ -295,7 +295,7 @@ export function RecipesModule() {
       {/* Recipe grid */}
       {filtered.length === 0 ? (
         <EmptyState icon={ChefHat} title={tr('recipes.noRecipesYet')}
-          description="Add your family's favorite recipes and they'll appear here."
+          description={tr('recipesModule.addYourFamilySFavorite')}
           action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

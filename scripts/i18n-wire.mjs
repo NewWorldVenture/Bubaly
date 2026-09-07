@@ -49,7 +49,15 @@ function indexSources() {
   const index = new Map();
   for (const file of files) {
     const src = readFileSync(file, 'utf8');
-    const specifiers = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    // `import type … from` is ERASED at compile time, so it says nothing about
+    // whether a module reaches the browser. Counting it made
+    // `app/(app)/dashboard/contact-center/page.tsx` look like a client module,
+    // because `contact-center-module.tsx` — which IS one — imports a ROW TYPE
+    // from it. The page then got `useTranslations()` inside an async server
+    // component, which only `next build` catches, and only at the very end.
+    const specifiers = [...src.matchAll(/(?:^|\n)\s*(?:export|import)\s+(type\s+)?[^;]*?from\s+['"]([^'"]+)['"]/g)]
+      .filter((m) => !m[1])
+      .map((m) => m[2]);
     index.set(file, { declaresClient: /^['"]use client['"]/.test(src.trimStart()), specifiers });
   }
   return index;

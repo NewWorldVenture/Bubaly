@@ -116,7 +116,7 @@ export default async function AIPage() {
         <SectionHeading
           eyebrow="Ask → Act"
           title={t('ai.sayItInPlainLanguage')}
-          description="Pick a prompt — Bubaly replies and creates the real records, the same cards your family sees inside the app."
+          description={t('ai.pickAPromptBubalyReplies')}
         />
         <div className="mt-12">
           <AiActionDemo />
@@ -147,7 +147,7 @@ export default async function AIPage() {
         <SectionHeading
           eyebrow="One assistant, the whole household"
           title={t('ai.everythingItCanTakeOff')}
-          description="Bubaly reaches across your family’s calendar, lists, money, documents, and safety — so a single ask can touch every corner of family life."
+          description={t('ai.bubalyReachesAcrossYourFamily')}
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CAPABILITIES.map((c) => (
@@ -167,7 +167,7 @@ export default async function AIPage() {
         <SectionHeading
           eyebrow="A Tuesday, handled"
           title={t('ai.whatADayFeelsLike')}
-          description="It doesn’t wait to be asked. Bubaly works in the background and surfaces the right thing at the right moment."
+          description={t('ai.itDoesnTWaitTo')}
         />
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
           {DAY.map((d, i) => (
@@ -192,7 +192,7 @@ export default async function AIPage() {
         title={t('ai.meetTheAssistantThatActually')}
         subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
       />
-      <MarketingAeoSection path="/ai" name={t('ai.bubalyAi')} description="An assistant that takes real action inside your family life." />
+      <MarketingAeoSection path="/ai" name={t('ai.bubalyAi')} description={t('ai.anAssistantThatTakesReal')} />
     </>
   );
 }

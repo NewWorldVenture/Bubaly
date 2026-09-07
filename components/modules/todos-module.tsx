@@ -314,7 +314,7 @@ export function TodosModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load tasks. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('todosModule.couldNotLoadTasksRefresh')} onRetry={refresh} />;
 
   const nothing = tabItems.length === 0;
 
@@ -324,7 +324,7 @@ export function TodosModule() {
       <div className="module-main">
         <PageHeader
           title={tr('todos.tasks')}
-          description="Stay organized and get things done—together."
+          description={tr('todosModule.stayOrganizedAndGetThings')}
           action={
             <div className="flex items-center gap-2">
               <AiInsight kind="todos" />

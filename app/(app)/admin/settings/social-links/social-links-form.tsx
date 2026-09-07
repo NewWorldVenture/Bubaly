@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { Loader2, Save } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { SOCIAL_PLATFORMS, type SocialLinks } from '@/lib/marketing/social-links';
 import { saveSocialLinksAction } from './actions';
 
 export function SocialLinksForm({ links }: { links: SocialLinks }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -45,9 +47,7 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
         </label>
       ))}
 
-      <p className="text-xs text-muted">
-        Full https URLs only. Clear a field and save to remove that icon from the footer.
-      </p>
+      <p className="text-xs text-muted">{t('socialLinksForm.fullHttpsUrlsOnlyClear')}</p>
 
       <button
         type="submit"

@@ -151,7 +151,7 @@ export function PasswordsModule() {
     <div className="module-page">
       <PageHeader
         title={t('passwords.wiFiPasswords')}
-        description="Shared family logins, Wi-Fi, PINs and cards — in one safe place."
+        description={t('passwordsModule.sharedFamilyLoginsWiFi')}
         action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addEntry')}</Button>}
       />
 
@@ -184,10 +184,10 @@ export function PasswordsModule() {
       {filtered.length === 0 ? (
         data.length === 0 ? (
           <EmptyState icon={KeyRound} title={t('passwords.noEntriesYet')}
-            description="Save your family Wi-Fi, streaming logins, door codes and more — everyone can find them, no one has to text “what’s the password?” again."
+            description={t('passwordsModule.saveYourFamilyWiFi')}
             action={<Button onClick={openAdd}><Plus className="h-4 w-4" /> {t('passwords.addYourFirstEntry')}</Button>} />
         ) : (
-          <EmptyState icon={Search} title={t('passwords.noMatches')} description="Try a different search or clear the filter." />
+          <EmptyState icon={Search} title={t('passwords.noMatches')} description={t('passwordsModule.tryADifferentSearchOr')} />
         )
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

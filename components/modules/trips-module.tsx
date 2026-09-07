@@ -318,7 +318,7 @@ export function TripsModule() {
     <div>
       <PageHeader
         title={tr('trips.tripPlanner')}
-        description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
+        description={tr('tripsModule.planFamilyTravelEndTo')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="trips" />

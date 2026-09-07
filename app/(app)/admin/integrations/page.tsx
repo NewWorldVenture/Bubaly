@@ -7,7 +7,7 @@ import { ErrorState } from '@/components/ui/states';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail } from '@/lib/server/health';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Integrations', robots: { index: false } };
+export const metadata: Metadata = { title: 'integrations.integrations', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Integration = {
@@ -18,7 +18,8 @@ type Integration = {
   detail: string;
 };
 
-function Row({ integration }: { integration: Integration }) {
+async function Row({ integration }: { integration: Integration }) {
+  const tr = await getTranslations();
   const Icon = integration.icon;
   return (
     <div className="flex items-center gap-4 rounded-xl border border-border bg-surface/40 p-4">
@@ -34,9 +35,9 @@ function Row({ integration }: { integration: Integration }) {
       </div>
       <div className="flex items-center gap-1.5 text-xs font-semibold">
         {integration.connected ? (
-          <><CheckCircle2 className="h-4 w-4 text-success" /> <span className="text-success">Connected</span></>
+          <><CheckCircle2 className="h-4 w-4 text-success" /> <span className="text-success">{tr('integrations.connected')}</span></>
         ) : (
-          <><XCircle className="h-4 w-4 text-muted" /> <span className="text-muted">Not configured</span></>
+          <><XCircle className="h-4 w-4 text-muted" /> <span className="text-muted">{tr('integrations.notConfigured')}</span></>
         )}
       </div>
     </div>
@@ -110,15 +111,16 @@ export default async function AdminIntegrationsPage() {
   );
 }
 
-function AdminIntegrationsReadError() {
+async function AdminIntegrationsReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Integrations</h1>
-        <p className="mt-1 text-sm text-muted">Every third-party service this app actually depends on.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('integrations.integrations')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('integrations.everyThirdPartyServiceThis')}</p>
       </div>
-      <ErrorState message="Could not load connected-account status from Supabase. Refresh and try again." />
-      <a href="/admin/integrations" className="text-sm font-medium text-brand-text underline">Refresh integrations</a>
+      <ErrorState message={tr('integrations.couldNotLoadConnectedAccount')} />
+      <a href="/admin/integrations" className="text-sm font-medium text-brand-text underline">{tr('integrations.refreshIntegrations')}</a>
     </div>
   );
 }

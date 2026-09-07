@@ -16,7 +16,7 @@ async function ReadFailure() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-bold tracking-tight">{t('dashboard.home')}</h1>
-      <ErrorState message="Could not load your dashboard preference from Supabase. Refresh and try again." />
+      <ErrorState message={t('dashboard.couldNotLoadYourDashboard')} />
       <Link href="/dashboard" className="text-sm font-medium text-brand-text underline">{t('dashboard.refreshHome')}</Link>
     </div>
   );

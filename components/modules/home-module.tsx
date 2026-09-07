@@ -151,7 +151,7 @@ export function HomeModule() {
     <div className="module-page">
       <PageHeader
         title={tr('home.homeMaintenance')}
-        description="Track appliances, assets, warranties, and maintenance tasks."
+        description={tr('homeModule.trackAppliancesAssetsWarrantiesAnd')}
         action={
           <div className="flex gap-2">
             <AiInsight kind="home" />
@@ -175,7 +175,7 @@ export function HomeModule() {
         </div>
         {warrantyRows.length === 0 ? (
           <EmptyState icon={Shield} title={tr('home.noWarrantiesTrackedYet')}
-            description="Open any asset below and click “Manage warranty” to log an expiration date or upload the warranty card or receipt." />
+            description={tr('homeModule.openAnyAssetBelowAnd')} />
         ) : (
           <ul className="space-y-2">
             {warrantyRows.map(({ asset, files, expiry }) => {
@@ -223,7 +223,7 @@ export function HomeModule() {
           <Badge tone={tasks.length > 0 ? 'warning' : 'neutral'}>{tasks.length} open</Badge>
         </div>
         {tasks.length === 0 ? (
-          <EmptyState icon={Wrench} title={tr('home.noPendingTasks')} description="Add maintenance tasks to stay on top of your home." />
+          <EmptyState icon={Wrench} title={tr('home.noPendingTasks')} description={tr('homeModule.addMaintenanceTasksToStay')} />
         ) : (
           <ul className="space-y-2">
             {tasks.map((t) => (
@@ -253,7 +253,7 @@ export function HomeModule() {
           <Badge tone="neutral">{assets.length}</Badge>
         </div>
         {assets.length === 0 ? (
-          <EmptyState icon={Package} title={tr('home.noAssetsTracked')} description="Add appliances and items to track warranties and maintenance." />
+          <EmptyState icon={Package} title={tr('home.noAssetsTracked')} description={tr('homeModule.addAppliancesAndItemsTo')} />
         ) : (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {assets.map((a) => {
@@ -386,7 +386,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   }
 
   return (
-    <Modal open onClose={onClose} title={`Warranty — ${asset.name}`} description="Keep the expiration date and the warranty card or receipt together, right on the asset.">
+    <Modal open onClose={onClose} title={`Warranty — ${asset.name}`} description={tr('homeModule.keepTheExpirationDateAnd')}>
       <div className="space-y-5">
         <Field label={tr('home.warrantyExpires')}>
           {(id) => (
@@ -483,7 +483,7 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
           <Field label={tr('home.brand')}>{(id) => <Input id={id} name="brand" placeholder={tr('home.bosch')} />}</Field>
           <Field label={tr('home.model')}>{(id) => <Input id={id} name="model" placeholder="SHPM88Z75N" />}</Field>
         </div>
-        <Field label={tr('home.warrantyUntil')} hint="You can also upload the warranty card after creating the asset.">
+        <Field label={tr('home.warrantyUntil')} hint={tr('homeModule.youCanAlsoUploadThe')}>
           {(id) => <Input id={id} name="warranty_until" type="date" />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">

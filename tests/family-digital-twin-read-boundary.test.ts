@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-digital-twin/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('family digital twin read boundary', () => {
   it('logs and returns an ErrorState on a roster read failure', () => {
     expect(page).toContain('if (membersRes.error) {');
     expect(page).toContain("console.error('[dashboard/family-digital-twin] member read failed', membersRes.error);");
-    expect(page).toContain('return <ErrorState message="Could not load your family from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familyDigitalTwin.couldNotLoadYourFamily', "Could not load your family from Supabase. Refresh and try again.");
   });
 
   it('derives members only after the fail-closed guard', () => {

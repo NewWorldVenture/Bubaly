@@ -44,7 +44,7 @@ export default async function EmailPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-3">
           {(emails ?? []).length === 0 ? (
-            <EmptyState icon={Mail} title={t('adminMarketingEmail.noEmailCampaignsYet')} description="Draft your first email on the right." />
+            <EmptyState icon={Mail} title={t('adminMarketingEmail.noEmailCampaignsYet')} description={t('email.draftYourFirstEmailOn')} />
           ) : (
             (emails ?? []).map((e) => (
               <Card key={e.id} className="flex items-start justify-between gap-4">
@@ -88,15 +88,16 @@ export default async function EmailPage() {
   );
 }
 
-function AdminEmailReadError() {
+async function AdminEmailReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Email</h1>
-        <p className="mt-1 text-sm text-muted">Draft, review, and send customer email campaigns.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('email.marketingEmail')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('email.draftReviewAndSendCustomer')}</p>
       </div>
-      <ErrorState message="Could not load marketing email data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/email" className="text-sm font-medium text-brand-text underline">Refresh email</Link>
+      <ErrorState message={t('email.couldNotLoadMarketingEmail')} />
+      <Link href="/admin/marketing/email" className="text-sm font-medium text-brand-text underline">{t('email.refreshEmail')}</Link>
     </div>
   );
 }

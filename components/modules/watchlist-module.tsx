@@ -110,7 +110,7 @@ export function WatchlistModule() {
   const error = titles.error || votes.error || sessions.error;
   const refresh = () => { void titles.refresh(); void votes.refresh(); void sessions.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the watchlist. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('watchlistModule.couldNotLoadTheWatchlist')} onRetry={refresh} />;
 
   const topPicks = tonight.picks.slice(0, 3);
   const ageClarificationNames = members.filter((m) => tonight.audienceEligibility.unresolvedIds.includes(m.id)).map((m) => m.display_name);
@@ -120,7 +120,7 @@ export function WatchlistModule() {
     <div className="space-y-6">
       <PageHeader
         title={tr('watchlist.familyWatchlist')}
-        description="One list for movie night: everyone votes, ages and runtimes are respected, and tonight’s pick is one tap instead of an hour of scrolling."
+        description={tr('watchlistModule.oneListForMovieNight')}
         action={<div className="flex items-center gap-2"><AiInsight kind="watchlist" iconOnly /><Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> {tr('watchlist.addTitle')}</Button></div>}
       />
 
@@ -215,7 +215,7 @@ export function WatchlistModule() {
       </div>
 
       {titles.data.length === 0 ? (
-        <EmptyState icon={Clapperboard} title={tr('watchlist.theWatchlistIsEmpty')} description="Add movies and shows the family keeps saying “we should watch that” about." action={<Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> {tr('watchlist.addTheFirstTitle')}</Button>} />
+        <EmptyState icon={Clapperboard} title={tr('watchlist.theWatchlistIsEmpty')} description={tr('watchlistModule.addMoviesAndShowsThe')} action={<Button onClick={() => setForm({ open: true, title: null })}><Plus className="h-4 w-4" /> {tr('watchlist.addTheFirstTitle')}</Button>} />
       ) : (
         <ul className="grid gap-2 lg:grid-cols-2">
           {filtered.map((t) => {
@@ -323,7 +323,7 @@ function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
           <Field label={tr('watchlist.runtimeMin')}>{(id) => <Input id={id} name="runtime_min" type="number" min={1} max={1440} defaultValue={title?.runtime_min ?? ''} placeholder="95" />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label={tr('watchlist.ageRating')} hint="Sets the minimum age">{(id) => <Select id={id} name="age_rating" value={rating} onChange={(e) => setRating(e.target.value)}>{AGE_RATINGS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</Select>}</Field>
+          <Field label={tr('watchlist.ageRating')} hint={tr('watchlistModule.setsTheMinimumAge')}>{(id) => <Select id={id} name="age_rating" value={rating} onChange={(e) => setRating(e.target.value)}>{AGE_RATINGS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</Select>}</Field>
           <Field label={tr('watchlist.minAgeOverride')}>{(id) => <Input id={id} name="min_age" type="number" min={0} max={21} placeholder={String(ratingMinAge(rating))} defaultValue={title && title.min_age !== ratingMinAge(title.age_rating) ? title.min_age : ''} />}</Field>
           <Field label={tr('watchlist.priority')}>{(id) => <Select id={id} name="priority" defaultValue={title?.priority ?? 2}><option value={1}>{tr('watchlist.1MustWatch')}</option><option value={2}>{tr('watchlist.2Normal')}</option><option value={3}>{tr('watchlist.3Someday')}</option></Select>}</Field>
         </div>

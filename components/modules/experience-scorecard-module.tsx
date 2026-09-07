@@ -73,13 +73,13 @@ export function ExperienceScorecardModule() {
   }, [data]);
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message="Could not load the experience scorecard. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('experienceScorecardModule.couldNotLoadTheExperience')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('experienceScorecard.experienceScorecard')}
-        description="Premium consistency, measured — every surface graded on empty states, error recovery, transitions, performance, accessibility and consistency, tracked over time."
+        description={t('experienceScorecardModule.premiumConsistencyMeasuredEverySurface')}
       />
 
       {card.auditedSurfaces === 0 ? (

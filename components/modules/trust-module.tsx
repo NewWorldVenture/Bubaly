@@ -96,7 +96,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
     <div className="module-page">
       <PageHeader
         title={tr('trust.trustPermissions')}
-        description="The household policy engine that governs every AI action and family member — least-privilege by default, fully overridable."
+        description={tr('trustModule.theHouseholdPolicyEngineThat')}
         action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text"><ShieldCheck className="h-3.5 w-3.5" /> {tr('trust.trustEngine')}</div>}
       />
 

@@ -62,7 +62,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
       </div>
 
       {warranties.length === 0 ? (
-        <EmptyState icon={Shield} title={t('warrantiesClient.noWarrantiesYet')} description="Add your first warranty so it's always a click away when something breaks." action={<Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>} />
+        <EmptyState icon={Shield} title={t('warrantiesClient.noWarrantiesYet')} description={tr('warrantiesClient.addYourFirstWarrantySo')} action={<Button onClick={openNew}><Plus className="h-4 w-4" /> {t('warrantiesClient.addWarranty')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {warranties.map((w) => {

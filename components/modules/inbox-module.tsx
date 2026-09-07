@@ -159,7 +159,7 @@ export function InboxModule() {
         <div className="module-page">
           <PageHeader
             title={tr('inbox.communicationsHub')}
-            description="All your family messages, calls, and school updates in one place."
+            description={tr('inboxModule.allYourFamilyMessagesCalls')}
             action={
               <div className="flex items-center gap-2">
                 <Link href="/dashboard/paperwork"

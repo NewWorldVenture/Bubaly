@@ -124,7 +124,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       )}
 
       {loading ? <LoadingBlock /> : error ? (
-        <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={tr('vacationsList.couldNotLoadYourTrips')} onRetry={refresh} />
       ) : sorted.length === 0 ? (
         <EmptyState icon={Plane} title={tr('vacationsList.noTripsYet')} description="Create your first vacation — or let the AI builder plan one for you." />
       ) : (

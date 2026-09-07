@@ -55,7 +55,7 @@ export default async function CommandCenterPage() {
   ].find(Boolean);
   if (readError) {
     console.error('[dashboard/command-center] command center read failed', readError);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   const { data: members } = membersResult;
@@ -73,7 +73,7 @@ export default async function CommandCenterPage() {
     ({ change } = await loadOperatingIndex(supabase, familyId, now));
   } catch (error) {
     console.error('[dashboard/command-center] operating index read failed', error);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──

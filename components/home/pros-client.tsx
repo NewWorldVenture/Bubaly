@@ -83,7 +83,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
 
       {/* Saved contractors */}
       {contractors.length === 0 ? (
-        <EmptyState icon={Users} title={tr('prosClient.noSavedContractors')} description="Save your trusted pros so they're one tap away next time something breaks." />
+        <EmptyState icon={Users} title={tr('prosClient.noSavedContractors')} description={tr('prosClient.saveYourTrustedProsSo')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {contractors.map((c) => (

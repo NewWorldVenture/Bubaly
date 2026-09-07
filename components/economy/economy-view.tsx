@@ -56,8 +56,8 @@ export function EconomyView(props: {
   if (currencies.length === 0 && !canManage) {
     return (
       <div>
-        <PageHeader title={tr('economy.familyEconomy')} description="Earn and spend family tokens." />
-        <EmptyState icon={Coins} title={tr('economy.noCurrenciesYet')} description="Ask a parent to set up your family's tokens." />
+        <PageHeader title={tr('economy.familyEconomy')} description={t('economyView.earnAndSpendFamilyTokens')} />
+        <EmptyState icon={Coins} title={tr('economy.noCurrenciesYet')} description={t('economyView.askAParentToSet')} />
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function EconomyView(props: {
 
   return (
     <div>
-      <PageHeader title={tr('economy.familyEconomy')} description="Custom family tokens kids earn and spend on rewards — no cash involved." />
+      <PageHeader title={tr('economy.familyEconomy')} description={t('economyView.customFamilyTokensKidsEarn')} />
 
       <div className="mb-5 mt-3 flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface/40 p-1 no-scrollbar">
         {TABS.filter((t) => t.show).map((t) => (
@@ -89,7 +89,7 @@ export function EconomyView(props: {
       {/* ── Balances ── */}
       {tab === 'balances' && (
         kids.length === 0 ? (
-          <EmptyState icon={Coins} title={tr('economy.noKidsYet')} description="Add child members to start the family economy." />
+          <EmptyState icon={Coins} title={tr('economy.noKidsYet')} description={t('economyView.addChildMembersToStart')} />
         ) : (
           <div className="space-y-3">
             {kids.map((m) => (
@@ -133,7 +133,7 @@ export function EconomyView(props: {
       {/* ── Requests (manager) ── */}
       {tab === 'requests' && canManage && (
         pending.length === 0 ? (
-          <EmptyState icon={Inbox} title={tr('economy.noPendingRequests')} description="Redemption requests will appear here for approval." />
+          <EmptyState icon={Inbox} title={tr('economy.noPendingRequests')} description={t('economyView.redemptionRequestsWillAppearHere')} />
         ) : (
           <div className="space-y-2">
             {pending.map((r) => (

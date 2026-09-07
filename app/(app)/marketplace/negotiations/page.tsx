@@ -40,8 +40,8 @@ export default async function NegotiationsInboxPage() {
   if (negError) {
     return (
       <div className="module-page">
-        <PageHeader title={tr('marketplaceNegotiations.offers')} description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
-        <ErrorState message="Couldn’t load your offers. Refresh and try again." />
+        <PageHeader title={tr('marketplaceNegotiations.offers')} description={tr('negotiations.everyMakeAnOfferNegotiation')} />
+        <ErrorState message={tr('negotiations.couldnTLoadYourOffers')} />
       </div>
     );
   }
@@ -105,7 +105,7 @@ export default async function NegotiationsInboxPage() {
 
   return (
     <div className="module-page">
-      <PageHeader title={tr('marketplaceNegotiations.offers')} description="Every Make-an-Offer negotiation you’re part of — counter, accept, or decline from the listing." />
+      <PageHeader title={tr('marketplaceNegotiations.offers')} description={tr('negotiations.everyMakeAnOfferNegotiation')} />
       {items.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-10 text-center">
           <Handshake className="mx-auto h-8 w-8 text-muted/40" />

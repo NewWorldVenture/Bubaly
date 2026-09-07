@@ -61,7 +61,7 @@ export function DevicesModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load family devices. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('devicesModule.couldNotLoadFamilyDevices')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -80,7 +80,7 @@ export function DevicesModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={Cpu} title={tr('devices.noDevicesYet')} description="Add your smart lights, locks, cameras and sensors to see them all in one place." />
+        <EmptyState icon={Cpu} title={tr('devices.noDevicesYet')} description={tr('devicesModule.addYourSmartLightsLocks')} />
       ) : groups.map((g) => (
         <div key={g.room}>
           <h4 className="mb-2 text-sm font-semibold">{g.room}</h4>

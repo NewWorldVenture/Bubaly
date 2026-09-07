@@ -135,7 +135,7 @@ export default async function PrivacyPage() {
     <>
       <LegalPage
         title={t('privacy.privacyPolicy')}
-        summary="What we collect, why, and the choices you have — written for families, in plain language."
+        summary={t('privacy.whatWeCollectWhyAnd')}
         lastUpdated="June 24, 2026"
         path="/privacy"
         sections={SECTIONS}

@@ -25,7 +25,7 @@ export default async function FunnelsPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(funnels ?? []).length === 0 ? (
-          <EmptyState icon={Filter} title={t('adminMarketingFunnels.noFunnelsYet')} description="Define your first funnel on the right." />
+          <EmptyState icon={Filter} title={t('adminMarketingFunnels.noFunnelsYet')} description={t('funnels.defineYourFirstFunnelOn')} />
         ) : (
           (funnels ?? []).map((f) => {
             const steps = Array.isArray(f.steps) ? f.steps as { label: string }[] : [];
@@ -57,15 +57,16 @@ export default async function FunnelsPage() {
   );
 }
 
-function AdminFunnelsReadError() {
+async function AdminFunnelsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Funnels</h1>
-        <p className="mt-1 text-sm text-muted">Define and review the customer journey.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('funnels.marketingFunnels')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('funnels.defineAndReviewTheCustomer')}</p>
       </div>
-      <ErrorState message="Could not load marketing funnels from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/funnels" className="text-sm font-medium text-brand-text underline">Refresh funnels</Link>
+      <ErrorState message={t('funnels.couldNotLoadMarketingFunnels')} />
+      <Link href="/admin/marketing/funnels" className="text-sm font-medium text-brand-text underline">{t('funnels.refreshFunnels')}</Link>
     </div>
   );
 }

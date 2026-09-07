@@ -102,7 +102,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load subscriptions. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('subscriptionsModule.couldNotLoadSubscriptionsRefresh')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -138,7 +138,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description="Add streaming, apps and memberships to see your true recurring spend." />
+          <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description={t('subscriptionsModule.addStreamingAppsAndMemberships')} />
         ) : all.map((s) => {
           const usage = subscriptionUsage(s, usageNow);
           const stale = isStale(s as SubLike, 60, usageNow);

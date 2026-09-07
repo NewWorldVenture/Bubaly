@@ -88,7 +88,7 @@ export function TaxVaultModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load tax documents. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('taxVaultModule.couldNotLoadTaxDocuments')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -101,7 +101,7 @@ export function TaxVaultModule() {
       </div>
 
       {all.length === 0 ? (
-        <EmptyState icon={FolderLock} title={t('taxVault.noTaxDocumentsYet')} description="Securely store W-2s, 1099s, receipts and deduction records by year." />
+        <EmptyState icon={FolderLock} title={t('taxVault.noTaxDocumentsYet')} description={t('taxVaultModule.securelyStoreW2s1099s')} />
       ) : grouped.map(({ year, docs: yearDocs }) => {
         const deductible = deductibleTotalCents(yearDocs as TaxDocLike[]);
         return (

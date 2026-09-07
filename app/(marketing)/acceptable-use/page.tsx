@@ -84,7 +84,7 @@ export default async function AcceptableUsePage() {
     <>
       <LegalPage
         title={t('acceptableUse.acceptableUsePolicy')}
-        summary="Simple rules that keep Bubaly safe, reliable, and welcoming for every family."
+        summary={t('acceptableUse.simpleRulesThatKeepBubaly')}
         lastUpdated="June 24, 2026"
         path="/acceptable-use"
         sections={SECTIONS}

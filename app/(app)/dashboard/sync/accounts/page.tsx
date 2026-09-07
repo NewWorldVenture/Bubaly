@@ -32,7 +32,7 @@ export default async function SyncAccountsPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
-        <ErrorState message="Could not load your connected accounts from Supabase. Refresh and try again." />
+        <ErrorState message={t('accounts.couldNotLoadYourConnected')} />
         <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshConnectedAccounts')}</Link>
       </div>
     );

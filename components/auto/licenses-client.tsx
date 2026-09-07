@@ -32,7 +32,7 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
       </div>
 
       {licenses.length === 0 ? (
-        <EmptyState icon={IdCard} title={t('licensesClient.noLicensesYet')} description="Store each driver's license with its renewal date so nobody drives on an expired one." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('licensesClient.addLicense')}</Button>} />
+        <EmptyState icon={IdCard} title={t('licensesClient.noLicensesYet')} description={t('licensesClient.storeEachDriverSLicense')} action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('licensesClient.addLicense')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {licenses.map((l) => {

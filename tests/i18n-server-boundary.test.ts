@@ -53,8 +53,13 @@ for (const file of files) {
   const src = readFileSync(file, 'utf8');
   sources.set(file, {
     declaresClient: /^['"]use client['"]/.test(src.trimStart()),
-    imports: [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)]
-      .map((m) => resolveSpecifier(file, m[1]))
+    // `import type … from` is ERASED at compile time and says nothing about
+    // whether a module reaches the browser. Counting it made
+    // `app/(app)/dashboard/contact-center/page.tsx` look client, because the
+    // client module `contact-center-module.tsx` imports a ROW TYPE from it.
+    imports: [...src.matchAll(/(?:^|\n)\s*(?:export|import)\s+(type\s+)?[^;]*?from\s+['"]([^'"]+)['"]/g)]
+      .filter((m) => !m[1])
+      .map((m) => resolveSpecifier(file, m[2]))
       .filter((x): x is string => Boolean(x)),
   });
 }
@@ -97,6 +102,17 @@ describe('lib/i18n/server never reaches the browser', () => {
       'these are client modules and must use useTranslations() from '
         + '@/components/i18n/locale-provider instead',
     ).toEqual([]);
+  });
+
+  it('does not count a type-only import as making a module client', () => {
+    // `contact-center-module.tsx` is a client component and imports the `InboxRow`
+    // TYPE from the page. That import disappears at compile time; the page is a
+    // server component and must stay one.
+    const page = resolve(ROOT, 'app/(app)/dashboard/contact-center/page.tsx');
+    const clientModule = resolve(ROOT, 'components/modules/contact-center-module.tsx');
+    expect(sources.get(clientModule)?.declaresClient, 'the module is client').toBe(true);
+    expect(sources.get(clientModule)?.imports, 'and the type import is not counted').not.toContain(page);
+    expect(isClientModule(page), 'so the page stays a server component').toBe(false);
   });
 
   it('knows what a client module is, transitively', () => {

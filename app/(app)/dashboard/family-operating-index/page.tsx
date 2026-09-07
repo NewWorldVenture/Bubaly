@@ -65,7 +65,7 @@ export default async function FamilyOperatingIndexPage() {
     indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const { index, priorComposite, trend, change, orchestrator } = indexResult;
   const band = BAND_COPY[index.band];
@@ -77,7 +77,7 @@ export default async function FamilyOperatingIndexPage() {
     graph = await loadFamilyGraph(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] graph read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const relationshipInsights = graph ? graphReasoningInsights(graph, index.band) : [];
 

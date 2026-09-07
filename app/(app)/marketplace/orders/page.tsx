@@ -51,7 +51,7 @@ export default async function MarketplaceOrdersPage() {
 
   if (ordersError) {
     console.error('[marketplace-orders] Orders read failed', ordersError);
-    return <ErrorState message="Could not load your marketplace orders. Refresh and try again." />;
+    return <ErrorState message={t('orders.couldNotLoadYourMarketplace')} />;
   }
 
   // Honest fee disclosure: the Bubaly service fee is applied only when Super
@@ -127,7 +127,7 @@ export default async function MarketplaceOrdersPage() {
 
   return (
     <div>
-      <PageHeader title={t('marketplaceOrders.orders')} description="Every exchange you’re part of — confirm, hand off, complete, and review." />
+      <PageHeader title={t('marketplaceOrders.orders')} description={t('orders.everyExchangeYouRePart')} />
       {dataWarnings.length > 0 && (
         <div role="status" aria-label={t('marketplaceOrders.marketplaceOrdersDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

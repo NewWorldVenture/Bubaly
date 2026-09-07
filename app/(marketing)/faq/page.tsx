@@ -85,9 +85,9 @@ export default async function FAQPage() {
   return (
     <>
       <FaqStructuredData items={schemaItems} />
-      <MarketingPageStructuredData path="/faq" name="FAQ & Family Knowledge Center" description="Answers to common questions about Bubaly." />
+      <MarketingPageStructuredData path="/faq" name="FAQ & Family Knowledge Center" description={t('faq.answersToCommonQuestionsAbout')} />
       <Section className="pt-20 text-center">
-        <SectionHeading eyebrow="FAQ" title={t('faq.questionsAnswered')} description="Everything you need to know to get your family started with the AI Family Operating System." />
+        <SectionHeading eyebrow="FAQ" title={t('faq.questionsAnswered')} description={t('faq.everythingYouNeedToKnow')} />
       </Section>
 
       {!aeo.available && (

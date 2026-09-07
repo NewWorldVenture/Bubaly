@@ -149,7 +149,7 @@ export function CareModule() {
     <div>
       <PageHeader
         title={tr('care.careLog')}
-        description="Coordinate care for a loved one — log check-ins, track well-being, and see who's been in touch."
+        description={tr('careModule.coordinateCareForALoved')}
         action={<div className="flex items-center gap-2"><AiInsight kind="care" iconOnly /><Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('care.logCare')}</Button></div>}
       />
 
@@ -166,7 +166,7 @@ export function CareModule() {
       </div>
 
       {!recipientId ? (
-        <EmptyState icon={HeartHandshake} title={tr('care.addAFamilyMember')} description="Add family members to start coordinating their care." />
+        <EmptyState icon={HeartHandshake} title={tr('care.addAFamilyMember')} description={tr('careModule.addFamilyMembersToStart')} />
       ) : (
         <>
           {/* Status cards */}
@@ -210,7 +210,7 @@ export function CareModule() {
           {/* Timeline */}
           {recipientEntries.length === 0 ? (
             <EmptyState icon={HeartHandshake} title={`No care logged for ${memberName(recipientId)}`}
-              description="Use the quick-log buttons above or “Log care” to record the first check-in."
+              description={tr('careModule.useTheQuickLogButtons')}
               action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('care.logCare')}</Button>} />
           ) : (
             <div className="space-y-6">
@@ -276,7 +276,7 @@ export function CareModule() {
               {(id) => <Input id={id} type="datetime-local" value={form.occurred_at} onChange={(e) => setForm((f) => ({ ...f, occurred_at: e.target.value }))} />}
             </Field>
           </div>
-          <Field label={tr('care.wellBeing15')} hint="Optional — how were they doing?">
+          <Field label={tr('care.wellBeing15')} hint={tr('careModule.optionalHowWereTheyDoing')}>
             {(id) => (
               <Select id={id} value={form.wellbeing} onChange={(e) => setForm((f) => ({ ...f, wellbeing: e.target.value }))}>
                 <option value="">{tr('care.notRated')}</option>

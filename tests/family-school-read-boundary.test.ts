@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-school/page.tsx', 'utf8');
@@ -17,7 +18,8 @@ describe('family-school page read boundary', () => {
   it('logs and returns an ErrorState on a school read failure', () => {
     expect(page).toContain('if (schoolError) {');
     expect(page).toContain("console.error('[dashboard/family-school] school read failed', schoolError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family school hub from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familySchool.couldNotLoadYourFamily', "Could not load your family school hub from Supabase. Refresh and try again.");
   });
 
   it('derives the school data only after the fail-closed guard', () => {

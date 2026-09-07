@@ -80,7 +80,7 @@ export function InvestView(props: {
       )}
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={TrendingUp} title={tr('invest.noChildWalletsYet')} description="Activate the Family Wallet and add children to start learning to invest." />
+        <EmptyState icon={TrendingUp} title={tr('invest.noChildWalletsYet')} description={tr('investView.activateTheFamilyWalletAnd')} />
       ) : (
         <div className="mt-4 space-y-4">
           {childWallets.map((child) => (

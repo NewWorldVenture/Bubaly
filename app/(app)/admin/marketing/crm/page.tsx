@@ -112,7 +112,7 @@ export default async function CrmPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteContactAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('crm.delete')}</button>
                       </form>
                     </td>
                   </tr>
@@ -126,15 +126,16 @@ export default async function CrmPage() {
   );
 }
 
-function AdminCrmReadError() {
+async function AdminCrmReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">CRM Contacts</h1>
-        <p className="mt-1 text-sm text-muted">Manage leads, prospects, and customer contacts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('crm.crmContacts')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('crm.manageLeadsProspectsAndCustomer')}</p>
       </div>
-      <ErrorState message="Could not load CRM contacts from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/crm" className="text-sm font-medium text-brand-text underline">Refresh CRM</Link>
+      <ErrorState message={t('crm.couldNotLoadCrmContacts')} />
+      <Link href="/admin/marketing/crm" className="text-sm font-medium text-brand-text underline">{t('crm.refreshCrm')}</Link>
     </div>
   );
 }

@@ -213,7 +213,7 @@ export function LocatorModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (readError) return <ErrorState message="Could not load family location data. Refresh and try again." onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
+  if (readError) return <ErrorState message={tr('locatorModule.couldNotLoadFamilyLocation')} onRetry={() => { void refreshLocations(); void refreshPlaces(); void refreshEvents(); }} />;
 
   const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
@@ -222,7 +222,7 @@ export function LocatorModule() {
       <div className="module-main module-page">
         <PageHeader
           title={tr('locator.location')}
-          description="See where your family is and keep everyone safe."
+          description={tr('locatorModule.seeWhereYourFamilyIs')}
           action={
             <div className="flex items-center gap-2">
               {canManage && <Button onClick={openNewPlace}><Plus className="h-4 w-4" /> {tr('locator.addPlace')}</Button>}

@@ -8,7 +8,7 @@ export default async function WalletNotFound() {
   return (
     <AppNotFound
       title={t('notFound.thatWalletIsnTHere')}
-      description="This child wallet may have been removed, or the link is out of date."
+      description={t('notFound.thisChildWalletMayHave')}
       backHref="/wallet"
       backLabel="Back to Wallet"
     />

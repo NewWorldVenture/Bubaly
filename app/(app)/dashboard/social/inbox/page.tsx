@@ -34,7 +34,7 @@ export default async function InboxPage() {
             <EmptyState
               icon={InboxIcon}
               title={t('dashboardSocialInbox.inboxIsEmpty')}
-              description="Comments, mentions, and replies from connected accounts appear here once their APIs are credentialed. Nothing is fabricated."
+              description={t('inbox.commentsMentionsAndRepliesFrom')}
             />
           ) : (
             comments.map((c) => (

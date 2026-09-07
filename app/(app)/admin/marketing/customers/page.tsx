@@ -57,7 +57,7 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
       </div>
 
       {customers.length === 0 ? (
-        <EmptyState icon={Users} title={t('adminMarketingCustomers.noCustomersMatch')} description="Adjust the filter or search to see customers." />
+        <EmptyState icon={Users} title={t('adminMarketingCustomers.noCustomersMatch')} description={t('customers.adjustTheFilterOrSearch')} />
       ) : (
         <Card className="p-0">
           <div className="hidden overflow-x-auto md:block">
@@ -106,15 +106,16 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
   );
 }
 
-function AdminCustomersReadError() {
+async function AdminCustomersReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Customers</h1>
-        <p className="mt-1 text-sm text-muted">Review customers derived from families and subscriptions.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('customers.marketingCustomers')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('customers.reviewCustomersDerivedFromFamilies')}</p>
       </div>
-      <ErrorState message="Could not load marketing customers from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/customers" className="text-sm font-medium text-brand-text underline">Refresh customers</Link>
+      <ErrorState message={t('customers.couldNotLoadMarketingCustomers')} />
+      <Link href="/admin/marketing/customers" className="text-sm font-medium text-brand-text underline">{t('customers.refreshCustomers')}</Link>
     </div>
   );
 }
