@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
@@ -49,6 +50,7 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
 }
 
 export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
+  const tr = await getTranslations();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { start, end, in7, in14, weekStart, weekEnd } = dayBounds();
@@ -158,19 +160,19 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {greeting}, {ctx.active.family.name}! <span>👋</span>
           </h1>
-          <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
+          <p className="mt-1 text-sm text-muted">{tr('familyDashboard.heresWhatsHappeningWithYourFamily')}</p>
         </div>
         <DashboardWeather />
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard href="/dashboard/calendar" label="Events Today" value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel="View calendar" />
-        <StatCard href="/dashboard/chores" label="Open Tasks" value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
-        <StatCard href="/dashboard/chores" label="Due Today" value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
-        <StatCard href="/dashboard/settings#members" label="Birthdays Soon" value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
-        <StatCard href="/dashboard/reminders" label="Overdue Alerts" value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel="View reminders" />
-        <StatCard href="/dashboard/messages" label="Unread Messages" value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel="Open messages" />
+        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel="View calendar" />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
+        <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
+        <StatCard href="/dashboard/reminders" label={tr('familyDashboard.overdueAlerts')} value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel="View reminders" />
+        <StatCard href="/dashboard/messages" label={tr('familyDashboard.unreadMessages')} value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel="Open messages" />
       </div>
 
       {/* AI tools */}
@@ -199,8 +201,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         {/* Today's schedule */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Today&apos;s Schedule</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View Calendar</Link>
+            <h2 className="font-semibold">{tr('familyDashboard.todaysSchedule')}</h2>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewCalendar')}</Link>
           </div>
           {todayEvents && todayEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -225,19 +227,19 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">Nothing scheduled today</p>
+              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.nothingScheduledToday')}</p>
             </div>
           )}
           <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
-            View full calendar <ChevronRight className="h-3 w-3" />
+            {tr('familyDashboard.viewFullCalendar')} <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Upcoming Events */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Upcoming Events</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View all</Link>
+            <h2 className="font-semibold">{tr('familyDashboard.upcomingEvents')}</h2>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewAll')}</Link>
           </div>
           {upcomingEvents && upcomingEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -262,11 +264,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">No upcoming events</p>
+              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.noUpcomingEvents')}</p>
             </div>
           )}
           <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
-            View full calendar <ChevronRight className="h-3 w-3" />
+            {tr('familyDashboard.viewFullCalendar')} <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
@@ -275,7 +277,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-brand-text" />
-              <h2 className="font-semibold">AI Assistant</h2>
+              <h2 className="font-semibold">{tr('familyDashboard.aiAssistant')}</h2>
             </div>
           </div>
           <p className="mb-4 text-sm text-fg/70">
@@ -297,7 +299,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           )}
           <Link href="/dashboard/assistant" className="mt-4 flex h-10 w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-sm font-bold shadow-glow">
-            Ask Anything
+            {tr('familyDashboard.askAnything')}
           </Link>
         </div>
       </div>
@@ -305,8 +307,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       {/* Meals this week */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold">Meals This Week</h2>
-          <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text">View meal plan</Link>
+          <h2 className="font-semibold">{tr('familyDashboard.mealsThisWeek')}</h2>
+          <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewMealPlan')}</Link>
         </div>
         <div className="grid grid-cols-7 gap-2">
           {DAYS.map((day, i) => {
@@ -328,7 +330,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           })}
         </div>
         <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-2 text-xs text-muted hover:text-fg/80">
-          <ShoppingCart className="h-3.5 w-3.5" /> Add to grocery list
+          <ShoppingCart className="h-3.5 w-3.5" /> {tr('familyDashboard.addToGroceryList')}
         </Link>
       </div>
 
@@ -337,8 +339,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         {/* Chores donut */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Chores Progress</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
+            <h2 className="font-semibold">{tr('familyDashboard.choresProgress')}</h2>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewAll')}</Link>
           </div>
           <div className="flex items-center gap-8">
             <div className="relative h-32 w-32 shrink-0">
@@ -354,7 +356,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-black">{pct}%</span>
-                <span className="text-[10px] text-muted">Completed</span>
+                <span className="text-[10px] text-muted">{tr('familyDashboard.completed')}</span>
               </div>
             </div>
             <div className="space-y-3">
@@ -374,14 +376,14 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           </div>
           <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
-            View chores <ChevronRight className="h-3 w-3" />
+            {tr('familyDashboard.viewChores')} <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Grocery List */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Grocery List</h2>
+            <h2 className="font-semibold">{tr('familyDashboard.groceryList')}</h2>
             <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
               {groceryItems?.length ?? 0} items
             </span>
@@ -398,12 +400,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <ShoppingCart className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">Grocery list is empty</p>
-              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand-text">Add items →</Link>
+              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.groceryListIsEmpty')}</p>
+              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand-text">{tr('familyDashboard.addItems')}</Link>
             </div>
           )}
           <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
-            View full list <ChevronRight className="h-3 w-3" />
+            {tr('familyDashboard.viewFullList')} <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
       </div>
@@ -413,8 +415,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         {/* Tasks due */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Tasks Due</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
+            <h2 className="font-semibold">{tr('familyDashboard.tasksDue')}</h2>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewAll')}</Link>
           </div>
           {dueTasks && dueTasks.length > 0 ? (
             <ul className="space-y-3">
@@ -444,19 +446,19 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-              <p className="mt-2 text-sm text-muted/60">All caught up!</p>
+              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.allCaughtUp')}</p>
             </div>
           )}
           <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
-            View all tasks <ChevronRight className="h-3 w-3" />
+            {tr('familyDashboard.viewAllTasks')} <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Recent Activity */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Activity</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View All</Link>
+            <h2 className="font-semibold">{tr('familyDashboard.recentActivity')}</h2>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.viewAll')}</Link>
           </div>
           <ul className="space-y-3">
             {(todayEvents ?? []).slice(0, 3).map((e, i) => (
@@ -480,7 +482,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               </li>
             ))}
             {((todayEvents?.length ?? 0) === 0 && (members?.length ?? 0) === 0) && (
-              <li className="py-6 text-center text-sm text-muted/60">No recent activity</li>
+              <li className="py-6 text-center text-sm text-muted/60">{tr('familyDashboard.noRecentActivity')}</li>
             )}
           </ul>
         </div>
@@ -488,9 +490,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         {/* Family Members */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Family Members</h2>
+            <h2 className="font-semibold">{tr('familyDashboard.familyMembers')}</h2>
             {isManager(ctx.active.role) && (
-              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-brand-text">Manage</Link>
+              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-brand-text">{tr('familyDashboard.manage')}</Link>
             )}
           </div>
           <ul className="space-y-2.5">
@@ -508,7 +510,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           </ul>
           {isManager(ctx.active.role) && (
             <Link href="/dashboard/settings#members" className="mt-4 flex items-center gap-2 text-xs font-medium text-brand-text hover:text-violet-200">
-              <Users className="h-3.5 w-3.5" /> Invite a family member
+              <Users className="h-3.5 w-3.5" /> {tr('familyDashboard.inviteAFamilyMember')}
             </Link>
           )}
         </div>

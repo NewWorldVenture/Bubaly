@@ -14,6 +14,7 @@ import { GoogleControls } from '@/components/sync/google-controls';
 import { ProviderControls } from '@/components/sync/provider-controls';
 import { isProviderConfigured, getAdapter } from '@/lib/sync/registry';
 import type { SyncProviderEnum } from '@/lib/database.types';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Sync provider' };
 export const dynamic = 'force-dynamic';
@@ -88,6 +89,7 @@ export default async function SyncProviderPage({
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const t = await getTranslations();
   const { provider: raw } = await params;
   const sp = await searchParams;
   const provider = raw as SyncProvider;
@@ -113,11 +115,11 @@ export default async function SyncProviderPage({
     return (
       <div className="module-page">
         <Link href="/dashboard/sync/accounts" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-          <ArrowLeft className="h-4 w-4" /> All accounts
+          <ArrowLeft className="h-4 w-4" /> {t('dashboardSyncAccounts.allAccounts')}
         </Link>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
         <ErrorState message="Could not load this provider account from Supabase. Refresh and try again." />
-        <a href={`/dashboard/sync/accounts/${provider}`} className="text-sm font-medium text-brand-text underline">Refresh provider account</a>
+        <a href={`/dashboard/sync/accounts/${provider}`} className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshProviderAccount')}</a>
       </div>
     );
   }
@@ -128,7 +130,7 @@ export default async function SyncProviderPage({
   return (
     <div className="module-page">
       <Link href="/dashboard/sync/accounts" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> All accounts
+        <ArrowLeft className="h-4 w-4" /> {t('dashboardSyncAccounts.allAccounts')}
       </Link>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -136,7 +138,7 @@ export default async function SyncProviderPage({
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{PROVIDER_LABELS[provider]}</h1>
           <p className="mt-1 text-sm text-muted">Auth: {setup.authKind}</p>
         </div>
-        {account ? <Badge tone="success">Connected · {account.sync_status}</Badge> : <Badge tone="neutral">Not connected</Badge>}
+        {account ? <Badge tone="success">{t('dashboardSyncAccounts.connected')} {account.sync_status}</Badge> : <Badge tone="neutral">{t('dashboardSyncAccounts.notConnected')}</Badge>}
       </div>
 
       {banner && (
@@ -147,20 +149,19 @@ export default async function SyncProviderPage({
 
       {account && getAdapter(provider as SyncProviderEnum) && (
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Sync</h2>
+          <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncAccounts.sync')}</h2>
           {account.last_synced_at && (
-            <p className="mb-3 text-xs text-muted">Last synced {new Date(account.last_synced_at).toLocaleString()}</p>
+            <p className="mb-3 text-xs text-muted">{t('dashboardSyncAccounts.lastSynced')} {new Date(account.last_synced_at).toLocaleString()}</p>
           )}
           {provider === 'google' ? <GoogleControls /> : <ProviderControls provider={provider} />}
           <p className="mt-3 text-xs text-muted">
-            A background sync also runs automatically every few hours — “Sync now” is only for when
-            you can’t wait.
+            {t('dashboardSyncAccounts.aBackgroundSyncAlsoRunsAutomatically')}
           </p>
         </Card>
       )}
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Capabilities</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncAccounts.capabilities')}</h2>
         <div className="space-y-2">
           {KINDS.map(({ key, label }) => {
             const c = caps[key];
@@ -185,7 +186,7 @@ export default async function SyncProviderPage({
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-base font-semibold">Setup</h2>
+        <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncAccounts.setup')}</h2>
         <ol className="space-y-2">
           {setup.steps.map((step, i) => (
             <li key={i} className="flex gap-3 text-sm">
@@ -198,19 +199,18 @@ export default async function SyncProviderPage({
             The registry knows whether this provider's OAuth keys are set. */}
         {setup.connectHref && getAdapter(provider as SyncProviderEnum) && !isProviderConfigured(provider as SyncProviderEnum) && (
           <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-500">
-            {PROVIDER_LABELS[provider]} sync is fully built but waiting on server credentials
-            {provider === 'google' ? ' (GOOGLE_SYNC_CLIENT_ID / SECRET)' : provider === 'microsoft' ? ' (MICROSOFT_SYNC_CLIENT_ID / SECRET)' : ''}.
-            Once an admin adds them, Connect appears here — no code changes needed.
+            {PROVIDER_LABELS[provider]} {t('dashboardSyncAccounts.syncIsFullyBuiltButWaiting')}
+            {provider === 'google' ? ' (GOOGLE_SYNC_CLIENT_ID / SECRET)' : provider === 'microsoft' ? ' (MICROSOFT_SYNC_CLIENT_ID / SECRET)' : ''}{t('dashboardSyncAccounts.onceAnAdminAddsThemConnect')}
           </div>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
           {setup.connectHref && (!getAdapter(provider as SyncProviderEnum) || isProviderConfigured(provider as SyncProviderEnum)) && (
             <Link href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
-              Connect {PROVIDER_LABELS[provider]}
+              {t('dashboardSyncAccounts.connect')} {PROVIDER_LABELS[provider]}
             </Link>
           )}
           <a href={setup.docsHref} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium transition hover:bg-elevated">
-            Provider docs <ExternalLink className="h-3.5 w-3.5" />
+            {t('dashboardSyncAccounts.providerDocs')} <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
       </Card>

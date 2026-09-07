@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
 // PLA-0836: on /contact, "Share an idea or request" must gate on auth — a
 // logged-out visitor is sent to log in first and returned to /feedback
 // afterwards (login-form honours ?redirect=). A logged-in visitor goes straight
 // to /feedback.
-const page = readFileSync('app/(marketing)/contact/page.tsx', 'utf8');
+const page = readUiSource('app/(marketing)/contact/page.tsx');
 
 describe('contact feedback CTA auth gate', () => {
   it('branches the CTA on login state', () => {

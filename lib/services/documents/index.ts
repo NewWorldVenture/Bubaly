@@ -170,7 +170,7 @@ export async function readDocument(scope: ServiceScope, documentId: string, inpu
     console.error('[service:documents] signed url failed', signed.error);
     return fail(describeDbError(signed.error, 'Could not open that document right now.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { agent: 'documents', title: `Opened "${data.title}"`, href: '/dashboard/documents' });
+  await recordActivitySafely(scope, { action: null, agent: 'documents', title: `Opened "${data.title}"`, href: '/dashboard/documents' });
   return ok({
     document: toMeta(data),
     url: signed.data.signedUrl,
@@ -244,7 +244,7 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
     console.error('[service:documents] link insert failed', error);
     return fail(describeDbError(error, 'Could not attach that document to the trip.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { agent: 'documents', title: `Attached "${data.title}" to ${trip.data.title}`, href: `/dashboard/vacations/${trip.data.id}` });
+  await recordActivitySafely(scope, { action: 'update', agent: 'documents', title: `Attached "${data.title}" to ${trip.data.title}`, href: `/dashboard/vacations/${trip.data.id}` });
   return ok({ link: data, created: true });
 }
 

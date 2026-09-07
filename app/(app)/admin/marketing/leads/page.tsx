@@ -7,6 +7,7 @@ import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { scoreLead, summarizeLeads, LEAD_BAND_LABEL, type LeadBand } from '@/lib/marketing/lead-score';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Lead Scoring', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const BAND_STYLE: Record<LeadBand, string> = {
 };
 
 export default async function LeadScoringPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
 
   const [ticketsResult, customersResult] = await Promise.all([
@@ -52,7 +54,7 @@ export default async function LeadScoringPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Inbound leads from the contact form, scored by recency, engagement, and status — hottest first.</p>
+      <p className="text-sm text-muted">{tr('adminMarketingLeads.inboundLeadsFromTheContactForm')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -64,14 +66,14 @@ export default async function LeadScoringPage() {
       </div>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Leads to follow up</h2>
+        <h2 className="mb-4 text-base font-semibold">{tr('adminMarketingLeads.leadsToFollowUp')}</h2>
         {rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No inbound leads yet.</p>
+          <p className="py-6 text-center text-sm text-muted">{tr('adminMarketingLeads.noInboundLeadsYet')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
-                <tr><th className="pb-2">Lead</th><th className="pb-2">Status</th><th className="pb-2">Age</th><th className="pb-2">Signals</th><th className="pb-2 text-right">Score</th></tr>
+                <tr><th className="pb-2">{tr('adminMarketingLeads.lead')}</th><th className="pb-2">{tr('adminMarketingLeads.status')}</th><th className="pb-2">Age</th><th className="pb-2">{tr('adminMarketingLeads.signals')}</th><th className="pb-2 text-right">{tr('adminMarketingLeads.score')}</th></tr>
               </thead>
               <tbody>
                 {rows.slice(0, 60).map(({ t, s, isCustomer }) => (

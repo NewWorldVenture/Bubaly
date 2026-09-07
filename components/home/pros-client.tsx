@@ -14,11 +14,13 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Contractor = Tables<'home_contractors'>;
 const tradeLabel = (v: string | null) => TRADES.find((t) => t.value === v)?.label ?? v ?? '';
 
 export function ProsClient({ contractors, initialTrade }: { contractors: Contractor[]; initialTrade: string }) {
+  const tr = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
 
@@ -48,31 +50,31 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Find a Pro</h1>
-          <p className="text-sm text-muted">Get AI hiring guidance, then save the contractors you trust for one-tap calling.</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{tr('prosClient.findAPro')}</h1>
+          <p className="text-sm text-muted">{tr('prosClient.getAiHiringGuidanceThenSave')}</p>
         </div>
-        <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Save a contractor</Button>
+        <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {tr('prosClient.saveAContractor')}</Button>
       </div>
 
       {/* AI sourcing */}
       <Card>
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI hiring guidance</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('prosClient.aiHiringGuidance')}</h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Trade">
+          <Field label={tr('prosClient.trade')}>
             <Select value={trade} onChange={(e) => setTrade(e.target.value)}>
               {TRADES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Select>
           </Field>
-          <Field label="Job (optional)"><Input value={job} onChange={(e) => setJob(e.target.value)} placeholder="Replace water heater" /></Field>
-          <Field label="Area (optional)"><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City or ZIP" /></Field>
+          <Field label={tr('prosClient.jobOptional')}><Input value={job} onChange={(e) => setJob(e.target.value)} placeholder={tr('prosClient.replaceWaterHeater')} /></Field>
+          <Field label={tr('prosClient.areaOptional')}><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={tr('prosClient.cityOrZip')} /></Field>
         </div>
-        <Button onClick={runFindPro} loading={aiBusy}><Sparkles className="h-4 w-4" /> Get guidance</Button>
+        <Button onClick={runFindPro} loading={aiBusy}><Sparkles className="h-4 w-4" /> {tr('prosClient.getGuidance')}</Button>
         {aiError && <p className="mt-2 text-sm text-danger">{aiError}</p>}
         {ai && (
           <div className="mt-3 space-y-2">
             <p className="whitespace-pre-wrap rounded-lg border border-border bg-elevated p-3 text-sm">{ai.text}</p>
             <a href={ai.searchUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg">
-              <Search className="h-4 w-4" /> Search local pros <ExternalLink className="h-3.5 w-3.5" />
+              <Search className="h-4 w-4" /> {tr('prosClient.searchLocalPros')} <ExternalLink className="h-3.5 w-3.5" />
             </a>
             <p className="text-[11px] text-muted">We don&apos;t have live local listings, so we never invent businesses — this opens a real search you control. Save the ones you pick below.</p>
           </div>
@@ -81,7 +83,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
 
       {/* Saved contractors */}
       {contractors.length === 0 ? (
-        <EmptyState icon={Users} title="No saved contractors" description="Save your trusted pros so they're one tap away next time something breaks." />
+        <EmptyState icon={Users} title={tr('prosClient.noSavedContractors')} description="Save your trusted pros so they're one tap away next time something breaks." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {contractors.map((c) => (
@@ -105,26 +107,26 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Save a contractor">
+      <Modal open={open} onClose={() => setOpen(false)} title={tr('prosClient.saveAContractor')}>
         <form action={(fd) => start(async () => { await saveContractorAction(fd); setOpen(false); })} className="space-y-3">
-          <Field label="Name"><Input name="name" required placeholder="Acme Heating & Air" /></Field>
+          <Field label={tr('prosClient.name')}><Input name="name" required placeholder={tr('prosClient.acmeHeatingAir')} /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Trade">
+            <Field label={tr('prosClient.trade')}>
               <Select name="trade" defaultValue={trade}>{TRADES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>
             </Field>
-            <Field label="Company"><Input name="company" /></Field>
+            <Field label={tr('prosClient.company')}><Input name="company" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Phone"><Input name="phone" /></Field>
-            <Field label="Email"><Input name="email" /></Field>
+            <Field label={tr('prosClient.phone')}><Input name="phone" /></Field>
+            <Field label={tr('prosClient.email')}><Input name="email" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Website"><Input name="website" placeholder="https://" /></Field>
-            <Field label="Rating (1–5)"><Input type="number" name="rating" min="1" max="5" /></Field>
+            <Field label={tr('prosClient.website')}><Input name="website" placeholder="https://" /></Field>
+            <Field label={tr('prosClient.rating15')}><Input type="number" name="rating" min="1" max="5" /></Field>
           </div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_preferred" /> Preferred pro</label>
-          <Field label="Notes"><Textarea name="notes" rows={2} /></Field>
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={pending}>Save</Button></div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_preferred" /> {tr('prosClient.preferredPro')}</label>
+          <Field label={tr('prosClient.notes')}><Textarea name="notes" rows={2} /></Field>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>{tr('prosClient.cancel')}</Button><Button type="submit" loading={pending}>{tr('prosClient.save')}</Button></div>
         </form>
       </Modal>
     </div>

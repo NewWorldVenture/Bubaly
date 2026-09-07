@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
@@ -12,6 +12,8 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
+import { createReminderAction, deleteReminderAction, snoozeReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -27,6 +29,7 @@ import {
   type Subtask,
 } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Reminder = Tables<'family_reminders'>;
 
@@ -87,6 +90,7 @@ const AI_SUGGESTIONS = [
 ];
 
 export function RemindersModule() {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -203,10 +207,10 @@ export function RemindersModule() {
 
   function snooze(id: string, mins: number) {
     return run(`snooze:${id}`, async () => {
-      const until = new Date(Date.now() + mins * 60000).toISOString();
-      const { error } = await createClient().from('family_reminders')
-        .update({ status: 'snoozed', snoozed_until: until }).eq('id', id);
-      if (error) throw error;
+      // The service computes the same `snoozed_until` from the scope's clock, and
+      // adds the family filter and a length check this had neither of.
+      const result = await snoozeReminderAction(id, mins);
+      if (!result.ok) throw new Error(result.error);
       success(`Snoozed for ${mins < 60 ? mins + ' min' : mins / 60 + ' hr'}`);
       void refresh();
     });
@@ -214,25 +218,33 @@ export function RemindersModule() {
 
   function deleteReminder(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('family_reminders').delete().eq('id', id);
-      if (error) throw error;
+      // Through the service, family-scoped where this filtered `id` alone. The
+      // editor and the recurrence respawn above cannot follow yet — they write
+      // columns `CreateReminderInput` cannot express — but a delete needs none
+      // of them.
+      const result = await deleteReminderAction(id);
+      if (!result.ok) throw new Error(result.error);
       success('Reminder deleted');
       void refresh();
     });
   }
 
+  // One submission id per suggestion template, so a double-tap on "Water the
+  // plants" adds it once — while adding it again next week is a new composition.
+  const quickAddIds = useRef<Record<string, string>>({});
+
   function quickAdd(suggestion: typeof AI_SUGGESTIONS[0]) {
     return run(`quickadd:${suggestion.title}`, async () => {
-      const { error } = await createClient().from('family_reminders').insert({
-        family_id: familyId,
-        created_by: userId,
+      const result = await createReminderAction({
         title: suggestion.title,
         kind: suggestion.kind,
         priority: suggestion.priority,
         notes: suggestion.notes,
-        ai_suggested: true,
+        aiSuggested: true,
+        submissionId: quickAddIds.current[suggestion.title] ||= newSubmissionId(),
       });
-      if (error) throw error;
+      if (!result.ok) throw new Error(result.error);
+      quickAddIds.current[suggestion.title] = '';
       success('Reminder added from suggestion');
       void refresh();
     });
@@ -244,15 +256,15 @@ export function RemindersModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Smart Reminders"
+        title={tr('reminders.smartReminders')}
         description="Never let anything slip through the cracks."
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="reminders" iconOnly />
             <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
-              <Sparkles className="h-4 w-4 text-brand-text" /> Quick Add
+              <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.quickAdd')}
             </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Reminder</Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.newReminder')}</Button>
           </div>
         }
       />
@@ -280,7 +292,7 @@ export function RemindersModule() {
         <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/8 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-danger" />
           <div>
-            <p className="text-sm font-bold text-danger">{overdue.length} overdue reminder{overdue.length > 1 ? 's' : ''}</p>
+            <p className="text-sm font-bold text-danger">{overdue.length} {tr('reminders.overdueReminder')}{overdue.length > 1 ? 's' : ''}</p>
             <p className="text-xs text-muted">{overdue.map((r) => r.title).join(', ')}</p>
           </div>
         </div>
@@ -291,7 +303,7 @@ export function RemindersModule() {
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-2 text-sm font-bold">
-              <Sparkles className="h-4 w-4 text-brand-text" /> Common Reminders
+              <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.commonReminders')}
             </p>
             <button onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
           </div>
@@ -330,10 +342,10 @@ export function RemindersModule() {
           {/* Search */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reminders…"
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tr('reminders.searchReminders')}
               className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand/50 sm:w-52" />
             {query && (
-              <button onClick={() => setQuery('')} aria-label="Clear search"
+              <button onClick={() => setQuery('')} aria-label={tr('reminders.clearSearch')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -343,12 +355,12 @@ export function RemindersModule() {
           <button onClick={() => setFilterFlagged((f) => !f)} aria-pressed={filterFlagged}
             className={cn('flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs transition',
               filterFlagged ? 'border-warning/60 bg-warning/10 text-warning' : 'border-border bg-surface/60 text-muted hover:bg-elevated')}>
-            <Flag className="h-3.5 w-3.5" /> Flagged
+            <Flag className="h-3.5 w-3.5" /> {tr('reminders.flagged')}
           </button>
           {/* Kind filter */}
           <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}
             className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-            <option value="all">All types</option>
+            <option value="all">{tr('reminders.allTypes')}</option>
             {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
           </select>
           {/* List filter */}
@@ -356,12 +368,12 @@ export function RemindersModule() {
             <div className="flex items-center gap-1">
               <select value={filterList} onChange={(e) => setFilterList(e.target.value)}
                 className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-                <option value="all">All lists</option>
+                <option value="all">{tr('reminders.allLists')}</option>
                 {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                <option value="none">No list</option>
+                <option value="none">{tr('reminders.noList')}</option>
               </select>
               {filterList !== 'all' && filterList !== 'none' && (
-                <button onClick={() => deleteList(filterList)} aria-label="Delete list" className="rounded-lg p-1.5 text-muted hover:text-danger">
+                <button onClick={() => deleteList(filterList)} aria-label={tr('reminders.deleteList')} className="rounded-lg p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
@@ -383,7 +395,7 @@ export function RemindersModule() {
           ))}
           {filterTag && (
             <button onClick={() => setFilterTag(null)} className="flex items-center gap-0.5 text-[11px] text-muted hover:text-fg">
-              <X className="h-3 w-3" /> Clear
+              <X className="h-3 w-3" /> {tr('reminders.clear')}
             </button>
           )}
         </div>
@@ -392,13 +404,13 @@ export function RemindersModule() {
       {/* Reminder list */}
       {filtered.length === 0 ? (
         filtersActive ? (
-          <EmptyState icon={Bell} title="No matching reminders"
+          <EmptyState icon={Bell} title={tr('reminders.noMatchingReminders')}
             description="Nothing matches the current filters. Clear them to see everything."
-            action={<Button variant="outline" onClick={clearFilters}><X className="h-4 w-4" /> Clear filters</Button>} />
+            action={<Button variant="outline" onClick={clearFilters}><X className="h-4 w-4" /> {tr('reminders.clearFilters')}</Button>} />
         ) : (
-          <EmptyState icon={Bell} title="No reminders"
+          <EmptyState icon={Bell} title={tr('reminders.noReminders')}
             description="Set time-based, location, medication, or recurring reminders for your family."
-            action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Reminder</Button>} />
+            action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
         )
       ) : (
         <div className="space-y-2">
@@ -439,8 +451,8 @@ export function RemindersModule() {
                       {reminder.title}
                     </p>
                     <Badge tone={priority.badge as 'neutral'}>{priority.label}</Badge>
-                    {snoozed && <Badge tone="warning">Snoozed</Badge>}
-                    {overdue && !completed && <Badge tone="danger">Overdue</Badge>}
+                    {snoozed && <Badge tone="warning">{tr('reminders.snoozed')}</Badge>}
+                    {overdue && !completed && <Badge tone="danger">{tr('reminders.overdue')}</Badge>}
                     {reminder.ai_suggested && (
                       <span className="flex items-center gap-0.5 text-[10px] text-brand-text/70">
                         <Sparkles className="h-2.5 w-2.5" /> AI
@@ -481,7 +493,7 @@ export function RemindersModule() {
                     {reminder.list_id && listById.get(reminder.list_id) && (
                       <span className="flex items-center gap-1"><ListTodo className="h-3.5 w-3.5" />{listById.get(reminder.list_id)!.name}</span>
                     )}
-                    {reminder.flagged && <span className="flex items-center gap-1 text-warning"><Flag className="h-3.5 w-3.5" />Flagged</span>}
+                    {reminder.flagged && <span className="flex items-center gap-1 text-warning"><Flag className="h-3.5 w-3.5" />{tr('reminders.flagged')}</span>}
                     {reminder.early_reminder_minutes != null && (
                       <span className="flex items-center gap-1"><Bell className="h-3.5 w-3.5" />{earlyReminderLabel(reminder.early_reminder_minutes)}</span>
                     )}
@@ -495,7 +507,7 @@ export function RemindersModule() {
                     ) : null; })()}
                     {reminder.url && (
                       <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand-text hover:underline" onClick={(e) => e.stopPropagation()}>
-                        <Link2 className="h-3.5 w-3.5" />Link
+                        <Link2 className="h-3.5 w-3.5" />{tr('reminders.link')}
                       </a>
                     )}
                     {(reminder.tags ?? []).map((t) => (
@@ -550,11 +562,11 @@ export function RemindersModule() {
                       </details>
                     </div>
                   )}
-                  <button onClick={() => setEditing(reminder)} aria-label="Edit reminder"
+                  <button onClick={() => setEditing(reminder)} aria-label={tr('reminders.editReminder')}
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => deleteReminder(reminder.id)} disabled={isPending(`delete:${reminder.id}`)} aria-label="Delete reminder"
+                  <button onClick={() => deleteReminder(reminder.id)} disabled={isPending(`delete:${reminder.id}`)} aria-label={tr('reminders.deleteReminder')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-50">
                     {isPending(`delete:${reminder.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
@@ -587,6 +599,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   lists: Tables<'reminder_lists'>[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kind, setKind] = useState(reminder?.kind ?? 'time');
@@ -704,11 +717,11 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   return (
     <Modal open onClose={onClose} title={reminder ? 'Edit Reminder' : 'New Reminder'}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Title" required>
-          {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder="Pick up prescription, Pay credit card…" autoFocus />}
+        <Field label={tr('reminders.title')} required>
+          {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder={tr('reminders.pickUpPrescriptionPayCreditCard')} autoFocus />}
         </Field>
 
-        <Field label="Type">
+        <Field label={tr('reminders.type')}>
           {() => (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {KINDS.map((k) => (
@@ -724,7 +737,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Priority">
+          <Field label={tr('reminders.priority')}>
             {(id) => (
               <select id={id} name="priority" defaultValue={reminder?.priority ?? 'medium'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
@@ -732,7 +745,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               </select>
             )}
           </Field>
-          <Field label="Repeat">
+          <Field label={tr('reminders.repeat')}>
             {(id) => (
               <select id={id} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
@@ -743,41 +756,41 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </div>
 
         {(kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore') && (
-          <Field label="Date & Time">
+          <Field label={tr('reminders.dateTime')}>
             {(id) => <Input id={id} name="remind_at" type="datetime-local"
               defaultValue={reminder?.remind_at ? reminder.remind_at.slice(0, 16) : ''} />}
           </Field>
         )}
 
         {kind === 'location' && (
-          <Field label="Location">
-            {(id) => <Input id={id} name="location_name" defaultValue={reminder?.location_name ?? ''} placeholder="Pharmacy, School, Grocery store…" />}
+          <Field label={tr('reminders.location')}>
+            {(id) => <Input id={id} name="location_name" defaultValue={reminder?.location_name ?? ''} placeholder={tr('reminders.pharmacySchoolGroceryStore')} />}
           </Field>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Assign to member">
+          <Field label={tr('reminders.assignToMember')}>
             {(id) => (
               <select id={id} name="member_id" defaultValue={reminder?.member_id ?? ''}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">Whole family</option>
+                <option value="">{tr('reminders.wholeFamily')}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </select>
             )}
           </Field>
-          <Field label="Assigned to (user)">
+          <Field label={tr('reminders.assignedToUser')}>
             {(id) => (
               <select id={id} name="assigned_to_id" defaultValue={reminder?.assigned_to_id ?? ''}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">Anyone</option>
+                <option value="">{tr('reminders.anyone')}</option>
                 {members.filter((m) => m.user_id).map((m) => <option key={m.user_id!} value={m.user_id!}>{m.display_name}</option>)}
               </select>
             )}
           </Field>
         </div>
 
-        <Field label="Notes">
-          {(id) => <Textarea id={id} name="notes" defaultValue={reminder?.notes ?? ''} placeholder="Additional context or instructions…" className="min-h-[80px]" />}
+        <Field label={tr('reminders.notes')}>
+          {(id) => <Textarea id={id} name="notes" defaultValue={reminder?.notes ?? ''} placeholder={tr('reminders.additionalContextOrInstructions')} className="min-h-[80px]" />}
         </Field>
 
         <Field label="URL">
@@ -785,18 +798,18 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="List">
+          <Field label={tr('reminders.list')}>
             {(id) => (
               <select id={id} value={listId}
                 onChange={(e) => { if (e.target.value === '__new__') void createList(); else setListId(e.target.value); }}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">No list</option>
+                <option value="">{tr('reminders.noList')}</option>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                <option value="__new__">＋ New list…</option>
+                <option value="__new__">{tr('reminders.newList')}</option>
               </select>
             )}
           </Field>
-          <Field label="Early Reminder">
+          <Field label={tr('reminders.earlyReminder')}>
             {(id) => (
               <select id={id} value={earlyMinutes} onChange={(e) => setEarlyMinutes(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
@@ -808,14 +821,14 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
 
         <button type="button" onClick={() => setFlagged((f) => !f)}
           className="flex w-full items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-sm">
-          <span className="flex items-center gap-2"><Flag className={cn('h-4 w-4', flagged ? 'text-warning' : 'text-muted')} /> Flag</span>
+          <span className="flex items-center gap-2"><Flag className={cn('h-4 w-4', flagged ? 'text-warning' : 'text-muted')} /> {tr('reminders.flag')}</span>
           <span className={cn('relative h-6 w-10 rounded-full transition', flagged ? 'bg-warning' : 'bg-border')}>
             <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition', flagged ? 'left-[18px]' : 'left-0.5')} />
           </span>
         </button>
 
         {/* Tags */}
-        <Field label="Tags">
+        <Field label={tr('reminders.tags')}>
           {(id) => (
             <div>
               {tags.length > 0 && (
@@ -832,7 +845,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitTags(); } }}
                 onBlur={() => commitTags()}
-                placeholder="Add tags, comma-separated" />
+                placeholder={tr('reminders.addTagsCommaSeparated')} />
             </div>
           )}
         </Field>
@@ -844,17 +857,17 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               {subtasks.map((s) => (
                 <div key={s.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface/40 px-2.5 py-1.5">
                   <button type="button" onClick={() => setSubtasks((cur) => cur.map((x) => x.id === s.id ? { ...x, done: !x.done } : x))}
-                    className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')} aria-label="Toggle subtask">
+                    className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')} aria-label={tr('reminders.toggleSubtask')}>
                     {s.done && <Check className="h-3 w-3" />}
                   </button>
                   <span className={cn('flex-1 text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
-                  <button type="button" onClick={() => setSubtasks((cur) => cur.filter((x) => x.id !== s.id))} aria-label="Remove subtask" className="text-muted hover:text-danger"><X className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => setSubtasks((cur) => cur.filter((x) => x.id !== s.id))} aria-label={tr('reminders.removeSubtask')} className="text-muted hover:text-danger"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
               <div className="flex gap-2">
                 <Input id={id} value={subtaskInput} onChange={(e) => setSubtaskInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } }}
-                  placeholder="Add a subtask" />
+                  placeholder={tr('reminders.addASubtask')} />
                 <Button type="button" variant="outline" onClick={addSubtask}><Plus className="h-4 w-4" /></Button>
               </div>
             </div>
@@ -862,14 +875,14 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         {/* Image */}
-        <Field label="Image">
+        <Field label={tr('reminders.image')}>
           {() => (
             <div className="flex items-center gap-3">
               {imageUrl
                 ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <div className="relative"><img src={imageUrl} alt="Reminder" className="h-16 w-16 rounded-lg object-cover" />
-                    <button type="button" onClick={() => setImageUrl('')} aria-label="Remove image" className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
+                  <div className="relative"><img src={imageUrl} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
+                    <button type="button" onClick={() => setImageUrl('')} aria-label={tr('reminders.removeImage')} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
                   </div>
                 )
                 : <div className="grid h-16 w-16 place-items-center rounded-lg border border-dashed border-border text-muted"><ImageIcon className="h-5 w-5" /></div>}
@@ -884,7 +897,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
         </Field>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('reminders.cancel')}</Button>
           <Button type="submit" loading={loading}>{reminder ? 'Save' : 'Create Reminder'}</Button>
         </div>
       </form>

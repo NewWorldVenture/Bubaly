@@ -23,6 +23,7 @@ import {
   DAY_LABELS, type ScheduleLike, type DueDose,
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Medication = Tables<'medications'>;
 type Schedule = Tables<'medication_schedules'>;
@@ -70,6 +71,7 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 }
 
 export function MedicationsModule() {
+  const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -274,12 +276,12 @@ export function MedicationsModule() {
   return (
     <div>
       <PageHeader
-        title="Medications"
+        title={t('medications.medications')}
         description="Track medications, dosing schedules, and adherence for the whole family."
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medications" />
-            {canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>}
+            {canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>}
           </div>
         }
       />
@@ -288,10 +290,10 @@ export function MedicationsModule() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 rounded-2xl bg-surface/50 border border-border p-5">
           <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-brand-text" /> Today&apos;s Doses
+            <Clock className="h-4 w-4 text-brand-text" /> {t('medications.todayAposSDoses')}
           </h2>
           {todayDoses.length === 0 ? (
-            <p className="text-muted text-sm py-6 text-center">No doses scheduled for today.</p>
+            <p className="text-muted text-sm py-6 text-center">{t('medications.noDosesScheduledForToday')}</p>
           ) : (
             <ul className="space-y-2">
               {todayDoses.map((due) => {
@@ -316,13 +318,13 @@ export function MedicationsModule() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button onClick={() => logDose(due, 'taken')} disabled={busy}
-                        aria-label="Mark taken"
+                        aria-label={t('medications.markTaken')}
                         className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg border transition',
                           due.status === 'taken' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border text-muted hover:text-emerald-400 hover:border-emerald-500/50')}>
                         <Check className="h-4 w-4" />
                       </button>
                       <button onClick={() => logDose(due, 'skipped')} disabled={busy}
-                        aria-label="Skip dose"
+                        aria-label={t('medications.skipDose')}
                         className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg border transition',
                           due.status === 'skipped' ? 'border-amber-500 bg-amber-500 text-white' : 'border-border text-muted hover:text-amber-400 hover:border-amber-500/50')}>
                         <X className="h-4 w-4" />
@@ -337,10 +339,10 @@ export function MedicationsModule() {
 
         <div className="rounded-2xl bg-surface/50 border border-border p-5 flex flex-col items-center justify-center text-center">
           <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Activity className="h-4 w-4 text-emerald-400" /> Adherence
+            <Activity className="h-4 w-4 text-emerald-400" /> {t('medications.adherence')}
           </h2>
           <AdherenceRing rate={adherence} />
-          <p className="text-xs text-muted mt-3">Last {ADHERENCE_WINDOW_DAYS} days</p>
+          <p className="text-xs text-muted mt-3">{t('medications.last')} {ADHERENCE_WINDOW_DAYS} days</p>
           <div className="flex gap-3 mt-3 text-xs">
             <span className="text-emerald-400">{counts.taken} taken</span>
             <span className="text-amber-400">{counts.skipped} skipped</span>
@@ -362,9 +364,9 @@ export function MedicationsModule() {
 
       {/* Medications list */}
       {visibleMeds.length === 0 ? (
-        <EmptyState icon={Pill} title="No medications yet"
+        <EmptyState icon={Pill} title={t('medications.noMedicationsYet')}
           description={canEdit ? 'Add a medication and set its dosing schedule to start tracking adherence.' : 'No medications have been added for this filter.'}
-          action={canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>} />
+          action={canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {visibleMeds.map((m) => {
@@ -379,7 +381,7 @@ export function MedicationsModule() {
                     <div className="min-w-0">
                       <div className="font-semibold text-fg truncate flex items-center gap-2">
                         {m.name}
-                        {!m.is_active && <span className="text-[10px] uppercase tracking-wide text-muted border border-border rounded px-1.5 py-0.5">Inactive</span>}
+                        {!m.is_active && <span className="text-[10px] uppercase tracking-wide text-muted border border-border rounded px-1.5 py-0.5">{t('medications.inactive')}</span>}
                         {m.is_active && (() => {
                           const rb = refillBadge(m.refill_on, m.refill_reminder_days);
                           return rb ? <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', rb.cls)}>{rb.label}</span> : null;
@@ -396,8 +398,8 @@ export function MedicationsModule() {
                   </div>
                   {canEdit && (
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => openEditMed(m)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => deleteMed(m)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => openEditMed(m)} aria-label={t('medications.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => deleteMed(m)} aria-label={t('medications.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
                 </div>
@@ -406,7 +408,7 @@ export function MedicationsModule() {
 
                 <div className="space-y-1.5">
                   {medSchedules.length === 0 ? (
-                    <p className="text-xs text-muted">No schedule set.</p>
+                    <p className="text-xs text-muted">{t('medications.noScheduleSet')}</p>
                   ) : medSchedules.map((s) => (
                     <div key={s.id} className="flex items-center gap-2 text-xs rounded-lg bg-surface/40 border border-border px-2.5 py-1.5">
                       <CalendarClock className="h-3.5 w-3.5 text-brand-text flex-shrink-0" />
@@ -415,7 +417,7 @@ export function MedicationsModule() {
                         {s.days_of_week.length === 7 ? 'Every day' : s.days_of_week.map((d) => DAY_LABELS[d]).join(', ')}
                       </span>
                       {canEdit && (
-                        <button onClick={() => deleteSchedule(s.id)} aria-label="Remove schedule" className="ml-auto p-0.5 rounded text-muted hover:text-rose-400"><X className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => deleteSchedule(s.id)} aria-label={t('medications.removeSchedule')} className="ml-auto p-0.5 rounded text-muted hover:text-rose-400"><X className="h-3.5 w-3.5" /></button>
                       )}
                     </div>
                   ))}
@@ -424,7 +426,7 @@ export function MedicationsModule() {
                 {canEdit && (
                   <div className="mt-3 flex items-center gap-3">
                     <button onClick={() => openSchedule(m)} className="text-xs font-medium text-brand-text hover:underline inline-flex items-center gap-1">
-                      <Plus className="h-3.5 w-3.5" /> Add schedule
+                      <Plus className="h-3.5 w-3.5" /> {t('medications.addSchedule')}
                     </button>
                     <button onClick={() => toggleActive(m)} className="text-xs font-medium text-muted hover:text-fg">
                       {m.is_active ? 'Mark inactive' : 'Reactivate'}
@@ -440,37 +442,37 @@ export function MedicationsModule() {
       {/* Medication modal */}
       <Modal open={medModalOpen} onClose={() => setMedModalOpen(false)} title={medForm.id ? 'Edit medication' : 'Add medication'}>
         <form onSubmit={saveMed} className="space-y-4">
-          <Field label="Name" required>
-            {(id) => <Input id={id} value={medForm.name} onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Amoxicillin" autoFocus />}
+          <Field label={t('medications.name')} required>
+            {(id) => <Input id={id} value={medForm.name} onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))} placeholder={t('medications.eGAmoxicillin')} autoFocus />}
           </Field>
-          <Field label="Dosage">
-            {(id) => <Input id={id} value={medForm.dosage} onChange={(e) => setMedForm((f) => ({ ...f, dosage: e.target.value }))} placeholder="e.g. 500 mg, 1 tablet" />}
+          <Field label={t('medications.dosage')}>
+            {(id) => <Input id={id} value={medForm.dosage} onChange={(e) => setMedForm((f) => ({ ...f, dosage: e.target.value }))} placeholder={t('medications.eG500Mg1Tablet')} />}
           </Field>
           <Field label="For">
             {(id) => (
               <Select id={id} value={medForm.member_id} onChange={(e) => setMedForm((f) => ({ ...f, member_id: e.target.value }))}>
-                <option value="">Whole family</option>
+                <option value="">{t('medications.wholeFamily')}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </Select>
             )}
           </Field>
-          <Field label="Instructions">
-            {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder="e.g. Take with food" />}
+          <Field label={t('medications.instructions')}>
+            {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder={t('medications.eGTakeWithFood')} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Refill due" hint="Bubaly reminds you before it runs out.">
+            <Field label={t('medications.refillDue')} hint="Bubaly reminds you before it runs out.">
               {(id) => <Input id={id} type="date" value={medForm.refill_on} onChange={(e) => setMedForm((f) => ({ ...f, refill_on: e.target.value }))} />}
             </Field>
-            <Field label="Remind days ahead">
+            <Field label={t('medications.remindDaysAhead')}>
               {(id) => <Input id={id} type="number" min={0} max={90} value={medForm.refill_reminder_days} onChange={(e) => setMedForm((f) => ({ ...f, refill_reminder_days: Number(e.target.value) }))} />}
             </Field>
           </div>
           <label className="flex items-center gap-2 text-sm text-fg">
             <input type="checkbox" checked={medForm.is_active} onChange={(e) => setMedForm((f) => ({ ...f, is_active: e.target.checked }))} className="h-4 w-4 rounded border-border" />
-            Active
+            {t('medications.active')}
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setMedModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setMedModalOpen(false)}>{t('medications.cancel')}</Button>
             <Button type="submit" disabled={savingMed}>{savingMed ? 'Saving…' : medForm.id ? 'Save changes' : 'Add medication'}</Button>
           </div>
         </form>
@@ -479,11 +481,11 @@ export function MedicationsModule() {
       {/* Schedule modal */}
       <Modal open={!!scheduleFor} onClose={() => setScheduleFor(null)} title={`Add schedule${scheduleFor ? ` · ${scheduleFor.name}` : ''}`}>
         <form onSubmit={saveSchedule} className="space-y-4">
-          <Field label="Time of day" required>
+          <Field label={t('medications.timeOfDay')} required>
             {(id) => <Input id={id} type="time" value={scheduleForm.time_of_day} onChange={(e) => setScheduleForm((f) => ({ ...f, time_of_day: e.target.value }))} />}
           </Field>
           <div>
-            <span className="block text-sm font-medium text-fg mb-1.5">Days</span>
+            <span className="block text-sm font-medium text-fg mb-1.5">{t('medications.days')}</span>
             <div className="flex flex-wrap gap-1.5">
               {DAY_LABELS.map((label, day) => (
                 <button key={day} type="button" onClick={() => toggleDay(day)}
@@ -495,15 +497,15 @@ export function MedicationsModule() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Starts">
+            <Field label={t('medications.starts')}>
               {(id) => <Input id={id} type="date" value={scheduleForm.starts_on} onChange={(e) => setScheduleForm((f) => ({ ...f, starts_on: e.target.value }))} />}
             </Field>
-            <Field label="Ends (optional)">
+            <Field label={t('medications.endsOptional')}>
               {(id) => <Input id={id} type="date" value={scheduleForm.ends_on} onChange={(e) => setScheduleForm((f) => ({ ...f, ends_on: e.target.value }))} />}
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setScheduleFor(null)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setScheduleFor(null)}>{t('medications.cancel')}</Button>
             <Button type="submit" disabled={savingSchedule}>{savingSchedule ? 'Saving…' : 'Add schedule'}</Button>
           </div>
         </form>

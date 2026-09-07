@@ -10,11 +10,13 @@ import {
   type OnboardingEventLike,
 } from '@/lib/analytics/onboarding';
 import { summarizeActivation, type ActivationEventLike } from '@/lib/analytics/activation';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Onboarding Funnel' };
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingFunnelPage() {
+  const t = await getTranslations();
   await requireUserContext();
   // Cross-user pre-family telemetry — admin-only, read via the service role.
   if (!(await isSuperAdmin())) notFound();
@@ -41,18 +43,18 @@ export default async function OnboardingFunnelPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Onboarding Funnel"
+        title={t('dashboardOnboardingFunnel.onboardingFunnel')}
         description="Pre-family telemetry: where new users reach, drop off, and how long sign-up takes. Real onboarding_events, all sessions."
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Sessions started" value={funnel.startedSessions} icon={Activity} accent="bg-blue-600" />
-        <StatTile label="Completed" value={funnel.completedSessions} icon={CheckCircle2} accent="bg-emerald-600" />
-        <StatTile label="Completion" value={formatRate(funnel.completionRate)} icon={Timer} accent="bg-violet-600" />
-        <StatTile label="Median time" value={formatDuration(funnel.medianCompletionMs)} icon={Timer} accent="bg-amber-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.sessionsStarted')} value={funnel.startedSessions} icon={Activity} accent="bg-blue-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.completed')} value={funnel.completedSessions} icon={CheckCircle2} accent="bg-emerald-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.completion')} value={formatRate(funnel.completionRate)} icon={Timer} accent="bg-violet-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.medianTime')} value={formatDuration(funnel.medianCompletionMs)} icon={Timer} accent="bg-amber-600" />
       </div>
 
-      <SectionCard title="Step-by-step funnel">
+      <SectionCard title={t('dashboardOnboardingFunnel.stepByStepFunnel')}>
         {funnelError ? (
           <MiniError text="Couldn’t load onboarding telemetry. Refresh to try again." />
         ) : funnel.startedSessions === 0 ? (
@@ -86,19 +88,19 @@ export default async function OnboardingFunnelPage() {
 
       {funnel.biggestDropStep && (
         <p className="text-sm text-muted">
-          Most users who leave do so at <strong>{stepLabel(funnel.biggestDropStep)}</strong> — the highest-leverage step to simplify.
+          {t('dashboardOnboardingFunnel.mostUsersWhoLeaveDoSo')} <strong>{stepLabel(funnel.biggestDropStep)}</strong> {t('dashboardOnboardingFunnel.theHighestLeverageStepToSimplify')}
         </p>
       )}
 
       {/* ── Time to First Value (T10) ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="TTFV (median)" value={formatDuration(activation.ttfvMedianMs)} icon={Zap} accent="bg-fuchsia-600" />
-        <StatTile label="TTFV (p90)" value={formatDuration(activation.ttfvP90Ms)} icon={Timer} accent="bg-fuchsia-700" />
-        <StatTile label="Activation rate" value={formatRate(activation.activationRate)} icon={Rocket} accent="bg-emerald-600" />
-        <StatTile label="New families" value={activation.cohorts} icon={Activity} accent="bg-blue-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.ttfvMedian')} value={formatDuration(activation.ttfvMedianMs)} icon={Zap} accent="bg-fuchsia-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.ttfvP90')} value={formatDuration(activation.ttfvP90Ms)} icon={Timer} accent="bg-fuchsia-700" />
+        <StatTile label={t('dashboardOnboardingFunnel.activationRate')} value={formatRate(activation.activationRate)} icon={Rocket} accent="bg-emerald-600" />
+        <StatTile label={t('dashboardOnboardingFunnel.newFamilies')} value={activation.cohorts} icon={Activity} accent="bg-blue-600" />
       </div>
 
-      <SectionCard title="Time to First Value">
+      <SectionCard title={t('dashboardOnboardingFunnel.timeToFirstValue')}>
         {actError ? (
           <MiniError text="Couldn’t load activation telemetry. Refresh to try again." />
         ) : activation.cohorts === 0 ? (
@@ -106,9 +108,9 @@ export default async function OnboardingFunnelPage() {
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <StatTile label="Calendar imported · session 1" value={formatRate(activation.session1.calendarImportRate)} icon={CalendarCheck} accent="bg-indigo-600" />
-              <StatTile label="First briefing · session 1" value={formatRate(activation.session1.firstBriefRate)} icon={Sun} accent="bg-amber-600" />
-              <StatTile label="First outcome · session 1" value={formatRate(activation.session1.firstOutcomeRate)} icon={Rocket} accent="bg-emerald-600" />
+              <StatTile label={t('dashboardOnboardingFunnel.calendarImportedSession1')} value={formatRate(activation.session1.calendarImportRate)} icon={CalendarCheck} accent="bg-indigo-600" />
+              <StatTile label={t('dashboardOnboardingFunnel.firstBriefingSession1')} value={formatRate(activation.session1.firstBriefRate)} icon={Sun} accent="bg-amber-600" />
+              <StatTile label={t('dashboardOnboardingFunnel.firstOutcomeSession1')} value={formatRate(activation.session1.firstOutcomeRate)} icon={Rocket} accent="bg-emerald-600" />
             </div>
             <ul className="space-y-3">
               {activation.milestoneReach.map((m) => (

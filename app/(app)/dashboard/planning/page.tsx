@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Planning & Organization' };
 export const dynamic = 'force-dynamic';
@@ -72,6 +73,7 @@ function ListRow({ label, meta, dot }: { label: string; meta?: string; dot?: str
 }
 
 export default async function PlanningPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -123,17 +125,17 @@ export default async function PlanningPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Planning &amp; Organization</h1>
-          <p className="mt-1 text-sm text-muted">Every page. Everything you need to plan, organize and stay in sync as a family.</p>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{tr('dashboardPlanning.planningAmpOrganization')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('dashboardPlanning.everyPageEverythingYouNeedTo')}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-bold">
-          <LayoutGrid className="h-4 w-4 text-brand-text" /> 8 Pages
+          <LayoutGrid className="h-4 w-4 text-brand-text" /> {tr('dashboardPlanning.8Pages')}
         </span>
       </div>
 
       {/* Intro hero */}
       <section className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-6">
-        <p className="text-sm font-semibold text-brand-text">All your plans, tasks, notes, documents and people — organized in one place.</p>
+        <p className="text-sm font-semibold text-brand-text">{tr('dashboardPlanning.allYourPlansTasksNotesDocuments')}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {PAGES.map((p) => (
             <span key={p} className="rounded-full border border-border bg-surface/60 px-3 py-1 text-xs font-semibold text-fg/80">{p}</span>
@@ -144,50 +146,50 @@ export default async function PlanningPage() {
       {/* 8-card grid */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {/* 1. Calendar */}
-        <FeatureCard index={1} title="Calendar" href="/dashboard/calendar" icon={CalendarIcon} tint="bg-blue-500/15 text-blue-400" count={eventCount ?? 0} countLabel="upcoming events">
-          {(events ?? []).length === 0 ? <EmptyHint>No upcoming events.</EmptyHint>
+        <FeatureCard index={1} title={tr('dashboardPlanning.calendar')} href="/dashboard/calendar" icon={CalendarIcon} tint="bg-blue-500/15 text-blue-400" count={eventCount ?? 0} countLabel="upcoming events">
+          {(events ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingEvents')}</EmptyHint>
             : (events as Ev[]).map((e) => <ListRow key={e.id} label={e.title} meta={e.all_day ? fmtDay(e.starts_at) : fmtTime(e.starts_at)} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Tasks */}
-        <FeatureCard index={2} title="Tasks" href="/dashboard/todos" icon={CheckSquare} tint="bg-emerald-500/15 text-emerald-400" count={taskCount ?? 0} countLabel="open tasks">
-          {(tasks ?? []).length === 0 ? <EmptyHint>No open tasks.</EmptyHint>
+        <FeatureCard index={2} title={tr('dashboardPlanning.tasks')} href="/dashboard/todos" icon={CheckSquare} tint="bg-emerald-500/15 text-emerald-400" count={taskCount ?? 0} countLabel="open tasks">
+          {(tasks ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noOpenTasks')}</EmptyHint>
             : (tasks as Td[]).map((t) => <ListRow key={t.id} label={t.title} meta={t.due_date === todayIso ? 'Today' : fmtDay(t.due_date)} dot="bg-emerald-400" />)}
         </FeatureCard>
 
         {/* 3. Reminders */}
-        <FeatureCard index={3} title="Reminders" href="/dashboard/reminders" icon={BellRing} tint="bg-amber-500/15 text-amber-400" count={reminderCount ?? 0} countLabel="active reminders">
-          {(reminders ?? []).length === 0 ? <EmptyHint>No active reminders.</EmptyHint>
+        <FeatureCard index={3} title={tr('dashboardPlanning.reminders')} href="/dashboard/reminders" icon={BellRing} tint="bg-amber-500/15 text-amber-400" count={reminderCount ?? 0} countLabel="active reminders">
+          {(reminders ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noActiveReminders')}</EmptyHint>
             : (reminders as Rm[]).map((r) => <ListRow key={r.id} label={r.title} meta={r.remind_at ? fmtDay(r.remind_at) : ''} dot="bg-amber-400" />)}
         </FeatureCard>
 
         {/* 4. Notes */}
-        <FeatureCard index={4} title="Notes" href="/dashboard/notes" icon={StickyNote} tint="bg-violet-500/15 text-violet-400" count={noteCount ?? 0} countLabel="notes">
-          {(notes ?? []).length === 0 ? <EmptyHint>No notes yet.</EmptyHint>
+        <FeatureCard index={4} title={tr('dashboardPlanning.notes')} href="/dashboard/notes" icon={StickyNote} tint="bg-violet-500/15 text-violet-400" count={noteCount ?? 0} countLabel="notes">
+          {(notes ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noNotesYet')}</EmptyHint>
             : (notes as Nt[]).map((n) => <ListRow key={n.id} label={(n.title ?? n.body ?? 'Untitled').slice(0, 60)} meta={fmtDay(n.updated_at)} dot="bg-violet-400" />)}
         </FeatureCard>
 
         {/* 5. Documents */}
-        <FeatureCard index={5} title="Documents" href="/dashboard/documents" icon={FolderLock} tint="bg-sky-500/15 text-sky-400" count={docCount ?? 0} countLabel="documents">
-          {(docs ?? []).length === 0 ? <EmptyHint>No documents yet.</EmptyHint>
+        <FeatureCard index={5} title={tr('dashboardPlanning.documents')} href="/dashboard/documents" icon={FolderLock} tint="bg-sky-500/15 text-sky-400" count={docCount ?? 0} countLabel="documents">
+          {(docs ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noDocumentsYet')}</EmptyHint>
             : (docs as Dc[]).map((d) => <ListRow key={d.id} label={d.title} meta={d.category ?? ''} dot="bg-sky-400" />)}
         </FeatureCard>
 
         {/* 6. Contacts */}
-        <FeatureCard index={6} title="Contacts" href="/dashboard/contacts" icon={ContactIcon} tint="bg-rose-500/15 text-rose-400" count={contactCount ?? 0} countLabel="contacts">
-          {(contacts ?? []).length === 0 ? <EmptyHint>No contacts yet.</EmptyHint>
+        <FeatureCard index={6} title={tr('dashboardPlanning.contacts')} href="/dashboard/contacts" icon={ContactIcon} tint="bg-rose-500/15 text-rose-400" count={contactCount ?? 0} countLabel="contacts">
+          {(contacts ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noContactsYet')}</EmptyHint>
             : (contacts as Ct[]).map((c) => <ListRow key={c.id} label={c.name} meta={c.relationship ?? ''} dot="bg-rose-400" />)}
         </FeatureCard>
 
         {/* 7. Milestones */}
-        <FeatureCard index={7} title="Milestones" href="/dashboard/celebrations" icon={Award} tint="bg-fuchsia-500/15 text-fuchsia-400" count={milestoneCount ?? 0} countLabel="upcoming milestones">
-          {(milestones ?? []).length === 0 ? <EmptyHint>No upcoming milestones.</EmptyHint>
+        <FeatureCard index={7} title={tr('dashboardPlanning.milestones')} href="/dashboard/celebrations" icon={Award} tint="bg-fuchsia-500/15 text-fuchsia-400" count={milestoneCount ?? 0} countLabel="upcoming milestones">
+          {(milestones ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingMilestones')}</EmptyHint>
             : (milestones as Ms[]).map((m) => <ListRow key={m.id} label={m.title} meta={fmtDay(m.milestone_date)} dot="bg-fuchsia-400" />)}
         </FeatureCard>
 
         {/* 8. Family Wall */}
-        <FeatureCard index={8} title="Family Wall" href="/dashboard/social-feed" icon={Newspaper} tint="bg-indigo-500/15 text-indigo-400" count={photoCount ?? 0} countLabel="shared moments">
-          {(photos ?? []).length === 0 ? <EmptyHint>No posts yet.</EmptyHint>
+        <FeatureCard index={8} title={tr('dashboardPlanning.familyWall')} href="/dashboard/social-feed" icon={Newspaper} tint="bg-indigo-500/15 text-indigo-400" count={photoCount ?? 0} countLabel="shared moments">
+          {(photos ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noPostsYet')}</EmptyHint>
             : (
               <div className="grid grid-cols-4 gap-1.5">
                 {(photos as Ph[]).map((p) => {

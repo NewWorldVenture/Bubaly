@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { GoogleIcon } from '@/components/auth/google-icon';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // Shared style for every auth provider button (Google · phone · email) so the
 // sign-in / sign-up screens are visually unified — a solid black pill with a
@@ -19,6 +20,7 @@ export const authButtonClass =
  * (e.g. '/onboarding' for sign-up, '/dashboard' for sign-in).
  */
 export function OAuthButtons({ next }: { next?: string }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [pending, setPending] = useState(false);
 
@@ -57,7 +59,7 @@ export function OAuthButtons({ next }: { next?: string }) {
       className={authButtonClass}
     >
       {pending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <GoogleIcon />}
-      Continue with Google
+      {t('oauthButtons.continueWithGoogle')}
     </button>
   );
 }

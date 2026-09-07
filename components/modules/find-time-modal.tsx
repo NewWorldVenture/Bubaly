@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Sparkles, Clock, CalendarCheck, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { createCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = ReturnType<typeof useApp>['members'][number];
 type Slot = { startISO: string; endISO: string };
@@ -35,7 +37,7 @@ const WINDOWS = [
 export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
-  const { familyId, userId } = useApp();
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
 
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
@@ -82,24 +84,34 @@ export function FindTimeModal({
     }
   }
 
+  // One submission id per slot, minted on first tap and kept for the life of this
+  // modal. Tapping the same slot again after a failure is the same booking and is
+  // deduplicated; tapping a different slot is a different booking and is not.
+  const bookingIds = useRef(new Map<string, string>());
+  function bookingIdFor(slotStart: string): string {
+    const held = bookingIds.current.get(slotStart);
+    if (held) return held;
+    const minted = newSubmissionId();
+    bookingIds.current.set(slotStart, minted);
+    return minted;
+  }
+
   async function book(slot: Slot) {
     setBooking(slot.startISO);
     try {
-      const supabase = createClient();
       // A meeting for several people books under the family; one person → that person.
-      const assignee_id = selectedMembers.length === 1 ? selectedMembers[0] : null;
-      const { error } = await supabase.from('calendar_events').insert({
-        family_id: familyId,
-        created_by: userId,
+      const assigneeId = selectedMembers.length === 1 ? selectedMembers[0] : null;
+      const result = await createCalendarEventAction({
         title: title.trim() || 'New event',
         category: 'general',
-        assignee_id,
-        starts_at: slot.startISO,
-        ends_at: slot.endISO,
-        all_day: false,
+        assigneeId,
+        startsAt: slot.startISO,
+        endsAt: slot.endISO,
+        allDay: false,
         recurrence: 'none',
+        submissionId: bookingIdFor(slot.startISO),
       });
-      if (error) { toastError(describeDbError(error)); return; }
+      if (!result.ok) { toastError(result.error); return; }
       success('Event scheduled');
       onScheduled();
     } catch (err) {
@@ -118,16 +130,16 @@ export function FindTimeModal({
   };
 
   return (
-    <Modal open title="Find a time" onClose={onClose}>
+    <Modal open title={tr('findTimeModal.findATime')} onClose={onClose}>
       <div className="space-y-4">
         <p className="flex items-center gap-1.5 text-xs text-muted">
           <Sparkles className="h-3.5 w-3.5 text-brand-text" />
-          We&apos;ll scan everyone&apos;s calendars and surface slots where they&apos;re all free.
+          {tr('findTimeModal.weAposLlScanEveryoneApos')}
         </p>
 
         {/* Who */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">Who needs to be free</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</label>
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
             {members.map((m) => {
               const on = selectedMembers.includes(m.id);
@@ -142,13 +154,13 @@ export function FindTimeModal({
             })}
           </div>
           {selectedMembers.length === 0 && (
-            <p className="mt-1 text-[11px] text-muted">No one selected → searches the whole family&apos;s shared time.</p>
+            <p className="mt-1 text-[11px] text-muted">{tr('findTimeModal.noOneSelectedSearchesTheWhole')}</p>
           )}
         </div>
 
         {/* Duration */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">How long</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</label>
           <div className="flex flex-wrap gap-1.5">
             {DURATIONS.map((d) => (
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
@@ -162,7 +174,7 @@ export function FindTimeModal({
 
         {/* Window */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">Within</label>
+          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</label>
           <div className="flex flex-wrap gap-1.5">
             {WINDOWS.map((w) => (
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
@@ -176,11 +188,11 @@ export function FindTimeModal({
 
         <label className="flex items-center gap-2 text-xs text-muted">
           <input type="checkbox" checked={workdayOnly} onChange={(e) => { setWorkdayOnly(e.target.checked); setSearched(false); }} className="accent-brand" />
-          Keep it to daytime hours (8am–8pm)
+          {tr('findTimeModal.keepItToDaytimeHours8am')}
         </label>
 
         <Button onClick={findTimes} loading={loading} className="w-full">
-          {loading ? 'Scanning calendars…' : <><Sparkles className="h-4 w-4" /> Find open times</>}
+          {loading ? 'Scanning calendars…' : <><Sparkles className="h-4 w-4" /> {tr('findTimeModal.findOpenTimes')}</>}
         </Button>
 
         {/* Results */}
@@ -188,13 +200,13 @@ export function FindTimeModal({
           <div className="border-t border-border pt-3">
             {slots.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted">
-                No shared openings in this window. Try a shorter duration or a wider range.
+                {tr('findTimeModal.noSharedOpeningsInThisWindow')}
               </p>
             ) : (
               <>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted">{slots.length} open slot{slots.length === 1 ? '' : 's'}</span>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title (optional)" className="h-7 max-w-[55%] text-xs" />
+                  <span className="text-xs font-semibold text-muted">{slots.length} {tr('findTimeModal.openSlot')}{slots.length === 1 ? '' : 's'}</span>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('findTimeModal.eventTitleOptional')} className="h-7 max-w-[55%] text-xs" />
                 </div>
                 <div className="max-h-60 space-y-1.5 overflow-y-auto">
                   {slots.map((s) => {
@@ -213,7 +225,7 @@ export function FindTimeModal({
                     );
                   })}
                 </div>
-                <p className="mt-2 text-[11px] text-muted">Tap a slot to book it instantly.</p>
+                <p className="mt-2 text-[11px] text-muted">{tr('findTimeModal.tapASlotToBookIt')}</p>
               </>
             )}
           </div>

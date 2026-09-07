@@ -9,6 +9,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
+import { setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -21,6 +23,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
@@ -67,6 +70,7 @@ function MealImg({ src, emoji, className }: { src: string | null; emoji: string;
 }
 
 export function MealsModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -169,15 +173,17 @@ export function MealsModule() {
   }, [recipes, recipeSearch]);
 
   async function removePlan(id: string) {
-    const { error } = await createClient().from('meal_plans').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const result = await removeMealPlanAction(id);
+    if (!result.ok) return toastError(result.error);
     void refresh();
   }
 
   async function addFromLibrary(mealId: string, date: string, mealType: MealType) {
-    const { error } = await createClient().from('meal_plans')
-      .insert({ family_id: familyId, meal_id: mealId, plan_date: date, meal_type: mealType, created_by: userId });
-    if (error) return toastError(describeDbError(error));
+    // `setSlot` REPLACES what is already in the slot. The raw insert stacked a
+    // second row on the same date and meal type, leaving two dinners on one
+    // Tuesday with nothing to say which the family meant.
+    const result = await planMealAction({ mealId, date, mealType });
+    if (!result.ok) return toastError(result.error);
     setAddCell(null); void refresh();
   }
 
@@ -188,8 +194,10 @@ export function MealsModule() {
   }
 
   async function toggleGrocery(item: Tables<'grocery_items'>) {
-    const { error } = await createClient().from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
-    if (error) return toastError(describeDbError(error));
+    // The shopping page's action, not a second spelling of it — two versions of
+    // one operation on one table is how the forks this work removes began.
+    const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
+    if (!result.ok) return toastError(result.error);
     void refreshGrocery();
   }
 
@@ -216,17 +224,17 @@ export function MealsModule() {
         {/* Header */}
         <div className="flex-shrink-0">
           <PageHeader
-            title="Meals"
+            title={tr('meals.meals')}
             description="Plan healthy meals your family will love."
             action={
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> Add Meal</Button>
+                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('meals.addMeal')}</Button>
                 <Button variant="outline" size="sm" onClick={() => { setTab('recipes'); }}>
-                  <Search className="h-4 w-4" /> Recipe Search
+                  <Search className="h-4 w-4" /> {tr('meals.recipeSearch')}
                 </Button>
                 <div className="relative">
-                  <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label="More">
-                    <MoreHorizontal className="h-4 w-4" /> More
+                  <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label={tr('meals.more')}>
+                    <MoreHorizontal className="h-4 w-4" /> {tr('meals.more')}
                   </Button>
                   {moreOpen && (
                     <>
@@ -234,9 +242,9 @@ export function MealsModule() {
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                         <button onClick={() => { setMoreOpen(false); setAutoPlanOpen(true); }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface">
-                          <Sparkles className="h-4 w-4 text-brand-text" /> Auto-plan the week
+                          <Sparkles className="h-4 w-4 text-brand-text" /> {tr('meals.autoPlanTheWeek')}
                         </button>
-                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"><AiInsight kind="meals" /> AI insight</div>
+                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"><AiInsight kind="meals" /> {tr('meals.aiInsight')}</div>
                       </div>
                     </>
                   )}
@@ -261,10 +269,10 @@ export function MealsModule() {
           <>
             {/* Week navigator */}
             <div className="flex flex-wrap items-center gap-2 py-3">
-              <button onClick={() => setWeekOffset(w => w - 1)} aria-label="Previous week" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
-              <button onClick={() => setWeekOffset(w => w + 1)} aria-label="Next week" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
+              <button onClick={() => setWeekOffset(w => w - 1)} aria-label={tr('meals.previousWeek')} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
+              <button onClick={() => setWeekOffset(w => w + 1)} aria-label={tr('meals.nextWeek')} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
               <span className="flex items-center gap-2 text-sm font-semibold">📅 {dateRange}</span>
-              <Button variant="outline" size="sm" className="ml-auto" onClick={() => setWeekOffset(0)}>This Week</Button>
+              <Button variant="outline" size="sm" className="ml-auto" onClick={() => setWeekOffset(0)}>{tr('meals.thisWeek')}</Button>
             </div>
 
             {/* Week grid — desktop */}
@@ -303,7 +311,7 @@ export function MealsModule() {
                             <div className="relative overflow-hidden rounded-lg border border-border/60 bg-surface/40">
                               <MealImg src={plan.meal?.image_url ?? null} emoji={MEAL_ICONS[type]} className="h-14 w-full" />
                               <div className="px-1.5 py-1 text-[10px] font-medium leading-tight line-clamp-2">{plan.meal?.name ?? 'Meal'}</div>
-                              <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label="Remove meal"
+                              <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label={tr('meals.removeMeal')}
                                 className="absolute right-1 top-1 hidden rounded-full bg-danger/90 p-0.5 group-hover:flex">
                                 <XIcon className="h-2.5 w-2.5 text-white" />
                               </button>
@@ -311,7 +319,7 @@ export function MealsModule() {
                           ) : (
                             <div className="flex h-full flex-col items-center justify-center opacity-0 transition group-hover:opacity-100">
                               <Plus className="h-4 w-4 text-muted" />
-                              <span className="mt-0.5 text-[9px] text-muted">Add meal</span>
+                              <span className="mt-0.5 text-[9px] text-muted">{tr('meals.addMeal')}</span>
                             </div>
                           )}
                         </div>
@@ -331,7 +339,7 @@ export function MealsModule() {
                   <div key={di} className={cn('overflow-hidden rounded-xl border border-border', isToday && 'border-brand/40')}>
                     <div className={cn('flex items-center gap-2 border-b border-border px-3 py-2', isToday ? 'bg-brand/10' : 'bg-surface/40')}>
                       <span className={cn('text-sm font-semibold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                      {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand-text">Today</span>}
+                      {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand-text">{tr('meals.today')}</span>}
                     </div>
                     <div className="divide-y divide-border/50">
                       {MEAL_TYPES.map(type => {
@@ -344,10 +352,10 @@ export function MealsModule() {
                               : <span className="text-base">{MEAL_ICONS[type]}</span>}
                             <div className="min-w-0 flex-1">
                               <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
-                              {plan ? <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div> : <div className="text-xs text-muted">Tap to add</div>}
+                              {plan ? <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div> : <div className="text-xs text-muted">{tr('meals.tapToAdd')}</div>}
                             </div>
                             {plan
-                              ? <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label="Remove meal" className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
+                              ? <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label={tr('meals.removeMeal')} className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
                               : <Plus className="h-4 w-4 text-muted" />}
                           </div>
                         );
@@ -362,8 +370,8 @@ export function MealsModule() {
             {recentlyCooked.length > 0 && (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Recently Cooked</h2>
-                  <button onClick={() => setTab('recipes')} className="text-xs text-brand-text hover:underline">View all</button>
+                  <h2 className="text-base font-semibold">{tr('meals.recentlyCooked')}</h2>
+                  <button onClick={() => setTab('recipes')} className="text-xs text-brand-text hover:underline">{tr('meals.viewAll')}</button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {recentlyCooked.map((r) => (
@@ -388,12 +396,12 @@ export function MealsModule() {
           <div className="py-3">
             <div className="mb-3 flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
-              <input value={recipeSearch} onChange={(e) => setRecipeSearch(e.target.value)} placeholder="Search recipes…"
+              <input value={recipeSearch} onChange={(e) => setRecipeSearch(e.target.value)} placeholder={tr('meals.searchRecipes')}
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted" />
-              {recipeSearch && <button onClick={() => setRecipeSearch('')} aria-label="Clear"><XIcon className="h-4 w-4 text-muted" /></button>}
+              {recipeSearch && <button onClick={() => setRecipeSearch('')} aria-label={tr('meals.clear')}><XIcon className="h-4 w-4 text-muted" /></button>}
             </div>
             {filteredRecipes.length === 0 ? (
-              <EmptyState icon={Utensils} title="No recipes yet" description="Saved recipes will appear here." />
+              <EmptyState icon={Utensils} title={tr('meals.noRecipesYet')} description="Saved recipes will appear here." />
             ) : (
               <RecipeGrid recipes={filteredRecipes} onToggleFavorite={toggleFavorite} />
             )}
@@ -404,11 +412,11 @@ export function MealsModule() {
         {tab === 'groceries' && (
           <div className="py-3">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Grocery List</h2>
-              <Link href="/dashboard/grocery" className="text-xs text-brand-text hover:underline">Open full list →</Link>
+              <h2 className="text-base font-semibold">{tr('meals.groceryList')}</h2>
+              <Link href="/dashboard/grocery" className="text-xs text-brand-text hover:underline">{tr('meals.openFullList')}</Link>
             </div>
             {groceryItems.length === 0 ? (
-              <EmptyState icon={Check} title="Your list is empty" description="Add items from the Grocery module." />
+              <EmptyState icon={Check} title={tr('meals.yourListIsEmpty')} description="Add items from the Grocery module." />
             ) : (
               <div className="space-y-1.5">
                 {groceryItems.map((item) => (
@@ -431,7 +439,7 @@ export function MealsModule() {
         {tab === 'favorites' && (
           <div className="py-3">
             {favorites.length === 0 ? (
-              <EmptyState icon={Heart} title="No favorites yet" description="Tap the heart on a recipe to save it here." />
+              <EmptyState icon={Heart} title={tr('meals.noFavoritesYet')} description="Tap the heart on a recipe to save it here." />
             ) : (
               <RecipeGrid recipes={favorites} onToggleFavorite={toggleFavorite} />
             )}
@@ -443,9 +451,9 @@ export function MealsModule() {
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {/* What's for Dinner? */}
         <div className="sidebar-card">
-          <p className="mb-3 text-sm font-semibold">What&apos;s for Dinner?</p>
+          <p className="mb-3 text-sm font-semibold">{tr('meals.whatAposSForDinner')}</p>
           {dinners.length === 0 ? (
-            <p className="text-xs text-muted">No dinners planned this week yet.</p>
+            <p className="text-xs text-muted">{tr('meals.noDinnersPlannedThisWeekYet')}</p>
           ) : (
             <div className="relative">
               <div className="overflow-hidden rounded-xl border border-border">
@@ -460,14 +468,14 @@ export function MealsModule() {
               {dinners[dinnerIdx]?.meal?.recipe_url && (
                 <a href={dinners[dinnerIdx]!.meal!.recipe_url!} target="_blank" rel="noreferrer"
                   className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:opacity-90">
-                  View Recipe
+                  {tr('meals.viewRecipe')}
                 </a>
               )}
               {dinners.length > 1 && (
                 <>
-                  <button onClick={() => setDinnerIdx((i) => (i - 1 + dinners.length) % dinners.length)} aria-label="Previous dinner"
+                  <button onClick={() => setDinnerIdx((i) => (i - 1 + dinners.length) % dinners.length)} aria-label={tr('meals.previousDinner')}
                     className="absolute left-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronLeft className="h-4 w-4" /></button>
-                  <button onClick={() => setDinnerIdx((i) => (i + 1) % dinners.length)} aria-label="Next dinner"
+                  <button onClick={() => setDinnerIdx((i) => (i + 1) % dinners.length)} aria-label={tr('meals.nextDinner')}
                     className="absolute right-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronRight className="h-4 w-4" /></button>
                   <div className="mt-2 flex justify-center gap-1">
                     {dinners.map((_, i) => <span key={i} className={cn('h-1.5 w-1.5 rounded-full', i === dinnerIdx ? 'bg-brand' : 'bg-border')} />)}
@@ -486,16 +494,16 @@ export function MealsModule() {
         {/* Grocery List */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Grocery List</p>
-            <button onClick={() => setTab('groceries')} className="text-[11px] font-medium text-brand-text hover:underline">View List</button>
+            <p className="text-sm font-semibold">{tr('meals.groceryList')}</p>
+            <button onClick={() => setTab('groceries')} className="text-[11px] font-medium text-brand-text hover:underline">{tr('meals.viewList')}</button>
           </div>
           {groceryItems.length === 0 ? (
-            <p className="text-xs text-muted">Your grocery list is empty.</p>
+            <p className="text-xs text-muted">{tr('meals.yourGroceryListIsEmpty')}</p>
           ) : (
             <div className="space-y-1.5">
               {groceryItems.slice(0, 6).map(item => (
                 <div key={item.id} className="flex items-center gap-2">
-                  <button onClick={() => toggleGrocery(item)} aria-label="Toggle"
+                  <button onClick={() => toggleGrocery(item)} aria-label={tr('meals.toggle')}
                     className={cn('flex h-4 w-4 shrink-0 items-center justify-center rounded border', item.is_checked ? 'border-brand bg-brand' : 'border-border')}>
                     {item.is_checked && <Check className="h-2.5 w-2.5 text-white" />}
                   </button>
@@ -517,7 +525,7 @@ export function MealsModule() {
           <div className="space-y-3">
             <p className="text-xs text-muted">For {new Date(addCell.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
             {library.length === 0 ? (
-              <p className="text-sm text-muted">No meals in your library yet. Add a meal first.</p>
+              <p className="text-sm text-muted">{tr('meals.noMealsInYourLibraryYet')}</p>
             ) : (
               <div className="max-h-72 space-y-1.5 overflow-y-auto">
                 {library.map(m => (
@@ -533,7 +541,7 @@ export function MealsModule() {
               </div>
             )}
             <button onClick={() => { setAddCell(null); setNewMealOpen(true); }} className="w-full rounded-lg border border-dashed border-border py-2 text-xs text-muted transition hover:border-brand/50 hover:text-brand-text">
-              + Create new meal
+              {tr('meals.createNewMeal')}
             </button>
           </div>
         </Modal>
@@ -588,12 +596,13 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
   memberById: Map<string, ReturnType<typeof useApp>['members'][number]>;
   onVote: (optionId: string) => void;
 }) {
+  const tr = useTranslations();
   const tally = (optId: string) => data.ballots.filter((b) => b.option_id === optId).length;
   const total = data.ballots.length || 1;
   const myPick = data.ballots.find((b) => b.member_id === selfId)?.option_id ?? null;
   return (
     <div className="sidebar-card">
-      <p className="text-sm font-semibold">Family Vote</p>
+      <p className="text-sm font-semibold">{tr('meals.familyVote')}</p>
       <p className="mb-3 text-[11px] text-muted">{data.vote.title || 'Help decide next week’s meals!'}</p>
       <div className="space-y-2.5">
         {data.options.map((opt) => {
@@ -627,6 +636,7 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
 function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
   weekStart: string; mealTypes: MealType[]; onClose: () => void; onPlanned: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<MealType[]>(['dinner']);
@@ -663,11 +673,11 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Auto-plan your week"
+    <Modal open onClose={onClose} title={tr('meals.autoPlanYourWeek')}
       description="Our planner fills the week from your saved meals & recipes, honoring your diet and using up food before it expires.">
       <div className="space-y-4">
         <div>
-          <p className="mb-2 text-sm font-medium">Which meals?</p>
+          <p className="mb-2 text-sm font-medium">{tr('meals.whichMeals')}</p>
           <div className="flex flex-wrap gap-2">
             {mealTypes.map((t) => (
               <button key={t} type="button" onClick={() => toggleType(t)}
@@ -678,26 +688,26 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
             ))}
           </div>
         </div>
-        <Field label="Dietary needs" hint="Comma-separated, e.g. Vegetarian, Nut-free">
-          {(id) => <Input id={id} value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="Vegetarian, Dairy-free" />}
+        <Field label={tr('meals.dietaryNeeds')} hint="Comma-separated, e.g. Vegetarian, Nut-free">
+          {(id) => <Input id={id} value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder={tr('meals.vegetarianDairyFree')} />}
         </Field>
-        <Field label="Anything else?">
-          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Kid-friendly, quick weeknights, double up for leftovers…" className="min-h-[50px]" />}
+        <Field label={tr('meals.anythingElse')}>
+          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={tr('meals.kidFriendlyQuickWeeknightsDoubleUp')} className="min-h-[50px]" />}
         </Field>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={useExpiring} onChange={(e) => setUseExpiring(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Use up pantry items that are expiring soon
+          {tr('meals.useUpPantryItemsThatAre')}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={avoidRepeats} onChange={(e) => setAvoidRepeats(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          Avoid repeating dishes this week
+          {tr('meals.avoidRepeatingDishesThisWeek')}
         </label>
         <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-muted">
-          This replaces any meals already planned in the selected slots for this week.
+          {tr('meals.thisReplacesAnyMealsAlreadyPlanned')}
         </p>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="button" loading={loading} onClick={run}><Sparkles className="h-4 w-4" /> Generate plan</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('meals.cancel')}</Button>
+          <Button type="button" loading={loading} onClick={run}><Sparkles className="h-4 w-4" /> {tr('meals.generatePlan')}</Button>
         </div>
       </div>
     </Modal>
@@ -708,6 +718,7 @@ const NUTRIENT_ORDER: (keyof Nutrition)[] = ['calories', 'protein_g', 'carbs_g',
 
 /** AI Nutrition Analysis for the planned week (cached server-side). */
 function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planCount: number }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [data, setData] = useState<(Nutrition & { summary: string | null }) | null>(null);
   const [loading, setLoading] = useState(false);
@@ -741,8 +752,8 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
   return (
     <div className="sidebar-card">
       <div className="mb-3 flex items-center justify-between">
-        <p className="flex items-center gap-1.5 text-sm font-semibold"><Activity className="h-4 w-4 text-success" /> Nutrition Overview</p>
-        {data && <span className="text-[10px] text-muted">avg / day{cached ? ' · saved' : ''}</span>}
+        <p className="flex items-center gap-1.5 text-sm font-semibold"><Activity className="h-4 w-4 text-success" /> {tr('meals.nutritionOverview')}</p>
+        {data && <span className="text-[10px] text-muted">{tr('meals.avgDay')}{cached ? ' · saved' : ''}</span>}
       </div>
 
       {!data ? (
@@ -751,7 +762,7 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
             {planCount === 0 ? 'Plan some meals, then analyze the week.' : 'See the nutrition of this week’s plan.'}
           </p>
           <Button size="sm" variant="outline" loading={loading} disabled={planCount === 0} onClick={() => analyze(false)}>
-            <Sparkles className="h-4 w-4" /> Analyze week
+            <Sparkles className="h-4 w-4" /> {tr('meals.analyzeWeek')}
           </Button>
         </div>
       ) : (
@@ -784,6 +795,7 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
 }
 
 function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string; userId: string; onClose: () => void; onSaved: () => void }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -803,16 +815,16 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
   }
 
   return (
-    <Modal open title="Add Meal" onClose={onClose}>
+    <Modal open title={tr('meals.addMeal')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Meal name" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Lemon Garlic Chicken" />}</Field>
-        <Field label="Type">
+        <Field label={tr('meals.mealName')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={tr('meals.lemonGarlicChicken')} />}</Field>
+        <Field label={tr('meals.type')}>
           {(id) => <Select id={id} name="meal_type">{MEAL_TYPES.map(t => <option key={t} value={t}>{MEAL_LABELS[t]}</option>)}</Select>}
         </Field>
-        <Field label="Photo URL" hint="Optional">{(id) => <Input id={id} name="image_url" placeholder="https://…" />}</Field>
-        <Field label="Recipe link" hint="Optional">{(id) => <Input id={id} name="recipe_url" placeholder="https://…" />}</Field>
+        <Field label={tr('meals.photoUrl')} hint="Optional">{(id) => <Input id={id} name="image_url" placeholder="https://…" />}</Field>
+        <Field label={tr('meals.recipeLink')} hint="Optional">{(id) => <Input id={id} name="recipe_url" placeholder="https://…" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" type="button" onClick={onClose} size="sm">Cancel</Button>
+          <Button variant="ghost" type="button" onClick={onClose} size="sm">{tr('meals.cancel')}</Button>
           <Button type="submit" disabled={loading} loading={loading} size="sm">{loading ? 'Saving…' : 'Add Meal'}</Button>
         </div>
       </form>

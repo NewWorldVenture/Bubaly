@@ -28,6 +28,10 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import {
+  createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
+  deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
+} from '@/app/(app)/dashboard/billing/actions';
 import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -48,6 +52,7 @@ import {
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -111,6 +116,7 @@ function PlanManager({
   pending: boolean;
   onChoose: (plan: StripePlan) => void;
 }) {
+  const tr = useTranslations();
   const [interval, setInterval] = useState<BillingInterval>('annual');
   const annual = interval === 'annual';
   const ref = useRef<HTMLDivElement>(null);
@@ -123,15 +129,15 @@ function PlanManager({
     <div ref={ref} className="space-y-3 scroll-mt-20">
       {highlight ? (
         <div className="rounded-xl border border-brand/30 bg-brand/5 px-3 py-2 text-sm">
-          <span className="font-semibold">{highlight === 2 ? 'Family+' : 'Family Basic'}</span> unlocks the feature you tapped — pick a billing period below.
+          <span className="font-semibold">{highlight === 2 ? 'Family+' : 'Family Basic'}</span> {tr('billing.unlocksTheFeatureYouTappedPick')}
         </div>
       ) : null}
       <div className="flex items-center gap-2">
         <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 p-1 text-xs">
-          <button onClick={() => setInterval('monthly')} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>Monthly</button>
-          <button onClick={() => setInterval('annual')} className={cn('rounded-full px-3 py-1 font-semibold transition', annual ? 'bg-brand text-white' : 'text-muted')}>Yearly</button>
+          <button onClick={() => setInterval('monthly')} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>{tr('billing.monthly')}</button>
+          <button onClick={() => setInterval('annual')} className={cn('rounded-full px-3 py-1 font-semibold transition', annual ? 'bg-brand text-white' : 'text-muted')}>{tr('billing.yearly')}</button>
         </div>
-        {annual && <Badge tone="success">Save up to {Math.max(annualSavingsPct(1), annualSavingsPct(2))}%</Badge>}
+        {annual && <Badge tone="success">{tr('billing.saveUpTo')} {Math.max(annualSavingsPct(1), annualSavingsPct(2))}%</Badge>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {TIER_DEFS.map((t) => {
@@ -144,7 +150,7 @@ function PlanManager({
             <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
               <div className="flex items-center justify-between">
                 <p className="font-semibold">{t.name}</p>
-                {isCurrent ? <Badge tone="success">Current</Badge> : t.featured && <Badge tone="brand">Most popular</Badge>}
+                {isCurrent ? <Badge tone="success">{tr('billing.current')}</Badge> : t.featured && <Badge tone="brand">{tr('billing.mostPopular')}</Badge>}
               </div>
               <p className="mt-1 text-2xl font-bold">{fmtUsd(perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
               <p className="text-xs text-muted">{sub}</p>
@@ -231,6 +237,7 @@ const EXPENSE_CATEGORIES = [
 function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -258,22 +265,22 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Account">
+    <Modal open={open} onClose={onClose} title={tr('billing.addAccount')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Account Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Chase Checking" required />}</Field>
-        <Field label="Type">{(id) => (
+        <Field label={tr('billing.accountName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('billing.eGChaseChecking')} required />}</Field>
+        <Field label={tr('billing.type')}>{(id) => (
           <Select id={id} value={type} onChange={(e) => setType(e.target.value as AccountType)}>
-            <option value="checking">Checking</option>
-            <option value="savings">Savings</option>
-            <option value="credit">Credit Card</option>
-            <option value="investment">Investment</option>
-            <option value="retirement">Retirement</option>
+            <option value="checking">{tr('billing.checking')}</option>
+            <option value="savings">{tr('billing.savings')}</option>
+            <option value="credit">{tr('billing.creditCard')}</option>
+            <option value="investment">{tr('billing.investment')}</option>
+            <option value="retirement">{tr('billing.retirement')}</option>
           </Select>
         )}</Field>
-        <Field label="Institution">{(id) => <Input id={id} value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="e.g. Chase, Ally, Fidelity" />}</Field>
-        <Field label="Last 4 Digits">{(id) => <Input id={id} value={lastFour} onChange={(e) => setLastFour(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="4823" maxLength={4} />}</Field>
-        <Field label="Current Balance" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" required />}</Field>
-        <Button type="submit" className="w-full" loading={saving}>Add Account</Button>
+        <Field label={tr('billing.institution')}>{(id) => <Input id={id} value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder={tr('billing.eGChaseAllyFidelity')} />}</Field>
+        <Field label={tr('billing.last4Digits')}>{(id) => <Input id={id} value={lastFour} onChange={(e) => setLastFour(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="4823" maxLength={4} />}</Field>
+        <Field label={tr('billing.currentBalance')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" required />}</Field>
+        <Button type="submit" className="w-full" loading={saving}>{tr('billing.addAccount')}</Button>
       </form>
     </Modal>
   );
@@ -282,6 +289,7 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
 function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; accounts: FinancialAccount[]; onDone: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -300,44 +308,43 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     const parsedAmount = parseFloat(amount);
     const finalAmount = type === 'expense' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
     const supabase = createClient();
-    const { error } = await supabase.from('transactions').insert({
-      family_id: familyId, created_by: userId,
+    const res = await createTransactionAction({
       name: name.trim(), amount: finalAmount, category, date, type,
-      account_id: accountId || null, notes: null,
+      accountId: accountId || null, notes: null,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Transaction added');
     reset(); onClose(); onDone();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Transaction">
+    <Modal open={open} onClose={onClose} title={tr('billing.addTransaction')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Whole Foods Market" required />}</Field>
-        <Field label="Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
-        <Field label="Type">{(id) => (
+        <Field label={tr('billing.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('billing.eGWholeFoodsMarket')} required />}</Field>
+        <Field label={tr('billing.amount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
+        <Field label={tr('billing.type')}>{(id) => (
           <Select id={id} value={type} onChange={(e) => setType(e.target.value as 'expense' | 'income' | 'transfer')}>
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-            <option value="transfer">Transfer</option>
+            <option value="expense">{tr('billing.expense')}</option>
+            <option value="income">{tr('billing.income')}</option>
+            <option value="transfer">{tr('billing.transfer')}</option>
           </Select>
         )}</Field>
-        <Field label="Category">{(id) => (
+        <Field label={tr('billing.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
         )}</Field>
-        <Field label="Date" required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}</Field>
+        <Field label={tr('billing.date')} required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}</Field>
         {accounts.length > 0 && (
-          <Field label="Account">{(id) => (
+          <Field label={tr('billing.account')}>{(id) => (
             <Select id={id} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">None</option>
+              <option value="">{tr('billing.none')}</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           )}</Field>
         )}
-        <Button type="submit" className="w-full" loading={saving}>Add Transaction</Button>
+        <Button type="submit" className="w-full" loading={saving}>{tr('billing.addTransaction')}</Button>
       </form>
     </Modal>
   );
@@ -346,6 +353,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
 function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState('Groceries');
@@ -359,33 +367,30 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
     if (!amount) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('budgets').insert({
-      family_id: familyId, created_by: userId,
-      category, amount: parseFloat(amount), period,
-    });
+    const res = await setBudgetAction(category, parseFloat(amount), period);
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Budget added');
     reset(); onClose(); onDone();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Budget">
+    <Modal open={open} onClose={onClose} title={tr('billing.addBudget')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Category" required>{(id) => (
+        <Field label={tr('billing.category')} required>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
         )}</Field>
-        <Field label="Budget Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />}</Field>
-        <Field label="Period">{(id) => (
+        <Field label={tr('billing.budgetAmount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />}</Field>
+        <Field label={tr('billing.period')}>{(id) => (
           <Select id={id} value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)}>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
+            <option value="weekly">{tr('billing.weekly')}</option>
+            <option value="monthly">{tr('billing.monthly')}</option>
+            <option value="yearly">{tr('billing.yearly')}</option>
           </Select>
         )}</Field>
-        <Button type="submit" className="w-full" loading={saving}>Add Budget</Button>
+        <Button type="submit" className="w-full" loading={saving}>{tr('billing.addBudget')}</Button>
       </form>
     </Modal>
   );
@@ -394,6 +399,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
 function AddBillModal({ open, onClose, familyId, userId, onDone }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -423,32 +429,32 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Bill">
+    <Modal open={open} onClose={onClose} title={tr('billing.addBill')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Bill Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mortgage" required />}</Field>
-        <Field label="Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
-        <Field label="Due Date" required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />}</Field>
-        <Field label="Category">{(id) => (
+        <Field label={tr('billing.billName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('billing.eGMortgage')} required />}</Field>
+        <Field label={tr('billing.amount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
+        <Field label={tr('billing.dueDate')} required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />}</Field>
+        <Field label={tr('billing.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
         )}</Field>
         <div className="flex items-center gap-3">
           <input type="checkbox" id="recurring" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="h-4 w-4 rounded border-border" />
-          <label htmlFor="recurring" className="text-sm font-medium">Recurring</label>
+          <label htmlFor="recurring" className="text-sm font-medium">{tr('billing.recurring')}</label>
         </div>
         {isRecurring && (
-          <Field label="Recurrence">{(id) => (
+          <Field label={tr('billing.recurrence')}>{(id) => (
             <Select id={id} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Biweekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Yearly</option>
+              <option value="weekly">{tr('billing.weekly')}</option>
+              <option value="biweekly">{tr('billing.biweekly')}</option>
+              <option value="monthly">{tr('billing.monthly')}</option>
+              <option value="quarterly">{tr('billing.quarterly')}</option>
+              <option value="yearly">{tr('billing.yearly')}</option>
             </Select>
           )}</Field>
         )}
-        <Button type="submit" className="w-full" loading={saving}>Add Bill</Button>
+        <Button type="submit" className="w-full" loading={saving}>{tr('billing.addBill')}</Button>
       </form>
     </Modal>
   );
@@ -457,6 +463,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
 function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
   open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -472,27 +479,26 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
     if (!name.trim() || !targetAmount) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('savings_goals').insert({
-      family_id: familyId, created_by: userId,
-      name: name.trim(), target_amount: parseFloat(targetAmount),
-      current_amount: parseFloat(currentAmount) || 0,
-      target_date: targetDate || null, emoji,
+    const res = await createSavingsGoalAction({
+      name: name.trim(), targetAmount: parseFloat(targetAmount),
+      currentAmount: parseFloat(currentAmount) || 0,
+      targetDate: targetDate || null, emoji,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (!res.ok) return toastError(res.error);
     success('Savings goal added');
     reset(); onClose(); onDone();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Savings Goal">
+    <Modal open={open} onClose={onClose} title={tr('billing.addSavingsGoal')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Goal Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Family Vacation" required />}</Field>
-        <Field label="Emoji">{(id) => <Input id={id} value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🎯" />}</Field>
-        <Field label="Target Amount" required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} placeholder="5000.00" required />}</Field>
-        <Field label="Saved So Far">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={currentAmount} onChange={(e) => setCurrentAmount(e.target.value)} placeholder="0.00" />}</Field>
-        <Field label="Target Date">{(id) => <Input id={id} type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />}</Field>
-        <Button type="submit" className="w-full" loading={saving}>Add Goal</Button>
+        <Field label={tr('billing.goalName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('billing.eGFamilyVacation')} required />}</Field>
+        <Field label={tr('billing.emoji')}>{(id) => <Input id={id} value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🎯" />}</Field>
+        <Field label={tr('billing.targetAmount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} placeholder="5000.00" required />}</Field>
+        <Field label={tr('billing.savedSoFar')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={currentAmount} onChange={(e) => setCurrentAmount(e.target.value)} placeholder="0.00" />}</Field>
+        <Field label={tr('billing.targetDate')}>{(id) => <Input id={id} type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />}</Field>
+        <Button type="submit" className="w-full" loading={saving}>{tr('billing.addGoal')}</Button>
       </form>
     </Modal>
   );
@@ -501,6 +507,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 // ── Main Module ─────────────────────────────────────────────────────────────
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
+  const tr = useTranslations();
   const { familyId, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -794,17 +801,15 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteTransactionAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Transaction removed');
     void refreshTransactions();
   }
 
   async function deleteBudget(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('budgets').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteBudgetAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Budget removed');
     void refreshBudgets();
   }
@@ -826,9 +831,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteGoal(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-    if (error) return toastError(describeDbError(error));
+    const res = await deleteSavingsGoalAction(id);
+    if (!res.ok) return toastError(res.error);
     success('Goal removed');
     void refreshGoals();
   }
@@ -870,8 +874,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       {/* Overview */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold">Overview</h2>
-          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></button>
+          <h2 className="font-semibold">{tr('billing.overview')}</h2>
+          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewFullReport')} <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
@@ -879,12 +883,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               foot: (
                 <span className={cn('flex items-center gap-1 font-medium', netSavings >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
                   {netSavings >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
-                  {fmtCurrency(Math.abs(netSavings))} this month
+                  {fmtCurrency(Math.abs(netSavings))} {tr('billing.thisMonth')}
                 </span>
               ) },
-            { icon: ArrowDownLeft, label: 'Income', value: fmtCurrency(income), circle: 'bg-emerald-500', foot: <span className="text-muted">This month</span> },
-            { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), circle: 'bg-rose-500', foot: <span className="text-muted">This month</span> },
-            { icon: PiggyBank, label: 'Savings', value: fmtCurrency(netSavings), circle: 'bg-blue-500', foot: <span className="text-muted">This month</span> },
+            { icon: ArrowDownLeft, label: 'Income', value: fmtCurrency(income), circle: 'bg-emerald-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
+            { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), circle: 'bg-rose-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
+            { icon: PiggyBank, label: 'Savings', value: fmtCurrency(netSavings), circle: 'bg-blue-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
           ].map(({ icon: Icon, label, value, circle, foot }) => (
             <div key={label} className="rounded-xl border border-border bg-bg/40 p-3 sm:p-4">
               <div className="flex items-start justify-between gap-2">
@@ -902,9 +906,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
         {/* Budget & Spending */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Budget &amp; Spending</h2>
+          <h2 className="mb-4 font-semibold">{tr('billing.budgetAmpSpending')}</h2>
           {spendByCategory.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted">No spending recorded this month. Add a transaction to see your breakdown.</p>
+            <p className="py-10 text-center text-sm text-muted">{tr('billing.noSpendingRecordedThisMonthAdd')}</p>
           ) : (
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="relative mx-auto h-40 w-40 shrink-0">
@@ -917,7 +921,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-lg font-black tabular-nums">{fmtCurrency(expenses)}</span>
-                  <span className="text-[10px] text-muted">Total Spent</span>
+                  <span className="text-[10px] text-muted">{tr('billing.totalSpent')}</span>
                 </div>
               </div>
               <div className="min-w-0 flex-1 space-y-2">
@@ -935,7 +939,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           {/* Budget Progress */}
           <div className="mt-5 border-t border-border pt-4">
             <div className="mb-1.5 flex items-center justify-between">
-              <p className="text-sm font-semibold">Budget Progress</p>
+              <p className="text-sm font-semibold">{tr('billing.budgetProgress')}</p>
               <span className="text-xs font-semibold text-muted tabular-nums">{totalMonthlyBudget > 0 ? `${budgetPct}%` : '—'}</span>
             </div>
             {totalMonthlyBudget > 0 ? (
@@ -949,7 +953,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </p>
               </>
             ) : (
-              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand-text hover:underline">Set a monthly budget →</button>
+              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand-text hover:underline">{tr('billing.setAMonthlyBudget')}</button>
             )}
           </div>
         </div>
@@ -957,11 +961,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {/* Recent Transactions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Transactions</h2>
-            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            <h2 className="font-semibold">{tr('billing.recentTransactions')}</h2>
+            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {transactions.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No transactions yet.</p>
+            <p className="py-6 text-center text-sm text-muted">{tr('billing.noTransactionsYet')}</p>
           ) : (
             <div className="space-y-0.5">
               {transactions.slice(0, 8).map((tx) => (
@@ -994,8 +998,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {/* Bills & Reminders */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Bills &amp; Reminders</h2>
-            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View calendar <ChevronRight className="h-3.5 w-3.5" /></button>
+            <h2 className="font-semibold">{tr('billing.billsAmpReminders')}</h2>
+            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewCalendar')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
             {/* Mini calendar */}
@@ -1020,16 +1024,16 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 ))}
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-[10px] text-muted">
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-brand" /> Bill Due</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Paid</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Upcoming</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-brand" /> {tr('billing.billDue')}</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> {tr('billing.paid')}</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> {tr('billing.upcoming')}</span>
               </div>
             </div>
             {/* Upcoming bills */}
             <div>
-              <p className="mb-2 text-sm font-semibold">Upcoming Bills</p>
+              <p className="mb-2 text-sm font-semibold">{tr('billing.upcomingBills')}</p>
               {upcomingBills.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted">Nothing due soon.</p>
+                <p className="py-4 text-center text-xs text-muted">{tr('billing.nothingDueSoon')}</p>
               ) : (
                 <div className="space-y-2.5">
                   {upcomingBills.map((b) => (
@@ -1053,11 +1057,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {/* Spending by Person */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Spending by Person</h2>
-            <span className="text-xs text-muted">This Month</span>
+            <h2 className="font-semibold">{tr('billing.spendingByPerson')}</h2>
+            <span className="text-xs text-muted">{tr('billing.thisMonth')}</span>
           </div>
           {spendingByPerson.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No attributed spending yet this month.</p>
+            <p className="py-6 text-center text-sm text-muted">{tr('billing.noAttributedSpendingYetThisMonth')}</p>
           ) : (
             <div className="space-y-3.5">
               {spendingByPerson.map((p) => (
@@ -1080,7 +1084,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </div>
               ))}
               <button onClick={() => setTab('Reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand-text hover:underline">
-                View full breakdown <ChevronRight className="h-3.5 w-3.5" />
+                {tr('billing.viewFullBreakdown')} <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
@@ -1092,7 +1096,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="flex items-start gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-300"><Lightbulb className="h-5 w-5" /></div>
           <div className="min-w-0">
-            <p className="text-sm font-bold">Money Tip</p>
+            <p className="text-sm font-bold">{tr('billing.moneyTip')}</p>
             <p className="text-xs text-muted">
               {lastMonthExpenses === 0
                 ? 'Log a full month of spending to unlock personalized insights.'
@@ -1104,7 +1108,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             </p>
           </div>
         </div>
-        <AiInsight kind="billing" label="View Insights" variant="primary" className="shrink-0 justify-center" />
+        <AiInsight kind="billing" label={tr('billing.viewInsights')} variant="primary" className="shrink-0 justify-center" />
       </div>
     </>
   );
@@ -1112,12 +1116,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const renderTransactions = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">All Transactions</h2>
+        <h2 className="font-semibold">{tr('billing.allTransactions')}</h2>
         <Button size="sm" onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add</Button>
       </div>
       {transactions.length === 0 ? (
-        <EmptyState icon={Receipt} title="No transactions" description="Add your first transaction to start tracking your finances."
-          action={<Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button>} />
+        <EmptyState icon={Receipt} title={tr('billing.noTransactions')} description="Add your first transaction to start tracking your finances."
+          action={<Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>} />
       ) : (
         <div className="rounded-2xl border border-border bg-surface/40 divide-y divide-border">
           {transactions.map((tx) => (
@@ -1145,12 +1149,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const renderBudgets = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Budgets</h2>
-        <Button size="sm" onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> Add Budget</Button>
+        <h2 className="font-semibold">{tr('billing.budgets')}</h2>
+        <Button size="sm" onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>
       </div>
       {budgetProgress.length === 0 ? (
-        <EmptyState icon={Wallet} title="No budgets" description="Set spending limits by category to stay on track."
-          action={<Button onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> Add Budget</Button>} />
+        <EmptyState icon={Wallet} title={tr('billing.noBudgets')} description="Set spending limits by category to stay on track."
+          action={<Button onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>} />
       ) : (
         <div className="space-y-4">
           {budgetProgress.map((b) => {
@@ -1190,12 +1194,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const renderBills = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Bills</h2>
-        <Button size="sm" onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> Add Bill</Button>
+        <h2 className="font-semibold">{tr('billing.bills')}</h2>
+        <Button size="sm" onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>
       </div>
       {bills.length === 0 ? (
-        <EmptyState icon={Receipt} title="No bills" description="Track your recurring bills and due dates."
-          action={<Button onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> Add Bill</Button>} />
+        <EmptyState icon={Receipt} title={tr('billing.noBills')} description="Track your recurring bills and due dates."
+          action={<Button onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>} />
       ) : (
         <div className="space-y-3">
           {bills.map((b) => (
@@ -1217,7 +1221,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <p className="text-sm font-bold shrink-0">{fmtCurrency(b.amount)}</p>
               <div className="flex gap-1">
                 {b.status !== 'paid' && (
-                  <button onClick={() => markBillPaid(b.id)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title="Mark paid">
+                  <button onClick={() => markBillPaid(b.id)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title={tr('billing.markPaid')}>
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
                 )}
@@ -1235,12 +1239,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const renderSavingsGoals = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Savings Goals</h2>
-        <Button size="sm" onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> Add Goal</Button>
+        <h2 className="font-semibold">{tr('billing.savingsGoals')}</h2>
+        <Button size="sm" onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>
       </div>
       {savingsGoals.length === 0 ? (
-        <EmptyState icon={PiggyBank} title="No savings goals" description="Set a savings goal to track your progress."
-          action={<Button onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> Add Goal</Button>} />
+        <EmptyState icon={PiggyBank} title={tr('billing.noSavingsGoals')} description="Set a savings goal to track your progress."
+          action={<Button onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {savingsGoals.map((g) => {
@@ -1252,7 +1256,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className="text-2xl">{g.emoji || '🎯'}</span>
                     <div>
                       <p className="font-semibold text-sm">{g.name}</p>
-                      <p className="text-xs text-muted">{pct.toFixed(0)}% saved</p>
+                      <p className="text-xs text-muted">{pct.toFixed(0)}{tr('billing.saved')}</p>
                     </div>
                   </div>
                   <button onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
@@ -1279,25 +1283,25 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   const renderReports = () => (
     <div className="space-y-5">
-      <h2 className="font-semibold">Monthly Report</h2>
+      <h2 className="font-semibold">{tr('billing.monthlyReport')}</h2>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
-          <p className="text-xs text-muted">Total Income</p>
+          <p className="text-xs text-muted">{tr('billing.totalIncome')}</p>
           <p className="text-2xl font-black text-emerald-400">{fmtCurrency(income)}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
-          <p className="text-xs text-muted">Total Expenses</p>
+          <p className="text-xs text-muted">{tr('billing.totalExpenses')}</p>
           <p className="text-2xl font-black text-rose-400">{fmtCurrency(expenses)}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4 text-center">
-          <p className="text-xs text-muted">Net Savings</p>
+          <p className="text-xs text-muted">{tr('billing.netSavings')}</p>
           <p className={cn('text-2xl font-black', netSavings >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{fmtCurrency(netSavings)}</p>
         </div>
       </div>
 
       {spendBreakdown.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h3 className="mb-4 font-semibold">Spending by Category</h3>
+          <h3 className="mb-4 font-semibold">{tr('billing.spendingByCategory')}</h3>
           <div className="space-y-3">
             {spendBreakdown.map(({ label, pct, color }) => (
               <div key={label}>
@@ -1315,9 +1319,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       )}
 
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <h3 className="mb-4 font-semibold">Accounts Summary</h3>
+        <h3 className="mb-4 font-semibold">{tr('billing.accountsSummary')}</h3>
         {accounts.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted">No accounts linked.</p>
+          <p className="py-4 text-center text-sm text-muted">{tr('billing.noAccountsLinked')}</p>
         ) : (
           <div className="space-y-3">
             {accounts.map((a) => (
@@ -1330,7 +1334,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               </div>
             ))}
             <div className="border-t border-border pt-3 flex justify-between">
-              <span className="text-sm text-muted">Total</span>
+              <span className="text-sm text-muted">{tr('billing.total')}</span>
               <span className="text-sm font-black">{fmtCurrency(totalBalance)}</span>
             </div>
           </div>
@@ -1355,12 +1359,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     <div className="module-with-sidebar">
       <div className="module-main module-page">
         <PageHeader
-          title="Finances"
+          title={tr('billing.finances')}
           description="Stay on top of your family's money, budgets, and goals."
           action={
             <div className="flex items-center gap-2">
-              <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button>
-              <Button variant="secondary" onClick={() => setShowAddAccount(true)}><Link2 className="h-4 w-4" /> Link Account</Button>
+              <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>
+              <Button variant="secondary" onClick={() => setShowAddAccount(true)}><Link2 className="h-4 w-4" /> {tr('billing.linkAccount')}</Button>
               <AiInsight kind="billing" iconOnly />
             </div>
           }
@@ -1382,7 +1386,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/30 p-5">
           <div className="mb-4 flex items-center gap-3">
             <CreditCard className="h-5 w-5 text-brand-text" />
-            <h2 className="font-semibold">Bubaly Subscription</h2>
+            <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
           </div>
           {subLoading ? <SkeletonList /> : (
             <>
@@ -1403,7 +1407,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className="flex items-center gap-1">{subConfig.icon} {subConfig.label}</span>
                   </Badge>
                   {admin && subscription && (
-                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>Payment &amp; invoices</Button>
+                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>{tr('billing.paymentAmpInvoices')}</Button>
                   )}
                 </div>
               </div>
@@ -1411,8 +1415,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               {/* Scheduled-cancel banner with one-tap Resume. */}
               {admin && subCanceling && (
                 <div className="mb-4 flex flex-col gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                  <span>Your plan ends on {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} and drops to Free.</span>
-                  <Button size="sm" loading={pending} onClick={() => setCancel(true)}>Resume plan</Button>
+                  <span>{tr('billing.yourPlanEndsOn')} {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} {tr('billing.andDropsToFree')}</span>
+                  <Button size="sm" loading={pending} onClick={() => setCancel(true)}>{tr('billing.resumePlan')}</Button>
                 </div>
               )}
 
@@ -1429,7 +1433,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               {admin && hasPaidPlan && !subCanceling && (
                 <div className="mt-3 text-right">
                   <button onClick={() => setCancel(false)} disabled={pending} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
-                    Cancel &amp; downgrade to Free
+                    {tr('billing.cancelAmpDowngradeToFree')}
                   </button>
                 </div>
               )}
@@ -1440,7 +1444,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   </div>
                 ))}
               </div>
-              {!admin && <p className="mt-4 text-center text-sm text-muted">Contact your family admin to manage billing.</p>}
+              {!admin && <p className="mt-4 text-center text-sm text-muted">{tr('billing.contactYourFamilyAdminToManage')}</p>}
             </>
           )}
         </div>
@@ -1451,10 +1455,10 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {/* Accounts */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Accounts</h2>
+            <h2 className="font-semibold">{tr('billing.accounts')}</h2>
           </div>
           {accounts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">No accounts linked yet.</p>
+            <p className="py-4 text-center text-sm text-muted">{tr('billing.noAccountsLinkedYet')}</p>
           ) : (
             <div className="space-y-3">
               {accounts.map((a) => {
@@ -1479,26 +1483,26 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           )}
           {accounts.length > 0 && (
             <div className="mt-4 border-t border-border pt-3 flex items-center justify-between">
-              <span className="text-sm text-muted">Total</span>
+              <span className="text-sm text-muted">{tr('billing.total')}</span>
               <span className="text-sm font-black">{fmtCurrency(totalBalance)}</span>
             </div>
           )}
           <button onClick={() => setShowAddAccount(true)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
-            <Plus className="h-3.5 w-3.5" /> Add Account
+            <Plus className="h-3.5 w-3.5" /> {tr('billing.addAccount')}
           </button>
         </div>
 
         {/* Savings Goals */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Savings Goals</h2>
-            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            <h2 className="font-semibold">{tr('billing.savingsGoals')}</h2>
+            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {savingsGoals.length === 0 ? (
             <div className="py-2 text-center">
-              <p className="text-sm text-muted">No savings goals yet.</p>
+              <p className="text-sm text-muted">{tr('billing.noSavingsGoalsYet')}</p>
               <button onClick={() => setShowAddGoal(true)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
-                <Plus className="h-3.5 w-3.5" /> Add Goal
+                <Plus className="h-3.5 w-3.5" /> {tr('billing.addGoal')}
               </button>
             </div>
           ) : (

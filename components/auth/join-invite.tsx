@@ -7,6 +7,7 @@ import { PartyPopper, AlertTriangle, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock } from '@/components/ui/states';
 import { createClient } from '@/lib/supabase/client';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type State =
   | { phase: 'loading' }
@@ -16,6 +17,7 @@ type State =
   | { phase: 'error'; message: string };
 
 export function JoinInvite() {
+  const t = useTranslations();
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get('token') ?? '';
@@ -53,7 +55,7 @@ export function JoinInvite() {
   }, [token, router]);
 
   if (state.phase === 'loading' || state.phase === 'accepting') {
-    return <div className="glass-card p-8"><LoadingBlock label="Joining your family…" /></div>;
+    return <div className="glass-card p-8"><LoadingBlock label={t('joinInvite.joiningYourFamily')} /></div>;
   }
 
   if (state.phase === 'needs-auth') {
@@ -61,16 +63,16 @@ export function JoinInvite() {
     return (
       <div className="glass-card p-8 text-center animate-fade-in">
         <LogIn className="mx-auto h-12 w-12 text-brand-text" />
-        <h1 className="mt-4 text-xl font-semibold">You’ve been invited</h1>
+        <h1 className="mt-4 text-xl font-semibold">{t('joinInvite.youveBeenInvited')}</h1>
         <p className="mt-2 text-sm text-muted">
-          Sign in or create an account with the email your invite was sent to, and you’ll join automatically.
+          {t('joinInvite.signInOrCreateAnAccount')}
         </p>
         <div className="mt-6 flex flex-col gap-3">
           <Link href={`/login?redirect=${encodeURIComponent(redirect)}`}>
-            <Button className="w-full">Sign in</Button>
+            <Button className="w-full">{t('joinInvite.signIn')}</Button>
           </Link>
           <Link href={`/signup?redirect=${encodeURIComponent(redirect)}`}>
-            <Button variant="secondary" className="w-full">Create account</Button>
+            <Button variant="secondary" className="w-full">{t('joinInvite.createAccount')}</Button>
           </Link>
         </div>
       </div>
@@ -81,8 +83,8 @@ export function JoinInvite() {
     return (
       <div className="glass-card p-8 text-center animate-fade-in">
         <PartyPopper className="mx-auto h-12 w-12 text-success" />
-        <h1 className="mt-4 text-xl font-semibold">Welcome to the family!</h1>
-        <p className="mt-2 text-sm text-muted">Taking you to your dashboard…</p>
+        <h1 className="mt-4 text-xl font-semibold">{t('joinInvite.welcomeToTheFamily')}</h1>
+        <p className="mt-2 text-sm text-muted">{t('joinInvite.takingYouToYourDashboard')}</p>
       </div>
     );
   }
@@ -90,10 +92,10 @@ export function JoinInvite() {
   return (
     <div className="glass-card p-8 text-center animate-fade-in">
       <AlertTriangle className="mx-auto h-12 w-12 text-danger" />
-      <h1 className="mt-4 text-xl font-semibold">Invite problem</h1>
+      <h1 className="mt-4 text-xl font-semibold">{t('joinInvite.inviteProblem')}</h1>
       <p className="mt-2 text-sm text-muted">{state.message}</p>
       <Link href="/dashboard" className="mt-6 inline-block">
-        <Button variant="secondary">Go to dashboard</Button>
+        <Button variant="secondary">{t('joinInvite.goToDashboard')}</Button>
       </Link>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   resolveAutomationRun,
 } from '@/lib/family/actions';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function DeleteButton({ table, id, label = 'Delete' }: { table: string; id: string; label?: string }) {
   const router = useRouter();
@@ -28,6 +29,7 @@ export function DeleteButton({ table, id, label = 'Delete' }: { table: string; i
 }
 
 export function RecommendationActions({ id }: { id: string }) {
+  const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
   const act = (status: 'accepted' | 'dismissed') =>
@@ -38,19 +40,20 @@ export function RecommendationActions({ id }: { id: string }) {
         type="button" disabled={pending} onClick={() => act('accepted')}
         className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
       >
-        <Check className="h-3.5 w-3.5" /> Accept
+        <Check className="h-3.5 w-3.5" /> {t('recordActions.accept')}
       </button>
       <button
         type="button" disabled={pending} onClick={() => act('dismissed')}
         className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-semibold text-muted hover:bg-white/10 disabled:opacity-50"
       >
-        <X className="h-3.5 w-3.5" /> Dismiss
+        <X className="h-3.5 w-3.5" /> {t('recordActions.dismiss')}
       </button>
     </div>
   );
 }
 
 export function AutomationApproval({ id }: { id: string }) {
+  const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
   const act = (decision: 'approved' | 'skipped') =>
@@ -61,13 +64,13 @@ export function AutomationApproval({ id }: { id: string }) {
         type="button" disabled={pending} onClick={() => act('approved')}
         className={cn('inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50')}
       >
-        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Approve
+        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {t('recordActions.approve')}
       </button>
       <button
         type="button" disabled={pending} onClick={() => act('skipped')}
         className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-muted hover:bg-white/10 disabled:opacity-50"
       >
-        <X className="h-3.5 w-3.5" /> Skip
+        <X className="h-3.5 w-3.5" /> {t('recordActions.skip')}
       </button>
     </div>
   );

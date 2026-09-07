@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   CheckSquare, Plus, Trash2, Check, Flag, Calendar as CalendarIcon, Search, X,
   Pencil, Loader2, ListChecks, Sparkles, User as UserIcon,
@@ -9,6 +9,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
@@ -63,6 +66,7 @@ function dueLabel(due: string, todayStr: string, tomorrowStr: string): string {
 }
 
 export function TodosModule() {
+  const tr = useTranslations();
   const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -74,6 +78,10 @@ export function TodosModule() {
   const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
   const [newListOpen, setNewListOpen] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
+  // Held across retries of one quick add and cleared once the row lands, so a
+  // second press after a lost response is deduplicated while a task typed again
+  // tomorrow is a new one. See lib/utils/submission-id.ts.
+  const quickSubmission = useRef('');
   const [quickBusy, setQuickBusy] = useState(false);
 
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<TodoList>({
@@ -171,11 +179,8 @@ export function TodosModule() {
 
   function toggleItem(item: TodoItem) {
     return run(`toggle:${item.id}`, async () => {
-      const { error } = await createClient().from('todo_items').update({
-        is_done: !item.is_done,
-        completed_at: item.is_done ? null : new Date().toISOString(),
-      }).eq('id', item.id);
-      if (error) throw error;
+      const result = await completeTodoAction(item.id, !item.is_done);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
@@ -183,8 +188,10 @@ export function TodosModule() {
   function deleteItem(id: string) {
     if (!confirm('Delete this task?')) return;
     return run(`delete:${id}`, async () => {
-      const { error } = await createClient().from('todo_items').delete().eq('id', id);
-      if (error) throw error;
+      // Through the service, which filters `family_id` as well as `id`. The
+      // client delete filtered on `id` alone and left tenancy to RLS.
+      const result = await deleteTodoAction(id);
+      if (!result.ok) throw new Error(result.error);
       void refreshItems();
     });
   }
@@ -208,11 +215,16 @@ export function TodosModule() {
       const listId = await ensureListId();
       if (!listId) return;
       const due = when === 'today' ? todayStr : when === 'tomorrow' ? tomorrowStr : weekEndStr;
-      const { error } = await createClient().from('todo_items').insert({
-        family_id: familyId, list_id: listId, title, due_date: due,
-        priority: 'medium', created_by: selfId, assigned_to_id: selfId,
+      // One id per quick-add attempt, minted when the title is typed and cleared
+      // when the row lands. A second press after a lost response is the same
+      // task; typing "Call the dentist" again tomorrow is a different one.
+      quickSubmission.current ||= newSubmissionId();
+      const result = await createTodoAction({
+        title, listId, dueDate: due, priority: 'medium',
+        assigneeId: selfId, submissionId: quickSubmission.current,
       });
-      if (error) { toastError(describeDbError(error)); return; }
+      if (!result.ok) { toastError(result.error); return; }
+      quickSubmission.current = '';
       setQuickTitle('');
       success('Task added');
       void refreshItems();
@@ -234,6 +246,7 @@ export function TodosModule() {
   ];
 
   function TaskRow({ item }: { item: TodoItem }) {
+  const tr = useTranslations();
     const p = PRIORITY_META[item.priority as keyof typeof PRIORITY_META] ?? PRIORITY_META.medium;
     const list = item.list_id ? listById.get(item.list_id) : undefined;
     const assignee = item.assigned_to_id ? memberById.get(item.assigned_to_id) : undefined;
@@ -251,9 +264,9 @@ export function TodosModule() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className={cn('truncate text-sm font-medium', item.is_done && 'text-muted line-through')}>{item.title}</p>
-            {overdue && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">Overdue</span>}
-            {!overdue && item.priority === 'urgent' && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">Urgent</span>}
-            {!overdue && item.priority === 'high' && <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">Important</span>}
+            {overdue && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">{tr('todos.overdue')}</span>}
+            {!overdue && item.priority === 'urgent' && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">{tr('todos.urgent')}</span>}
+            {!overdue && item.priority === 'high' && <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">{tr('todos.important')}</span>}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
             {list && <span aria-hidden>{list.icon}</span>}
@@ -264,10 +277,10 @@ export function TodosModule() {
         </div>
 
         <div className="hidden items-center gap-1 opacity-0 transition group-hover:opacity-100 sm:flex">
-          <button onClick={() => setEditingItem(item)} aria-label="Edit task" className="rounded p-1 text-muted hover:text-fg">
+          <button onClick={() => setEditingItem(item)} aria-label={tr('todos.editTask')} className="rounded p-1 text-muted hover:text-fg">
             <Pencil className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete task"
+          <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label={tr('todos.deleteTask')}
             className="rounded p-1 text-muted hover:text-danger disabled:opacity-50">
             {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           </button>
@@ -310,15 +323,15 @@ export function TodosModule() {
       {/* Main column */}
       <div className="module-main">
         <PageHeader
-          title="Tasks"
+          title={tr('todos.tasks')}
           description="Stay organized and get things done—together."
           action={
             <div className="flex items-center gap-2">
               <AiInsight kind="todos" />
               <Button variant="outline" size="sm" onClick={() => setTab('assigned')}>
-                <UserIcon className="h-4 w-4" /> My Tasks
+                <UserIcon className="h-4 w-4" /> {tr('todos.myTasks')}
               </Button>
-              <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> Add Task</Button>
+              <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button>
             </div>
           }
         />
@@ -338,9 +351,9 @@ export function TodosModule() {
           </div>
           <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
             <Search className="h-3.5 w-3.5 text-muted" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..."
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr('todos.searchTasks')}
               className="w-32 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-            {search && <button onClick={() => setSearch('')} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted" /></button>}
+            {search && <button onClick={() => setSearch('')} aria-label={tr('todos.clearSearch')}><X className="h-3.5 w-3.5 text-muted" /></button>}
           </div>
         </div>
 
@@ -350,21 +363,21 @@ export function TodosModule() {
             <EmptyState icon={CheckSquare}
               title={tab === 'completed' ? 'No completed tasks' : 'All clear!'}
               description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet — add one to get started.'}
-              action={tab !== 'completed' ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> Add Task</Button> : undefined} />
+              action={tab !== 'completed' ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> {tr('todos.addTask')}</Button> : undefined} />
           ) : tab === 'completed' ? (
             <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
           ) : (
             <>
-              <Section label="Overdue" tone="text-danger" list={groups.overdue} />
-              <Section label="Today" tone="text-brand-text" list={groups.today} />
-              <Section label="Upcoming" tone="text-fg" list={groups.upcoming} />
-              <Section label="No due date" tone="text-muted" list={groups.noDate} />
+              <Section label={tr('todos.overdue')} tone="text-danger" list={groups.overdue} />
+              <Section label={tr('todos.today')} tone="text-brand-text" list={groups.today} />
+              <Section label={tr('todos.upcoming')} tone="text-fg" list={groups.upcoming} />
+              <Section label={tr('todos.noDueDate')} tone="text-muted" list={groups.noDate} />
             </>
           )}
 
           <button onClick={openAdd}
             className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand-text">
-            <Plus className="h-4 w-4" /> Add Task
+            <Plus className="h-4 w-4" /> {tr('todos.addTask')}
           </button>
         </div>
       </div>
@@ -373,7 +386,7 @@ export function TodosModule() {
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {/* Task Summary */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><ListChecks className="h-4 w-4 text-brand-text" /> Task Summary</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><ListChecks className="h-4 w-4 text-brand-text" /> {tr('todos.taskSummary')}</h3>
           <SummaryDonut summary={summary} />
           <div className="mt-3 space-y-1.5">
             {([['overdue', summary.overdue], ['today', summary.today], ['week', summary.week], ['completed', summary.completed]] as const).map(([k, v]) => (
@@ -384,14 +397,14 @@ export function TodosModule() {
               </div>
             ))}
           </div>
-          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('all')}>View all tasks</Button>
+          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('all')}>{tr('todos.viewAllTasks')}</Button>
         </div>
 
         {/* My Top Priorities */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Flag className="h-4 w-4 text-brand-text" /> My Top Priorities</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Flag className="h-4 w-4 text-brand-text" /> {tr('todos.myTopPriorities')}</h3>
           {priorities.length === 0 ? (
-            <p className="text-xs text-muted">Nothing assigned to you yet.</p>
+            <p className="text-xs text-muted">{tr('todos.nothingAssignedToYouYet')}</p>
           ) : (
             <div className="space-y-2">
               {priorities.map((i) => {
@@ -411,17 +424,17 @@ export function TodosModule() {
               })}
             </div>
           )}
-          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('mine')}>View my tasks</Button>
+          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('mine')}>{tr('todos.viewMyTasks')}</Button>
         </div>
 
         {/* Assigned to Others */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-bold"><UserIcon className="h-4 w-4 text-brand-text" /> Assigned to Others</h3>
-            <button onClick={() => setTab('all')} className="text-[11px] font-medium text-brand-text hover:underline">View all</button>
+            <h3 className="flex items-center gap-2 text-sm font-bold"><UserIcon className="h-4 w-4 text-brand-text" /> {tr('todos.assignedToOthers')}</h3>
+            <button onClick={() => setTab('all')} className="text-[11px] font-medium text-brand-text hover:underline">{tr('todos.viewAll')}</button>
           </div>
           {assignedToOthers.length === 0 ? (
-            <p className="text-xs text-muted">No tasks assigned to others.</p>
+            <p className="text-xs text-muted">{tr('todos.noTasksAssignedToOthers')}</p>
           ) : (
             <div className="space-y-2.5">
               {assignedToOthers.map((i) => {
@@ -443,10 +456,10 @@ export function TodosModule() {
 
         {/* Quick Add */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> Quick Add</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('todos.quickAdd')}</h3>
           <Input value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void quickAdd('today'); } }}
-            placeholder="What needs to be done?" disabled={quickBusy} />
+            placeholder={tr('todos.whatNeedsToBeDone')} disabled={quickBusy} />
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             {([['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This Week']] as const).map(([w, label]) => (
               <button key={w} onClick={() => void quickAdd(w)} disabled={quickBusy}
@@ -456,7 +469,7 @@ export function TodosModule() {
             ))}
             <button onClick={openAdd} disabled={quickBusy}
               className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
-              <CalendarIcon className="h-3.5 w-3.5" /> Pick Date
+              <CalendarIcon className="h-3.5 w-3.5" /> {tr('todos.pickDate')}
             </button>
           </div>
         </div>
@@ -480,6 +493,7 @@ export function TodosModule() {
 }
 
 function SummaryDonut({ summary }: { summary: { total: number; overdue: number; today: number; week: number; completed: number } }) {
+  const tr = useTranslations();
   const segs = [
     { v: summary.overdue, hex: DONUT.overdue.hex },
     { v: summary.today, hex: DONUT.today.hex },
@@ -500,7 +514,7 @@ function SummaryDonut({ summary }: { summary: { total: number; overdue: number; 
         <div className="h-32 w-32 rounded-full" style={{ background: `conic-gradient(${stops})` }} />
         <div className="absolute inset-[14px] grid place-items-center rounded-full bg-surface">
           <span className="text-2xl font-bold leading-none">{summary.total}</span>
-          <span className="mt-0.5 text-[10px] text-muted">Total Tasks</span>
+          <span className="mt-0.5 text-[10px] text-muted">{tr('todos.totalTasks')}</span>
         </div>
       </div>
     </div>
@@ -510,6 +524,7 @@ function SummaryDonut({ summary }: { summary: { total: number; overdue: number; 
 function NewListModal({ familyId, onClose, onCreated }: {
   familyId: string; onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
@@ -539,12 +554,12 @@ function NewListModal({ familyId, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="New Category">
+    <Modal open onClose={onClose} title={tr('todos.newCategory')}>
       <form onSubmit={create} className="space-y-4">
-        <Field label="Name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="School, Shopping, Chores…" autoFocus />}
+        <Field label={tr('todos.name')} required>
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('todos.schoolShoppingChores')} autoFocus />}
         </Field>
-        <Field label="Icon">
+        <Field label={tr('todos.icon')}>
           {() => (
             <div className="flex flex-wrap gap-2">
               {LIST_ICONS.map((e) => (
@@ -556,7 +571,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
             </div>
           )}
         </Field>
-        <Field label="Color">
+        <Field label={tr('todos.color')}>
           {() => (
             <div className="flex gap-2">
               {Object.keys(LIST_COLORS).map((c) => (
@@ -568,11 +583,11 @@ function NewListModal({ familyId, onClose, onCreated }: {
         </Field>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={isShared} onChange={(e) => setIsShared(e.target.checked)} className="accent-brand" />
-          Shared with family
+          {tr('todos.sharedWithFamily')}
         </label>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Create</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('todos.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('todos.create')}</Button>
         </div>
       </form>
     </Modal>
@@ -585,6 +600,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   members: ReturnType<typeof useApp>['members'];
   item?: TodoItem; onClose: () => void; onSaved: () => void; onNewList: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState(item?.title ?? '');
@@ -593,6 +609,12 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   const [dueDate, setDueDate] = useState(item?.due_date ?? '');
   const [assignedTo, setAssignedTo] = useState(item?.assigned_to_id ?? '');
   const [listId, setListId] = useState(item?.list_id ?? lists[0]?.id ?? '');
+  // One id for this composition of this task, held across every retry of it. The
+  // modal unmounts on save and on close, so the next New Task mints a new one and
+  // two children each needing "Pack the kit" both get a row; a Save pressed again
+  // after a response that never arrived reuses this one and gets the first back.
+  const submissionId = useRef('');
+  if (!submissionId.current) submissionId.current = newSubmissionId();
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -603,16 +625,17 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
     if (!listId) { toastError('Pick a category'); return; }
     setLoading(true);
     try {
-      const supabase = createClient();
-      // list_id is fixed at creation (the generated Update type excludes it).
-      const payload = {
+      // list_id is fixed at creation, so it is a create-only field — the service's
+      // update patch has no way to express a move between lists either.
+      const fields = {
         title: trimmed, notes: notes.trim() || null, priority,
-        due_date: dueDate || null, assigned_to_id: assignedTo || null,
+        dueDate: dueDate || null, assigneeId: assignedTo || null,
       };
-      const { error } = item
-        ? await supabase.from('todo_items').update(payload).eq('id', item.id)
-        : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId, created_by: selfId });
-      if (error) { toastError(describeDbError(error)); return; }
+      // No family_id and no created_by: the action reads both from the session.
+      const result = item
+        ? await updateTodoAction(item.id, fields)
+        : await createTodoAction({ ...fields, listId, submissionId: submissionId.current });
+      if (!result.ok) { toastError(result.error); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));
@@ -624,18 +647,18 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   return (
     <Modal open onClose={onClose} title={item ? 'Edit Task' : 'New Task'}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Title" required>
-          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus />}
+        <Field label={tr('todos.title')} required>
+          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('todos.whatNeedsToBeDone')} autoFocus />}
         </Field>
-        <Field label="Notes">
-          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional details…" />}
+        <Field label={tr('todos.notes')}>
+          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={tr('todos.optionalDetails')} />}
         </Field>
-        <Field label="Category" hint={item ? 'Set when the task is created' : undefined}>
+        <Field label={tr('todos.category')} hint={item ? 'Set when the task is created' : undefined}>
           {(id) => (
             <div className="flex gap-2">
               <select id={id} value={listId} onChange={(e) => setListId(e.target.value)} disabled={!!item}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-60">
-                {lists.length === 0 && <option value="">No categories yet</option>}
+                {lists.length === 0 && <option value="">{tr('todos.noCategoriesYet')}</option>}
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.icon} {l.name}</option>)}
               </select>
               {!item && <Button type="button" variant="secondary" size="sm" onClick={onNewList}>New</Button>}
@@ -643,7 +666,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
           )}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Priority">
+          <Field label={tr('todos.priority')}>
             {(id) => (
               <select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand">
@@ -651,21 +674,21 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
               </select>
             )}
           </Field>
-          <Field label="Due date">
+          <Field label={tr('todos.dueDate')}>
             {(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />}
           </Field>
         </div>
-        <Field label="Assign to">
+        <Field label={tr('todos.assignTo')}>
           {(id) => (
             <select id={id} value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
               className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand">
-              <option value="">Unassigned</option>
+              <option value="">{tr('todos.unassigned')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('todos.cancel')}</Button>
           <Button type="submit" loading={loading}>{item ? 'Save' : 'Add Task'}</Button>
         </div>
       </form>

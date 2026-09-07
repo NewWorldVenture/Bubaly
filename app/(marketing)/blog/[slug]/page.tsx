@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import { ReadingProgress } from './reading-progress';
 import { ShareButtons } from './share-buttons';
 import { TableOfContents } from './table-of-contents';
+import { getTranslations } from '@/lib/i18n/server';
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -92,6 +93,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 export default async function BlogPostPage({ params }: Params) {
+  const tr = await getTranslations();
   const { slug } = await params;
   const post = await getPost(slug);
   if (!post) notFound();
@@ -128,7 +130,7 @@ export default async function BlogPostPage({ params }: Params) {
       <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <nav className="mb-6 flex items-center gap-2 text-sm text-white/40">
-          <Link href="/blog" className="transition hover:text-white/70">Blog</Link>
+          <Link href="/blog" className="transition hover:text-white/70">{tr('blog.blog')}</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <Link href={`/blog?category=${encodeURIComponent(post.category)}`} className="transition hover:text-white/70">
             {post.category}
@@ -185,7 +187,7 @@ export default async function BlogPostPage({ params }: Params) {
                 <Calendar className="h-4 w-4" /> {fmtDate(post.date, 'MMMM d, yyyy')}
               </span>
               <span className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4" /> {post.readingMinutes} min read
+                <Clock className="h-4 w-4" /> {post.readingMinutes} {tr('blog.minRead')}
               </span>
               <HeartButton slug={post.slug} />
             </div>
@@ -210,7 +212,7 @@ export default async function BlogPostPage({ params }: Params) {
             {headings.length > 1 && (
               <details className="group mt-8 rounded-2xl border border-white/8 bg-white/[0.03] lg:hidden">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold coarse:min-h-11">
-                  In this article
+                  {tr('blog.inThisArticle')}
                   <ChevronRight className="h-4 w-4 shrink-0 text-white/40 transition-transform group-open:rotate-90" aria-hidden />
                 </summary>
                 <ul className="space-y-1 border-t border-white/8 px-3 py-2">
@@ -250,7 +252,7 @@ export default async function BlogPostPage({ params }: Params) {
             {aeoFaqs.length > 0 && (
               <section className="mb-10 rounded-2xl border border-white/8 bg-white/[0.02] p-6" aria-labelledby="article-faq">
                 <FaqStructuredData items={aeoFaqs.map((q) => ({ q: q.question, a: q.answer }))} />
-                <h2 id="article-faq" className="scroll-mt-24 text-xl font-bold sm:text-2xl">Frequently asked questions</h2>
+                <h2 id="article-faq" className="scroll-mt-24 text-xl font-bold sm:text-2xl">{tr('blog.frequentlyAskedQuestions')}</h2>
                 <dl className="mt-5 space-y-5">
                   {aeoFaqs.map((q) => (
                     <div key={q.question}>
@@ -260,7 +262,7 @@ export default async function BlogPostPage({ params }: Params) {
                   ))}
                 </dl>
                 <Link href="/faq" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
-                  Explore the full Family Knowledge Center <ArrowRight className="h-3.5 w-3.5" />
+                  {tr('blog.exploreTheFullFamilyKnowledgeCenter')} <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </section>
             )}
@@ -276,13 +278,13 @@ export default async function BlogPostPage({ params }: Params) {
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
                   <HeartButton slug={post.slug} />
-                  <p className="text-sm text-white/60">Enjoyed this one? Sign in and save it to your account.</p>
+                  <p className="text-sm text-white/60">{tr('blog.enjoyedThisOneSignInAnd')}</p>
                 </div>
               </div>
               <div className="mt-5 border-t border-white/8 pt-5">
                 <div className="mb-3 flex items-center gap-2">
                   <Mail className="h-4 w-4 text-violet-300" />
-                  <p className="text-sm font-bold">Get the next article in your inbox</p>
+                  <p className="text-sm font-bold">{tr('blog.getTheNextArticleInYour')}</p>
                 </div>
                 <SubscribeForm source="article" variant="inline" />
               </div>
@@ -295,10 +297,10 @@ export default async function BlogPostPage({ params }: Params) {
                   <User className="h-7 w-7 text-violet-300" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Written by</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/40">{tr('blog.writtenBy')}</p>
                   <p className="mt-1 text-lg font-bold">{post.author}</p>
                   <p className="mt-1 text-sm leading-6 text-white/50">
-                    Part of the Bubaly team, helping families stay organized and connected through practical advice and real-world insights.
+                    {tr('blog.partOfTheBubalyTeamHelping')}
                   </p>
                 </div>
               </div>
@@ -316,7 +318,7 @@ export default async function BlogPostPage({ params }: Params) {
                 {prev ? (
                   <Link href={`/blog/${prev.slug}`} className="group flex flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-violet-400/20">
                     <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
-                      <ArrowLeft className="h-3.5 w-3.5" /> Previous Article
+                      <ArrowLeft className="h-3.5 w-3.5" /> {tr('blog.previousArticle')}
                     </span>
                     <span className="text-sm font-bold transition group-hover:text-violet-200">{prev.title}</span>
                     <span className="mt-1 text-xs text-white/40">{fmtDate(prev.date)}</span>
@@ -325,7 +327,7 @@ export default async function BlogPostPage({ params }: Params) {
                 {next ? (
                   <Link href={`/blog/${next.slug}`} className="group flex flex-col items-end rounded-2xl border border-white/8 bg-white/[0.03] p-5 text-right transition hover:border-violet-400/20">
                     <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
-                      Next Article <ArrowRight className="h-3.5 w-3.5" />
+                      {tr('blog.nextArticle')} <ArrowRight className="h-3.5 w-3.5" />
                     </span>
                     <span className="text-sm font-bold transition group-hover:text-violet-200">{next.title}</span>
                     <span className="mt-1 text-xs text-white/40">{fmtDate(next.date)}</span>
@@ -339,8 +341,8 @@ export default async function BlogPostPage({ params }: Params) {
                 phone readers otherwise get NO related-article navigation. Render the
                 same list inline for < lg; the sticky sidebar owns lg+. */}
             {related.length > 0 && (
-              <section className="border-t border-white/8 py-8 lg:hidden" aria-label="Related articles">
-                <h2 className="mb-5 text-lg font-bold">Related Articles</h2>
+              <section className="border-t border-white/8 py-8 lg:hidden" aria-label={tr('blog.relatedArticles')}>
+                <h2 className="mb-5 text-lg font-bold">{tr('blog.relatedArticles')}</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {related.map((r) => (
                     <Link key={r.slug} href={`/blog/${r.slug}`} className="group flex gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4 transition hover:border-violet-400/20">
@@ -377,7 +379,7 @@ export default async function BlogPostPage({ params }: Params) {
               {/* Related posts */}
               {related.length > 0 && (
                 <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-                  <h3 className="mb-4 text-sm font-bold">Related Articles</h3>
+                  <h3 className="mb-4 text-sm font-bold">{tr('blog.relatedArticles')}</h3>
                   <ul className="space-y-4">
                     {related.map((r) => (
                       <li key={r.slug}>
@@ -408,14 +410,14 @@ export default async function BlogPostPage({ params }: Params) {
 
               {/* Subscribe */}
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-                <h3 className="mb-1 text-sm font-bold">Never miss an article</h3>
-                <p className="mb-3 text-xs leading-5 text-white/55">New tips and stories for modern families, straight to your inbox.</p>
+                <h3 className="mb-1 text-sm font-bold">{tr('blog.neverMissAnArticle')}</h3>
+                <p className="mb-3 text-xs leading-5 text-white/55">{tr('blog.newTipsAndStoriesForModern')}</p>
                 <SubscribeForm source="blog-sidebar" variant="card" />
               </div>
 
               {/* Back to blog */}
               <Link href="/blog" className="flex items-center gap-2 text-sm font-semibold text-violet-300 hover:text-violet-200">
-                <ArrowLeft className="h-4 w-4" /> Back to all articles
+                <ArrowLeft className="h-4 w-4" /> {tr('blog.backToAllArticles')}
               </Link>
             </div>
           </aside>

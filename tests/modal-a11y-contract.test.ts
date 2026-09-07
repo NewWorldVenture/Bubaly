@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
 // A-19 accessibility + mobile-responsive contract for the shared Modal — the
@@ -6,7 +7,7 @@ import { readFileSync } from 'node:fs';
 // dropped the dialog role, focus trap, Escape handling, focus restore, or the
 // mobile safe-area/bottom-sheet layout would regress a11y everywhere at once.
 // This locks the WAI-ARIA dialog contract + the mobile layout at the source.
-const SRC = readFileSync('components/ui/modal.tsx', 'utf8');
+const SRC = readUiSource('components/ui/modal.tsx');
 
 describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
   it('is a labelled, modal dialog', () => {

@@ -12,11 +12,14 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Vehicle = Tables<'vehicles'>;
 type Member = { id: string; display_name: string | null };
 
 export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; members: Member[] }) {
+  const tr = useTranslations();
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [pending, start] = useTransition();
@@ -25,12 +28,12 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Vehicles</h2>
-        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add vehicle</Button>
+        <h2 className="text-sm font-semibold">{t('vehiclesClient.vehicles')}</h2>
+        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('vehiclesClient.addVehicle')}</Button>
       </div>
 
       {vehicles.length === 0 ? (
-        <EmptyState icon={Car} title="No vehicles yet" description="Add your cars to track registration, inspection, insurance, and service." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add vehicle</Button>} />
+        <EmptyState icon={Car} title={t('vehiclesClient.noVehiclesYet')} description="Add your cars to track registration, inspection, insurance, and service." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('vehiclesClient.addVehicle')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {vehicles.map((v) => (
@@ -61,30 +64,30 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
         <form action={(fd) => start(async () => { await saveVehicleAction(fd); setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Year"><Input type="number" name="year" defaultValue={editing?.year ?? ''} /></Field>
-            <Field label="Make"><Input name="make" defaultValue={editing?.make ?? ''} placeholder="Toyota" /></Field>
-            <Field label="Model"><Input name="model" defaultValue={editing?.model ?? ''} placeholder="RAV4" /></Field>
+            <Field label={t('vehiclesClient.year')}><Input type="number" name="year" defaultValue={editing?.year ?? ''} /></Field>
+            <Field label={t('vehiclesClient.make')}><Input name="make" defaultValue={editing?.make ?? ''} placeholder={t('vehiclesClient.toyota')} /></Field>
+            <Field label={t('vehiclesClient.model')}><Input name="model" defaultValue={editing?.model ?? ''} placeholder="RAV4" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Nickname"><Input name="nickname" defaultValue={editing?.nickname ?? ''} placeholder="Mom's car" /></Field>
-            <Field label="Color"><Input name="color" defaultValue={editing?.color ?? ''} /></Field>
+            <Field label={t('vehiclesClient.nickname')}><Input name="nickname" defaultValue={editing?.nickname ?? ''} placeholder={tr('vehiclesClient.momsCar')} /></Field>
+            <Field label={t('vehiclesClient.color')}><Input name="color" defaultValue={editing?.color ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="License plate"><Input name="license_plate" defaultValue={editing?.license_plate ?? ''} /></Field>
-            <Field label="Plate state"><Input name="plate_state" defaultValue={editing?.plate_state ?? ''} maxLength={2} placeholder="CA" /></Field>
+            <Field label={t('vehiclesClient.licensePlate')}><Input name="license_plate" defaultValue={editing?.license_plate ?? ''} /></Field>
+            <Field label={t('vehiclesClient.plateState')}><Input name="plate_state" defaultValue={editing?.plate_state ?? ''} maxLength={2} placeholder="CA" /></Field>
           </div>
           <Field label="VIN"><Input name="vin" defaultValue={editing?.vin ?? ''} /></Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Body type"><Select name="body_type" defaultValue={editing?.body_type ?? ''}><option value="">—</option>{BODY_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}</Select></Field>
-            <Field label="Fuel"><Select name="fuel_type" defaultValue={editing?.fuel_type ?? ''}><option value="">—</option>{FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}</Select></Field>
-            <Field label="Mileage"><Input type="number" name="mileage" defaultValue={editing?.mileage ?? ''} /></Field>
+            <Field label={t('vehiclesClient.bodyType')}><Select name="body_type" defaultValue={editing?.body_type ?? ''}><option value="">—</option>{BODY_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}</Select></Field>
+            <Field label={t('vehiclesClient.fuel')}><Select name="fuel_type" defaultValue={editing?.fuel_type ?? ''}><option value="">—</option>{FUEL_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}</Select></Field>
+            <Field label={t('vehiclesClient.mileage')}><Input type="number" name="mileage" defaultValue={editing?.mileage ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Primary driver"><Select name="primary_driver" defaultValue={editing?.primary_driver ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name ?? 'Member'}</option>)}</Select></Field>
-            <Field label="Status"><Select name="status" defaultValue={editing?.status ?? 'active'}><option value="active">Active</option><option value="sold">Sold</option><option value="stored">Stored</option></Select></Field>
+            <Field label={t('vehiclesClient.primaryDriver')}><Select name="primary_driver" defaultValue={editing?.primary_driver ?? ''}><option value="">—</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name ?? 'Member'}</option>)}</Select></Field>
+            <Field label={t('vehiclesClient.status')}><Select name="status" defaultValue={editing?.status ?? 'active'}><option value="active">{t('vehiclesClient.active')}</option><option value="sold">{t('vehiclesClient.sold')}</option><option value="stored">{t('vehiclesClient.stored')}</option></Select></Field>
           </div>
-          <Field label="Notes"><Textarea name="notes" rows={2} defaultValue={editing?.notes ?? ''} /></Field>
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={pending}>{editing ? 'Save' : 'Add'}</Button></div>
+          <Field label={t('vehiclesClient.notes')}><Textarea name="notes" rows={2} defaultValue={editing?.notes ?? ''} /></Field>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('vehiclesClient.cancel')}</Button><Button type="submit" loading={pending}>{editing ? 'Save' : 'Add'}</Button></div>
         </form>
       </Modal>
     </div>

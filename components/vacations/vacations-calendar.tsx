@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/states';
 import { VACATION_KINDS, lookup } from '@/lib/vacations/meta';
 import { buildICS, type IcsEvent } from '@/lib/vacations/ics';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 
@@ -22,6 +23,7 @@ function inRange(day: string, start: string | null, end: string | null): boolean
 }
 
 export function VacationsCalendar() {
+  const tr = useTranslations();
   const { familyId } = useApp();
   const { data: trips, error, refresh } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
 
@@ -59,7 +61,7 @@ export function VacationsCalendar() {
   if (error) {
     return (
       <div className="space-y-5">
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> Vacation Calendar</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> {tr('vacationsCalendar.vacationCalendar')}</h1>
         <ErrorState message="Could not load your trips. Refresh and try again." onRetry={refresh} />
       </div>
     );
@@ -68,19 +70,19 @@ export function VacationsCalendar() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> Vacation Calendar</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> {tr('vacationsCalendar.vacationCalendar')}</h1>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={exportICS}><Download className="h-4 w-4" /> Export .ics</Button>
-          <Link href="/dashboard/vacations"><Button size="sm" variant="ghost">All trips</Button></Link>
+          <Button size="sm" variant="secondary" onClick={exportICS}><Download className="h-4 w-4" /> {tr('vacationsCalendar.exportIcs')}</Button>
+          <Link href="/dashboard/vacations"><Button size="sm" variant="ghost">{tr('vacationsCalendar.allTrips')}</Button></Link>
         </div>
       </div>
-      <p className="-mt-2 text-xs text-muted">Export imports straight into Google Calendar, Apple Calendar, and Outlook.</p>
+      <p className="-mt-2 text-xs text-muted">{tr('vacationsCalendar.exportImportsStraightIntoGoogleCalendar')}</p>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <button onClick={prev} aria-label="Previous month" className="rounded-lg p-1.5 hover:bg-elevated"><ChevronLeft className="h-5 w-5" /></button>
+          <button onClick={prev} aria-label={tr('vacationsCalendar.previousMonth')} className="rounded-lg p-1.5 hover:bg-elevated"><ChevronLeft className="h-5 w-5" /></button>
           <h2 className="font-semibold">{MONTHS[month]} {year}</h2>
-          <button onClick={next} aria-label="Next month" className="rounded-lg p-1.5 hover:bg-elevated"><ChevronRight className="h-5 w-5" /></button>
+          <button onClick={next} aria-label={tr('vacationsCalendar.nextMonth')} className="rounded-lg p-1.5 hover:bg-elevated"><ChevronRight className="h-5 w-5" /></button>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted">{DOW.map((d) => <div key={d} className="py-1">{d}</div>)}</div>
         <div className="grid grid-cols-7 gap-1">
@@ -103,7 +105,7 @@ export function VacationsCalendar() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold text-muted">Trips</h2>
+        <h2 className="mb-2 text-sm font-semibold text-muted">{tr('vacationsCalendar.trips')}</h2>
         <div className="space-y-2">
           {datedTrips.sort((a, b) => (a.start_date! < b.start_date! ? -1 : 1)).map((t) => (
             <Link key={t.id} href={`/dashboard/vacations/${t.id}/overview`} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 p-3 hover:border-brand/40">

@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { toggleDateOnCalendarAction } from '@/app/(app)/dashboard/relationship/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -21,8 +22,8 @@ import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
-import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -56,6 +57,7 @@ const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(
 const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`);
 
 export function RelationshipModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -171,23 +173,14 @@ export function RelationshipModule() {
     success('Removed');
   }
   async function toggleCalendar(d: RDate) {
-    const sb = createClient();
-    if (d.calendar_event_id) {
-      await sb.from('calendar_events').delete().eq('id', d.calendar_event_id);
-      const { error: err } = await sb.from('relationship_dates').update({ calendar_event_id: null }).eq('id', d.id);
-      if (err) { toastError(describeDbError(err)); return; }
-      success('Removed from calendar');
-      return;
-    }
-    const payload = buildCalendarEventForDate(
-      { kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, location: d.location },
-      familyId, userId,
-    );
-    const { data: created, error: err } = await sb.from('calendar_events').insert(payload).select('id').single();
-    if (err || !created) { toastError(describeDbError(err)); return; }
-    const { error: e2 } = await sb.from('relationship_dates').update({ calendar_event_id: created.id }).eq('id', d.id);
-    if (e2) { toastError(describeDbError(e2)); return; }
-    success('Added to your family calendar 📅');
+    // Both halves in one call. This used to delete the event and then clear
+    // `calendar_event_id` REGARDLESS — the delete's result was discarded — so a
+    // failed delete left the date saying "not on your calendar" while the event
+    // sat there with nothing linking them. The action clears the link only once
+    // the event is actually gone.
+    const result = await toggleDateOnCalendarAction(d.id);
+    if (!result.ok) { toastError(result.error); return; }
+    success(result.onCalendar ? 'Added to your family calendar 📅' : 'Removed from calendar');
   }
 
   // ── Gifts CRUD ──
@@ -310,13 +303,13 @@ export function RelationshipModule() {
   return (
     <div>
       <PageHeader
-        title="Relationship Helper"
+        title={t('relationship.relationshipHelper')}
         description={`Never miss the moments that matter${partnerName === 'your partner' ? '' : ` with ${partnerName}`} — anniversaries, birthdays, date nights, and gift ideas, with a little AI nudge.`}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={openProfile} className="gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Preferences</Button>
+            <Button variant="outline" onClick={openProfile} className="gap-1.5"><SlidersHorizontal className="h-4 w-4" /> {t('relationship.preferences')}</Button>
             <Button onClick={() => runAi()} disabled={aiLoading} className="gap-1.5">
-              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} AI suggestions
+              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} {t('relationship.aiSuggestions')}
             </Button>
           </div>
         }
@@ -340,11 +333,11 @@ export function RelationshipModule() {
           </div>
           {digest.giftHistory && (
             <div className="mt-4 rounded-xl border border-border bg-surface/50 p-3">
-              <p className="text-xs font-semibold">Recorded gift history</p>
+              <p className="text-xs font-semibold">{t('relationship.recordedGiftHistory')}</p>
               <p className="mt-1 text-xs text-muted">{digest.giftHistory.summary}</p>
               {digest.giftHistory.records.length > 0 && (
                 <details className="mt-2 text-xs text-muted">
-                  <summary className="cursor-pointer text-brand-text">View recorded outcomes</summary>
+                  <summary className="cursor-pointer text-brand-text">{t('relationship.viewRecordedOutcomes')}</summary>
                   <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
                     {digest.giftHistory.records.map((record) => (
                       <li key={record.id}>
@@ -368,7 +361,7 @@ export function RelationshipModule() {
                     <p className="text-sm font-medium">{idea.title}{idea.estimatedPrice ? <span className="ml-1 text-xs text-muted">· {idea.estimatedPrice}</span> : null}</p>
                     {idea.reason && <p className="mt-0.5 text-xs text-muted">{idea.reason}</p>}
                   </div>
-                  <button onClick={() => saveAiGift(idea)} className="shrink-0 rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20" aria-label="Save gift idea">
+                  <button onClick={() => saveAiGift(idea)} className="shrink-0 rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20" aria-label={t('relationship.saveGiftIdea')}>
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -381,16 +374,16 @@ export function RelationshipModule() {
       {/* Upcoming dates */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Upcoming</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('relationship.upcoming')}</h2>
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => openNewDate('date_night')} className="gap-1"><Wine className="h-3.5 w-3.5" /> Date night</Button>
-            <Button size="sm" onClick={() => openNewDate('anniversary')} className="gap-1"><Plus className="h-3.5 w-3.5" /> Add date</Button>
+            <Button size="sm" variant="outline" onClick={() => openNewDate('date_night')} className="gap-1"><Wine className="h-3.5 w-3.5" /> {t('relationship.dateNight')}</Button>
+            <Button size="sm" onClick={() => openNewDate('anniversary')} className="gap-1"><Plus className="h-3.5 w-3.5" /> {t('relationship.addDate')}</Button>
           </div>
         </div>
         {upcoming.length === 0 ? (
-          <EmptyState icon={Heart} title="No dates yet"
+          <EmptyState icon={Heart} title={t('relationship.noDatesYet')}
             description="Add your anniversary, your partner’s birthday, or plan a date night — Bubaly will remind you and suggest gifts."
-            action={<Button onClick={() => openNewDate('anniversary')} className="gap-1.5"><Plus className="h-4 w-4" /> Add your first date</Button>} />
+            action={<Button onClick={() => openNewDate('anniversary')} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addYourFirstDate')}</Button>} />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {upcoming.map((u) => {
@@ -410,8 +403,8 @@ export function RelationshipModule() {
                         className={cn('rounded p-1 hover:bg-elevated', raw.calendar_event_id ? 'text-emerald-300' : 'text-muted hover:text-fg')}>
                         {raw.calendar_event_id ? <CalendarCheck className="h-3.5 w-3.5" /> : <CalendarPlus className="h-3.5 w-3.5" />}
                       </button>
-                      <button onClick={() => openEditDate(raw)} aria-label="Edit" className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => removeDate(raw)} aria-label="Remove" className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => openEditDate(raw)} aria-label={t('relationship.edit')} className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => removeDate(raw)} aria-label={t('relationship.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                   <p className="mt-2 font-semibold">{u.title}</p>
@@ -432,25 +425,25 @@ export function RelationshipModule() {
       {/* Gift ideas */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Gift ideas</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('relationship.giftIdeas')}</h2>
           <div className="flex flex-wrap gap-1.5">
             {profile?.partner_member_id && wishSuggestions.length > 0 && (
-              <Button size="sm" variant="outline" onClick={() => setWishModal(true)} className="gap-1"><Gift className="h-3.5 w-3.5" /> From wishlist</Button>
+              <Button size="sm" variant="outline" onClick={() => setWishModal(true)} className="gap-1"><Gift className="h-3.5 w-3.5" /> {t('relationship.fromWishlist')}</Button>
             )}
-            <Button size="sm" onClick={openNewGift} className="gap-1"><Plus className="h-3.5 w-3.5" /> Add idea</Button>
+            <Button size="sm" onClick={openNewGift} className="gap-1"><Plus className="h-3.5 w-3.5" /> {t('relationship.addIdea')}</Button>
           </div>
         </div>
         {(gifts ?? []).length === 0 ? (
-          <EmptyState icon={Gift} title="No gift ideas yet"
+          <EmptyState icon={Gift} title={t('relationship.noGiftIdeasYet')}
             description={`Jot down ideas as you spot them${profile?.partner_member_id ? `, pull from ${partnerName}’s wishlist,` : ''} or let AI suggest a few.`}
-            action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> Add a gift idea</Button>} />
+            action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addAGiftIdea')}</Button>} />
         ) : (
           <>
             {/* Shopping summary + status filter */}
             <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-sm text-muted">
-                <span className="font-semibold text-fg">{giftSummary.open}</span> to buy
-                {giftSummary.openCents > 0 && <> · <span className="font-semibold text-fg">{dollars(giftSummary.openCents)}</span> to go</>}
+                <span className="font-semibold text-fg">{giftSummary.open}</span> {t('relationship.toBuy')}
+                {giftSummary.openCents > 0 && <> · <span className="font-semibold text-fg">{dollars(giftSummary.openCents)}</span> {t('relationship.toGo')}</>}
                 {giftSummary.done > 0 && <> · {giftSummary.done} done</>}
               </p>
               <div className="flex flex-wrap gap-1 sm:ml-auto">
@@ -464,7 +457,7 @@ export function RelationshipModule() {
               </div>
             </div>
             {visibleGifts.length === 0 ? (
-              <p className="rounded-xl border border-border bg-surface/30 px-4 py-6 text-center text-sm text-muted">No gifts in this status.</p>
+              <p className="rounded-xl border border-border bg-surface/30 px-4 py-6 text-center text-sm text-muted">{t('relationship.noGiftsInThisStatus')}</p>
             ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visibleGifts.map((g) => (
@@ -473,9 +466,9 @@ export function RelationshipModule() {
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Gift className="h-5 w-5" /></div>
                   <div className="flex items-center gap-1">
                     {g.source === 'ai' && <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand-text">AI</span>}
-                    {g.source === 'wishlist' && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">Wishlist</span>}
-                    <button onClick={() => openEditGift(g)} aria-label="Edit" className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => removeGift(g)} aria-label="Remove" className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                    {g.source === 'wishlist' && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">{t('relationship.wishlist')}</span>}
+                    <button onClick={() => openEditGift(g)} aria-label={t('relationship.edit')} className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => removeGift(g)} aria-label={t('relationship.remove')} className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 <p className="mt-2 font-semibold">{g.title}</p>
@@ -483,13 +476,13 @@ export function RelationshipModule() {
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
-                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> View</a>}
+                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'
                     ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-300"><Check className="h-3.5 w-3.5" />{GIFT_STATUS.find((s) => s.value === g.status)?.label}</span>
                     : <ShoppingBag className="h-3.5 w-3.5 text-muted" />}
-                  <Select aria-label="Gift status" value={g.status} onChange={(e) => setGiftStatus(g, e.target.value as RelationshipGiftStatus)} className="ml-auto h-7 w-auto text-xs">
+                  <Select aria-label={t('relationship.giftStatus')} value={g.status} onChange={(e) => setGiftStatus(g, e.target.value as RelationshipGiftStatus)} className="ml-auto h-7 w-auto text-xs">
                     {GIFT_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </Select>
                 </div>
@@ -504,7 +497,7 @@ export function RelationshipModule() {
       {/* Date modal */}
       <Modal open={dateModal} onClose={() => setDateModal(false)} title={dateForm.id ? 'Edit date' : 'Add a date'}>
         <form onSubmit={saveDate} className="space-y-4">
-          <Field label="Type">
+          <Field label={t('relationship.type')}>
             {(id) => (
               <Select id={id} value={dateForm.kind} onChange={(e) => {
                 const kind = e.target.value as RelationshipDateKind;
@@ -514,27 +507,27 @@ export function RelationshipModule() {
               </Select>
             )}
           </Field>
-          <Field label="Title" required>
-            {(id) => <Input id={id} value={dateForm.title} onChange={(e) => setDateForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Our anniversary" autoFocus />}
+          <Field label={t('relationship.title')} required>
+            {(id) => <Input id={id} value={dateForm.title} onChange={(e) => setDateForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('relationship.eGOurAnniversary')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Date" required>
+            <Field label={t('relationship.date')} required>
               {(id) => <Input id={id} type="date" value={dateForm.eventDate} onChange={(e) => setDateForm((f) => ({ ...f, eventDate: e.target.value }))} />}
             </Field>
-            <Field label="Remind me (days before)">
+            <Field label={t('relationship.remindMeDaysBefore')}>
               {(id) => <Input id={id} type="number" min={0} max={365} value={dateForm.reminderDaysBefore} onChange={(e) => setDateForm((f) => ({ ...f, reminderDaysBefore: e.target.value }))} />}
             </Field>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={dateForm.recursAnnually} onChange={(e) => setDateForm((f) => ({ ...f, recursAnnually: e.target.checked }))} className="h-4 w-4 rounded border-border" />
-            Repeats every year
+            {t('relationship.repeatsEveryYear')}
           </label>
           {dateForm.kind === 'date_night' && (
-            <Field label="Where">
-              {(id) => <Input id={id} value={dateForm.location} onChange={(e) => setDateForm((f) => ({ ...f, location: e.target.value }))} placeholder="Restaurant, movie, …" />}
+            <Field label={t('relationship.where')}>
+              {(id) => <Input id={id} value={dateForm.location} onChange={(e) => setDateForm((f) => ({ ...f, location: e.target.value }))} placeholder={t('relationship.restaurantMovie')} />}
             </Field>
           )}
-          <Field label="Who it’s about (optional)">
+          <Field label={t('relationship.whoItsAboutOptional')}>
             {(id) => (
               <Select id={id} value={dateForm.memberId} onChange={(e) => setDateForm((f) => ({ ...f, memberId: e.target.value }))}>
                 <option value="">—</option>
@@ -542,11 +535,11 @@ export function RelationshipModule() {
               </Select>
             )}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={dateForm.notes} onChange={(e) => setDateForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Ideas, reservations, anything to remember…" />}
+          <Field label={t('relationship.notes')}>
+            {(id) => <Textarea id={id} value={dateForm.notes} onChange={(e) => setDateForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('relationship.ideasReservationsAnythingToRemember')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setDateModal(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setDateModal(false)}>{t('relationship.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : dateForm.id ? 'Save changes' : 'Add date'}</Button>
           </div>
         </form>
@@ -555,44 +548,44 @@ export function RelationshipModule() {
       {/* Gift modal */}
       <Modal open={giftModal} onClose={() => setGiftModal(false)} title={giftForm.id ? 'Edit gift idea' : 'Add a gift idea'}>
         <form onSubmit={saveGift} className="space-y-4">
-          <Field label="Gift" required>
-            {(id) => <Input id={id} value={giftForm.title} onChange={(e) => setGiftForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Weekend cabin getaway" autoFocus />}
+          <Field label={t('relationship.gift')} required>
+            {(id) => <Input id={id} value={giftForm.title} onChange={(e) => setGiftForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('relationship.eGWeekendCabinGetaway')} autoFocus />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Link">
+            <Field label={t('relationship.link')}>
               {(id) => <Input id={id} type="url" value={giftForm.url} onChange={(e) => setGiftForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://…" />}
             </Field>
-            <Field label="Approx. price ($)">
+            <Field label={t('relationship.approxPrice')}>
               {(id) => <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={giftForm.price} onChange={(e) => setGiftForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" />}
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="For">
-              {(id) => <Input id={id} value={giftForm.forName} onChange={(e) => setGiftForm((f) => ({ ...f, forName: e.target.value }))} placeholder="Partner’s name" />}
+              {(id) => <Input id={id} value={giftForm.forName} onChange={(e) => setGiftForm((f) => ({ ...f, forName: e.target.value }))} placeholder={t('relationship.partnersName')} />}
             </Field>
-            <Field label="Occasion">
-              {(id) => <Input id={id} value={giftForm.occasion} onChange={(e) => setGiftForm((f) => ({ ...f, occasion: e.target.value }))} placeholder="Anniversary, birthday…" />}
+            <Field label={t('relationship.occasion')}>
+              {(id) => <Input id={id} value={giftForm.occasion} onChange={(e) => setGiftForm((f) => ({ ...f, occasion: e.target.value }))} placeholder={t('relationship.anniversaryBirthday')} />}
             </Field>
           </div>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={giftForm.reason} onChange={(e) => setGiftForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Why it’s a great fit…" />}
+          <Field label={t('relationship.notes')}>
+            {(id) => <Textarea id={id} value={giftForm.reason} onChange={(e) => setGiftForm((f) => ({ ...f, reason: e.target.value }))} placeholder={t('relationship.whyItsAGreatFit')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setGiftModal(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setGiftModal(false)}>{t('relationship.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : giftForm.id ? 'Save changes' : 'Save idea'}</Button>
           </div>
         </form>
       </Modal>
 
       {/* Preferences modal */}
-      <Modal open={profileModal} onClose={() => setProfileModal(false)} title="Partner preferences">
+      <Modal open={profileModal} onClose={() => setProfileModal(false)} title={t('relationship.partnerPreferences')}>
         <form onSubmit={saveProfile} className="space-y-4">
-          <p className="text-sm text-muted">These help the AI suggest thoughtful, well-fitting gifts.</p>
+          <p className="text-sm text-muted">{t('relationship.theseHelpTheAiSuggestThoughtful')}</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Partner’s name">
-              {(id) => <Input id={id} value={pForm.partnerName} onChange={(e) => setPForm((f) => ({ ...f, partnerName: e.target.value }))} placeholder="e.g. Sam" />}
+            <Field label={t('relationship.partnersName')}>
+              {(id) => <Input id={id} value={pForm.partnerName} onChange={(e) => setPForm((f) => ({ ...f, partnerName: e.target.value }))} placeholder={t('relationship.eGSam')} />}
             </Field>
-            <Field label="Link to member">
+            <Field label={t('relationship.linkToMember')}>
               {(id) => (
                 <Select id={id} value={pForm.partnerMemberId} onChange={(e) => setPForm((f) => ({ ...f, partnerMemberId: e.target.value }))}>
                   <option value="">—</option>
@@ -601,20 +594,20 @@ export function RelationshipModule() {
               )}
             </Field>
           </div>
-          <Field label="Interests (comma-separated)">
-            {(id) => <Input id={id} value={pForm.interests} onChange={(e) => setPForm((f) => ({ ...f, interests: e.target.value }))} placeholder="hiking, coffee, vinyl records" />}
+          <Field label={t('relationship.interestsCommaSeparated')}>
+            {(id) => <Input id={id} value={pForm.interests} onChange={(e) => setPForm((f) => ({ ...f, interests: e.target.value }))} placeholder={t('relationship.hikingCoffeeVinylRecords')} />}
           </Field>
-          <Field label="Love languages (comma-separated)">
-            {(id) => <Input id={id} value={pForm.loveLanguages} onChange={(e) => setPForm((f) => ({ ...f, loveLanguages: e.target.value }))} placeholder="quality time, gifts, acts of service" />}
+          <Field label={t('relationship.loveLanguagesCommaSeparated')}>
+            {(id) => <Input id={id} value={pForm.loveLanguages} onChange={(e) => setPForm((f) => ({ ...f, loveLanguages: e.target.value }))} placeholder={t('relationship.qualityTimeGiftsActsOfService')} />}
           </Field>
-          <Field label="Typical gift budget ($)">
+          <Field label={t('relationship.typicalGiftBudget')}>
             {(id) => <Input id={id} type="number" min={0} step="1" value={pForm.budget} onChange={(e) => setPForm((f) => ({ ...f, budget: e.target.value }))} placeholder="100" />}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={pForm.notes} onChange={(e) => setPForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Sizes, allergies, what to avoid…" />}
+          <Field label={t('relationship.notes')}>
+            {(id) => <Textarea id={id} value={pForm.notes} onChange={(e) => setPForm((f) => ({ ...f, notes: e.target.value }))} placeholder={t('relationship.sizesAllergiesWhatToAvoid')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setProfileModal(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setProfileModal(false)}>{t('relationship.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save preferences'}</Button>
           </div>
         </form>
@@ -624,7 +617,7 @@ export function RelationshipModule() {
       <Modal open={wishModal} onClose={() => setWishModal(false)} title={`Add from ${partnerName}’s wishlist`}>
         <div className="space-y-2">
           {wishSuggestions.length === 0
-            ? <p className="text-sm text-muted">No available wishlist items to add.</p>
+            ? <p className="text-sm text-muted">{t('relationship.noAvailableWishlistItemsToAdd')}</p>
             : wishSuggestions.map((c) => {
                 const w = partnerWishes.find((x) => x.id === c.wishlistItemId)!;
                 const already = (gifts ?? []).some((g) => g.wishlist_item_id === c.wishlistItemId);
@@ -635,7 +628,7 @@ export function RelationshipModule() {
                       <p className="text-xs text-muted">{c.priceCents != null ? dollars(c.priceCents) : 'No price'} · {c.priority} priority</p>
                     </div>
                     <Button size="sm" variant={already ? 'outline' : 'primary'} disabled={already} onClick={() => addWishGift(w)} className="shrink-0 gap-1">
-                      {already ? <><Check className="h-3.5 w-3.5" /> Added</> : <><Plus className="h-3.5 w-3.5" /> Add</>}
+                      {already ? <><Check className="h-3.5 w-3.5" /> {t('relationship.added')}</> : <><Plus className="h-3.5 w-3.5" /> Add</>}
                     </Button>
                   </div>
                 );

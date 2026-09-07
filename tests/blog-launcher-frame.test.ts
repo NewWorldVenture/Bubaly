@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import nextConfig from '../next.config.mjs';
 
 const ROOT = join(__dirname, '..');
-const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
+const read = (p: string) => readUiSource(join(ROOT, p));
 
 type HeaderRule = { source: string; headers: { key: string; value: string }[] };
 const xfo = (r: HeaderRule) => r.headers.find((h) => h.key === 'X-Frame-Options')?.value;

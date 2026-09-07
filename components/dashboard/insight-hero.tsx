@@ -15,6 +15,7 @@ import { dismissInsightAction } from '@/app/(app)/dashboard/insight-actions';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainInsight } from '@/lib/ai/explanation';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Kind = 'departure' | 'conflict' | 'homework' | 'approval' | 'reminder_overdue'
   | 'renewal' | 'document' | 'meal' | 'grocery' | 'autopilot';
@@ -33,6 +34,7 @@ const META: Record<Kind, { icon: React.ComponentType<{ className?: string }>; ct
 };
 
 export function InsightHero({ insight }: { insight: { id: string; kind: string; title: string; detail: string; href: string; impact?: number; alternatives?: number } }) {
+  const t = useTranslations();
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -58,7 +60,7 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
         </div>
         <div className="min-w-0 flex-1 pr-6">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-text">
-            <Sparkles className="h-3 w-3" /> Insight of the day
+            <Sparkles className="h-3 w-3" /> {t('insightHero.insightOfTheDay')}
           </p>
           <p className="mt-1 text-sm font-bold leading-snug">{insight.title}</p>
           <p className="mt-0.5 text-xs text-muted">{insight.detail}</p>
@@ -80,7 +82,7 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
           />
         </div>
       </div>
-      <button type="button" onClick={dismiss} disabled={pending} aria-label="Dismiss insight"
+      <button type="button" onClick={dismiss} disabled={pending} aria-label={t('insightHero.dismissInsight')}
         className={cn('absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg', pending && 'opacity-50')}>
         <X className="h-4 w-4" />
       </button>

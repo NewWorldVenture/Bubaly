@@ -28,6 +28,7 @@ import {
   addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction, decideAllowanceRequestAction,
 } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
@@ -84,6 +85,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   pendingApprovals: PendingApproval[];
   analytics?: WalletAnalytics;
 }) {
+  const tr = useTranslations();
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [requestFor, setRequestFor] = useState<ChildWalletView | null>(null);
@@ -110,9 +112,9 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Spend, save, give, and invest — for the whole family."
+      <PageHeader title={tr('walletDashboard.familyWallet')} description="Spend, save, give, and invest — for the whole family."
         action={hasCoach ? (
-          <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
+          <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> {tr('walletDashboard.moneyCoach')}</Button>
         ) : undefined}
       />
       <WalletSubnav />
@@ -120,7 +122,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       {coach && (
         <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text"><Sparkles className="h-3.5 w-3.5" /> Money Coach</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text"><Sparkles className="h-3.5 w-3.5" /> {tr('walletDashboard.moneyCoach')}</span>
             <button onClick={() => setCoach(null)} className="text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
           </div>
           {coach.headline && <p className="text-sm font-semibold leading-relaxed">{coach.headline}</p>}
@@ -131,14 +133,14 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
               ))}
             </ul>
           )}
-          {coach.suggestion && <p className="mt-2 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs"><span className="font-semibold text-brand-text">Try this: </span>{coach.suggestion}</p>}
+          {coach.suggestion && <p className="mt-2 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs"><span className="font-semibold text-brand-text">{tr('walletDashboard.tryThis')} </span>{coach.suggestion}</p>}
         </div>
       )}
 
       {/* Family total */}
       <div className="mb-5 rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-6">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-          <Wallet className="h-4 w-4" /> Total family balance
+          <Wallet className="h-4 w-4" /> {tr('walletDashboard.totalFamilyBalance')}
         </div>
         <p className="mt-1 text-4xl font-black">{formatCents(familyTotal)}</p>
         <p className="text-xs text-muted">
@@ -156,17 +158,17 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
         {canSend && (
           <button onClick={() => setSendOpen(true)}
             className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text">
-            <Send className="h-4 w-4" /> Send money
+            <Send className="h-4 w-4" /> {tr('walletDashboard.sendMoney')}
           </button>
         )}
         <button onClick={() => setRequestFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
           className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
-          <HandCoins className="h-4 w-4" /> Request to spend
+          <HandCoins className="h-4 w-4" /> {tr('walletDashboard.requestToSpend')}
         </button>
         {canManage && (
           <button onClick={() => setAddFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
             className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
-            <Plus className="h-4 w-4" /> Add funds
+            <Plus className="h-4 w-4" /> {tr('walletDashboard.addFunds')}
           </button>
         )}
       </div>
@@ -175,7 +177,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       {pendingApprovals.length > 0 && (
         <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
           <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-500">
-            <Clock className="h-3.5 w-3.5" /> Pending approvals ({pendingApprovals.length})
+            <Clock className="h-3.5 w-3.5" /> {tr('walletDashboard.pendingApprovals')}{pendingApprovals.length})
           </h2>
           <div className="space-y-2">
             {pendingApprovals.map((a) => (
@@ -189,18 +191,18 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-xs">
         <div>
           <span className="font-semibold">{WALLET_TIERS[tier].label} plan</span>
-          <span className="text-muted"> · Bubaly service fee: {serviceFeeLabel(tier)}</span>
+          <span className="text-muted"> {tr('walletDashboard.bubalyServiceFee')} {serviceFeeLabel(tier)}</span>
         </div>
         <div className="text-muted">
-          A {formatCents(5000)} gift costs the sender{' '}
+          A {formatCents(5000)} {tr('walletDashboard.giftCostsTheSender')}{' '}
           <span className="font-semibold text-fg">{formatCents(sampleGift.totalChargedCents)}</span>{' '}
           (processing {formatCents(sampleGift.processingCents)}
-          {sampleGift.serviceFeeCents > 0 ? ` + fee ${formatCents(sampleGift.serviceFeeCents)}` : ', no Bubaly fee'}); the child receives the full {formatCents(5000)}.
+          {sampleGift.serviceFeeCents > 0 ? ` + fee ${formatCents(sampleGift.serviceFeeCents)}` : ', no Bubaly fee'}{tr('walletDashboard.theChildReceivesTheFull')} {formatCents(5000)}.
         </div>
       </div>
 
       {childWallets.length === 0 ? (
-        <EmptyState icon={Wallet} title="No child wallets yet"
+        <EmptyState icon={Wallet} title={tr('walletDashboard.noChildWalletsYet')}
           description="Add children to your family and they'll each get a wallet here." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -246,9 +248,9 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
       {/* Recent activity */}
       <div className="mt-6">
-        <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">Recent activity</h2>
+        <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{tr('walletDashboard.recentActivity')}</h2>
         {recent.length === 0 ? (
-          <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">No transactions yet. Add funds to get started.</p>
+          <p className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">{tr('walletDashboard.noTransactionsYetAddFundsTo')}</p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border divide-y divide-border/50">
             {recent.map((t) => (
@@ -287,6 +289,7 @@ const CREDIT_TYPE_META: Record<string, { label: string; color: string }> = {
 };
 
 function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
+  const tr = useTranslations();
   const { thisMonthIn, thisMonthOut, creditsByType, monthlyTrend } = analytics;
   const net = thisMonthIn - thisMonthOut;
   const maxMonthlyTotal = Math.max(...monthlyTrend.map((m) => m.credits + m.debits), 1);
@@ -299,16 +302,16 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
 
   return (
     <div className="mb-5 rounded-2xl border border-border bg-surface/40 p-4">
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">This Month</h2>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">{tr('walletDashboard.thisMonth')}</h2>
 
       {/* In / Out / Net strip */}
       <div className="mb-4 grid grid-cols-3 gap-2">
         <div className="rounded-xl bg-emerald-500/10 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">Money In</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">{tr('walletDashboard.moneyIn')}</p>
           <p className="mt-0.5 text-base font-black text-emerald-500">{formatCents(thisMonthIn)}</p>
         </div>
         <div className="rounded-xl bg-rose-500/10 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-500">Money Out</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-500">{tr('walletDashboard.moneyOut')}</p>
           <p className="mt-0.5 text-base font-black text-rose-500">{formatCents(thisMonthOut)}</p>
         </div>
         <div className={cn('rounded-xl p-3', net >= 0 ? 'bg-brand/10' : 'bg-amber-500/10')}>
@@ -322,7 +325,7 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
       {/* Credits breakdown */}
       {creditEntries.length > 0 && (
         <div className="mb-4">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Where money came from</p>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('walletDashboard.whereMoneyCameFrom')}</p>
           <div className="space-y-1.5">
             {creditEntries.map(([type, amount]) => {
               const meta = CREDIT_TYPE_META[type];
@@ -343,7 +346,7 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
 
       {/* 6-month bar chart */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">6-month trend</p>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('walletDashboard.6MonthTrend')}</p>
         <div className="flex items-end gap-1.5 h-16">
           {monthlyTrend.map((m) => {
             const totalH = ((m.credits + m.debits) / maxMonthlyTotal) * 100;
@@ -376,6 +379,7 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
 
 /** One pending approval row with inline Approve / Reject (managers only). */
 function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDecide: boolean }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<'approved' | 'rejected' | null>(null);
@@ -411,11 +415,11 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
       {canDecide && (
         <div className="flex shrink-0 items-center gap-1">
           <button onClick={() => decide('approved')} disabled={busy !== null}
-            className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500 transition hover:bg-emerald-500/25 disabled:opacity-50" aria-label="Approve">
+            className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500 transition hover:bg-emerald-500/25 disabled:opacity-50" aria-label={tr('walletDashboard.approve')}>
             <Check className="h-4 w-4" />
           </button>
           <button onClick={() => decide('rejected')} disabled={busy !== null}
-            className="grid h-7 w-7 place-items-center rounded-lg bg-rose-500/15 text-rose-500 transition hover:bg-rose-500/25 disabled:opacity-50" aria-label="Reject">
+            className="grid h-7 w-7 place-items-center rounded-lg bg-rose-500/15 text-rose-500 transition hover:bg-rose-500/25 disabled:opacity-50" aria-label={tr('walletDashboard.reject')}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -426,6 +430,7 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
 
 /** Request to spend from a child's Spend bucket → completes or queues for approval. */
 function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -450,16 +455,16 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
   return (
     <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
-        <p className="text-xs text-muted">{formatCents(spendable)} available in Spend. Larger amounts need a parent&apos;s OK.</p>
-        <Field label="What for?">
+        <p className="text-xs text-muted">{formatCents(spendable)} {tr('walletDashboard.availableInSpendLargerAmountsNeed')}</p>
+        <Field label={tr('walletDashboard.whatFor')}>
           {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
         </Field>
-        <Field label="Amount (USD)">
+        <Field label={tr('walletDashboard.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><HandCoins className="h-4 w-4" /> Request</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('walletDashboard.cancel')}</Button>
+          <Button type="submit" loading={loading}><HandCoins className="h-4 w-4" /> {tr('walletDashboard.request')}</Button>
         </div>
       </form>
     </Modal>
@@ -468,6 +473,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
 
 /** Move money between two child wallets (parent-initiated, money-conserving). */
 function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onClose: () => void }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -494,9 +500,9 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
   const selectCls = 'w-full rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm focus:border-brand/40 focus:outline-none';
 
   return (
-    <Modal open onClose={onClose} title="Send money">
+    <Modal open onClose={onClose} title={tr('walletDashboard.sendMoney')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="From">
+        <Field label={tr('walletDashboard.from')}>
           {(id) => (
             <select id={id} value={from} onChange={(e) => setFrom(e.target.value)} className={selectCls}>
               {wallets.map((w) => <option key={w.id} value={w.id}>{w.name} — {formatCents(w.buckets.spend ?? 0)} in Spend</option>)}
@@ -510,16 +516,16 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
             </select>
           )}
         </Field>
-        <Field label="Amount (USD)">
+        <Field label={tr('walletDashboard.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
         </Field>
-        {fromWallet && <p className="text-xs text-muted">{formatCents(fromWallet.buckets.spend ?? 0)} available in {fromWallet.name}&apos;s Spend bucket.</p>}
-        <Field label="Note (optional)">
+        {fromWallet && <p className="text-xs text-muted">{formatCents(fromWallet.buckets.spend ?? 0)} {tr('walletDashboard.availableIn')} {fromWallet.name}{tr('walletDashboard.aposSSpendBucket')}</p>}
+        <Field label={tr('walletDashboard.noteOptional')}>
           {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}><Send className="h-4 w-4" /> Send</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('walletDashboard.cancel')}</Button>
+          <Button type="submit" loading={loading}><Send className="h-4 w-4" /> {tr('walletDashboard.send')}</Button>
         </div>
       </form>
     </Modal>
@@ -527,6 +533,7 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
 }
 
 function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -548,8 +555,8 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
   return (
     <Modal open onClose={onClose} title={`Add funds — ${child.name}`}>
       <form onSubmit={submit} className="space-y-4">
-        <p className="text-xs text-muted">Funds are split across {child.name}&apos;s buckets using your allocation rule.</p>
-        <Field label="Amount (USD)">
+        <p className="text-xs text-muted">{tr('walletDashboard.fundsAreSplitAcross')} {child.name}{tr('walletDashboard.aposSBucketsUsingYourAllocation')}</p>
+        <Field label={tr('walletDashboard.amountUsd')}>
           {(id) => (
             <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" autoFocus
               value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" />
@@ -564,8 +571,8 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
           ))}
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}>Add funds</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('walletDashboard.cancel')}</Button>
+          <Button type="submit" loading={loading}>{tr('walletDashboard.addFunds')}</Button>
         </div>
       </form>
     </Modal>

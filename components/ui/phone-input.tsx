@@ -8,6 +8,7 @@ import {
   type CountryDialCode,
 } from '@/lib/utils/phone';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 interface PhoneInputProps {
   /** ISO country code for the pre-selected dial code, e.g. "US" */
@@ -28,6 +29,7 @@ export function PhoneInput({
   onChange,
   className,
 }: PhoneInputProps) {
+  const tr = useTranslations();
   const [country, setCountry] = useState<CountryDialCode>(() => {
     if (defaultDialCode) {
       const match = COUNTRY_DIAL_CODES.find(
@@ -125,7 +127,7 @@ export function PhoneInput({
           onChange={(e) => setLocalNumber(e.target.value)}
           placeholder={country.format}
           className="flex-1 bg-transparent px-3 text-sm text-fg placeholder:text-muted outline-none"
-          aria-label="Phone number"
+          aria-label={tr('phoneInput.phoneNumber')}
         />
       </div>
 
@@ -134,7 +136,7 @@ export function PhoneInput({
         <div
           ref={panelRef}
           role="listbox"
-          aria-label="Select country"
+          aria-label={tr('phoneInput.selectCountry')}
           className="absolute top-full left-0 z-50 mt-1 w-72 rounded-xl border border-border bg-surface shadow-glass"
         >
           {/* Search */}
@@ -143,7 +145,7 @@ export function PhoneInput({
             <input
               ref={searchRef}
               type="text"
-              placeholder="Search country or code…"
+              placeholder={tr('phoneInput.searchCountryOrCode')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
@@ -176,7 +178,7 @@ export function PhoneInput({
               );
             })}
             {filtered.length === 0 && (
-              <li className="px-3 py-4 text-center text-sm text-muted">No countries found</li>
+              <li className="px-3 py-4 text-center text-sm text-muted">{tr('phoneInput.noCountriesFound')}</li>
             )}
           </ul>
         </div>

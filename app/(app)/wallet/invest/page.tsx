@@ -8,11 +8,13 @@ import {
   InvestView, type InvestAsset, type InvestChild, type Holding, type PendingOrder,
 } from '@/components/wallet/invest-view';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Wallet Invest' };
 export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -77,9 +79,9 @@ export default async function WalletInvestPage() {
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Investment data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={tr('walletInvest.investmentDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some investment details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{tr('walletInvest.someInvestmentDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <InvestView assets={assetList} childWallets={children} holdings={holdingList} pendingOrders={pendingOrders} canManage={isManager(ctx.active.role)} />

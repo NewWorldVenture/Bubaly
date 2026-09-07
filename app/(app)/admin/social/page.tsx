@@ -7,11 +7,13 @@ import { PlatformDot } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Social Admin', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminSocialPage() {
+  const t = await getTranslations();
   const supabase = createServiceClient();
   const [accounts, posts, published, failedResults, generations, errors] = await Promise.all([
     supabase.from('social_accounts').select('id', { count: 'exact', head: true }),
@@ -27,10 +29,10 @@ export default async function AdminSocialPage() {
     console.error('[admin-social] social platform read failed', readError);
     return (
       <div className="module-page space-y-5">
-        <h1 className="text-2xl font-bold tracking-tight">Social platform</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t('adminSocial.socialPlatform')}</h1>
         <AdminSocialSubnav active="/admin/social" />
         <ErrorState message="Could not load social platform data from Supabase. Refresh and try again." />
-        <a href="/admin/social" className="text-sm font-medium text-brand-text underline">Refresh social overview</a>
+        <a href="/admin/social" className="text-sm font-medium text-brand-text underline">{t('adminSocial.refreshSocialOverview')}</a>
       </div>
     );
   }
@@ -46,7 +48,7 @@ export default async function AdminSocialPage() {
 
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Social platform</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('adminSocial.socialPlatform')}</h1>
       <AdminSocialSubnav active="/admin/social" />
       <div className="grid-stats">
         {stats.map((s) => (
@@ -60,7 +62,7 @@ export default async function AdminSocialPage() {
         ))}
       </div>
       <Card>
-        <h2 className="mb-3 text-sm font-semibold">Provider credential readiness</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t('adminSocial.providerCredentialReadiness')}</h2>
         <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">

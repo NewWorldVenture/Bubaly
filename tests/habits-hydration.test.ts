@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
 // TODO-0416 — hydration ships as habit presets + count logging, not a new module.
-const src = readFileSync('components/modules/habits-module.tsx', 'utf8');
+const src = readUiSource('components/modules/habits-module.tsx');
 function body(fn: string): string {
   const start = src.indexOf(`async function ${fn}(`);
   expect(start, `${fn} should exist`).toBeGreaterThan(-1);

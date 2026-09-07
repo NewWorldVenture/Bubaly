@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, type Lifecycle } from '@/lib/marketing/customers';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Customers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const TONE: Record<Lifecycle, 'success' | 'brand' | 'warning' | 'danger' | 'neut
 const FILTERS: (Lifecycle | 'all')[] = ['all', 'new', 'active', 'lapsed', 'churned', 'free'];
 
 export default async function MarketingCustomersPage({ searchParams }: { searchParams: Promise<{ lifecycle?: string; q?: string }> }) {
+  const t = await getTranslations();
   const { lifecycle = 'all', q = '' } = await searchParams;
   const supabase = createServiceClient();
   const { customers: loadedCustomers, error: customersError } = await getMarketingCustomersWithError(supabase);
@@ -35,10 +37,10 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">{customers.length.toLocaleString()} customer{customers.length === 1 ? '' : 's'} · derived live from families &amp; subscriptions</p>
+        <p className="text-sm text-muted">{customers.length.toLocaleString()} customer{customers.length === 1 ? '' : 's'} {t('adminMarketingCustomers.derivedLiveFromFamiliesAmpSubscriptions')}</p>
         <form className="flex gap-2" action="/admin/marketing/customers" method="GET">
           {lifecycle !== 'all' && <input type="hidden" name="lifecycle" value={lifecycle} />}
-          <input name="q" defaultValue={q} placeholder="Search name or email…" className="h-9 rounded-lg border border-border bg-surface/60 px-3 text-sm focus-ring" />
+          <input name="q" defaultValue={q} placeholder={t('adminMarketingCustomers.searchNameOrEmail')} className="h-9 rounded-lg border border-border bg-surface/60 px-3 text-sm focus-ring" />
         </form>
       </div>
 
@@ -55,20 +57,20 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
       </div>
 
       {customers.length === 0 ? (
-        <EmptyState icon={Users} title="No customers match" description="Adjust the filter or search to see customers." />
+        <EmptyState icon={Users} title={t('adminMarketingCustomers.noCustomersMatch')} description="Adjust the filter or search to see customers." />
       ) : (
         <Card className="p-0">
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-4 py-3 font-medium">Family</th>
-                  <th className="px-4 py-3 font-medium">Owner</th>
-                  <th className="px-4 py-3 font-medium">Members</th>
-                  <th className="px-4 py-3 font-medium">Plan</th>
-                  <th className="px-4 py-3 font-medium">Lifecycle</th>
-                  <th className="px-4 py-3 font-medium">Est. LTV</th>
-                  <th className="px-4 py-3 font-medium">Joined</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.family')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.owner')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.members')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.plan')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.lifecycle')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.estLtv')}</th>
+                  <th className="px-4 py-3 font-medium">{t('adminMarketingCustomers.joined')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">

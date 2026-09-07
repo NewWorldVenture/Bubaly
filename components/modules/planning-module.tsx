@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Plan = Tables<'prep_plans'>;
 type Step = Tables<'prep_plan_steps'>;
@@ -38,6 +39,7 @@ function daysUntil(dateStr: string): number {
 }
 
 export function PlanningModule() {
+  const t = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -84,7 +86,7 @@ export function PlanningModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Prep Plans"
+        title={t('planning.prepPlans')}
         description="The AI looks ahead and prepares — coordinated, timed plans for what's coming, so nothing is a last-minute scramble."
         action={<Button onClick={generate} disabled={generating}><Sparkles className="size-4" /> {generating ? 'Looking ahead…' : 'Generate plans'}</Button>}
       />
@@ -96,7 +98,7 @@ export function PlanningModule() {
       ) : (plans ?? []).length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <CalendarClock className="mx-auto mb-3 size-8 text-muted" />
-          <h3 className="mb-1 text-base font-semibold">Nothing to prep — yet</h3>
+          <h3 className="mb-1 text-base font-semibold">{t('planning.nothingToPrepYet')}</h3>
           <p className="mx-auto mb-4 max-w-md text-sm text-muted">
             Add a trip, a birthday, or a document with an expiry date, then generate plans. The
             assistant works backward from each date into timed, ordered steps.
@@ -125,7 +127,7 @@ export function PlanningModule() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[p.urgency] ?? URGENCY_STYLE.later)}>{URGENCY_LABEL[p.urgency] ?? p.urgency}</span>
-                    <button onClick={() => dismiss(p.id)} className="rounded-full p-1 text-muted hover:bg-muted/10" aria-label="Dismiss plan"><X className="size-4" /></button>
+                    <button onClick={() => dismiss(p.id)} className="rounded-full p-1 text-muted hover:bg-muted/10" aria-label={t('planning.dismissPlan')}><X className="size-4" /></button>
                   </div>
                 </div>
                 {planSteps.length > 0 && (

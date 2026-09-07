@@ -11,14 +11,14 @@ import {
   Plane, Cake, Inbox, ArrowRight, Check, X, CircleDot, Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { resolveActivityAction } from '@/app/(app)/dashboard/agents/actions';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatus } from '@/lib/agents/roster';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAgentActivity } from '@/lib/ai/explanation';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Activity = Tables<'agent_activity'>;
 
@@ -35,6 +35,7 @@ const SEV_STYLE = {
 } as const;
 
 export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing[]; activity: Activity[] }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<AgentId>('scheduler');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -57,9 +58,8 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
 
   async function resolve(a: Activity, status: 'done' | 'dismissed') {
     setHidden((h) => new Set(h).add(a.id));
-    const sb = createClient();
-    const { error: err } = await sb.from('agent_activity').update({ status }).eq('id', a.id);
-    if (err) { toastError(describeDbError(err)); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
+    const res = await resolveActivityAction(a.id, status);
+    if (!res.ok) { toastError(res.error); setHidden((h) => { const n = new Set(h); n.delete(a.id); return n; }); return; }
     success(status === 'done' ? 'Marked done' : 'Dismissed');
   }
 
@@ -68,7 +68,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title="Your family assistant"
+        title={t('agents.yourFamilyAssistant')}
         description="One assistant, a team of specialists behind it — each watching its corner of family life."
       />
 
@@ -81,7 +81,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-brand-text"><Compass className="h-5 w-5" /></span>
             <div>
-              <h2 className="text-sm font-semibold text-fg">Chief of Staff</h2>
+              <h2 className="text-sm font-semibold text-fg">{t('agents.chiefOfStaff')}</h2>
               <p className="text-xs text-muted">{AGENTS_BY_ID.chief_of_staff.role}</p>
             </div>
           </div>

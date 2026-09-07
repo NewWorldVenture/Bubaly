@@ -23,6 +23,7 @@ import type { Tables } from '@/lib/database.types';
 import { promptOfTheDay } from '@/lib/journal/prompts';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { appendTranscript } from '@/lib/voice/transcript';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Entry = Tables<'journal_entries'>;
 type Mood = NonNullable<Entry['mood']>;
@@ -37,6 +38,7 @@ const MOODS: { id: Mood; emoji: string; label: string }[] = [
 const moodOf = (id: string | null) => MOODS.find((m) => m.id === id);
 
 export function JournalModule() {
+  const t = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const memberId = selfMember?.id ?? null;
   const { success, error: toastError } = useToast();
@@ -65,17 +67,17 @@ export function JournalModule() {
   return (
     <div className="module-page">
       <PageHeader
-        title="Journal"
+        title={t('journal.journal')}
         description="A private space to reflect, process, and grow — just for you."
-        action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> New Entry</Button>}
+        action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.newEntry')}</Button>}
       />
 
       <PromptCard onWrite={(prompt) => setComposer({ entry: null, prompt })} />
 
       {data.length === 0 ? (
-        <EmptyState icon={BookHeart} title="Your journal is empty"
+        <EmptyState icon={BookHeart} title={t('journal.yourJournalIsEmpty')}
           description="Reflection builds self-awareness. Start with today's prompt or a free write."
-          action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> Write your first entry</Button>} />
+          action={<Button onClick={() => setComposer({ entry: null, prompt: null })}><Plus className="h-4 w-4" /> {t('journal.writeYourFirstEntry')}</Button>} />
       ) : (
         <div className="space-y-3">
           {data.map((e) => {
@@ -118,6 +120,7 @@ export function JournalModule() {
 }
 
 function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [prompt, setPrompt] = useState(promptOfTheDay());
   const [loading, setLoading] = useState(false);
@@ -139,13 +142,13 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
   return (
     <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-text">
-        <Sparkles className="h-3.5 w-3.5" /> Today&apos;s reflection
+        <Sparkles className="h-3.5 w-3.5" /> {t('journal.todayAposSReflection')}
       </div>
       <p className="mt-2 text-base font-semibold leading-relaxed">{prompt}</p>
       <div className="mt-3 flex items-center gap-2">
-        <Button onClick={() => onWrite(prompt)}><Pencil className="h-4 w-4" /> Write about this</Button>
+        <Button onClick={() => onWrite(prompt)}><Pencil className="h-4 w-4" /> {t('journal.writeAboutThis')}</Button>
         <Button variant="ghost" onClick={personalize} loading={loading}>
-          <Sparkles className="h-4 w-4" /> Personalize
+          <Sparkles className="h-4 w-4" /> {t('journal.personalize')}
         </Button>
       </div>
     </div>
@@ -157,6 +160,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
   familyId: string; userId: string; memberId: string | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [mood, setMood] = useState<Mood | null>(entry?.mood ?? null);
@@ -204,7 +208,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
         )}
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">How are you feeling?</label>
+          <label className="mb-1.5 block text-sm font-medium">{t('journal.howAreYouFeeling')}</label>
           <div className="flex gap-2">
             {MOODS.map((m) => (
               <button key={m.id} type="button" onClick={() => setMood(mood === m.id ? null : m.id)}
@@ -216,29 +220,29 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
           </div>
         </div>
 
-        <Field label="Title (optional)">
-          {(id) => <Input id={id} name="title" defaultValue={entry?.title ?? ''} placeholder="A line to remember this by…" />}
+        <Field label={t('journal.titleOptional')}>
+          {(id) => <Input id={id} name="title" defaultValue={entry?.title ?? ''} placeholder={t('journal.aLineToRememberThisBy')} />}
         </Field>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium">Your entry</label>
+            <label className="text-sm font-medium">{t('journal.yourEntry')}</label>
             {speech.supported && (
               <button type="button" onClick={toggleMic}
                 className={cn('flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition',
                   speech.listening ? 'bg-rose-500/10 text-rose-500' : 'text-brand-text hover:bg-brand/10')}>
-                {speech.listening ? <><MicOff className="h-3 w-3" /> Stop</> : <><Mic className="h-3 w-3" /> Speak</>}
+                {speech.listening ? <><MicOff className="h-3 w-3" /> {t('journal.stop')}</> : <><Mic className="h-3 w-3" /> {t('journal.speak')}</>}
               </button>
             )}
           </div>
           <Textarea value={body} onChange={(e) => setBody(e.target.value)}
-            placeholder="Let it out… write freely, no judgment." className="min-h-[200px]" autoFocus />
+            placeholder={t('journal.letItOutWriteFreelyNo')} className="min-h-[200px]" autoFocus />
           {speech.listening && <p className="mt-1 text-xs text-rose-500">Listening… {speech.transcript}</p>}
           {speech.error && <p className="mt-1 text-xs text-danger">{speech.error}</p>}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('journal.cancel')}</Button>
           <Button type="submit" loading={loading}>{entry ? 'Save' : 'Add Entry'}</Button>
         </div>
       </form>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
 
 // Mobile production-readiness (Phase 6 — touch targets & accessible names):
@@ -8,10 +9,10 @@ import fs from 'node:fs';
 // fixes: four icon-only buttons that had no name (shopping edit, inbox archive,
 // concierge back, feedback submit), plus the inbox archive being touch-visible.
 
-const shopping = fs.readFileSync('components/modules/shopping-module.tsx', 'utf8');
-const inbox = fs.readFileSync('components/modules/inbox-module.tsx', 'utf8');
-const concierge = fs.readFileSync('components/modules/concierge-module.tsx', 'utf8');
-const feedback = fs.readFileSync('app/(app)/feedback/feedback-board.tsx', 'utf8');
+const shopping = readUiSource('components/modules/shopping-module.tsx');
+const inbox = readUiSource('components/modules/inbox-module.tsx');
+const concierge = readUiSource('components/modules/concierge-module.tsx');
+const feedback = readUiSource('app/(app)/feedback/feedback-board.tsx');
 
 describe('icon-only controls expose an accessible name (Phase 6 a11y)', () => {
   it('shopping list edit button is labeled + focus-reachable', () => {

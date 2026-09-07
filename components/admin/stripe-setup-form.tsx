@@ -8,6 +8,7 @@ import { Input, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { saveStripeSettingsAction, testStripeConnectionAction } from '@/app/(app)/admin/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type StripeSetupInitial = {
   enabled: boolean;
@@ -21,6 +22,7 @@ export type StripeSetupInitial = {
 };
 
 export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -70,7 +72,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
     <Card className="p-5">
       <div className="mb-1 flex items-center gap-2">
         <CreditCard className="h-4 w-4 text-brand-text" />
-        <h2 className="font-semibold">Stripe Setup</h2>
+        <h2 className="font-semibold">{t('stripeSetup.stripeSetup')}</h2>
       </div>
       <p className="mb-4 text-sm text-muted">
         Configure the Bubaly Stripe account and the per-transaction service fee paid to Bubaly. These override the environment defaults at runtime.
@@ -81,12 +83,12 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
         <div className="flex flex-wrap items-end gap-4">
           <label className="flex items-center gap-2 text-sm font-medium">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4 rounded border-border" />
-            Charge the service fee on transactions
+            {t('stripeSetup.chargeTheServiceFeeOnTransactions')}
           </label>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Service fee ($ per transaction)" required>
+          <Field label={t('stripeSetup.serviceFeePerTransaction')} required>
             {(id) => (
               <div className="relative">
                 <Percent className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -95,33 +97,33 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
               </div>
             )}
           </Field>
-          <Field label="Service fee Stripe Price ID" hint="A one-time Price in the Bubaly account, added to checkout invoices.">
+          <Field label={t('stripeSetup.serviceFeeStripePriceId')} hint="A one-time Price in the Bubaly account, added to checkout invoices.">
             {(id) => <Input id={id} value={feePriceId} onChange={(e) => setFeePriceId(e.target.value)} placeholder="price_…" />}
           </Field>
         </div>
 
         {/* Account credentials */}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Publishable key">
+          <Field label={t('stripeSetup.publishableKey')}>
             {(id) => <Input id={id} value={publishableKey} onChange={(e) => setPublishableKey(e.target.value)} placeholder="pk_live_…" />}
           </Field>
-          <Field label="Connect / platform account ID" hint="Bubaly platform account for routing application fees.">
+          <Field label={t('stripeSetup.connectPlatformAccountId')} hint="Bubaly platform account for routing application fees.">
             {(id) => <Input id={id} value={connectAccountId} onChange={(e) => setConnectAccountId(e.target.value)} placeholder="acct_…" />}
           </Field>
-          <Field label="Secret key" hint={initial.hasSecret ? 'Saved — leave blank to keep.' : initial.envSecretSet ? 'Using env STRIPE_SECRET_KEY — enter to override.' : 'Not set.'}>
+          <Field label={t('stripeSetup.secretKey')} hint={initial.hasSecret ? 'Saved — leave blank to keep.' : initial.envSecretSet ? 'Using env STRIPE_SECRET_KEY — enter to override.' : 'Not set.'}>
             {(id) => <Input id={id} type="password" autoComplete="off" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder={initial.hasSecret ? '•••••••• saved' : 'sk_live_…'} />}
           </Field>
-          <Field label="Webhook signing secret" hint={initial.hasWebhook ? 'Saved — leave blank to keep.' : 'Not set.'}>
+          <Field label={t('stripeSetup.webhookSigningSecret')} hint={initial.hasWebhook ? 'Saved — leave blank to keep.' : 'Not set.'}>
             {(id) => <Input id={id} type="password" autoComplete="off" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={initial.hasWebhook ? '•••••••• saved' : 'whsec_…'} />}
           </Field>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button type="submit" disabled={saving} className="gap-1.5">
-            {saving ? 'Saving…' : <><Save className="h-4 w-4" /> Save Stripe Setup</>}
+            {saving ? 'Saving…' : <><Save className="h-4 w-4" /> {t('stripeSetup.saveStripeSetup')}</>}
           </Button>
           <Button type="button" variant="outline" onClick={testConnection} disabled={testing} className="gap-1.5">
-            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />} Test connection
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />} {t('stripeSetup.testConnection')}
           </Button>
         </div>
 

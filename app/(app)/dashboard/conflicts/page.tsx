@@ -5,6 +5,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'AI Conflict Resolution' };
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ function whenLabel(startsAt: string, endsAt: string | null): string {
 }
 
 export default async function ConflictsPage() {
+  const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/conflicts');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -78,15 +80,15 @@ export default async function ConflictsPage() {
   return (
     <div className="module-page">
       <Link href="/dashboard/command-center" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> Command Center
+        <ArrowLeft className="h-4 w-4" /> {t('dashboardConflicts.commandCenter')}
       </Link>
       <div className="flex items-center gap-3">
         <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
           <CalendarClock className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">AI Conflict Resolution</h1>
-          <p className="text-sm text-muted">Overlapping events in the next two weeks, with one-tap fixes and AI suggestions.</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('dashboardConflicts.aiConflictResolution')}</h1>
+          <p className="text-sm text-muted">{t('dashboardConflicts.overlappingEventsInTheNextTwo')}</p>
         </div>
       </div>
 

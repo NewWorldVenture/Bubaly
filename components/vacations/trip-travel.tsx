@@ -5,6 +5,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { TRANSPORT_KINDS, dollars, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Flight = Tables<'vacation_flights'>;
 type Transport = Tables<'vacation_transportation'>;
@@ -43,10 +44,11 @@ const transportFields: FieldDef[] = [
 ];
 
 export function TripTravel({ vacationId }: { vacationId: string }) {
+  const tr = useTranslations();
   return (
     <div className="space-y-8">
       <TripCrudSection<Flight>
-        table="vacation_flights" vacationId={vacationId} title="Flights" icon={Plane}
+        table="vacation_flights" vacationId={vacationId} title={tr('tripTravel.flights')} icon={Plane}
         fields={flightFields} emptyText="No flights yet" addLabel="Add flight"
         orderBy={(a, b) => (a.depart_at ?? '').localeCompare(b.depart_at ?? '')}
         renderRow={(f) => (
@@ -64,7 +66,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
         )}
       />
       <TripCrudSection<Transport>
-        table="vacation_transportation" vacationId={vacationId} title="Ground transportation" icon={Car}
+        table="vacation_transportation" vacationId={vacationId} title={tr('tripTravel.groundTransportation')} icon={Car}
         fields={transportFields} emptyText="No transportation yet" addLabel="Add transport"
         orderBy={(a, b) => (a.depart_at ?? '').localeCompare(b.depart_at ?? '')}
         renderRow={(t) => {

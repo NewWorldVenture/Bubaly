@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CloudSun, MapPin } from 'lucide-react';
 import { fetchForecast, reverseGeocode, weatherInfo } from '@/lib/weather/open-meteo';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type State =
   | { status: 'loading' }
@@ -13,6 +14,7 @@ type State =
 /** Compact, real current-conditions widget for the dashboard header. Uses the
  *  browser's location; shows nothing fabricated and links to the full page. */
 export function DashboardWeather() {
+  const t = useTranslations();
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export function DashboardWeather() {
   if (state.status === 'denied') {
     return (
       <Link href="/dashboard/weather" className="hidden items-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted transition hover:bg-elevated sm:flex">
-        <CloudSun className="h-5 w-5" /> Weather
+        <CloudSun className="h-5 w-5" /> {t('dashboardWeather.weather')}
       </Link>
     );
   }

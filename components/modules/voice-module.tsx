@@ -21,6 +21,7 @@ import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
@@ -51,6 +52,7 @@ function ago(iso: string): string {
 }
 
 export function VoiceModule() {
+  const tr = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
@@ -133,7 +135,7 @@ export function VoiceModule() {
   return (
     <div className="mx-auto w-full max-w-2xl">
       <PageHeader
-        title="Voice Control"
+        title={tr('voice.voiceControl')}
         description="Speak a command — Bubaly files it as a task, note, event, or shopping item, automatically."
       />
 
@@ -162,7 +164,7 @@ export function VoiceModule() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
-          placeholder="e.g. Remind me to pack cleats tomorrow at 8am"
+          placeholder={tr('voice.eGRemindMeToPack')}
           className="mt-2"
           onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(text); } }}
         />
@@ -182,9 +184,9 @@ export function VoiceModule() {
             })()}
           </div>
           <div className="flex items-center gap-2">
-            {text && <Button variant="ghost" onClick={() => { setText(''); speech.reset(); }} className="gap-1"><RotateCcw className="h-4 w-4" /> Clear</Button>}
+            {text && <Button variant="ghost" onClick={() => { setText(''); speech.reset(); }} className="gap-1"><RotateCcw className="h-4 w-4" /> {tr('voice.clear')}</Button>}
             <Button onClick={() => run(text)} disabled={!text.trim() || running} className="gap-1.5">
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Run command
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {tr('voice.runCommand')}
             </Button>
           </div>
         </div>
@@ -203,7 +205,7 @@ export function VoiceModule() {
       {/* Recent commands */}
       <div className="mt-8">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg">
-          <Sparkles className="h-4 w-4 text-brand-text" /> Recent commands
+          <Sparkles className="h-4 w-4 text-brand-text" /> {tr('voice.recentCommands')}
         </h2>
         {loading ? (
           <SkeletonList count={3} />
@@ -211,7 +213,7 @@ export function VoiceModule() {
           <ErrorState message="Could not load voice history. Refresh and try again." onRetry={refresh} />
         ) : (history ?? []).length === 0 ? (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">
-            <Info className="h-4 w-4 shrink-0" /> Your spoken commands will appear here so you can re-run them in a tap.
+            <Info className="h-4 w-4 shrink-0" /> {tr('voice.yourSpokenCommandsWillAppearHere')}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -231,9 +233,9 @@ export function VoiceModule() {
                       {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
                     </p>
                   </div>
-                  <button onClick={() => run(c.transcript)} aria-label="Run again" title="Run again"
+                  <button onClick={() => run(c.transcript)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-brand-text"><RotateCcw className="h-4 w-4" /></button>
-                  <button onClick={() => remove(c)} aria-label="Remove" title="Remove"
+                  <button onClick={() => remove(c)} aria-label={tr('voice.remove')} title={tr('voice.remove')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>
               );

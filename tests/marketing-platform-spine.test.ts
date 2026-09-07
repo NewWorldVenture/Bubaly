@@ -1,32 +1,33 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
 const migration = readFileSync('supabase/migrations/0237_marketing_platform_spine.sql', 'utf8');
 const imageMigration = readFileSync('supabase/migrations/0238_blog_image_provenance.sql', 'utf8');
 const platform = readFileSync('lib/marketing/platform.ts', 'utf8');
-const worker = readFileSync('app/api/cron/marketing/route.ts', 'utf8');
-const providers = readFileSync('app/api/cron/marketing-providers/route.ts', 'utf8');
+const worker = readUiSource('app/api/cron/marketing/route.ts');
+const providers = readUiSource('app/api/cron/marketing-providers/route.ts');
 const providerSync = readFileSync('lib/marketing/provider-sync.ts', 'utf8');
-const featureRoute = readFileSync('app/(marketing)/features/[slug]/page.tsx', 'utf8');
-const customRoute = readFileSync('app/(marketing)/p/[slug]/page.tsx', 'utf8');
+const featureRoute = readUiSource('app/(marketing)/features/[slug]/page.tsx');
+const customRoute = readUiSource('app/(marketing)/p/[slug]/page.tsx');
 const verifier = readFileSync('scripts/verify-marketing-platform.mjs', 'utf8');
 const remoteAssetVerifier = readFileSync('scripts/verify-marketing-assets-remote.mjs', 'utf8');
-const videoActions = readFileSync('app/(app)/admin/marketing/video/actions.ts', 'utf8');
+const videoActions = readUiSource('app/(app)/admin/marketing/video/actions.ts');
 const provenanceBackfill = readFileSync('scripts/backfill-marketing-asset-provenance.mjs', 'utf8');
 const migrationSource = readFileSync('supabase/migrations/0237_marketing_platform_spine.sql', 'utf8');
 const legacyBridge = readFileSync('lib/marketing/legacy-bridge.ts', 'utf8');
-const contentActions = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
-const landingActions = readFileSync('app/(app)/admin/marketing/actions.ts', 'utf8');
-const landingRoute = readFileSync('app/(marketing)/lp/[slug]/page.tsx', 'utf8');
+const contentActions = readUiSource('app/(app)/admin/marketing/content/actions.ts');
+const landingActions = readUiSource('app/(app)/admin/marketing/actions.ts');
+const landingRoute = readUiSource('app/(marketing)/lp/[slug]/page.tsx');
 const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 const productionMigrationWorkflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
 const imageBackfill = readFileSync('scripts/backfill-marketing-image-provenance.mjs', 'utf8');
 const blogGenerator = readFileSync('scripts/generate-blog-posts.mjs', 'utf8');
 const coverageBackfill = readFileSync('scripts/backfill-marketing-coverage.mjs', 'utf8');
 const coverageVerifier = readFileSync('scripts/verify-marketing-coverage-remote.mjs', 'utf8');
-const platformAdmin = readFileSync('app/(app)/admin/marketing/platform/page.tsx', 'utf8');
+const platformAdmin = readUiSource('app/(app)/admin/marketing/platform/page.tsx');
 const runtimeVerifier = readFileSync('scripts/verify-marketing-runtime-remote.mjs', 'utf8');
-const marketingSettings = readFileSync('app/(app)/admin/marketing/settings/page.tsx', 'utf8');
+const marketingSettings = readUiSource('app/(app)/admin/marketing/settings/page.tsx');
 const backfillQueueMigration = readFileSync('supabase/migrations/0239_marketing_backfill_queue_cleanup.sql', 'utf8');
 
 describe('marketing platform spine contract', () => {

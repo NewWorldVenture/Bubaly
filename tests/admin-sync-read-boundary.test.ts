@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const source = readFileSync('app/(app)/admin/sync/page.tsx', 'utf8');
+const source = readUiSource('app/(app)/admin/sync/page.tsx');
 
 describe('admin sync read boundary', () => {
   it('does not render zero-valued provider operations after a required read failure', () => {

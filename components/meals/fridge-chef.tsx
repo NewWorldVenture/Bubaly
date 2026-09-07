@@ -5,6 +5,7 @@ import { Camera, CalendarPlus, Clock, Check, AlertTriangle, ShoppingCart, Sparkl
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Recipe = {
   title: string;
@@ -30,6 +31,7 @@ function readAsBase64(file: File): Promise<{ data: string; mediaType: string }> 
 }
 
 export function FridgeChef() {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export function FridgeChef() {
     <div className="space-y-5">
       <div className="rounded-3xl border border-border bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6 text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15"><Utensils className="h-7 w-7 text-brand-text" /></div>
-        <h2 className="mt-3 text-lg font-bold">What can I make for dinner?</h2>
+        <h2 className="mt-3 text-lg font-bold">{t('fridgeChef.whatCanIMakeForDinner')}</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted">
           Snap a photo of your fridge or pantry. Bubaly spots what you have, suggests dinners that fit your family&apos;s allergies, and adds anything missing to your grocery list.
         </p>
@@ -130,13 +132,13 @@ export function FridgeChef() {
 
         {preview && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Your fridge" className="mx-auto mt-4 max-h-48 rounded-2xl border border-border object-cover" />
+          <img src={preview} alt={t('fridgeChef.yourFridge')} className="mx-auto mt-4 max-h-48 rounded-2xl border border-border object-cover" />
         )}
       </div>
 
       {scanning && (
         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted">
-          <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> Cooking up ideas from your photo…
+          <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> {t('fridgeChef.cookingUpIdeasFromYourPhoto')}
         </div>
       )}
 

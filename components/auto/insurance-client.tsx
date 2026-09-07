@@ -14,11 +14,13 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Policy = Tables<'auto_insurance_policies'>;
 type Vehicle = Tables<'vehicles'>;
 
 export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; vehicles: Vehicle[] }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Policy | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -29,14 +31,14 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Auto insurance</h2>
-          <p className="text-xs text-muted">Full policy details plus a one-tap emergency card for claims and roadside.</p>
+          <h2 className="text-sm font-semibold">{t('insuranceClient.autoInsurance')}</h2>
+          <p className="text-xs text-muted">{t('insuranceClient.fullPolicyDetailsPlusAOne')}</p>
         </div>
-        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add policy</Button>
+        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>
       </div>
 
       {policies.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No policies yet" description="Add your auto policy so claim and roadside numbers are one tap away in an emergency." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add policy</Button>} />
+        <EmptyState icon={ShieldCheck} title={t('insuranceClient.noPoliciesYet')} description="Add your auto policy so claim and roadside numbers are one tap away in an emergency." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>} />
       ) : (
         <div className="space-y-3">
           {policies.map((p) => {
@@ -88,42 +90,42 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
         </div>
       )}
 
-      <p className="inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> Stored privately for your family only. Keep your policy doc handy for claims.</p>
+      <p className="inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {t('insuranceClient.storedPrivatelyForYourFamilyOnly')}</p>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit policy' : 'Add policy'}>
         <form action={(fd) => start(async () => { await savePolicyAction(fd); setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Provider"><Input name="provider" defaultValue={editing?.provider ?? ''} placeholder="GEICO" /></Field>
-            <Field label="Policy number"><Input name="policy_number" defaultValue={editing?.policy_number ?? ''} /></Field>
+            <Field label={t('insuranceClient.provider')}><Input name="provider" defaultValue={editing?.provider ?? ''} placeholder="GEICO" /></Field>
+            <Field label={t('insuranceClient.policyNumber')}><Input name="policy_number" defaultValue={editing?.policy_number ?? ''} /></Field>
           </div>
-          <Field label="Vehicle"><Select name="vehicle_id" defaultValue={editing?.vehicle_id ?? ''}><option value="">— all / none —</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
-          <Field label="Coverage summary"><Textarea name="coverage_summary" rows={2} defaultValue={editing?.coverage_summary ?? ''} placeholder="Full coverage, $500 deductible…" /></Field>
+          <Field label={t('insuranceClient.vehicle')}><Select name="vehicle_id" defaultValue={editing?.vehicle_id ?? ''}><option value="">{t('insuranceClient.allNone')}</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
+          <Field label={t('insuranceClient.coverageSummary')}><Textarea name="coverage_summary" rows={2} defaultValue={editing?.coverage_summary ?? ''} placeholder={t('insuranceClient.fullCoverage500Deductible')} /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Liability limits"><Input name="liability_limits" defaultValue={editing?.liability_limits ?? ''} placeholder="100/300/100" /></Field>
+            <Field label={t('insuranceClient.liabilityLimits')}><Input name="liability_limits" defaultValue={editing?.liability_limits ?? ''} placeholder="100/300/100" /></Field>
             <Field label="NAIC"><Input name="naic" defaultValue={editing?.naic ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Collision deductible"><Input type="number" name="deductible_collision" defaultValue={editing?.deductible_collision ?? ''} /></Field>
-            <Field label="Comprehensive deductible"><Input type="number" name="deductible_comprehensive" defaultValue={editing?.deductible_comprehensive ?? ''} /></Field>
+            <Field label={t('insuranceClient.collisionDeductible')}><Input type="number" name="deductible_collision" defaultValue={editing?.deductible_collision ?? ''} /></Field>
+            <Field label={t('insuranceClient.comprehensiveDeductible')}><Input type="number" name="deductible_comprehensive" defaultValue={editing?.deductible_comprehensive ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Claims phone"><Input name="claims_phone" defaultValue={editing?.claims_phone ?? ''} /></Field>
-            <Field label="Roadside phone"><Input name="roadside_phone" defaultValue={editing?.roadside_phone ?? ''} /></Field>
-            <Field label="Agent phone"><Input name="agent_phone" defaultValue={editing?.agent_phone ?? ''} /></Field>
+            <Field label={t('insuranceClient.claimsPhone')}><Input name="claims_phone" defaultValue={editing?.claims_phone ?? ''} /></Field>
+            <Field label={t('insuranceClient.roadsidePhone')}><Input name="roadside_phone" defaultValue={editing?.roadside_phone ?? ''} /></Field>
+            <Field label={t('insuranceClient.agentPhone')}><Input name="agent_phone" defaultValue={editing?.agent_phone ?? ''} /></Field>
           </div>
-          <Field label="Agent name"><Input name="agent_name" defaultValue={editing?.agent_name ?? ''} /></Field>
+          <Field label={t('insuranceClient.agentName')}><Input name="agent_name" defaultValue={editing?.agent_name ?? ''} /></Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Effective"><Input type="date" name="effective_on" defaultValue={editing?.effective_on ?? ''} /></Field>
-            <Field label="Expires"><Input type="date" name="expires_on" defaultValue={editing?.expires_on ?? ''} /></Field>
-            <Field label="Premium"><Input type="number" name="premium" defaultValue={editing?.premium ?? ''} /></Field>
+            <Field label={t('insuranceClient.effective')}><Input type="date" name="effective_on" defaultValue={editing?.effective_on ?? ''} /></Field>
+            <Field label={t('insuranceClient.expires')}><Input type="date" name="expires_on" defaultValue={editing?.expires_on ?? ''} /></Field>
+            <Field label={t('insuranceClient.premium')}><Input type="number" name="premium" defaultValue={editing?.premium ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Billing"><Select name="premium_period" defaultValue={editing?.premium_period ?? '6_month'}><option value="monthly">Monthly</option><option value="6_month">6-month</option><option value="annual">Annual</option></Select></Field>
-            <label className="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="is_active" defaultChecked={editing?.is_active ?? true} /> Active policy</label>
+            <Field label={t('insuranceClient.billing')}><Select name="premium_period" defaultValue={editing?.premium_period ?? '6_month'}><option value="monthly">{t('insuranceClient.monthly')}</option><option value="6_month">6-month</option><option value="annual">{t('insuranceClient.annual')}</option></Select></Field>
+            <label className="mt-6 flex items-center gap-2 text-sm"><input type="checkbox" name="is_active" defaultChecked={editing?.is_active ?? true} /> {t('insuranceClient.activePolicy')}</label>
           </div>
-          <Field label="Notes"><Textarea name="notes" rows={2} defaultValue={editing?.notes ?? ''} /></Field>
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={pending}>{editing ? 'Save' : 'Add policy'}</Button></div>
+          <Field label={t('insuranceClient.notes')}><Textarea name="notes" rows={2} defaultValue={editing?.notes ?? ''} /></Field>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('insuranceClient.cancel')}</Button><Button type="submit" loading={pending}>{editing ? 'Save' : 'Add policy'}</Button></div>
         </form>
       </Modal>
     </div>

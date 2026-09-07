@@ -24,6 +24,7 @@ import {
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -50,6 +51,7 @@ function toLocalInput(iso: string): string {
 const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
 
 export function CareModule() {
+  const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -146,14 +148,14 @@ export function CareModule() {
   return (
     <div>
       <PageHeader
-        title="Care Log"
+        title={tr('care.careLog')}
         description="Coordinate care for a loved one — log check-ins, track well-being, and see who's been in touch."
-        action={<div className="flex items-center gap-2"><AiInsight kind="care" iconOnly /><Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="care" iconOnly /><Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('care.logCare')}</Button></div>}
       />
 
       {/* Recipient selector */}
       <div className="flex max-h-28 flex-wrap items-center gap-2 mb-5 overflow-y-auto">
-        <span className="text-sm text-muted">Caring for:</span>
+        <span className="text-sm text-muted">{tr('care.caringFor')}</span>
         {members.map((m) => (
           <button key={m.id} onClick={() => setRecipientId(m.id)}
             className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition',
@@ -164,31 +166,31 @@ export function CareModule() {
       </div>
 
       {!recipientId ? (
-        <EmptyState icon={HeartHandshake} title="Add a family member" description="Add family members to start coordinating their care." />
+        <EmptyState icon={HeartHandshake} title={tr('care.addAFamilyMember')} description="Add family members to start coordinating their care." />
       ) : (
         <>
           {/* Status cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
             <div className={cn('rounded-2xl border p-5', overdue ? 'bg-amber-500/5 border-amber-500/30' : 'bg-surface/50 border-border')}>
               <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider mb-1.5">
-                <Clock className="h-4 w-4" /> Last contact
+                <Clock className="h-4 w-4" /> {tr('care.lastContact')}
               </div>
               <div className={cn('text-2xl font-bold', overdue ? 'text-amber-400' : 'text-fg')}>{sinceLabel}</div>
-              {overdue && <div className="text-xs text-amber-400 mt-1">Check in soon</div>}
+              {overdue && <div className="text-xs text-amber-400 mt-1">{tr('care.checkInSoon')}</div>}
             </div>
             <div className="rounded-2xl bg-surface/50 border border-border p-5">
               <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider mb-1.5">
                 <Heart className="h-4 w-4" /> Well-being
               </div>
               <div className="text-2xl font-bold text-fg">{avgWellbeing == null ? '—' : `${avgWellbeing}/5`}</div>
-              <div className="text-xs text-muted mt-1">Average rated</div>
+              <div className="text-xs text-muted mt-1">{tr('care.averageRated')}</div>
             </div>
             <div className="rounded-2xl bg-surface/50 border border-border p-5">
               <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider mb-1.5">
-                <HeartHandshake className="h-4 w-4" /> This week
+                <HeartHandshake className="h-4 w-4" /> {tr('care.thisWeek')}
               </div>
               <div className="text-2xl font-bold text-fg">{weekCount}</div>
-              <div className="text-xs text-muted mt-1">Care touchpoints</div>
+              <div className="text-xs text-muted mt-1">{tr('care.careTouchpoints')}</div>
             </div>
           </div>
 
@@ -209,7 +211,7 @@ export function CareModule() {
           {recipientEntries.length === 0 ? (
             <EmptyState icon={HeartHandshake} title={`No care logged for ${memberName(recipientId)}`}
               description="Use the quick-log buttons above or “Log care” to record the first check-in."
-              action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button>} />
+              action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('care.logCare')}</Button>} />
           ) : (
             <div className="space-y-6">
               {grouped.map(([day, dayEntries]) => (
@@ -243,8 +245,8 @@ export function CareModule() {
                                 {e.logged_by && <div className="text-xs text-muted mt-0.5">by {memberName(e.logged_by)}</div>}
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
-                                <button onClick={() => openEdit(e)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                                <button onClick={() => remove(e)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                                <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                                <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                               </div>
                             </div>
                           </div>
@@ -263,34 +265,34 @@ export function CareModule() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit care entry' : `Log care${recipientId ? ` · ${memberName(recipientId)}` : ''}`}>
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">
+            <Field label={tr('care.type')}>
               {(id) => (
                 <Select id={id} value={form.log_type} onChange={(e) => setForm((f) => ({ ...f, log_type: e.target.value as CareLogType }))}>
                   {(Object.keys(CARE_LOG_TYPE_LABELS) as CareLogType[]).map((t) => <option key={t} value={t}>{CARE_LOG_TYPE_LABELS[t]}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="When">
+            <Field label={tr('care.when')}>
               {(id) => <Input id={id} type="datetime-local" value={form.occurred_at} onChange={(e) => setForm((f) => ({ ...f, occurred_at: e.target.value }))} />}
             </Field>
           </div>
-          <Field label="Well-being (1–5)" hint="Optional — how were they doing?">
+          <Field label={tr('care.wellBeing15')} hint="Optional — how were they doing?">
             {(id) => (
               <Select id={id} value={form.wellbeing} onChange={(e) => setForm((f) => ({ ...f, wellbeing: e.target.value }))}>
-                <option value="">Not rated</option>
-                <option value="5">5 — Great</option>
-                <option value="4">4 — Good</option>
-                <option value="3">3 — Okay</option>
-                <option value="2">2 — Poor</option>
-                <option value="1">1 — Concerning</option>
+                <option value="">{tr('care.notRated')}</option>
+                <option value="5">{tr('care.5Great')}</option>
+                <option value="4">{tr('care.4Good')}</option>
+                <option value="3">{tr('care.3Okay')}</option>
+                <option value="2">{tr('care.2Poor')}</option>
+                <option value="1">{tr('care.1Concerning')}</option>
               </Select>
             )}
           </Field>
-          <Field label="Notes">
-            {(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder="How are they? Anything to follow up on?" />}
+          <Field label={tr('care.notes')}>
+            {(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder={tr('care.howAreTheyAnythingToFollow')} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{tr('care.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Log care'}</Button>
           </div>
         </form>

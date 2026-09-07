@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 import { readFileSync } from 'node:fs';
 
-const cardsView = readFileSync('components/wallet/money-cards-view.tsx', 'utf8');
-const childView = readFileSync('components/wallet/child-detail-view.tsx', 'utf8');
+const cardsView = readUiSource('components/wallet/money-cards-view.tsx');
+const childView = readUiSource('components/wallet/child-detail-view.tsx');
 
 describe('wallet card availability contract', () => {
   it('does not promise cards when the provider capability is disabled', () => {

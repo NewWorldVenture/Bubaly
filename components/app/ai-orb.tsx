@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Sparkles, X, Loader2 } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // Lazy-load the (large) assistant only when the mobile overlay opens, so the
 // globally-mounted orb doesn't ship the assistant bundle on every page.
@@ -20,6 +21,7 @@ const AssistantModule = dynamic(
  * global entry point into the one AI intelligence layer.
  */
 export function AIOrb() {
+  const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -54,22 +56,22 @@ export function AIOrb() {
     <>
       <button
         onClick={handleClick}
-        aria-label="Ask the AI assistant"
+        aria-label={t('aiOrb.askTheAiAssistant')}
         aria-haspopup="dialog"
         aria-expanded={open}
         className="group fixed bottom-[calc(9rem+var(--safe-bottom))] right-[calc(1rem+var(--safe-right))] z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-24 lg:right-6"
       >
         <Sparkles className="h-6 w-6" />
         <span className="pointer-events-none absolute right-16 hidden whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-fg shadow-lg group-hover:block lg:block lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
-          Ask AI
+          {t('aiOrb.askAi')}
         </span>
       </button>
 
       {/* Mobile overlay — the assistant hovers over the current screen. */}
       {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="AI assistant">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t('aiOrb.aiAssistant')}>
           <button
-            aria-label="Close assistant"
+            aria-label={t('aiOrb.closeAssistant')}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
@@ -80,7 +82,7 @@ export function AIOrb() {
             <div className="flex shrink-0 items-center justify-end p-2">
               <button
                 onClick={() => setOpen(false)}
-                aria-label="Close"
+                aria-label={t('aiOrb.close')}
                 className="grid h-9 w-9 place-items-center rounded-full bg-elevated text-muted transition hover:text-fg"
               >
                 <X className="h-5 w-5" />

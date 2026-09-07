@@ -22,6 +22,7 @@ import {
   WARDROBE_CATEGORIES, WARDROBE_STATUSES, SEASONS, OCCASIONS, categoryMeta, statusMeta, occasionMeta,
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -43,6 +44,7 @@ function photoUrl(path: string | null): string | null {
 }
 
 export function ClosetModule() {
+  const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -172,19 +174,19 @@ export function ClosetModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Closet & Outfits"
+        title={t('closet.closetOutfits')}
         description="Every family member’s closet, today’s outfit picked from what they own, and the laundry, outgrown and cost-per-wear signals that keep it honest."
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="closet" iconOnly />
-            <Button variant="secondary" onClick={() => setBuilderOpen(true)}><Wand2 className="h-4 w-4" /> Build outfit</Button>
-            <Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> Add item</Button>
+            <Button variant="secondary" onClick={() => setBuilderOpen(true)}><Wand2 className="h-4 w-4" /> {t('closet.buildOutfit')}</Button>
+            <Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addItem')}</Button>
           </div>
         }
       />
 
       {/* Member switcher */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Family member">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('closet.familyMember')}>
         {members.map((m) => (
           <button
             key={m.id}
@@ -202,19 +204,19 @@ export function ClosetModule() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> Today’s outfit for {memberName(memberId)}</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand-text"><Sparkles className="h-4 w-4" /> {t('closet.todaysOutfitFor')} {memberName(memberId)}</div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <label className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-2 py-1">
                 <Thermometer className="h-4 w-4 text-muted" />
                 <input
-                  type="number" value={tempF} min={-30} max={120} aria-label="Temperature in Fahrenheit"
+                  type="number" value={tempF} min={-30} max={120} aria-label={t('closet.temperatureInFahrenheit')}
                   onChange={(e) => { setTempF(Number(e.target.value)); setTempSource('manual'); }}
                   className="w-14 bg-transparent text-right outline-none"
                 />
                 <span className="text-muted">°F</span>
                 <span className="text-[10px] text-muted">{tempSource === 'forecast' ? `· ${location?.name ?? 'forecast'}` : '· manual'}</span>
               </label>
-              <Select value={occasion} onChange={(e) => setOccasion(e.target.value as OutfitOccasion)} aria-label="Occasion" className="w-auto">
+              <Select value={occasion} onChange={(e) => setOccasion(e.target.value as OutfitOccasion)} aria-label={t('closet.occasion')} className="w-auto">
                 {OCCASIONS.map((o) => <option key={o.value} value={o.value}>{o.emoji} {o.label}</option>)}
               </Select>
             </div>
@@ -240,11 +242,11 @@ export function ClosetModule() {
                 })}
               </ul>
               {suggestion.missing.length > 0 && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-300"><AlertTriangle className="h-3.5 w-3.5" /> Nothing suitable for: {suggestion.missing.join(', ')} — a gap worth filling.</p>
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-300"><AlertTriangle className="h-3.5 w-3.5" /> {t('closet.nothingSuitableFor')} {suggestion.missing.join(', ')} {t('closet.aGapWorthFilling')}</p>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button size="sm" loading={busy} onClick={() => logWear(suggestion.picks.map((p) => p.item.id), null)}><Check className="h-3.5 w-3.5" /> Wearing this</Button>
-                <Button size="sm" variant="secondary" onClick={saveSuggestionAsOutfit}><Star className="h-3.5 w-3.5" /> Save as outfit</Button>
+                <Button size="sm" loading={busy} onClick={() => logWear(suggestion.picks.map((p) => p.item.id), null)}><Check className="h-3.5 w-3.5" /> {t('closet.wearingThis')}</Button>
+                <Button size="sm" variant="secondary" onClick={saveSuggestionAsOutfit}><Star className="h-3.5 w-3.5" /> {t('closet.saveAsOutfit')}</Button>
               </div>
             </>
           )}
@@ -252,23 +254,23 @@ export function ClosetModule() {
 
         <div className="space-y-3">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold"><Shirt className="h-4 w-4 text-brand-text" /> Closet status</div>
+            <div className="flex items-center gap-2 text-sm font-semibold"><Shirt className="h-4 w-4 text-brand-text" /> {t('closet.closetStatus')}</div>
             <p className={cn('mt-2 text-xl font-bold', summary.retire > 0 ? 'text-amber-300' : 'text-fg')}>{summary.text}</p>
             <p className="mt-1 text-xs text-muted">
-              {summary.wornThisWeek} outfit{summary.wornThisWeek === 1 ? '' : 's'} logged this week
+              {summary.wornThisWeek} outfit{summary.wornThisWeek === 1 ? '' : 's'} {t('closet.loggedThisWeek')}
               {summary.avgCostPerWearCents !== null ? ` · avg ${money(summary.avgCostPerWearCents)} per wear` : ''}
             </p>
             {summary.mostWorn.length > 0 && (
-              <p className="mt-2 text-xs text-muted">Most worn: {summary.mostWorn.map((m) => `${m.name} (${m.count}×)`).join(', ')}</p>
+              <p className="mt-2 text-xs text-muted">{t('closet.mostWorn')} {summary.mostWorn.map((m) => `${m.name} (${m.count}×)`).join(', ')}</p>
             )}
           </div>
           {neglected.length > 0 && (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-              <p className="font-semibold text-amber-200">Not worn in months</p>
+              <p className="font-semibold text-amber-200">{t('closet.notWornInMonths')}</p>
               <ul className="mt-1 space-y-1 text-xs text-amber-100/90">
                 {neglected.map((i) => <li key={i.id}>{i.name}{i.last_worn_on ? ` · last worn ${fmtDate(i.last_worn_on)}` : ' · never worn'}</li>)}
               </ul>
-              <p className="mt-2 text-[11px] text-amber-200/80">Outgrown? Mark it, donate it, or move it to storage from the item menu.</p>
+              <p className="mt-2 text-[11px] text-amber-200/80">{t('closet.outgrownMarkItDonateItOr')}</p>
             </div>
           )}
         </div>
@@ -276,19 +278,19 @@ export function ClosetModule() {
 
       {/* Filters + items */}
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as 'all' | WardrobeCategory)} aria-label="Category filter" className="w-auto">
-          <option value="all">All categories</option>
+        <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as 'all' | WardrobeCategory)} aria-label={t('closet.categoryFilter')} className="w-auto">
+          <option value="all">{t('closet.allCategories')}</option>
           {WARDROBE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
         </Select>
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | WardrobeStatus)} aria-label="Status filter" className="w-auto">
-          <option value="all">Any status</option>
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | WardrobeStatus)} aria-label={t('closet.statusFilter')} className="w-auto">
+          <option value="all">{t('closet.anyStatus')}</option>
           {WARDROBE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
         </Select>
         <span className="text-xs text-muted">{filtered.length} of {memberItems.length} items</span>
       </div>
 
       {memberItems.length === 0 ? (
-        <EmptyState icon={Shirt} title={`${memberName(memberId)}’s closet is empty`} description="Add tops, bottoms, shoes and outerwear with a warmth and formality rating — the outfit engine does the rest." action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> Add the first item</Button>} />
+        <EmptyState icon={Shirt} title={`${memberName(memberId)}’s closet is empty`} description="Add tops, bottoms, shoes and outerwear with a warmth and formality rating — the outfit engine does the rest." action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addTheFirstItem')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
@@ -315,9 +317,9 @@ export function ClosetModule() {
                   </span>
                   <div className="flex items-center gap-1 opacity-80 transition group-hover:opacity-100">
                     {item.status === 'active' ? (
-                      <button onClick={() => setItemStatus(item, 'laundry')} aria-label={`Send ${item.name} to the laundry`} title="To laundry" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><WashingMachine className="h-4 w-4" /></button>
+                      <button onClick={() => setItemStatus(item, 'laundry')} aria-label={`Send ${item.name} to the laundry`} title={t('closet.toLaundry')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><WashingMachine className="h-4 w-4" /></button>
                     ) : (
-                      <button onClick={() => setItemStatus(item, 'active')} aria-label={`Return ${item.name} to the closet`} title="Back in closet" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Check className="h-4 w-4" /></button>
+                      <button onClick={() => setItemStatus(item, 'active')} aria-label={`Return ${item.name} to the closet`} title={t('closet.backInCloset')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Check className="h-4 w-4" /></button>
                     )}
                     <button onClick={() => setItemForm({ open: true, item })} aria-label={`Edit ${item.name}`} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => deleteItem(item)} aria-label={`Remove ${item.name}`} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
@@ -332,9 +334,9 @@ export function ClosetModule() {
       {/* Saved outfits + history */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Star className="h-4 w-4 text-brand-text" /> Saved outfits</div>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Star className="h-4 w-4 text-brand-text" /> {t('closet.savedOutfits')}</div>
           {memberOutfits.length === 0 ? (
-            <p className="text-sm text-muted">Save today’s suggestion or build one from the closet.</p>
+            <p className="text-sm text-muted">{t('closet.saveTodaysSuggestionOrBuildOne')}</p>
           ) : (
             <ul className="space-y-2">
               {memberOutfits.slice(0, 8).map((o) => (
@@ -348,8 +350,8 @@ export function ClosetModule() {
                       {' · '}{o.item_ids.map((id) => itemById.get(id)?.name).filter(Boolean).join(' + ') || 'no items'}
                     </p>
                   </div>
-                  <Button size="sm" variant="secondary" loading={busy} onClick={() => logWear(o.item_ids, o.id)}>Wear</Button>
-                  <button onClick={() => deleteOutfit(o)} aria-label="Delete outfit" className="shrink-0 p-1 text-muted/60 hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <Button size="sm" variant="secondary" loading={busy} onClick={() => logWear(o.item_ids, o.id)}>{t('closet.wear')}</Button>
+                  <button onClick={() => deleteOutfit(o)} aria-label={t('closet.deleteOutfit')} className="shrink-0 p-1 text-muted/60 hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                 </li>
               ))}
             </ul>
@@ -357,9 +359,9 @@ export function ClosetModule() {
         </div>
 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4 text-brand-text" /> Recently worn</div>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4 text-brand-text" /> {t('closet.recentlyWorn')}</div>
           {memberLogs.length === 0 ? (
-            <p className="text-sm text-muted">Outfits you log show up here with the weather they were worn in.</p>
+            <p className="text-sm text-muted">{t('closet.outfitsYouLogShowUpHere')}</p>
           ) : (
             <ul className="space-y-1.5">
               {memberLogs.slice(0, 8).map((l) => (
@@ -395,6 +397,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   familyId: string; userId: string; memberId: string; members: Tables<'family_members'>[]; item: Item | null;
   onClose: () => void; onSaved: (message: string) => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -451,24 +454,24 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder="Grey hoodie" />}</Field>
-          <Field label="Whose">{(id) => <Select id={id} name="member_id" defaultValue={item?.member_id ?? memberId}>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={t('closet.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={item?.name ?? ''} placeholder={t('closet.greyHoodie')} />}</Field>
+          <Field label={t('closet.whose')}>{(id) => <Select id={id} name="member_id" defaultValue={item?.member_id ?? memberId}>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">{(id) => <Select id={id} name="category" defaultValue={item?.category ?? 'top'}>{WARDROBE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
-          <Field label="Status">{(id) => <Select id={id} name="status" defaultValue={item?.status ?? 'active'}>{WARDROBE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}</Select>}</Field>
+          <Field label={t('closet.category')}>{(id) => <Select id={id} name="category" defaultValue={item?.category ?? 'top'}>{WARDROBE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
+          <Field label={t('closet.status')}>{(id) => <Select id={id} name="status" defaultValue={item?.status ?? 'active'}>{WARDROBE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Color">{(id) => <Input id={id} name="color" defaultValue={item?.color ?? ''} placeholder="navy" />}</Field>
-          <Field label="Size">{(id) => <Input id={id} name="size" defaultValue={item?.size ?? ''} placeholder="M / 8" />}</Field>
-          <Field label="Brand">{(id) => <Input id={id} name="brand" defaultValue={item?.brand ?? ''} placeholder="Optional" />}</Field>
+          <Field label={t('closet.color')}>{(id) => <Input id={id} name="color" defaultValue={item?.color ?? ''} placeholder="navy" />}</Field>
+          <Field label={t('closet.size')}>{(id) => <Input id={id} name="size" defaultValue={item?.size ?? ''} placeholder="M / 8" />}</Field>
+          <Field label={t('closet.brand')}>{(id) => <Input id={id} name="brand" defaultValue={item?.brand ?? ''} placeholder={t('closet.optional')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Warmth (1 light – 5 heavy)" hint="Drives the weather match">{(id) => <Input id={id} name="warmth" type="number" min={1} max={5} defaultValue={item?.warmth ?? 3} />}</Field>
-          <Field label="Formality (1 lounge – 5 dressy)" hint="Drives the occasion match">{(id) => <Input id={id} name="formality" type="number" min={1} max={5} defaultValue={item?.formality ?? 2} />}</Field>
+          <Field label={t('closet.warmth1Light5Heavy')} hint="Drives the weather match">{(id) => <Input id={id} name="warmth" type="number" min={1} max={5} defaultValue={item?.warmth ?? 3} />}</Field>
+          <Field label={t('closet.formality1Lounge5Dressy')} hint="Drives the occasion match">{(id) => <Input id={id} name="formality" type="number" min={1} max={5} defaultValue={item?.formality ?? 2} />}</Field>
         </div>
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted">Seasons (leave empty for year-round)</p>
+          <p className="mb-1.5 text-xs font-medium text-muted">{t('closet.seasonsLeaveEmptyForYearRound')}</p>
           <div className="flex flex-wrap gap-2">
             {SEASONS.map((s) => {
               const on = seasons.includes(s.value);
@@ -482,8 +485,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Purchased on">{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
-          <Field label="Price ($)" hint="Enables cost per wear">{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
+          <Field label={t('closet.purchasedOn')}>{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
+          <Field label={t('closet.price')} hint="Enables cost per wear">{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
         </div>
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
@@ -492,11 +495,11 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />
           </label>
-          {photoPath && <button type="button" onClick={() => setPhotoPath(null)} className="text-xs text-muted hover:text-rose-400">Remove</button>}
+          {photoPath && <button type="button" onClick={() => setPhotoPath(null)} className="text-xs text-muted hover:text-rose-400">{t('closet.remove')}</button>}
         </div>
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder="Hand-me-down from Sam, school uniform, dry-clean only…" />}</Field>
+        <Field label={t('closet.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={t('closet.handMeDownFromSamSchool')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('closet.cancel')}</Button>
           <Button type="submit" loading={loading || uploading}>{item ? 'Save changes' : 'Add item'}</Button>
         </div>
       </form>
@@ -507,6 +510,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
 function OutfitBuilder({ familyId, userId, memberId, items, onClose, onSaved }: {
   familyId: string; userId: string; memberId: string; items: Item[]; onClose: () => void; onSaved: () => void;
 }) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -529,14 +533,14 @@ function OutfitBuilder({ familyId, userId, memberId, items, onClose, onSaved }: 
 
   const grouped = WARDROBE_CATEGORIES.map((c) => ({ ...c, items: items.filter((i) => i.category === c.value) })).filter((g) => g.items.length);
   return (
-    <Modal open title="Build an outfit" onClose={onClose}>
+    <Modal open title={t('closet.buildAnOutfit')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" required>{(id) => <Input id={id} name="name" autoFocus placeholder="Rainy school day" />}</Field>
-          <Field label="Occasion">{(id) => <Select id={id} name="occasion" defaultValue="everyday">{OCCASIONS.map((o) => <option key={o.value} value={o.value}>{o.emoji} {o.label}</option>)}</Select>}</Field>
+          <Field label={t('closet.name')} required>{(id) => <Input id={id} name="name" autoFocus placeholder={t('closet.rainySchoolDay')} />}</Field>
+          <Field label={t('closet.occasion')}>{(id) => <Select id={id} name="occasion" defaultValue="everyday">{OCCASIONS.map((o) => <option key={o.value} value={o.value}>{o.emoji} {o.label}</option>)}</Select>}</Field>
         </div>
         {grouped.length === 0 ? (
-          <p className="text-sm text-muted">No active items for this member yet.</p>
+          <p className="text-sm text-muted">{t('closet.noActiveItemsForThisMember')}</p>
         ) : (
           <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
             {grouped.map((g) => (
@@ -557,10 +561,10 @@ function OutfitBuilder({ familyId, userId, memberId, items, onClose, onSaved }: 
             ))}
           </div>
         )}
-        <Field label="Notes">{(id) => <Textarea id={id} name="notes" placeholder="Optional" />}</Field>
+        <Field label={t('closet.notes')}>{(id) => <Textarea id={id} name="notes" placeholder={t('closet.optional')} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}>Save outfit ({selected.length})</Button>
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('closet.cancel')}</Button>
+          <Button type="submit" loading={loading}>{t('closet.saveOutfit')}{selected.length})</Button>
         </div>
       </form>
     </Modal>

@@ -12,6 +12,7 @@ import {
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { CalmInbox, CalmItem, CalmSource } from '@/lib/calm/inbox';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SOURCE_ICON: Record<CalmSource, typeof Bot> = {
   agent: Bot, autopilot: Sun, operating_index: Gauge, approval: Inbox, reminder: Bell, graph: Network,
@@ -40,13 +41,14 @@ function Row({ item, urgent }: { item: CalmItem; urgent?: boolean }) {
 }
 
 export function CalmModule({ inbox }: { inbox: CalmInbox }) {
+  const t = useTranslations();
   const [showQuiet, setShowQuiet] = useState(false);
   const allClear = inbox.needsYou.length === 0 && inbox.today.length === 0;
 
   return (
     <div className="mx-auto w-full max-w-2xl">
       <PageHeader
-        title="Calm"
+        title={t('calm.calm')}
         description="One quiet inbox. Only what needs you — everything else is handled in the background."
       />
 
@@ -57,7 +59,7 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
           <Leaf className="h-5 w-5" />
         </span>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Today’s digest</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('calm.todaysDigest')}</p>
           <p className="mt-0.5 text-sm text-fg">{inbox.digest}</p>
         </div>
       </div>
@@ -65,15 +67,15 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
       {allClear ? (
         <div className="flex flex-col items-center rounded-2xl border border-border bg-surface/40 py-12 text-center">
           <CheckCircle2 className="h-10 w-10 text-emerald-400/70" />
-          <p className="mt-3 text-sm font-medium text-fg">You’re all caught up.</p>
-          <p className="mt-1 max-w-xs text-xs text-muted">Bubaly is watching quietly and will only surface something when it genuinely needs you.</p>
+          <p className="mt-3 text-sm font-medium text-fg">{t('calm.youreAllCaughtUp')}</p>
+          <p className="mt-1 max-w-xs text-xs text-muted">{t('calm.bubalyIsWatchingQuietlyAndWill')}</p>
         </div>
       ) : (
         <div className="space-y-6">
           {inbox.needsYou.length > 0 && (
             <section>
               <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-rose-300">
-                <AlertCircle className="h-3.5 w-3.5" /> Needs you
+                <AlertCircle className="h-3.5 w-3.5" /> {t('calm.needsYou')}
               </h2>
               <ul className="space-y-2">
                 {inbox.needsYou.map((i) => <li key={i.id}><Row item={i} urgent /></li>)}
@@ -84,7 +86,7 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
           {inbox.today.length > 0 && (
             <section>
               <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                <Sun className="h-3.5 w-3.5" /> For today
+                <Sun className="h-3.5 w-3.5" /> {t('calm.forToday')}
               </h2>
               <ul className="space-y-2">
                 {inbox.today.map((i) => <li key={i.id}><Row item={i} /></li>)}
@@ -101,14 +103,14 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
           className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3 text-xs text-muted transition hover:text-fg"
         >
           <ChevronDown className={cn('h-3.5 w-3.5 transition', showQuiet && 'rotate-180')} />
-          {inbox.quieted} quieter {inbox.quieted === 1 ? 'item is' : 'items are'} handled in the background
+          {inbox.quieted} quieter {inbox.quieted === 1 ? 'item is' : 'items are'} {t('calm.handledInTheBackground')}
         </button>
       )}
       {showQuiet && (
         <p className="mt-2 px-2 text-center text-xs text-muted">
-          Bubaly is tracking these across your hubs — you don’t need to act on them now. Open the
-          {' '}<Link href="/dashboard/family-operating-index" className="text-brand-text hover:underline">Operating Index</Link>{' '}
-          or <Link href="/dashboard/agents" className="text-brand-text hover:underline">Family Assistant</Link> to see the full picture.
+          {t('calm.bubalyIsTrackingTheseAcrossYour')}
+          {' '}<Link href="/dashboard/family-operating-index" className="text-brand-text hover:underline">{t('calm.operatingIndex')}</Link>{' '}
+          or <Link href="/dashboard/agents" className="text-brand-text hover:underline">{t('calm.familyAssistant')}</Link> {t('calm.toSeeTheFullPicture')}
         </p>
       )}
     </div>

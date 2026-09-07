@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail } from '@/lib/server/health';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Integrations', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,8 @@ function Row({ integration }: { integration: Integration }) {
 }
 
 export default async function AdminIntegrationsPage() {
+  const tr = await getTranslations();
+  const t = await getTranslations();
   const supabase = createServiceClient();
 
   const [dbCheck, storageCheck, authCheck, stripeCheck, emailCheck, googleCalendarResult] = await Promise.all([
@@ -78,8 +81,8 @@ export default async function AdminIntegrationsPage() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Integrations</h1>
-        <p className="mt-1 text-sm text-muted">Every third-party service this app actually depends on, and its real connection status.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminIntegrations.integrations')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('adminIntegrations.everyThirdPartyServiceThisApp')}</p>
       </div>
 
       <div className="grid-stats">
@@ -89,15 +92,15 @@ export default async function AdminIntegrationsPage() {
           </div>
           <div>
             <p className="text-xl font-bold leading-none">{connectedCount} / {integrations.length}</p>
-            <p className="mt-1 text-xs text-muted">Connected</p>
+            <p className="mt-1 text-xs text-muted">{t('adminIntegrations.connected')}</p>
           </div>
         </div>
       </div>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold">Status</h2>
+        <h2 className="mb-4 text-base font-semibold">{t('adminIntegrations.status')}</h2>
         <p className="mb-4 text-xs text-muted">
-          This list is exactly what&rsquo;s wired into the codebase — no placeholder rows for services that aren&rsquo;t actually integrated.
+          {tr('adminIntegrations.thisListIsExactlyWhatsWired')}
         </p>
         <div className="space-y-2">
           {integrations.map((i) => <Row key={i.name} integration={i} />)}

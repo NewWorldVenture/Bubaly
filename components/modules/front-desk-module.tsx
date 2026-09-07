@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -22,6 +24,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
 type Settings = Tables<'front_desk_settings'>;
@@ -64,6 +67,7 @@ function fmtDuration(secs: number | null) {
 }
 
 export function FrontDeskModule() {
+  const tr = useTranslations();
   const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
   const manager = isManager(role);
@@ -163,18 +167,18 @@ export function FrontDeskModule() {
       <div className="module-main">
         <div className="module-page">
           <PageHeader
-            title="AI Front Desk"
+            title={tr('frontDesk.aiFrontDesk')}
             description="Your family's AI receptionist — every call screened, answered, and summarized."
             action={
               <div className="flex items-center gap-2">
                 {manager && (
                   <button onClick={() => setShowSettings(true)}
                     className="flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg hover:bg-elevated transition">
-                    <SettingsIcon className="h-3.5 w-3.5" /> Settings
+                    <SettingsIcon className="h-3.5 w-3.5" /> {tr('frontDesk.settings')}
                   </button>
                 )}
                 <Button onClick={() => setShowLog(true)}>
-                  <Phone className="h-4 w-4" /> Log Call
+                  <Phone className="h-4 w-4" /> {tr('frontDesk.logCall')}
                 </Button>
               </div>
             }
@@ -215,9 +219,9 @@ export function FrontDeskModule() {
               <PhoneOutgoing className="h-5 w-5 text-brand-text" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Have Bubaly make a call for you</p>
+              <p className="text-sm font-bold">{tr('frontDesk.haveBubalyMakeACallFor')}</p>
               <p className="text-xs text-muted">
-                Book, reschedule, confirm or chase — the AI dials out with a ready call plan.
+                {tr('frontDesk.bookRescheduleConfirmOrChaseThe')}
               </p>
             </div>
             <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
@@ -230,9 +234,9 @@ export function FrontDeskModule() {
               <FileText className="h-5 w-5 text-brand-text" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Paperwork Inbox — Bubaly reads it for you</p>
+              <p className="text-sm font-bold">{tr('frontDesk.paperworkInboxBubalyReadsItFor')}</p>
               <p className="text-xs text-muted">
-                Slips, forms, flyers and bills → what to sign, pay and return, with the dates on your calendar.
+                {tr('frontDesk.slipsFormsFlyersAndBillsWhat')}
               </p>
             </div>
             <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
@@ -261,7 +265,7 @@ export function FrontDeskModule() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted pointer-events-none" />
               <input value={search} inputMode="search" enterKeyHint="search" onChange={e => setSearch(e.target.value)}
-                placeholder="Search calls, numbers, summaries…"
+                placeholder={tr('frontDesk.searchCallsNumbersSummaries')}
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (
                 <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
@@ -286,11 +290,11 @@ export function FrontDeskModule() {
                 <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-brand/10">
                   <PhoneIncoming className="h-7 w-7 text-brand-text opacity-60" />
                 </div>
-                <p className="text-sm font-semibold">No calls here</p>
-                <p className="mt-1 text-xs text-muted">When the AI Front Desk handles a call, it shows up here.</p>
+                <p className="text-sm font-semibold">{tr('frontDesk.noCallsHere')}</p>
+                <p className="mt-1 text-xs text-muted">{tr('frontDesk.whenTheAiFrontDeskHandles')}</p>
                 <button onClick={() => setShowLog(true)}
                   className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                  <Phone className="h-3.5 w-3.5" /> Log a Call
+                  <Phone className="h-3.5 w-3.5" /> {tr('frontDesk.logACall')}
                 </button>
               </div>
             ) : (
@@ -348,7 +352,7 @@ export function FrontDeskModule() {
       {!selected && (
         <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
           <div className="sidebar-card">
-            <p className="mb-3 text-sm font-semibold">How it works</p>
+            <p className="mb-3 text-sm font-semibold">{tr('frontDesk.howItWorks')}</p>
             <div className="space-y-3 text-xs text-muted">
               {[
                 { icon: PhoneIncoming, text: 'Every call is answered by your AI receptionist' },
@@ -368,7 +372,7 @@ export function FrontDeskModule() {
           </div>
 
           <div className="sidebar-card">
-            <p className="mb-3 text-sm font-semibold">By Classification</p>
+            <p className="mb-3 text-sm font-semibold">{tr('frontDesk.byClassification')}</p>
             <div className="space-y-2">
               {(['important', 'known', 'unknown', 'spam'] as const).map(c => {
                 const count = calls.filter(call => call.classification === c).length;
@@ -401,12 +405,22 @@ export function FrontDeskModule() {
 function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   call: Call; familyId: string; userId: string; onClose: () => void; onDelete: () => void; canDelete: boolean;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const st = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.screened;
   const cls = CLASS_CONFIG[call.classification] ?? CLASS_CONFIG.unknown;
   const actions = call.action_items as string[];
   const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
   const [busyItem, setBusyItem] = useState<number | null>(null);
+  // One submission id per action item, keyed by CALL AND INDEX — not index alone.
+  //
+  // `<CallDetail call={selected} />` is rendered without a `key`, so selecting a
+  // different call re-renders this instance with a new prop rather than
+  // remounting it, and this ref survives. Keyed by position, call B's first
+  // action item would reuse call A's id, the server would answer with the row
+  // that id already created, and call B's reminder would silently never exist —
+  // the exact failure the idempotency key is here to prevent, caused by the key.
+  const reminderIds = useRef<Record<string, string>>({});
 
   const callerLabel = call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'caller';
 
@@ -414,16 +428,21 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   async function addReminder(text: string, i: number) {
     if (busyItem !== null) return;
     setBusyItem(i);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_reminders').insert({
-      family_id: familyId, created_by: userId,
+    // One id per action item, so tapping the same item again after a failure is
+    // the same reminder while a different item is a different one.
+    // Through the service. The raw insert sent `status: 'pending'` and, off the
+    // urgent branch, `priority: 'normal'` — neither is in 0014's CHECK sets, so
+    // Postgres rejected the row and this button never once saved a reminder.
+    const result = await createReminderAction({
       title: text.slice(0, 200),
       notes: `From call with ${callerLabel}`,
-      kind: 'task', priority: call.priority === 'urgent' ? 'high' : 'normal',
-      status: 'pending', ai_suggested: true,
+      kind: 'task',
+      priority: call.priority === 'urgent' ? 'high' : 'medium',
+      aiSuggested: true,
+      submissionId: reminderIds.current[`${call.id}:${i}`] ||= newSubmissionId(),
     });
     setBusyItem(null);
-    if (error) { toastError(describeDbError(error)); return; }
+    if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
     success('Added to reminders');
   }
@@ -431,7 +450,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3 flex-shrink-0">
-        <button onClick={onClose} aria-label="Back" className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
+        <button onClick={onClose} aria-label={tr('frontDesk.back')} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className={cn('grid h-9 w-9 place-items-center rounded-xl flex-shrink-0', st.color)}>
@@ -442,7 +461,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
           <div className="text-[10px] text-muted">{st.label} · {fmtTime(call.received_at)}</div>
         </div>
         {canDelete && (
-          <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-red-400" title="Delete">
+          <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-red-400" title={tr('frontDesk.delete')}>
             <Trash2 className="h-4 w-4" />
           </button>
         )}
@@ -472,7 +491,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex items-center gap-1.5 mb-1.5">
               <Sparkles className="h-3.5 w-3.5 text-brand-text" />
-              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Summary</span>
+              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">{tr('frontDesk.aiSummary')}</span>
             </div>
             <p className="text-xs leading-relaxed text-fg/80">{call.ai_summary}</p>
           </div>
@@ -480,7 +499,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
 
         {call.voicemail_url && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Voicemail</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">{tr('frontDesk.voicemail')}</p>
             <audio controls src={call.voicemail_url} className="w-full h-9" />
           </div>
         )}
@@ -489,7 +508,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <CheckCircle2 className="h-3.5 w-3.5 text-amber-400" />
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Action Items</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('frontDesk.actionItems')}</p>
             </div>
             <div className="space-y-1.5">
               {actions.map((a, i) => {
@@ -501,9 +520,9 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
                       className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
                         added ? 'text-green-400' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
-                      {added ? <><Check className="h-3 w-3" /> Added</>
+                      {added ? <><Check className="h-3 w-3" /> {tr('frontDesk.added')}</>
                         : busyItem === i ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : <><Bell className="h-3 w-3" /> Remind</>}
+                        : <><Bell className="h-3 w-3" /> {tr('frontDesk.remind')}</>}
                     </button>
                   </div>
                 );
@@ -514,14 +533,14 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
 
         {call.transcript && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">Transcript</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{tr('frontDesk.transcript')}</p>
             <p className="text-xs whitespace-pre-wrap leading-relaxed text-fg/80">{call.transcript}</p>
           </div>
         )}
 
         {call.contact && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Contact</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">{tr('frontDesk.contact')}</p>
             <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface/60 px-3 py-2.5">
               <Avatar name={call.contact.name} src={call.contact.photo_url} size={36} />
               <div>
@@ -539,6 +558,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
 function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
   familyId: string; settings: Settings | null; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
@@ -583,35 +603,35 @@ function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
   );
 
   return (
-    <Modal open title="Front Desk Settings" onClose={onClose}>
+    <Modal open title={tr('frontDesk.frontDeskSettings')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Toggle on={enabled} onClick={() => setEnabled(v => !v)}
-          label="Enable AI Front Desk" desc="Answer & screen every incoming call" />
-        <Field label="AI greeting">
+          label={tr('frontDesk.enableAiFrontDesk')} desc="Answer & screen every incoming call" />
+        <Field label={tr('frontDesk.aiGreeting')}>
           {id => <Textarea id={id} name="greeting" rows={3} defaultValue={settings?.greeting ?? ''}
             placeholder="Hi! You've reached the family. I'm their AI assistant — how can I help?" />}
         </Field>
-        <Field label="Screening mode">
+        <Field label={tr('frontDesk.screeningMode')}>
           {id => (
             <Select id={id} name="screening_mode" defaultValue={settings?.screening_mode ?? 'smart'}>
-              <option value="off">Off — ring everything through</option>
-              <option value="smart">Smart — AI decides (recommended)</option>
-              <option value="strict">Strict — screen all unknown callers</option>
-              <option value="allowlist">Allowlist — only known contacts</option>
+              <option value="off">{tr('frontDesk.offRingEverythingThrough')}</option>
+              <option value="smart">{tr('frontDesk.smartAiDecidesRecommended')}</option>
+              <option value="strict">{tr('frontDesk.strictScreenAllUnknownCallers')}</option>
+              <option value="allowlist">{tr('frontDesk.allowlistOnlyKnownContacts')}</option>
             </Select>
           )}
         </Field>
         <Toggle on={blockSpam} onClick={() => setBlockSpam(v => !v)}
-          label="Block spam & robocalls" desc="Automatically reject flagged numbers" />
+          label={tr('frontDesk.blockSpamRobocalls')} desc="Automatically reject flagged numbers" />
         <Toggle on={blockUnknown} onClick={() => setBlockUnknown(v => !v)}
-          label="Block unknown callers" desc="Send unrecognized numbers to voicemail" />
+          label={tr('frontDesk.blockUnknownCallers')} desc="Send unrecognized numbers to voicemail" />
         <Toggle on={voicemail} onClick={() => setVoicemail(v => !v)}
-          label="Voicemail" desc="Take & transcribe messages when you can't answer" />
-        <Field label="Forward urgent calls to (optional)">
+          label={tr('frontDesk.voicemail')} desc="Take & transcribe messages when you can't answer" />
+        <Field label={tr('frontDesk.forwardUrgentCallsToOptional')}>
           {id => <Input id={id} name="forward_number" defaultValue={settings?.forward_number ?? ''} placeholder="+1 555 123 4567" />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('frontDesk.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Save Settings'}</Button>
         </div>
       </form>
@@ -625,6 +645,7 @@ const VALID_PRIORITY = new Set(['low', 'normal', 'high', 'urgent']);
 function LogCallModal({ familyId, userId, onClose, onSaved }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -699,15 +720,15 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
   }
 
   return (
-    <Modal open title="Log a Call" onClose={onClose}>
+    <Modal open title={tr('frontDesk.logACall')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Caller name">{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder="Dr. Smith's office" />}</Field>
-          <Field label="Number">{id => <Input id={id} value={callerNumber} onChange={e => setCallerNumber(e.target.value)} placeholder="+1 555 …" />}</Field>
+          <Field label={tr('frontDesk.callerName')}>{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder="Dr. Smith's office" />}</Field>
+          <Field label={tr('frontDesk.number')}>{id => <Input id={id} value={callerNumber} onChange={e => setCallerNumber(e.target.value)} placeholder="+1 555 …" />}</Field>
         </div>
 
-        <Field label="Transcript / Voicemail / Notes">
-          {id => <Textarea id={id} value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} placeholder="Paste the voicemail or what was discussed…" />}
+        <Field label={tr('frontDesk.transcriptVoicemailNotes')}>
+          {id => <Textarea id={id} value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} placeholder={tr('frontDesk.pasteTheVoicemailOrWhatWas')} />}
         </Field>
         <button type="button" onClick={analyze} disabled={!transcript.trim() || analyzing}
           className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-50">
@@ -716,23 +737,23 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
         </button>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Status">
+          <Field label={tr('frontDesk.status')}>
             {id => <Select id={id} value={status} onChange={e => setStatus(e.target.value)}>{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
           </Field>
-          <Field label="Classification">
+          <Field label={tr('frontDesk.classification')}>
             {id => <Select id={id} value={classification} onChange={e => setClassification(e.target.value)}>{Object.entries(CLASS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
           </Field>
         </div>
-        <Field label="Priority">
-          {id => <Select id={id} value={priority} onChange={e => setPriority(e.target.value)}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select>}
+        <Field label={tr('frontDesk.priority')}>
+          {id => <Select id={id} value={priority} onChange={e => setPriority(e.target.value)}><option value="low">Low</option><option value="normal">{tr('frontDesk.normal')}</option><option value="high">{tr('frontDesk.high')}</option><option value="urgent">{tr('frontDesk.urgent')}</option></Select>}
         </Field>
-        <Field label="AI summary">
+        <Field label={tr('frontDesk.aiSummary')}>
           {id => <Input id={id} value={summary} onChange={e => setSummary(e.target.value)} placeholder="Confirming Emma's appointment for Thursday 3pm" />}
         </Field>
 
         {actionItems.length > 0 && (
           <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Action items (AI)</p>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('frontDesk.actionItemsAi')}</p>
             <div className="space-y-1">
               {actionItems.map((a, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-2.5 py-1.5">
@@ -748,7 +769,7 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('frontDesk.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Log Call'}</Button>
         </div>
       </form>

@@ -5,11 +5,13 @@ import { APP_NAV_GROUPS } from '@/lib/constants/navigation';
 import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
 import { loadServiceDescriptionOverrides } from '@/lib/services/descriptions-server';
 import { ServiceDescriptionsEditor, type EditorGroup } from '@/components/admin/service-descriptions-editor';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Service Catalog', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminServicesPage() {
+  const t = await getTranslations();
   const overrides = await loadServiceDescriptionOverrides(createServiceClient());
 
   // Group exactly as the "All Services" catalog, keeping only services that ship
@@ -31,7 +33,7 @@ export default async function AdminServicesPage() {
           <LayoutGrid className="h-6 w-6 text-brand-text" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Service Catalog</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminServices.serviceCatalog')}</h1>
           <p className="mt-1 text-sm text-muted">
             The hover tooltip shown for each service in the “All Services” picker. Edit any blurb to
             override the built-in default across the whole app — changes are live for every member. Empty

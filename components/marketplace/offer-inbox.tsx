@@ -13,6 +13,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type InboxOffer = {
   id: string;
@@ -23,6 +24,7 @@ export type InboxOffer = {
 };
 
 export function OfferInbox({ offers }: { offers: InboxOffer[] }) {
+  const t = useTranslations();
   const [rows, setRows] = useState(offers);
   const [busy, setBusy] = useState<string | null>(null);
   const { success, error: toastError } = useToast();
@@ -51,7 +53,7 @@ export function OfferInbox({ offers }: { offers: InboxOffer[] }) {
   return (
     <div className="mt-5 w-full rounded-xl border border-border bg-surface/50 p-4">
       <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-        <HandHeart className="h-4 w-4 text-brand-text" /> Offers on your listing
+        <HandHeart className="h-4 w-4 text-brand-text" /> {t('offerInbox.offersOnYourListing')}
       </h2>
       <ul className="space-y-2.5">
         {rows.map((o) => (

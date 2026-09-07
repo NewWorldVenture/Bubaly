@@ -6,11 +6,13 @@ import { Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { planMonthlyCents } from '@/lib/constants/plans';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
     getMarketingCustomersWithError(supabase),
@@ -58,26 +60,26 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">All figures are computed from live data. Estimated revenue is labeled as such.</p>
+      <p className="text-sm text-muted">{tr('adminMarketingAnalytics.allFiguresAreComputedFromLive')}</p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card><p className="text-xs text-muted">Customers</p><p className="text-2xl font-bold">{m.total}</p></Card>
-        <Card><p className="text-xs text-muted">Paying</p><p className="text-2xl font-bold">{m.paying}</p></Card>
-        <Card><p className="text-xs text-muted">Est. MRR</p><p className="text-2xl font-bold">{fmtMoney(m.estMrrCents)}</p></Card>
-        <Card><p className="text-xs text-muted">Email open rate</p><p className="text-2xl font-bold">{recip > 0 ? `${Math.round((opens / recip) * 100)}%` : '—'}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.customers')}</p><p className="text-2xl font-bold">{m.total}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.paying')}</p><p className="text-2xl font-bold">{m.paying}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.estMrr')}</p><p className="text-2xl font-bold">{fmtMoney(m.estMrrCents)}</p></Card>
+        <Card><p className="text-xs text-muted">{tr('adminMarketingAnalytics.emailOpenRate')}</p><p className="text-2xl font-bold">{recip > 0 ? `${Math.round((opens / recip) * 100)}%` : '—'}</p></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Customer Acquisition</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.customerAcquisition')}</h2>
           <Bars data={acq} max={maxAcq} />
-          <p className="mt-2 text-xs text-muted">New families · last 6 months</p>
+          <p className="mt-2 text-xs text-muted">{tr('adminMarketingAnalytics.newFamiliesLast6Months')}</p>
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Campaigns by Channel</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.campaignsByChannel')}</h2>
           {byChannel.size === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">No campaigns yet.</p>
+            <p className="py-8 text-center text-sm text-muted">{tr('adminMarketingAnalytics.noCampaignsYet')}</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {[...byChannel.entries()].map(([ch, e]) => (
@@ -91,16 +93,16 @@ export default async function AnalyticsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Email Performance</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.emailPerformance')}</h2>
           <div className="grid grid-cols-3 gap-3 text-center">
-            <div><p className="text-2xl font-bold">{recip}</p><p className="text-xs text-muted">Recipients</p></div>
-            <div><p className="text-2xl font-bold">{opens}</p><p className="text-xs text-muted">Opens</p></div>
-            <div><p className="text-2xl font-bold">{clicks}</p><p className="text-xs text-muted">Clicks</p></div>
+            <div><p className="text-2xl font-bold">{recip}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.recipients')}</p></div>
+            <div><p className="text-2xl font-bold">{opens}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.opens')}</p></div>
+            <div><p className="text-2xl font-bold">{clicks}</p><p className="text-xs text-muted">{tr('adminMarketingAnalytics.clicks')}</p></div>
           </div>
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Est. Revenue Influenced (monthly)</h2>
+          <h2 className="mb-3 text-base font-semibold">{tr('adminMarketingAnalytics.estRevenueInfluencedMonthly')}</h2>
           <ul className="space-y-2 text-sm">
             {revByLifecycle.map((r) => (
               <li key={r.label} className="flex items-center justify-between">

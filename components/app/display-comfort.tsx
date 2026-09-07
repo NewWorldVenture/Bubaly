@@ -11,10 +11,12 @@ import {
 } from '@/lib/ui/role-surface';
 import { COMFORT_STORAGE_KEY, COMFORT_CHANGE_EVENT } from './role-density';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Choice = 'auto' | Density;
 
 export function DisplayComfort() {
+  const t = useTranslations();
   const { role } = useApp();
   const roleDefault = roleSurface(role).density;
   const [choice, setChoice] = useState<Choice>('auto');
@@ -46,8 +48,8 @@ export function DisplayComfort() {
       <div className="flex items-center gap-2">
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Type className="h-4 w-4" /></span>
         <div>
-          <h2 className="text-sm font-bold">Display comfort</h2>
-          <p className="text-[11px] text-muted">Text size &amp; spacing across the app. Bubaly tailors this to each member&apos;s role.</p>
+          <h2 className="text-sm font-bold">{t('displayComfort.displayComfort')}</h2>
+          <p className="text-[11px] text-muted">{t('displayComfort.textSizeAmpSpacingAcrossThe')}</p>
         </div>
       </div>
 

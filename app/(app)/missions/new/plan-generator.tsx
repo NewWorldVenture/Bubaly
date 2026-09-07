@@ -6,8 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { generatePlanAction, createChoreAction } from '../actions';
 import type { ChorePlanItem } from '@/lib/chores/ai';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function PlanGenerator({ members }: { members: { id: string; name: string }[] }) {
+  const t = useTranslations();
   const [prompt, setPrompt] = useState('');
   const [items, setItems] = useState<ChorePlanItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +47,16 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
 
   return (
     <Card className="border-brand/30 bg-brand/5">
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-brand-text" /> AI chore plan builder</h2>
-      <p className="mb-3 text-xs text-muted">Describe your family and let AI suggest an age-appropriate, balanced plan.{members.length > 0 ? ` Kids: ${members.map((m) => m.name).join(', ')}.` : ''}</p>
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-brand-text" /> {t('missionsNewPlanGenerator.aiChorePlanBuilder')}</h2>
+      <p className="mb-3 text-xs text-muted">{t('missionsNewPlanGenerator.describeYourFamilyAndLetAi')}{members.length > 0 ? ` Kids: ${members.map((m) => m.name).join(', ')}.` : ''}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           value={prompt} onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Create a weekly chore plan for my 15, 13, and 10 year old"
+          placeholder={t('missionsNewPlanGenerator.createAWeeklyChorePlanFor')}
           className="h-10 flex-1 rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring"
         />
         <button onClick={generate} disabled={pending || !prompt.trim()} className="inline-flex h-10 items-center justify-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg disabled:opacity-60">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} Generate
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} {t('missionsNewPlanGenerator.generate')}
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}

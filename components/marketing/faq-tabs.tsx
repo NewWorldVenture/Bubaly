@@ -3,6 +3,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { FAQAccordion, type FAQ } from '@/components/marketing/faq-accordion';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type FaqSection = { id: string; label: string; items: FAQ[] };
 
@@ -13,6 +14,7 @@ export type FaqSection = { id: string; label: string; items: FAQ[] };
  * on larger ones, so it stays touch-friendly at every width.
  */
 export function FaqTabs({ sections }: { sections: FaqSection[] }) {
+  const t = useTranslations();
   const baseId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [active, setActive] = useState(0);
@@ -42,7 +44,7 @@ export function FaqTabs({ sections }: { sections: FaqSection[] }) {
     <div className="mx-auto max-w-3xl">
       <div
         role="tablist"
-        aria-label="FAQ categories"
+        aria-label={t('faqTabs.faqCategories')}
         className="scrollbar-none -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0"
       >
         {sections.map((section, index) => {

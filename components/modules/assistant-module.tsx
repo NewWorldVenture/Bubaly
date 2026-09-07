@@ -30,6 +30,7 @@ import { useVoice } from '@/lib/hooks/use-voice';
 import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
 import { parsePrefillQuery } from '@/lib/ai/prefill';
 import { parseAssistantStreamEvent, runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 // Quick-suggestion chips shown above an active conversation.
 const CHIPS = [
@@ -93,6 +94,7 @@ export function withRunCards(cards: ResultCard[], runIds: string[]): ResultCard[
 }
 
 export function AssistantModule() {
+  const t = useTranslations();
   const { family, selfMember, role } = useApp();
   const firstName = (selfMember?.display_name || 'there').split(' ')[0];
   const canDecide = isManager(role);
@@ -435,15 +437,15 @@ export function AssistantModule() {
                   {msg.content
                     ? msg.content
                     : ((msg.actions && msg.actions.length > 0) || (msg.cards && msg.cards.length > 0))
-                      ? <span className="text-muted">Working on it…</span>
+                      ? <span className="text-muted">{t('assistant.workingOnIt')}</span>
                       : (
-                        <span className="inline-flex items-center gap-1.5" role="status" aria-label="Bubaly is thinking">
+                        <span className="inline-flex items-center gap-1.5" role="status" aria-label={t('assistant.bubalyIsThinking')}>
                           {[0, 1, 2].map((i) => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand motion-reduce:animate-none" style={{ animationDelay: `${i * 0.15}s` }} />)}
                         </span>
                       )}
                 </div>
                 {msg.actions && msg.actions.length > 0 && (
-                  <ul className="flex flex-wrap gap-1.5" aria-label="What Bubaly did">
+                  <ul className="flex flex-wrap gap-1.5" aria-label={t('assistant.whatBubalyDid')}>
                     {msg.actions.map((a, i) => (
                       <li key={i} className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', a.ok ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger')}>
                         <CheckCircle2 className="h-3 w-3" aria-hidden /> {a.summary}
@@ -452,7 +454,7 @@ export function AssistantModule() {
                   </ul>
                 )}
                 {msg.cards && msg.cards.length > 0 && (
-                  <ul className="flex flex-wrap gap-1.5" aria-label="Results">
+                  <ul className="flex flex-wrap gap-1.5" aria-label={t('assistant.results')}>
                     {msg.cards.map((card, i) => {
                       const id = cardId(msg.id, i);
                       return (
@@ -488,16 +490,16 @@ export function AssistantModule() {
       {/* Docked input bar */}
       <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
         <Composer variant="bar" {...composerProps} onMicPress={composerProps.onMic} />
-        <p className="mt-3 text-center text-xs text-muted/60">AI can make mistakes. Please double-check important information.</p>
+        <p className="mt-3 text-center text-xs text-muted/60">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
       </div>
     </>
   );
 
   const hero = (
     <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-start rounded-3xl px-2 pb-5 pt-6 text-center sm:pt-8">
-      <h2 className="text-2xl font-black sm:text-4xl">What can I help you with today?</h2>
+      <h2 className="text-2xl font-black sm:text-4xl">{t('assistant.whatCanIHelpYouWith')}</h2>
       <p className="mt-2 max-w-lg text-sm text-muted sm:text-base">
-        Tell me what you need — I&apos;ll handle the scheduling, lists, and reminders.
+        {t('assistant.tellMeWhatYouNeedI')}
       </p>
 
       <div className="mt-6 w-full max-w-2xl">
@@ -505,7 +507,7 @@ export function AssistantModule() {
       </div>
 
       <div className="mt-6 w-full max-w-3xl">
-        <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">Popular requests</p>
+        <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">{t('assistant.popularRequests')}</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {POPULAR.map(({ icon: Icon, title, sub, prompt }) => (
             <button
@@ -529,7 +531,7 @@ export function AssistantModule() {
 
       <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted sm:text-sm">
         <ShieldCheck className="h-4 w-4 text-success" aria-hidden />
-        Your family&apos;s data stays private and secure.
+        {t('assistant.yourFamilyAposSDataStays')}
       </div>
     </div>
   );
@@ -543,18 +545,18 @@ export function AssistantModule() {
             <div className="ai-orb h-11 w-11 shrink-0">
               <Sparkles className="h-5 w-5 text-brand-text drop-shadow" aria-hidden />
             </div>
-            <h1 className="text-2xl font-black sm:text-3xl">Family AI</h1>
+            <h1 className="text-2xl font-black sm:text-3xl">{t('assistant.familyAi')}</h1>
             <span className="rounded-md bg-brand px-2.5 py-1 text-[10px] font-black tracking-wide text-brand-fg">BETA</span>
           </div>
         ) : (
-          <span className="text-sm font-semibold text-muted">Family Concierge</span>
+          <span className="text-sm font-semibold text-muted">{t('assistant.familyConcierge')}</span>
         )}
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowVoiceMenu((s) => !s)}
-              aria-label="Voice settings"
+              aria-label={t('assistant.voiceSettings')}
               aria-expanded={showVoiceMenu}
               className={cn(
                 'focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition',
@@ -564,13 +566,13 @@ export function AssistantModule() {
               )}
             >
               {voice.mode === 'text' ? <VolumeX className="h-4 w-4" aria-hidden /> : <Volume2 className="h-4 w-4" aria-hidden />}
-              <span className="hidden sm:inline">Voice</span>
+              <span className="hidden sm:inline">{t('assistant.voice')}</span>
             </button>
             {showVoiceMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
                 <div className="popover-surface absolute right-0 z-20 mt-2 w-60 p-2">
-                  <p className="px-2 py-1.5 text-xs font-semibold text-muted">Assistant voice (this device)</p>
+                  <p className="px-2 py-1.5 text-xs font-semibold text-muted">{t('assistant.assistantVoiceThisDevice')}</p>
                   {VOICE_MODES.map((m) => (
                     <button
                       key={m.value}
@@ -590,7 +592,7 @@ export function AssistantModule() {
             )}
           </div>
           <button type="button" onClick={newChat} className="focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
-            <Plus className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">New chat</span>
+            <Plus className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">{t('assistant.newChat')}</span>
           </button>
         </div>
       </div>
@@ -613,7 +615,7 @@ export function AssistantModule() {
           >
             {hasConversation ? thread : (
               <p className="mt-4 rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
-                Your conversation with Bubaly shows up here.
+                {t('assistant.yourConversationWithBubalyShowsUp')}
               </p>
             )}
           </ConversationPane>
@@ -664,6 +666,7 @@ function Composer({
   onMicPress: () => void;
   dismissVoiceError: () => void;
 }) {
+  const t = useTranslations();
   const isHero = variant === 'hero';
   const disabled = loading || voice.status === 'transcribing';
   const canSend = !disabled && input.trim().length > 0;
@@ -673,7 +676,7 @@ function Composer({
       {voiceError && (
         <div className="mb-2 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
           <span>{voiceError}</span>
-          <button type="button" onClick={dismissVoiceError} aria-label="Dismiss" className="ml-2 text-amber-300/70 hover:text-amber-200">✕</button>
+          <button type="button" onClick={dismissVoiceError} aria-label={t('assistant.dismiss')} className="ml-2 text-amber-300/70 hover:text-amber-200">✕</button>
         </div>
       )}
       {voice.status === 'speaking' && (
@@ -682,7 +685,7 @@ function Composer({
           onClick={voice.stopSpeaking}
           className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand-text"
         >
-          <Square className="h-3 w-3" aria-hidden /> Stop speaking
+          <Square className="h-3 w-3" aria-hidden /> {t('assistant.stopSpeaking')}
         </button>
       )}
 
@@ -693,11 +696,11 @@ function Composer({
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
           </span>
-          <span className="flex-1 text-sm font-medium text-rose-200">Listening… tap the mic to send</span>
+          <span className="flex-1 text-sm font-medium text-rose-200">{t('assistant.listeningTapTheMicToSend')}</span>
           <button type="button" onClick={voice.cancelRecording} className="rounded-full px-3 py-1.5 text-xs font-semibold text-rose-200/80 hover:text-rose-100">
-            Cancel
+            {t('assistant.cancel')}
           </button>
-          <button type="button" onClick={onMicPress} aria-label="Stop and send" className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
+          <button type="button" onClick={onMicPress} aria-label={t('assistant.stopAndSend')} className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
             <Square className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -713,14 +716,14 @@ function Composer({
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
             enterKeyHint="send"
             disabled={disabled}
-            aria-label="Ask Bubaly"
+            aria-label={t('assistant.askBubaly')}
           />
           {voice.supported && (
             <button
               type="button"
               onClick={onMicPress}
               disabled={disabled}
-              aria-label="Record voice message"
+              aria-label={t('assistant.recordVoiceMessage')}
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
             >
               {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-5 w-5" aria-hidden />}
@@ -730,7 +733,7 @@ function Composer({
             type="button"
             onClick={onSend}
             disabled={!canSend}
-            aria-label="Send"
+            aria-label={t('assistant.send')}
             className="ai-send grid h-11 w-11 shrink-0 place-items-center rounded-full text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Send className="h-5 w-5" aria-hidden />
@@ -747,20 +750,20 @@ function Composer({
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
             enterKeyHint="send"
             disabled={disabled}
-            aria-label="Message Bubaly"
+            aria-label={t('assistant.messageBubaly')}
           />
           {voice.supported && (
             <button
               type="button"
               onClick={onMicPress}
               disabled={disabled}
-              aria-label="Record voice message"
+              aria-label={t('assistant.recordVoiceMessage')}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
             >
               {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mic className="h-4 w-4" aria-hidden />}
             </button>
           )}
-          <button type="button" onClick={onSend} disabled={!canSend} aria-label="Send" className="ai-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40">
+          <button type="button" onClick={onSend} disabled={!canSend} aria-label={t('assistant.send')} className="ai-send grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40">
             <Send className="h-4 w-4" aria-hidden />
           </button>
         </div>

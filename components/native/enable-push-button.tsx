@@ -6,6 +6,7 @@ import { isNative } from '@/lib/native/capacitor';
 import {
   webPushSupported, subscribeWebPush, unsubscribeWebPush, VAPID_PUBLIC_KEY,
 } from '@/lib/push/web-client';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type State = 'idle' | 'busy' | 'on' | 'unsupported' | 'denied' | 'unconfigured';
 
@@ -15,6 +16,7 @@ type State = 'idle' | 'busy' | 'on' | 'unsupported' | 'denied' | 'unconfigured';
  * PushRegistrar, so this control hides inside the native shell.
  */
 export function EnablePushButton() {
+  const t = useTranslations();
   const [state, setState] = useState<State>('idle');
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState('');
@@ -86,7 +88,7 @@ export function EnablePushButton() {
   if (state === 'denied') {
     return (
       <p className="inline-flex items-center gap-2 text-xs text-warning">
-        <BellOff className="h-3.5 w-3.5" /> Notifications are blocked — enable them in your browser settings.
+        <BellOff className="h-3.5 w-3.5" /> {t('enablePushButton.notificationsAreBlockedEnableThemIn')}
       </p>
     );
   }
@@ -95,10 +97,10 @@ export function EnablePushButton() {
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-2">
           <button onClick={sendTest} disabled={testing} className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60">
-            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send test push
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {t('enablePushButton.sendTestPush')}
           </button>
           <button onClick={disable} className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-muted hover:text-fg">
-            <BellRing className="h-4 w-4 text-success" /> On — turn off
+            <BellRing className="h-4 w-4 text-success" /> {t('enablePushButton.onTurnOff')}
           </button>
         </div>
         {testMsg && <p className="text-xs text-muted">{testMsg}</p>}
@@ -107,7 +109,7 @@ export function EnablePushButton() {
   }
   return (
     <button onClick={enable} disabled={state === 'busy'} className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60">
-      {state === 'busy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />} Enable push notifications
+      {state === 'busy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />} {t('enablePushButton.enablePushNotifications')}
     </button>
   );
 }

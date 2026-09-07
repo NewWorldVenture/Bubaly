@@ -11,8 +11,10 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { setMatchStatusAction } from '@/app/(app)/marketplace/actions';
 import type { EnrichedMatch } from '@/lib/marketplace/matches-server';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function MarketplaceMatchesStrip({ matches }: { matches: EnrichedMatch[] }) {
+  const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
@@ -37,7 +39,7 @@ export function MarketplaceMatchesStrip({ matches }: { matches: EnrichedMatch[] 
     <section className="mb-5 rounded-2xl border border-brand/25 bg-brand/[0.04] p-4">
       <div className="mb-2.5 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand-text" />
-        <h2 className="text-sm font-semibold">Matches on the board</h2>
+        <h2 className="text-sm font-semibold">{t('matchesStrip.matchesOnTheBoard')}</h2>
         <span className="ml-auto rounded-full bg-brand/12 px-2 py-0.5 text-xs font-medium text-brand-text">
           {visible.length}
         </span>

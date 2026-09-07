@@ -14,11 +14,13 @@ import {
   KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Alerts · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceAlertsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -55,14 +57,14 @@ export default async function MarketplaceAlertsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Alerts"
+        title={t('marketplaceAlerts.alerts')}
         description="Tell Bubaly what you’re after — we’ll match new listings the moment they hit the board."
       />
 
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Marketplace alerts data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={t('marketplaceAlerts.marketplaceAlertsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some alert details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{t('marketplaceAlerts.someAlertDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
 
@@ -71,7 +73,7 @@ export default async function MarketplaceAlertsPage() {
       {rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <BellRing className="mx-auto mb-2 h-6 w-6" />
-          No alerts yet — create one above (e.g. “balance bike, under $50”) and matches show up here.
+          {t('marketplaceAlerts.noAlertsYetCreateOneAbove')}
         </div>
       ) : (
         <div className="space-y-6">

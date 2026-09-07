@@ -6,10 +6,12 @@ import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { WalletActivityView } from '@/components/wallet/activity-view';
 import { isManager } from '@/lib/constants/roles';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Wallet Activity' };
 
 export default async function WalletActivityPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -45,9 +47,9 @@ export default async function WalletActivityPage() {
   return (
     <div>
       {dataWarnings.length > 0 && (
-        <div role="status" aria-label="Wallet activity data health" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" aria-label={tr('walletActivity.walletActivityDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <p>Some wallet details are temporarily unavailable: {dataWarnings.join(', ')}.</p>
+          <p>{tr('walletActivity.someWalletDetailsAreTemporarilyUnavailable')} {dataWarnings.join(', ')}.</p>
         </div>
       )}
       <WalletActivityView rows={rows} childOptions={childOptions} />

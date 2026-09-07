@@ -12,6 +12,7 @@ import {
 } from '@/lib/independence/progression';
 import { startMilestoneAction, achieveMilestoneAction, skipMilestoneAction } from '@/app/(app)/dashboard/independence/actions';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Kid = { id: string; display_name: string; role: string; birthday: string | null; color: string | null };
 type Row = Tables<'independence_milestones'>;
@@ -19,6 +20,7 @@ type Row = Tables<'independence_milestones'>;
 const DEFAULT_AGE = 10;   // no birthday on file → mid-ladder, parent can still pick anything
 
 export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -54,10 +56,10 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   if (kids.length === 0) {
     return (
       <div className="module-page">
-        <PageHeader title="Independence" description="Responsibilities that grow as your kids do." />
+        <PageHeader title={t('independence.independence')} description="Responsibilities that grow as your kids do." />
         <div className="rounded-2xl border border-border bg-surface/30 p-8 text-center">
           <p className="text-sm text-muted">
-            Add a child or teen to the family to start their independence ladder.
+            {t('independence.addAChildOrTeenTo')}
           </p>
         </div>
       </div>
@@ -67,7 +69,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
   return (
     <div className="module-page">
       <PageHeader
-        title="Independence"
+        title={t('independence.independence')}
         description="An age-based ladder of real-life skills — responsibilities grow as they do."
       />
 
@@ -96,16 +98,16 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">
-                Level {level.level} · {level.label}
+                {t('independence.level')} {level.level} · {level.label}
                 {ageFromBirthday(kid.birthday) === null && (
-                  <span className="ml-2 text-[10px] font-semibold text-muted">(add a birthday for age-tuned suggestions)</span>
+                  <span className="ml-2 text-[10px] font-semibold text-muted">{t('independence.addABirthdayForAgeTuned')}</span>
                 )}
               </p>
               <p className="mt-0.5 text-xs text-muted">
-                {level.achievedCount} of {level.eligibleCount} age-appropriate skills achieved.
+                {level.achievedCount} of {level.eligibleCount} {t('independence.ageAppropriateSkillsAchieved')}
               </p>
               <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand-text">
-                <Sparkles className="h-3.5 w-3.5" /> Next unlock: {level.nextUnlock}
+                <Sparkles className="h-3.5 w-3.5" /> {t('independence.nextUnlock')} {level.nextUnlock}
               </p>
             </div>
           </div>
@@ -113,7 +115,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
           {/* In progress */}
           {inProgress.length > 0 && (
             <section className="mb-4 rounded-2xl border border-border bg-surface/30 p-4">
-              <h2 className="mb-3 text-sm font-bold">Working on now</h2>
+              <h2 className="mb-3 text-sm font-bold">{t('independence.workingOnNow')}</h2>
               <div className="space-y-2">
                 {inProgress.map(r => (
                   <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
@@ -146,9 +148,9 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
           {/* Suggestions */}
           <section className="mb-4 rounded-2xl border border-border bg-surface/30 p-4">
             <h2 className="mb-1 flex items-center gap-2 text-sm font-bold">
-              <Sparkles className="h-4 w-4 text-brand-text" /> Ready for {kid.display_name} (age {age})
+              <Sparkles className="h-4 w-4 text-brand-text" /> {t('independence.readyFor')} {kid.display_name} (age {age})
             </h2>
-            <p className="mb-3 text-xs text-muted">Age-matched skills to start next — foundations first.</p>
+            <p className="mb-3 text-xs text-muted">{t('independence.ageMatchedSkillsToStartNext')}</p>
             <div className="space-y-2">
               {(showAllSuggestions ? suggestions : suggestions.slice(0, 6)).map(m => (
                 <div key={m.title} className="flex items-center gap-3 rounded-xl border border-border bg-elevated/50 p-3">
@@ -172,7 +174,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               ))}
               {suggestions.length === 0 && (
                 <p className="py-4 text-center text-sm text-muted">
-                  Every age-appropriate skill is on the ladder already — amazing! 🎉
+                  {t('independence.everyAgeAppropriateSkillIsOn')}
                 </p>
               )}
             </div>
@@ -188,10 +190,10 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
           {/* Achieved */}
           <section className="rounded-2xl border border-border bg-surface/30 p-4">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
-              <Trophy className="h-4 w-4 text-amber-400" /> Achieved ({achieved.length})
+              <Trophy className="h-4 w-4 text-amber-400" /> {t('independence.achieved')}{achieved.length})
             </h2>
             {achieved.length === 0 ? (
-              <p className="py-3 text-center text-sm text-muted">No badges yet — start a skill above.</p>
+              <p className="py-3 text-center text-sm text-muted">{t('independence.noBadgesYetStartASkill')}</p>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {achieved.map(r => (

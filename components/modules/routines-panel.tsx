@@ -5,12 +5,14 @@
 // history and lets a family save them as reusable routines, then apply a
 // routine to a week (materializing concrete calendar_events). 100% Supabase.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Plus, Sparkles, Repeat, Trash2, Pencil, Loader2, X, Wand2, CalendarPlus } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { applyRoutineToCalendarAction, undoCalendarEventsAction } from '@/app/(app)/dashboard/calendar/actions';
+import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -24,6 +26,7 @@ import {
   WEEKDAYS_WEEKDAYS, type RoutineEventInput, type EventCategory,
 } from '@/lib/routines/detect';
 import type { Tables } from '@/lib/database.types';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Template = Tables<'routine_templates'>;
 type Item = Tables<'routine_template_items'>;
@@ -51,6 +54,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   weekStartMonday: Date;
   onApplied: () => void;
 }) {
+  const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -112,7 +116,13 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     });
   }
 
-  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">Loading routines…</div>;
+  // One submission id per (routine, week) — the composition a family means when
+  // they say "put this routine on this week". Dropped on undo, so changing their
+  // mind and applying again is a new composition rather than being answered with
+  // events that no longer exist.
+  const applyIds = useRef<Record<string, string>>({});
+
+  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{tr('routines.loadingRoutines')}</div>;
   if (error) return <ErrorState message="Could not load routines. Refresh and try again." onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {
@@ -124,15 +134,36 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
         weekStartMonday, 1,
       );
       if (rows.length === 0) { toastError('This routine has no active days.'); return; }
-      const sb = createClient();
-      const { data: inserted, error } = await sb.from('calendar_events')
-        .insert(rows.map((r) => ({ ...r, family_id: familyId, created_by: userId, recurrence: 'none' as const })))
-        .select('id');
-      if (error) throw error;
-      const ids = (inserted ?? []).map((r) => r.id);
+      // One write, and one composition. Applying this routine to this week twice
+      // used to add the week twice; the batch carries a key derived from the id
+      // below, so the second Apply is answered with the events the first created.
+      const key = `${t.id}:${weekStartMonday.toISOString().slice(0, 10)}`;
+      const result = await applyRoutineToCalendarAction({
+        events: rows.map((r) => ({
+          title: r.title,
+          startsAt: r.starts_at,
+          endsAt: r.ends_at,
+          category: r.category,
+          assigneeId: r.assignee_id,
+        })),
+        submissionId: (applyIds.current[key] ||= newSubmissionId()),
+      });
+      if (!result.ok) { toastError(result.error); return; }
+
+      const ids = result.eventIds;
       success(`Added ${ids.length} events for this week`, {
         label: 'Undo',
-        onClick: () => { void createClient().from('calendar_events').delete().in('id', ids).then(() => { success('Undone'); onApplied(); }); },
+        onClick: () => {
+          void undoCalendarEventsAction(ids).then((undone) => {
+            if (!undone.ok) { toastError(undone.error); return; }
+            // Undo means the family changed their mind, so the next Apply of this
+            // routine and week is a NEW composition — otherwise the batch key
+            // would answer it with events that no longer exist.
+            delete applyIds.current[key];
+            success('Undone');
+            onApplied();
+          });
+        },
       });
       onApplied();
     });
@@ -151,7 +182,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   return (
     <div className="sidebar-card">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-bold"><Repeat className="h-4 w-4 text-brand-text" /> Routines</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-bold"><Repeat className="h-4 w-4 text-brand-text" /> {tr('routines.routines')}</h3>
         <button onClick={() => setCreating(true)} className="flex items-center gap-1 text-[11px] font-medium text-brand-text hover:underline">
           <Plus className="h-3.5 w-3.5" /> New
         </button>
@@ -167,7 +198,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{s.title}</p>
                   <p className="text-[10px] text-muted">
-                    {weekdayLong(s.weekday)}s at {minutesToLabel(s.startMinutes)} · seen {s.occurrences}×
+                    {weekdayLong(s.weekday)}{tr('routines.sAt')} {minutesToLabel(s.startMinutes)} {tr('routines.seen')} {s.occurrences}×
                   </p>
                 </div>
               </div>
@@ -176,7 +207,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                 disabled={isPending(`save:${s.signature}`)}
                 className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg bg-brand py-1.5 text-[11px] font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
               >
-                {isPending(`save:${s.signature}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Save as routine
+                {isPending(`save:${s.signature}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {tr('routines.saveAsRoutine')}
               </button>
             </div>
           ))}
@@ -186,7 +217,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
       {/* Saved routines */}
       {templates.length === 0 ? (
         suggestions.length === 0 && (
-          <p className="text-xs text-muted">No routines yet. Create one, or we&apos;ll suggest them as patterns appear in your calendar.</p>
+          <p className="text-xs text-muted">{tr('routines.noRoutinesYetCreateOneOr')}</p>
         )
       ) : (
         <div className="space-y-1.5">
@@ -200,9 +231,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                     <p className="truncate text-xs font-semibold">{t.name}</p>
                     <p className="text-[10px] text-muted">{weekdayMaskLabel(t.weekday_mask)} · {its.length} step{its.length === 1 ? '' : 's'}</p>
                   </div>
-                  <button onClick={() => setEditing({ template: t, items: its })} aria-label="Edit routine"
+                  <button onClick={() => setEditing({ template: t, items: its })} aria-label={tr('routines.editRoutine')}
                     className="rounded p-1 text-muted opacity-0 transition hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => deleteTemplate(t)} disabled={isPending(`del:${t.id}`)} aria-label="Delete routine"
+                  <button onClick={() => deleteTemplate(t)} disabled={isPending(`del:${t.id}`)} aria-label={tr('routines.deleteRoutine')}
                     className="rounded p-1 text-muted opacity-0 transition hover:text-danger group-hover:opacity-100">
                     {isPending(`del:${t.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                   </button>
@@ -212,7 +243,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
                   disabled={isPending(`apply:${t.id}`) || its.length === 0}
                   className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-border py-1.5 text-[11px] font-semibold transition hover:bg-elevated disabled:opacity-50"
                 >
-                  {isPending(`apply:${t.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />} Apply to this week
+                  {isPending(`apply:${t.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarPlus className="h-3 w-3" />} {tr('routines.applyToThisWeek')}
                 </button>
               </div>
             );
@@ -239,6 +270,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
   template?: Template; initialItems?: Item[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const tr = useTranslations();
   const { error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(template?.name ?? '');
@@ -298,12 +330,12 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
   return (
     <Modal open title={template ? 'Edit routine' : 'New routine'} onClose={onClose}>
       <div className="space-y-4">
-        <Field label="Name">
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="School Morning" autoFocus />}
+        <Field label={tr('routines.name')}>
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('routines.schoolMorning')} autoFocus />}
         </Field>
 
         <div>
-          <p className="mb-1 text-sm font-medium">Icon</p>
+          <p className="mb-1 text-sm font-medium">{tr('routines.icon')}</p>
           <div className="flex flex-wrap gap-1.5">
             {ROUTINE_ICONS.map((e) => (
               <button key={e} type="button" onClick={() => setIcon(e)}
@@ -313,7 +345,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         </div>
 
         <div>
-          <p className="mb-1 text-sm font-medium">Repeats on</p>
+          <p className="mb-1 text-sm font-medium">{tr('routines.repeatsOn')}</p>
           <div className="flex gap-1">
             {WEEKDAY_INITIALS.map((d, w) => (
               <button key={w} type="button" onClick={() => setMask((m) => toggleWeekday(m, w))}
@@ -326,27 +358,27 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
 
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <p className="text-sm font-medium">Steps</p>
-            <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> Add step</button>
+            <p className="text-sm font-medium">{tr('routines.steps')}</p>
+            <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> {tr('routines.addStep')}</button>
           </div>
           <div className="space-y-2">
             {rows.map((r, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface/40 p-2">
                 <div className="flex items-center gap-2">
-                  <Input value={r.title} onChange={(e) => patchRow(i, { title: e.target.value })} placeholder="e.g. Breakfast" className="flex-1" />
+                  <Input value={r.title} onChange={(e) => patchRow(i, { title: e.target.value })} placeholder={tr('routines.eGBreakfast')} className="flex-1" />
                   {rows.length > 1 && (
-                    <button type="button" onClick={() => removeRow(i)} aria-label="Remove step" className="rounded p-1 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => removeRow(i)} aria-label={tr('routines.removeStep')} className="rounded p-1 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
                   )}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
-                  <Input type="time" value={r.start} onChange={(e) => patchRow(i, { start: e.target.value })} aria-label="Start time" />
-                  <Input type="number" min={5} step={5} value={r.duration} onChange={(e) => patchRow(i, { duration: Number(e.target.value) })} aria-label="Minutes" />
-                  <Select value={r.category} onChange={(e) => patchRow(i, { category: e.target.value as EventCategory })} aria-label="Category">
+                  <Input type="time" value={r.start} onChange={(e) => patchRow(i, { start: e.target.value })} aria-label={tr('routines.startTime')} />
+                  <Input type="number" min={5} step={5} value={r.duration} onChange={(e) => patchRow(i, { duration: Number(e.target.value) })} aria-label={tr('routines.minutes')} />
+                  <Select value={r.category} onChange={(e) => patchRow(i, { category: e.target.value as EventCategory })} aria-label={tr('routines.category')}>
                     {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_EMOJI[c]} {c[0].toUpperCase() + c.slice(1)}</option>)}
                   </Select>
                 </div>
-                <Select value={r.assignee_id} onChange={(e) => patchRow(i, { assignee_id: e.target.value })} aria-label="Assign to" className="mt-2">
-                  <option value="">Whole family</option>
+                <Select value={r.assignee_id} onChange={(e) => patchRow(i, { assignee_id: e.target.value })} aria-label={tr('routines.assignTo')} className="mt-2">
+                  <option value="">{tr('routines.wholeFamily')}</option>
                   {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                 </Select>
               </div>
@@ -355,7 +387,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('routines.cancel')}</Button>
           <Button type="button" loading={saving} onClick={save}>{template ? 'Save routine' : 'Create routine'}</Button>
         </div>
       </div>

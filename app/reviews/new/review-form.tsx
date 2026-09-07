@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { Star, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { submitReviewAction } from './actions';
 import { shouldRouteToPublic } from '@/lib/marketing/reviews';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type PublicLink = { label: string; url: string };
 
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export function ReviewForm(p: Props) {
+  const t = useTranslations();
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [title, setTitle] = useState('');
@@ -73,21 +75,21 @@ export function ReviewForm(p: Props) {
         ))}
       </div>
 
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (optional)"
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('reviewsNewReviewForm.titleOptional')}
         className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" />
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Tell us about your experience…"
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder={t('reviewsNewReviewForm.tellUsAboutYourExperience')}
         className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
       <div className="grid grid-cols-2 gap-3">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)"
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('reviewsNewReviewForm.yourNameOptional')}
           className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" />
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email (optional)"
+        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder={t('reviewsNewReviewForm.emailOptional')}
           className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" />
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
       <button onClick={submit} disabled={pending}
         className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-semibold text-brand-fg disabled:opacity-60">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Submit review
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {t('reviewsNewReviewForm.submitReview')}
       </button>
     </div>
   );

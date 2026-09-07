@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { submitResponseAction } from './actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Props = {
   slug: string;
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function SurveyForm(p: Props) {
+  const t = useTranslations();
   const [score, setScore] = useState<number | null>(null);
   const [comment, setComment] = useState('');
   const [email, setEmail] = useState('');
@@ -41,7 +43,7 @@ export function SurveyForm(p: Props) {
           <CheckCircle2 className="h-7 w-7" />
         </div>
         <h2 className="text-xl font-semibold">{p.thankYou || 'Thank you!'}</h2>
-        <p className="mt-1 text-sm text-muted">Your feedback has been recorded.</p>
+        <p className="mt-1 text-sm text-muted">{t('sSurveyForm.yourFeedbackHasBeenRecorded')}</p>
       </div>
     );
   }
@@ -76,11 +78,11 @@ export function SurveyForm(p: Props) {
       <div className="space-y-1">
         <label className="block text-sm font-medium">{p.followUp || 'Anything you’d like to add?'}</label>
         <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3}
-          className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" placeholder="Optional" />
+          className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" placeholder={t('sSurveyForm.optional')} />
       </div>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium">Email (optional)</label>
+        <label className="block text-sm font-medium">{t('sSurveyForm.emailOptional')}</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
           className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" placeholder="you@example.com" />
       </div>
@@ -89,7 +91,7 @@ export function SurveyForm(p: Props) {
 
       <button onClick={submit} disabled={pending}
         className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-semibold text-brand-fg disabled:opacity-60">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Submit feedback
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {t('sSurveyForm.submitFeedback')}
       </button>
     </div>
   );

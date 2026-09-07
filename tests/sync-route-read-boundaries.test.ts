@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readUiSource } from './helpers/i18n-source';
 
-const conflicts = readFileSync('app/(app)/dashboard/sync/conflicts/page.tsx', 'utf8');
-const accounts = readFileSync('app/(app)/dashboard/sync/accounts/page.tsx', 'utf8');
-const provider = readFileSync('app/(app)/dashboard/sync/accounts/[provider]/page.tsx', 'utf8');
+const conflicts = readUiSource('app/(app)/dashboard/sync/conflicts/page.tsx');
+const accounts = readUiSource('app/(app)/dashboard/sync/accounts/page.tsx');
+const provider = readUiSource('app/(app)/dashboard/sync/accounts/[provider]/page.tsx');
 
 describe('family sync route read boundaries', () => {
   it('does not turn sync read failures into empty conflicts or disconnected accounts', () => {

@@ -18,6 +18,7 @@ import {
   type Party, type RoundKind,
 } from '@/lib/marketplace/negotiation';
 import { makeOfferAction, respondToOfferAction } from '@/app/(app)/marketplace/negotiations/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
@@ -36,6 +37,7 @@ export function NegotiationPanel({
   canOffer: boolean;       // listing is open and viewer isn't the owner
   threads: Thread[];       // owner: all threads; buyer: their own (0 or 1)
 }) {
+  const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
 
@@ -58,8 +60,8 @@ export function NegotiationPanel({
   return (
     <div className="rounded-2xl border border-border bg-gradient-to-br from-brand/[0.05] to-surface/40 p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-        <Handshake className="h-4 w-4 text-brand-text" /> Make an Offer
-        <span className="ml-auto text-[11px] font-normal text-muted">Asking {money(askCents)}</span>
+        <Handshake className="h-4 w-4 text-brand-text" /> {tr('negotiation.makeAnOffer')}
+        <span className="ml-auto text-[11px] font-normal text-muted">{tr('negotiation.asking')} {money(askCents)}</span>
       </div>
 
       {showOpener && <OfferOpener listingId={listingId} askCents={askCents} onDone={(m) => { success(m); router.refresh(); }} onError={toastError} />}
@@ -71,7 +73,7 @@ export function NegotiationPanel({
 
       {isOwner && (
         threads.length === 0
-          ? <p className="text-sm text-muted">No offers yet. When a buyer makes an offer, you can counter or accept it here.</p>
+          ? <p className="text-sm text-muted">{tr('negotiation.noOffersYetWhenABuyer')}</p>
           : (
             <div className="space-y-3">
               {threads.map((t) => (
@@ -98,6 +100,7 @@ export function NegotiationPanel({
 function OfferOpener({ listingId, askCents, onDone, onError }: {
   listingId: string; askCents: number; onDone: (m: string) => void; onError: (m: string) => void;
 }) {
+  const tr = useTranslations();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [amt, setAmt] = useState(() => (suggestedOpeningCents(askCents) / 100).toString());
@@ -107,7 +110,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
     return (
       <button onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
-        <CircleDollarSign className="h-4 w-4" /> Make an offer
+        <CircleDollarSign className="h-4 w-4" /> {tr('negotiation.makeAnOffer')}
       </button>
     );
   }
@@ -134,12 +137,12 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
         </div>
         <button onClick={submit} disabled={pending}
           className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} Send
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} {tr('negotiation.send')}
         </button>
       </div>
-      <input value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={500} placeholder="Add a note (optional)"
+      <input value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={500} placeholder={tr('negotiation.addANoteOptional')}
         className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
-      <p className="text-[11px] text-muted">Offers below the {money(askCents)} asking price. The seller can accept or counter.</p>
+      <p className="text-[11px] text-muted">{tr('negotiation.offersBelowThe')} {money(askCents)} {tr('negotiation.askingPriceTheSellerCanAccept')}</p>
     </div>
   );
 }
@@ -148,6 +151,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
 function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
   thread: Thread; viewer: Party; askCents: number; listingId: string; onDone: (m: string) => void; onError: (m: string) => void;
 }) {
+  const tr = useTranslations();
   const [pending, start] = useTransition();
   const [countering, setCountering] = useState(false);
   const [amt, setAmt] = useState(() => (suggestedCounterCents(thread.currentAmountCents, askCents) / 100).toString());
@@ -208,28 +212,28 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
               {actions.includes('accept') && (
                 <button onClick={() => respond('accept')} disabled={pending}
                   className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-400 transition hover:bg-emerald-500/25 disabled:opacity-50">
-                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Accept {money(thread.currentAmountCents)}
+                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('negotiation.accept')} {money(thread.currentAmountCents)}
                 </button>
               )}
               {actions.includes('counter') && (
                 <button onClick={() => setCountering(true)} disabled={pending}
                   className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated disabled:opacity-50">
-                  <CircleDollarSign className="h-3 w-3" /> Counter
+                  <CircleDollarSign className="h-3 w-3" /> {tr('negotiation.counter')}
                 </button>
               )}
               {actions.includes('decline') && (
                 <button onClick={() => respond('decline')} disabled={pending}
                   className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-rose-400 disabled:opacity-50">
-                  <X className="h-3 w-3" /> Decline
+                  <X className="h-3 w-3" /> {tr('negotiation.decline')}
                 </button>
               )}
               {actions.includes('withdraw') && (
                 <button onClick={() => respond('withdraw')} disabled={pending}
                   className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-rose-400 disabled:opacity-50">
-                  <X className="h-3 w-3" /> Withdraw
+                  <X className="h-3 w-3" /> {tr('negotiation.withdraw')}
                 </button>
               )}
-              {!myTurn && <span className="self-center text-[11px] text-muted">Waiting on the other side…</span>}
+              {!myTurn && <span className="self-center text-[11px] text-muted">{tr('negotiation.waitingOnTheOtherSide')}</span>}
             </div>
           ) : (
             <div className="flex gap-2">
@@ -240,9 +244,9 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
               </div>
               <button onClick={sendCounter} disabled={pending}
                 className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-                {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />} Send
+                {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />} {tr('negotiation.send')}
               </button>
-              <button onClick={() => setCountering(false)} className="text-xs text-muted hover:text-fg">Cancel</button>
+              <button onClick={() => setCountering(false)} className="text-xs text-muted hover:text-fg">{tr('negotiation.cancel')}</button>
             </div>
           )}
         </div>
@@ -250,9 +254,9 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
 
       {thread.status === 'agreed' && (
         <p className="text-xs font-semibold text-emerald-400">
-          Agreed at {money(thread.agreedAmountCents ?? thread.currentAmountCents)}
+          {tr('negotiation.agreedAt')} {money(thread.agreedAmountCents ?? thread.currentAmountCents)}
           {savingsPercent(thread.agreedAmountCents ?? thread.currentAmountCents, askCents) > 0 && (
-            <span className="text-muted"> · {savingsPercent(thread.agreedAmountCents ?? thread.currentAmountCents, askCents)}% off asking</span>
+            <span className="text-muted"> · {savingsPercent(thread.agreedAmountCents ?? thread.currentAmountCents, askCents)}{tr('negotiation.offAsking')}</span>
           )}
         </p>
       )}

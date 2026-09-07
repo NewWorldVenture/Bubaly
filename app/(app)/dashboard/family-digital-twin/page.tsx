@@ -10,11 +10,13 @@ import { Avatar } from '@/components/ui/avatar';
 import { DecisionSimulator } from '@/components/twin/decision-simulator';
 import { ActivityProjection, type SavedSim } from '@/components/twin/activity-projection';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Digital Twin' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyDigitalTwinPage() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -67,7 +69,7 @@ export default async function FamilyDigitalTwinPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Family Digital Twin"
+        title={tr('dashboardFamilyDigitalTwin.familyDigitalTwin')}
         description="A living model of each family member — preferences, responsibilities and AI insights that power the whole platform."
       />
 
@@ -114,12 +116,12 @@ export default async function FamilyDigitalTwinPage() {
 
       {manager && (
         <SectionCard
-          title="Capture an Insight"
+          title={tr('dashboardFamilyDigitalTwin.captureAnInsight')}
           description="Add what you know about a member — it sharpens recommendations everywhere."
         >
           <QuickAdd
             table="family_digital_twin_profiles"
-            title="Add / update profile"
+            title={tr('dashboardFamilyDigitalTwin.addUpdateProfile')}
             members={(members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }))}
             fields={[
               { name: 'member_id', label: 'Member', type: 'member', required: true },
@@ -131,7 +133,7 @@ export default async function FamilyDigitalTwinPage() {
         </SectionCard>
       )}
 
-      <SectionCard title="Open Family Goals" viewAllHref="/dashboard/goals">
+      <SectionCard title={tr('dashboardFamilyDigitalTwin.openFamilyGoals')} viewAllHref="/dashboard/goals">
         {goals && goals.length > 0 ? (
           <ul className="grid gap-2 sm:grid-cols-2">
             {goals.map((g) => (

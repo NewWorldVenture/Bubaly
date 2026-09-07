@@ -6,11 +6,13 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReward, DIFFICULTY_LABELS, fmtCash, type Difficulty } from '@/lib/chores/logic';
 import { SubmitProofForm } from './submit-form';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Submit your work' };
 export const dynamic = 'force-dynamic';
 
 export default async function SubmitProofPage({ params }: { params: Promise<{ assignmentId: string }> }) {
+  const t = await getTranslations();
   const { assignmentId } = await params;
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -35,7 +37,7 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pt-2">
-      <Link href="/kids" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> Back</Link>
+      <Link href="/kids" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> {t('kidsSubmit.back')}</Link>
 
       <div className="rounded-3xl bg-gradient-to-br from-brand/20 to-pink-500/20 p-5">
         <div className="text-4xl">{chore.icon ?? '🎯'}</div>

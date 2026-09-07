@@ -4,8 +4,10 @@ import { useState, useTransition } from 'react';
 import { MoreHorizontal, UserX, UserCheck, ShieldOff } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { deactivateAdminAction, activateAdminAction, revokeAdminAction } from '@/app/(app)/admin/admins/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function AdminRowActions({ adminId, status, email }: { adminId: string; status: string; email: string }) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
@@ -44,14 +46,14 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
                 onClick={() => act(deactivateAdminAction)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-warning hover:bg-elevated"
               >
-                <UserX className="h-4 w-4" /> Deactivate
+                <UserX className="h-4 w-4" /> {t('adminRowActions.deactivate')}
               </button>
             ) : (
               <button
                 onClick={() => act(activateAdminAction)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-success hover:bg-elevated"
               >
-                <UserCheck className="h-4 w-4" /> Activate
+                <UserCheck className="h-4 w-4" /> {t('adminRowActions.activate')}
               </button>
             )}
             <button
@@ -60,7 +62,7 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
               }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated"
             >
-              <ShieldOff className="h-4 w-4" /> Remove Access
+              <ShieldOff className="h-4 w-4" /> {t('adminRowActions.removeAccess')}
             </button>
           </div>
         </>

@@ -3,6 +3,7 @@ import { Database, HardDrive, Shield, Info } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Data & Storage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,7 @@ function fmtBytes(bytes: number): string {
 }
 
 export default async function AdminDataPage() {
+  const tr = await getTranslations();
   const supabase = createServiceClient();
 
   const counts = await Promise.all(
@@ -46,11 +48,11 @@ export default async function AdminDataPage() {
     return (
       <div className="module-page">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Data &amp; Storage</h1>
-          <p className="mt-1 text-sm text-muted">Live row counts and document storage across the platform.</p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminBackup.dataAmpStorage')}</h1>
+          <p className="mt-1 text-sm text-muted">{tr('adminBackup.liveRowCountsAndDocumentStorage')}</p>
         </div>
         <ErrorState message="Could not load data and storage metrics from Supabase. Refresh and try again." />
-        <a href="/admin/backup" className="text-sm font-medium text-brand-text underline">Refresh data overview</a>
+        <a href="/admin/backup" className="text-sm font-medium text-brand-text underline">{tr('adminBackup.refreshDataOverview')}</a>
       </div>
     );
   }
@@ -60,33 +62,33 @@ export default async function AdminDataPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Data &amp; Storage</h1>
-        <p className="mt-1 text-sm text-muted">Live row counts and document storage across the platform.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminBackup.dataAmpStorage')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('adminBackup.liveRowCountsAndDocumentStorage')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card className="flex flex-col gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-400"><Database className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{totalRows.toLocaleString()}</p><p className="mt-1 text-xs text-muted">Total rows (tracked tables)</p></div>
+          <div><p className="text-xl font-bold leading-none">{totalRows.toLocaleString()}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.totalRowsTrackedTables')}</p></div>
         </Card>
         <Card className="flex flex-col gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400"><HardDrive className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{fmtBytes(usedBytes)}</p><p className="mt-1 text-xs text-muted">Document storage used</p></div>
+          <div><p className="text-xl font-bold leading-none">{fmtBytes(usedBytes)}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.documentStorageUsed')}</p></div>
         </Card>
         <Card className="flex flex-col gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400"><Shield className="h-5 w-5" /></div>
-          <div><p className="text-xl font-bold leading-none">{(docs ?? []).length.toLocaleString()}</p><p className="mt-1 text-xs text-muted">Stored documents</p></div>
+          <div><p className="text-xl font-bold leading-none">{(docs ?? []).length.toLocaleString()}</p><p className="mt-1 text-xs text-muted">{tr('adminBackup.storedDocuments')}</p></div>
         </Card>
       </div>
 
       <Card className="p-0">
-        <h2 className="px-4 pt-4 text-base font-semibold">Table Sizes</h2>
+        <h2 className="px-4 pt-4 text-base font-semibold">{tr('adminBackup.tableSizes')}</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-y border-border text-left text-xs text-muted">
-                <th className="px-4 py-2.5 font-medium">Table</th>
-                <th className="px-4 py-2.5 font-medium">Rows</th>
+                <th className="px-4 py-2.5 font-medium">{tr('adminBackup.table')}</th>
+                <th className="px-4 py-2.5 font-medium">{tr('adminBackup.rows')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -104,7 +106,7 @@ export default async function AdminDataPage() {
       <Card className="flex items-start gap-3">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-text" />
         <div className="text-sm text-muted">
-          <p className="font-medium text-fg">Backups</p>
+          <p className="font-medium text-fg">{tr('adminBackup.backups')}</p>
           <p className="mt-1">
             Database backups are handled automatically by Supabase (daily point-in-time recovery on supported plans).
             Manage retention and restore points from your Supabase project dashboard → Database → Backups.

@@ -7,6 +7,7 @@ import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/
 import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Rule = {
   id: string;
@@ -39,6 +40,7 @@ const ROUTING_MODES: RoutingMode[] = [
 ];
 
 export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
+  const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [rules, setRules] = useState(initial);
   const [creating, setCreating] = useState(false);
@@ -97,20 +99,19 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">
-          Rules are evaluated in priority order. The first match wins.
-          All rules require parent approval — AI can only suggest.
+          {tr('rulesEditor.rulesAreEvaluatedInPriorityOrder')}
         </p>
         <button
           onClick={() => setCreating(true)}
           className="flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition shrink-0"
         >
-          <Plus className="h-3.5 w-3.5" /> New Rule
+          <Plus className="h-3.5 w-3.5" /> {tr('rulesEditor.newRule')}
         </button>
       </div>
 
       {sorted.length === 0 && !creating && (
         <div className="rounded-2xl border border-border bg-surface/40 py-10 text-center text-sm text-muted">
-          No rules yet. Create your first rule to customize how calls are handled.
+          {tr('rulesEditor.noRulesYetCreateYourFirst')}
         </div>
       )}
 
@@ -223,6 +224,7 @@ type NewRuleForm = {
 };
 
 function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; onClose: () => void }) {
+  const tr = useTranslations();
   const [form, setForm] = useState<NewRuleForm>({
     name: '', description: '', priority: '100',
     trust_levels: [], time_start: '', time_end: '',
@@ -254,24 +256,24 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
         className="relative z-10 w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl"
       >
         <div className="sticky top-0 z-10 border-b border-border bg-bg px-5 py-4">
-          <h2 id="rules-editor-title" className="text-lg font-bold">New Rule</h2>
-          <p className="text-xs text-muted mt-0.5">All conditions must match for the rule to apply.</p>
+          <h2 id="rules-editor-title" className="text-lg font-bold">{tr('rulesEditor.newRule')}</h2>
+          <p className="text-xs text-muted mt-0.5">{tr('rulesEditor.allConditionsMustMatchForThe')}</p>
         </div>
         <div className="p-5 space-y-4">
           <input
             value={form.name}
             onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            placeholder="Rule name (e.g. Quiet hours)"
+            placeholder={tr('rulesEditor.ruleNameEGQuietHours')}
             className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm"
           />
           <textarea
             value={form.description}
             onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-            placeholder="Description (optional)"
+            placeholder={tr('rulesEditor.descriptionOptional')}
             className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm min-h-[50px]"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">Trust Levels (any of these)</label>
+            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</label>
             <div className="flex flex-wrap gap-1.5">
               {TRUST_LEVELS.map((t) => (
                 <button key={t} type="button" onClick={() => toggleTrust(t)}
@@ -285,18 +287,18 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">Time Start</label>
+              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeStart')}</label>
               <input type="time" value={form.time_start} onChange={e => setForm(p => ({ ...p, time_start: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">Time End</label>
+              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeEnd')}</label>
               <input type="time" value={form.time_end} onChange={e => setForm(p => ({ ...p, time_end: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">Days of Week</label>
+            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</label>
             <div className="flex gap-1.5">
               {DAYS.map((d, i) => (
                 <button key={d} type="button" onClick={() => toggleDay(i)}
@@ -307,7 +309,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">Context</label>
+            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</label>
             <div className="flex flex-wrap gap-1.5">
               {CONTEXTS.map((c) => (
                 <button key={c.value} type="button" onClick={() => toggleCtx(c.value)}
@@ -320,11 +322,11 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
           <input
             value={form.caller_pattern}
             onChange={e => setForm(p => ({ ...p, caller_pattern: e.target.value }))}
-            placeholder="Caller number/name pattern (regex, optional)"
+            placeholder={tr('rulesEditor.callerNumberNamePatternRegexOptional')}
             className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm font-mono"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">Action</label>
+            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</label>
             <div className="grid grid-cols-2 gap-1.5">
               {ROUTING_MODES.map((mode) => (
                 <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))}
@@ -337,13 +339,13 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Priority (lower = higher priority)</label>
+            <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.priorityLowerHigherPriority')}</label>
             <input type="number" min="1" max="999" value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
               className="h-10 w-32 rounded-lg border border-border bg-elevated px-3 text-sm" />
           </div>
         </div>
         <div className="sticky bottom-0 border-t border-border bg-bg px-5 py-4 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-surface transition">Cancel</button>
+          <button onClick={onClose} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-surface transition">{tr('rulesEditor.cancel')}</button>
           <button
             onClick={async () => { if (!form.name.trim()) return; setSaving(true); await onSave(form); setSaving(false); }}
             disabled={saving || !form.name.trim()}
