@@ -152,10 +152,65 @@ Read the result like this:
   audit keeps reporting.** Note its name.
 - `SELECT` rows are out of scope — leave them alone (§3).
 
+### What the query actually returned on production, 2026-09-07
+
+Worth recording, because it is worse than the finding that prompted this page
+and it was found only by running the query rather than reasoning about the
+migrations.
+
+The **wallet** tables are correct — `0254` did its job:
+
+```
+child_wallets  child_wallets_mng_insert  INSERT  PERMISSIVE  can_manage_family(family_id)
+child_wallets  child_wallets_mng_update  UPDATE  PERMISSIVE  can_manage_family(family_id)
+child_wallets  child_wallets_mng_delete  DELETE  PERMISSIVE  can_manage_family(family_id)
+child_wallets  child_wallets_select      SELECT  PERMISSIVE  is_family_member(family_id)
+```
+
+The **finance** tables are not. `0267` has never been applied to production:
+
+```
+bills    "Members can manage bills"  ALL     PERMISSIVE  is_family_member(family_id)
+bills    bills_insert                INSERT  PERMISSIVE  is_family_member(family_id)
+bills    bills_update                UPDATE  PERMISSIVE  is_family_member(family_id)
+bills    bills_delete                DELETE  PERMISSIVE  is_family_member(family_id)
+budgets  ... identical shape
+```
+
+`is_family_member`, not `can_manage_family` — **membership, not role.** A child
+has a real session (`/kid-login` is whitelisted in `middleware.ts`). So on
+production right now a minor can turn off autopay on the mortgage, delete the
+Groceries budget, or remove a financial account. That is exactly the hole `0267`
+was written to close, and it is still open. There are no restrictive guards on
+these tables either — `0267` never added any, which is why `0275` does.
+
+**The trap this sprang:** `bills_insert` has the *correct name* and the *wrong
+rule*. Every check that works by policy name — including the first version of
+the step 1 query on this page — reports it as intended. Diagnose by rule, not by
+name:
+
+```sql
+  and p.polpermissive
+  and p.polcmd in ('a','w','d','*')
+  and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+      coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') not like '%can_manage_family%'
+```
+
+Every row that returns is a write a child can currently make.
+
 ### Step 2 — remove it
 
 Paste the whole of `supabase/migrations/0275_money_permissive_write_sweep.sql`
-into the SQL editor and run it. It removes strays by shape rather than by name,
+into the SQL editor and run it. It closes the finance hole above as well as the
+wallet finding: it drops the `FOR ALL` policy and recreates
+`<table>_insert/_update/_delete` against `can_manage_family`, then adds the
+restrictive guards.
+
+**This one is a behaviour change, not metadata tidying.** Any non-manager who can
+currently edit bills, budgets, financial accounts or savings goals stops being
+able to. That is what `0267` intended and what the TypeScript already enforces in
+three independent places; the database was the one disagreeing. Reads are
+untouched, so nothing disappears from anyone's screen. It removes strays by shape rather than by name,
 so you do not have to tell it what the policy from step 1 is called. It is
 idempotent, it re-asserts the intended policies and the guards, it touches no
 money rows, and it raises an exception rather than reporting success if a stray
