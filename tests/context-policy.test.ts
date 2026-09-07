@@ -52,9 +52,11 @@ describe('static ratchet: slices never read a denied table', () => {
 });
 
 describe('role policy', () => {
-  it('money and documents are the manager-only slices', () => {
+  it('money, documents and the move are the manager-only slices', () => {
     const managerOnly = SLICE_NAMES.filter((s) => SLICE_ACCESS[s].managerOnly);
-    expect(managerOnly.sort()).toEqual(['documents', 'money']);
+    // `moving` is manager-only because half of it is the family's money: the
+    // subscriptions and recurring bills that need a new address.
+    expect(managerOnly.sort()).toEqual(['documents', 'money', 'moving']);
   });
 
   it('a child or teen is refused money and documents regardless of the requested list', () => {
