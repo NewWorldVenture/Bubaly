@@ -42,7 +42,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: 'children',
-    heading: 'Children\'s privacy',
+    heading: 'privacy.childrensPrivacy',
     body: [
       'privacy.bubalyIsDesignedForFamilies',
       'privacy.weCollectChildrenSInformation',

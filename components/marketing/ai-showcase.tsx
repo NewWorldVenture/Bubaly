@@ -28,7 +28,7 @@ const DEMOS: Demo[] = [
     reply: 'aiShowcase.doneIAddedARepeating',
     actions: [
       { icon: Calendar, title: 'aiShowcase.soccerPractice', meta: 'aiShowcase.repeatsTueThu500', tone: 'brand' },
-      { icon: Bell, title: 'aiShowcase.leaveByReminder', meta: '4:30 PM · 12 min drive to the field', tone: 'accent' },
+      { icon: Bell, title: 'aiShowcase.leaveByReminder', meta: 'aiShowcase.leaveBy430Pm12MinDrive', tone: 'accent' },
     ],
   },
   {
@@ -36,7 +36,7 @@ const DEMOS: Demo[] = [
     prompt: 'Plan dinners for this week — nothing too heavy.',
     reply: 'aiShowcase.hereSALightBalanced',
     actions: [
-      { icon: UtensilsCrossed, title: '5 dinners planned', meta: 'aiShowcase.honeyGarlicChickenTacoBowls', tone: 'brand' },
+      { icon: UtensilsCrossed, title: 'aiShowcase.fiveDinnersPlanned', meta: 'aiShowcase.honeyGarlicChickenTacoBowls', tone: 'brand' },
     ],
   },
   {

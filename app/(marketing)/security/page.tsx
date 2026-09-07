@@ -68,15 +68,15 @@ const COMPLIANCE_BADGES = [
     desc: 'security.independentAuditorsVerifyOurSecurity',
   },
   {
-    badge: 'GDPR', label: 'GDPR', sub: 'security.euCompliant',
+    badge: 'GDPR', label: 'security.gdpr', sub: 'security.euCompliant',
     desc: 'security.fullComplianceWithEuGeneral',
   },
   {
-    badge: 'HIPAA', label: 'HIPAA', sub: 'security.healthcareReady',
+    badge: 'HIPAA', label: 'security.hipaa', sub: 'security.healthcareReady',
     desc: 'security.weImplementAdministrativePhysicalAnd',
   },
   {
-    badge: 'CCPA', label: 'CCPA', sub: 'security.californiaCompliant',
+    badge: 'CCPA', label: 'security.ccpa', sub: 'security.californiaCompliant',
     desc: 'security.californiaResidentsHaveFullRights',
   },
 ];
@@ -135,11 +135,11 @@ const SECURITY_FAQ = [
 ];
 
 const COMMITMENTS = [
-  { text: 'security.weNeverSellYourData', detail: 'Your family\'s information is never monetized — period.' },
+  { text: 'security.weNeverSellYourData', detail: 'security.yourFamilySInformationIsNever' },
   { text: 'security.weOnlyCollectWhatWe', detail: 'security.minimalDataCollectionWithPurpose' },
   { text: 'security.weProtectYourData24', detail: 'security.automatedMonitoringAlertingAndOn' },
   { text: 'security.weGiveYouFullControl', detail: 'security.exportDeleteOrModifyYour' },
-  { text: 'We\'re transparent about incidents', detail: 'security.publicPostMortemsAndProactive' },
+  { text: 'security.wereTransparentAboutIncidents', detail: 'security.publicPostMortemsAndProactive' },
   { text: 'security.weInvestInContinuousImprovement', detail: 'security.regularPenetrationTestsSecurityAudits' },
 ];
 

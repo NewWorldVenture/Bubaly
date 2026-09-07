@@ -10,19 +10,35 @@ import {
 describe('Supabase migration filename safety', () => {
   const audit = auditMigrationVersions();
 
-  it('keeps the known historical collision set explicit', () => {
+  // The 17 historical collisions are gone — every group was renamed to a
+  // unique version preserving apply order. KNOWN_DUPLICATE_MIGRATIONS is now
+  // empty and must STAY empty: it is the escape hatch that let duplicates
+  // accumulate, and re-populating it to quiet a red audit is how they came
+  // back the first time.
+  it('has no duplicate versions at all, and no escape hatch left open', () => {
     expect(audit.unexpectedDuplicates).toEqual([]);
-    expect(Object.fromEntries(audit.duplicates.map(({ version, names }) => [version, names])))
-      .toEqual(KNOWN_DUPLICATE_MIGRATIONS);
+    expect(audit.duplicates).toEqual([]);
+    expect(KNOWN_DUPLICATE_MIGRATIONS).toEqual({});
   });
 
-  // 0275 is the newest file, so the next free number is 0276. The gap this
-  // leaves is deliberate and is not the collision this suite exists to catch:
-  // 0270 is reserved by the travel-confirmations branch and 0274 by the
-  // finance-receipts branch, both of which are held behind an unproven
-  // production migration ledger. Taking a reserved number to close the gap
-  // would hand whichever of them merges first a real collision; the audit
-  // takes max+1, so a hole costs nothing.
+  // Why this matters beyond tidiness: supabase_migrations.schema_migrations has
+  // a PRIMARY KEY on version, so it cannot record two files numbered 0010. That
+  // is a hard blocker for Supabase branching AND for the production ledger
+  // repair, both of which replay the history into that table.
+  it('gives every migration a version the ledger can actually record', () => {
+    const seen = new Map<string, string>();
+    for (const entry of audit.entries as { name: string; version: string }[]) {
+      expect(
+        seen.has(entry.version),
+        `${entry.version} used by ${seen.get(entry.version)} and ${entry.name}`,
+      ).toBe(false);
+      seen.set(entry.version, entry.name);
+    }
+  });
+
+  // The de-duplicated files carry a 5th digit that orders them within their
+  // generation (00100 and 00101 both live in 0010). nextVersion reads the first
+  // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
     expect(audit.nextVersion).toBe('0276');
   });

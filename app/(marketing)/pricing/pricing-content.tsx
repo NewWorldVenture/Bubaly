@@ -235,19 +235,19 @@ type MatrixTier = 'free' | 'basic' | 'plus';
 type FeatureMatrix = { section: string; items: { label: string; tier: MatrixTier }[] }[];
 
 const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
-  { key: 'free', label: '5-Day Trial', dot: 'bg-emerald-400' },
+  { key: 'free', label: 'pricingContent.fiveDayTrial', dot: 'bg-emerald-400' },
   { key: 'basic', label: 'pricingContent.familyBasic', dot: 'bg-blue-400' },
-  { key: 'plus', label: 'Family+', dot: 'bg-violet-400' },
+  { key: 'plus', label: 'pricingContent.familyPlus', dot: 'bg-violet-400' },
 ];
 const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
 
 // Competitor-positioning callouts (how each tier stacks up vs the market).
 const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
-  { key: 'free', label: '5-Day Free Trial', dot: 'bg-emerald-400',
+  { key: 'free', label: 'pricingContent.fiveDayFreeTrial', dot: 'bg-emerald-400',
     line: 'pricingContent.getFullFamilyBasicFree' },
   { key: 'basic', label: 'pricingContent.familyBasic', dot: 'bg-blue-400',
     line: 'pricingContent.aDirectReplacementForCozi' },
-  { key: 'plus', label: 'Family+', dot: 'bg-violet-400',
+  { key: 'plus', label: 'pricingContent.familyPlus', dot: 'bg-violet-400',
     line: 'pricingContent.categoryCreatorYourFamilyS' },
 ];
 
@@ -328,14 +328,34 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   const yearly = period === 'yearly';
   const router = useRouter();
 
-  // Keep the tier/feature grid live: an admin change to /admin/tier-features
-  // revalidates this page, and re-fetching on an interval + on tab focus means
-  // an already-open pricing page reflects the change automatically.
+  // Keep the tier/feature grid live after an admin edits /admin/tier-features.
+  //
+  // This used to also poll every 20 seconds, unconditionally and forever. On a
+  // PUBLIC page that is expensive in a way that is easy to miss: each refresh
+  // re-renders the server tree, and this route's render awaits getPublicStats()
+  // and getResolvedFeatureTiers() — so one open tab was ~8,600 Supabase queries
+  // a day, whether or not anyone was looking at it, and crawlers and abandoned
+  // tabs all counted. Tier pricing changes maybe monthly; polling it three times
+  // a minute buys nothing that returning to the tab does not.
+  //
+  // Refreshing when the tab becomes visible covers the real case (admin edits,
+  // then someone looks at the page), and the throttle stops an alt-tab habit
+  // from turning into its own poll.
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), 20_000);
-    const onFocus = () => router.refresh();
-    window.addEventListener('focus', onFocus);
-    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+    let lastRefresh = 0;
+    const refreshIfStale = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefresh < 60_000) return;
+      lastRefresh = now;
+      router.refresh();
+    };
+    window.addEventListener('focus', refreshIfStale);
+    document.addEventListener('visibilitychange', refreshIfStale);
+    return () => {
+      window.removeEventListener('focus', refreshIfStale);
+      document.removeEventListener('visibilitychange', refreshIfStale);
+    };
   }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);

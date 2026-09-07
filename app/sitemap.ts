@@ -4,6 +4,39 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
+/**
+ * How long the sitemap will wait on the database before giving up on the
+ * admin-published pages and shipping the routes it already knows.
+ *
+ * This route is PRERENDERED, so these reads run during `next build`. The
+ * try/catch below handles a query that *errors*, but nothing bounded how long
+ * one could *hang* — and an unreachable Postgres does not error promptly, it
+ * sits at the TCP layer. That makes every deployment, on every branch, depend
+ * on database health at build time: a sick database stops being an incident on
+ * the site and becomes an incident on the deploy pipeline as well.
+ *
+ * A sitemap missing its admin-published landing pages for one deploy is a
+ * small, self-correcting loss. A deployment that cannot ship during an
+ * incident is not.
+ */
+const DB_BUDGET_MS = 5_000;
+
+/** Resolves to `fallback` if `work` has not finished within the budget. */
+async function withBudget<T>(work: PromiseLike<T>, fallback: T, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      console.error(`[sitemap] ${label} exceeded ${DB_BUDGET_MS}ms — shipping without it`);
+      resolve(fallback);
+    }, DB_BUDGET_MS);
+  });
+  try {
+    return await Promise.race([work, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Static public routes. Legal pages are included so they're crawlable and
 // discoverable (required for a production site). Authenticated app surfaces
 // stay out of the sitemap and are disallowed in robots.ts.
@@ -60,12 +93,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const supabase = createServiceClient();
-      const { data, error } = await supabase
-        .from('marketing_landing_pages')
-        .select('slug, updated_at')
-        .eq('published', true)
-        .is('deleted_at', null)
-        .order('updated_at', { ascending: false });
+      const { data, error } = await withBudget(
+        supabase
+          .from('marketing_landing_pages')
+          .select('slug, updated_at')
+          .eq('published', true)
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false })
+          .then((r) => ({ data: r.data, error: r.error as unknown })),
+        { data: null as { slug: string; updated_at: string }[] | null, error: null as unknown },
+        'landing-page read',
+      );
 
       if (error) {
         console.error('[sitemap] published landing-page read failed', error);
@@ -80,12 +118,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           }));
       }
 
-      const { data: platformPages, error: platformError } = await supabase
-        .from('marketing_pages')
-        .select('path, updated_at, published_at')
-        .eq('status', 'published')
-        .is('deleted_at', null)
-        .order('updated_at', { ascending: false });
+      const { data: platformPages, error: platformError } = await withBudget(
+        supabase
+          .from('marketing_pages')
+          .select('path, updated_at, published_at')
+          .eq('status', 'published')
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false })
+          .then((r) => ({ data: r.data, error: r.error as unknown })),
+        { data: null as { path: string; updated_at: string; published_at: string | null }[] | null, error: null as unknown },
+        'platform-page read',
+      );
       if (platformError) {
         console.error('[sitemap] published platform-page read failed', platformError);
       } else {
