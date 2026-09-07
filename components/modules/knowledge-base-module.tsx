@@ -12,6 +12,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -71,16 +72,15 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
     e.preventDefault();
     if (!form.label.trim() || !form.value.trim()) { toastError('Add both a label and a value'); return; }
     setSaving(true);
-    const sb = createClient();
-    const fields = {
-      member_id: form.member_id || null, category: form.category,
-      label: form.label.trim(), value: form.value.trim(), notes: form.notes.trim() || null,
-    };
-    const { error: err } = form.id
-      ? await sb.from('family_facts').update(fields).eq('id', form.id)
-      : await sb.from('family_facts').insert({ ...fields, family_id: familyId, created_by: userId });
+    const res = await saveFactAction(form.id || null, {
+      memberId: form.member_id || null,
+      category: form.category,
+      label: form.label.trim(),
+      value: form.value.trim(),
+      notes: form.notes.trim() || null,
+    });
     setSaving(false);
-    if (err) { toastError(describeDbError(err)); return; }
+    if (!res.ok) { toastError(res.error); return; }
     success(form.id ? 'Updated' : 'Saved to family memory');
     setModalOpen(false);
   }
@@ -88,15 +88,14 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
   async function remove(f: Fact) {
     if (!confirm(`Forget "${f.label}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('family_facts').delete().eq('id', f.id);
-    if (err) { toastError(describeDbError(err)); return; }
+    const res = await forgetFactAction(f.id);
+    if (!res.ok) { toastError(res.error); return; }
     success('Removed');
   }
 
   async function togglePin(f: Fact) {
-    const sb = createClient();
-    const { error: err } = await sb.from('family_facts').update({ is_pinned: !f.is_pinned }).eq('id', f.id);
-    if (err) toastError(describeDbError(err));
+    const res = await setFactPinnedAction(f.id, !f.is_pinned);
+    if (!res.ok) toastError(res.error);
   }
 
   async function copyValue(f: Fact) {
