@@ -61,7 +61,6 @@ const KNOWN_FORKS: Record<string, string> = {
   home_assets: 'not yet converted',
   maintenance_tasks: 'not yet converted',
   meals: 'not yet converted',
-  notes: 'not yet converted',
   notifications: 'not yet converted',
   vacation_budgets: 'not yet converted',
   vacation_itinerary_days: 'not yet converted',
