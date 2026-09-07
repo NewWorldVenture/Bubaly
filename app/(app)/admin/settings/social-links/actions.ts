@@ -1,11 +1,11 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { SOCIAL_PLATFORMS, type SocialLinks } from '@/lib/marketing/social-links';
-import { setSocialLinks } from '@/lib/server/social-links';
+import { setSocialLinks, SOCIAL_LINKS_TAG } from '@/lib/server/social-links';
 import { describeActionError } from '@/lib/supabase/errors';
 
 export type SaveSocialLinksResult =
@@ -36,6 +36,10 @@ export async function saveSocialLinksAction(formData: FormData): Promise<SaveSoc
   try {
     const saved = await setSocialLinks(createServiceClient(), submitted, user.id);
     const rejected = nonEmpty.filter((k) => !saved[k as keyof SocialLinks]);
+    // The footer's read is cached under this tag (it renders on every public
+    // page, so it must not hit Postgres per view). Dropping the tag is what
+    // keeps an admin edit immediate despite that cache.
+    revalidateTag(SOCIAL_LINKS_TAG);
     revalidatePath('/admin/settings/social-links');
     // The footer renders on every marketing route, so the whole tree is stale.
     revalidatePath('/', 'layout');

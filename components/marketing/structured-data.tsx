@@ -4,8 +4,7 @@
 // ratings or reviews — so we never risk a structured-data spam penalty.
 
 import { Fragment } from 'react';
-import { createServiceClient } from '@/lib/supabase/server';
-import { getSocialLinks } from '@/lib/server/social-links';
+import { getCachedSocialLinks } from '@/lib/server/social-links';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -30,7 +29,7 @@ export async function SiteStructuredData() {
   // The same admin-entered profiles the footer shows. `sameAs` is how a search
   // engine ties those accounts to the brand, so it reads from one source rather
   // than a second hand-kept list that would drift from the footer.
-  const social = await getSocialLinks(createServiceClient());
+  const social = await getCachedSocialLinks();
 
   const organization = {
     '@context': 'https://schema.org',

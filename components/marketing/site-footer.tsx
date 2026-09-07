@@ -3,9 +3,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { Logo } from '@/components/brand/logo';
 import { ConsentReopenLink } from '@/components/marketing/consent-manager';
 import { LanguageBar } from '@/components/i18n/language-picker';
-import { createServiceClient } from '@/lib/supabase/server';
 import { SOCIAL_PLATFORMS, type SocialPlatform } from '@/lib/marketing/social-links';
-import { getSocialLinks } from '@/lib/server/social-links';
+import { getCachedSocialLinks } from '@/lib/server/social-links';
 import {
   FacebookIcon,
   InstagramIcon,
@@ -71,7 +70,7 @@ const GROUPS = [
 
 export async function SiteFooter() {
   const t = await getTranslations();
-  const social = await getSocialLinks(createServiceClient());
+  const social = await getCachedSocialLinks();
   const configured = SOCIAL_PLATFORMS.filter((p) => social[p.key]);
 
   return (
