@@ -19,14 +19,16 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
 
+// `labelKey`, not `label`: 'supportTickets.unassigned' was a catalogue key in a
+// field rendered verbatim, so that tab read back its own key.
 const TABS = [
-  { key: 'all',        label: 'All Tickets' },
-  { key: 'mine',       label: 'My Tickets' },
-  { key: 'unassigned', label: 'supportTickets.unassigned' },
-  { key: 'open',       label: 'Open' },
-  { key: 'pending',    label: 'Pending' },
-  { key: 'resolved',   label: 'Resolved' },
-  { key: 'closed',     label: 'Closed' },
+  { key: 'all',        labelKey: 'supportTickets.tab.all' },
+  { key: 'mine',       labelKey: 'supportTickets.tab.mine' },
+  { key: 'unassigned', labelKey: 'supportTickets.unassigned' },
+  { key: 'open',       labelKey: 'supportTickets.tab.open' },
+  { key: 'pending',    labelKey: 'supportTickets.tab.pending' },
+  { key: 'resolved',   labelKey: 'supportTickets.tab.resolved' },
+  { key: 'closed',     labelKey: 'supportTickets.tab.closed' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -168,7 +170,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
         {TABS.map((t) => (
           <a key={t.key} href={`/admin/support-tickets?tab=${t.key}`}
             className={`tab-item ${tab === t.key ? 'tab-item-active' : 'tab-item-inactive'}`}>
-            {t.label}
+            {tr(t.labelKey)}
           </a>
         ))}
       </div>

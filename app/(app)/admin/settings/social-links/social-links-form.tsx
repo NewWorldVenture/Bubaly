@@ -4,14 +4,46 @@ import { useState } from 'react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { Loader2, Save } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { SOCIAL_PLATFORMS, type SocialLinks } from '@/lib/marketing/social-links';
+import {
+  SOCIAL_PLATFORMS,
+  normalizeSocialUrl,
+  type SocialLinks,
+  type SocialPlatform,
+} from '@/lib/marketing/social-links';
+import {
+  FacebookIcon,
+  InstagramIcon,
+  LinkedinIcon,
+  TiktokIcon,
+  XIcon,
+  YoutubeIcon,
+  type SocialIconProps,
+} from '@/components/brand/social-icons';
 import { saveSocialLinksAction } from './actions';
+
+const ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Element> = {
+  facebook: FacebookIcon,
+  youtube: YoutubeIcon,
+  x: XIcon,
+  instagram: InstagramIcon,
+  linkedin: LinkedinIcon,
+  tiktok: TiktokIcon,
+};
 
 export function SocialLinksForm({ links }: { links: SocialLinks }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
+  // What is currently typed, so the preview and the per-field validity below
+  // track every keystroke rather than the last saved value.
+  const [draft, setDraft] = useState<SocialLinks>(links);
+
+  // The footer publishes exactly the accounts that survive normalizeSocialUrl —
+  // the same function the server uses — so this row is what the site will show,
+  // not an approximation of it. A field that is typed but not yet a valid https
+  // URL simply does not appear, which is the honest preview of what saving does.
+  const publishable = SOCIAL_PLATFORMS.filter(({ key }) => normalizeSocialUrl(draft[key]));
 
   async function onSubmit(formData: FormData) {
     setSaving(true);
@@ -22,8 +54,9 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
       return;
     }
     setRejected(res.rejected);
+    setDraft(res.saved);
     if (res.rejected.length) {
-      toastError(`Saved, but ${res.rejected.join(', ')} was not a valid https URL and is not published.`);
+      toastError(t('socialLinksForm.savedButRejected', { fields: res.rejected.join(', ') }));
     } else {
       success(t('socialLinksForm.socialLinksUpdated'));
     }
@@ -31,23 +64,62 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
 
   return (
     <form action={onSubmit} className="space-y-4">
-      {SOCIAL_PLATFORMS.map(({ key, label, placeholder }) => (
-        <label key={key} className="block">
-          <span className="text-sm font-semibold">{label}</span>
-          <input
-            name={key}
-            type="url"
-            inputMode="url"
-            defaultValue={links[key] ?? ''}
-            placeholder={placeholder}
-            className={`mt-1.5 h-11 w-full rounded-xl border bg-surface px-3 text-base focus-ring ${
-              rejected.includes(key) ? 'border-danger' : 'border-border'
-            }`}
-          />
-        </label>
-      ))}
+      {SOCIAL_PLATFORMS.map(({ key, label, placeholder }) => {
+        const typed = (draft[key] ?? '').trim();
+        // Only complain about something actually typed — an empty field is a
+        // deliberate "no account", not a mistake.
+        const invalid = typed.length > 0 && !normalizeSocialUrl(typed);
+        return (
+          <label key={key} className="block">
+            <span className="text-sm font-semibold">{label}</span>
+            <input
+              name={key}
+              type="url"
+              inputMode="url"
+              value={draft[key] ?? ''}
+              onChange={(e) => {
+                setDraft((d) => ({ ...d, [key]: e.target.value }));
+                // A field being edited is no longer the one the server rejected.
+                setRejected((r) => r.filter((k) => k !== key));
+              }}
+              placeholder={placeholder}
+              aria-invalid={invalid || rejected.includes(key)}
+              className={`mt-1.5 h-11 w-full rounded-xl border bg-surface px-3 text-base focus-ring ${
+                invalid || rejected.includes(key) ? 'border-danger' : 'border-border'
+              }`}
+            />
+            {invalid && (
+              <span className="mt-1 block text-xs text-danger">
+                {t('socialLinksForm.mustBeHttpsUrl')}
+              </span>
+            )}
+          </label>
+        );
+      })}
 
       <p className="text-xs text-muted">{t('socialLinksForm.fullHttpsUrlsOnlyClear')}</p>
+
+      <div className="rounded-xl border border-border bg-surface/60 p-4">
+        <p className="text-xs font-semibold text-muted">{t('socialLinksForm.footerPreview')}</p>
+        <div className="mt-2 flex min-h-9 flex-wrap items-center gap-1">
+          {publishable.length === 0 ? (
+            <span className="text-xs text-muted">{t('socialLinksForm.noIconsYet')}</span>
+          ) : (
+            publishable.map(({ key, label }) => {
+              const Icon = ICONS[key];
+              return (
+                <span
+                  key={key}
+                  title={label}
+                  className="grid h-9 w-9 place-items-center rounded-full text-muted"
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+              );
+            })
+          )}
+        </div>
+      </div>
 
       <button
         type="submit"
@@ -55,7 +127,7 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
         className="btn-primary inline-flex items-center gap-2 disabled:opacity-60"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Save social links
+        {t('socialLinksForm.saveSocialLinks')}
       </button>
     </form>
   );
