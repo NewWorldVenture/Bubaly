@@ -9,9 +9,10 @@ import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/faq', {
-  title: 'FAQ & Family Knowledge Center',
-  description: 'Answers to the questions families ask about organizing family life with Bubaly, the AI Family Operating System — privacy, roles, the AI assistant, pricing, and mobile apps.',
+  title: t('faq.faqFamilyKnowledgeCenter'),
+  description: t('faq.answersToTheQuestionsFamilies'),
   });
 }
 
@@ -21,46 +22,46 @@ export const revalidate = 3600;
 const FAQ_SECTIONS: FaqSection[] = [
   {
     id: 'privacy-security',
-    label: 'Privacy & Security',
+    label: 'faq.privacySecurity',
     items: [
-      { q: 'Is my family’s data private?', a: 'Yes. Every database table enforces row-level security, so no family can ever access another family’s data. Documents are stored privately and served only via short-lived signed URLs.' },
+      { q: 'faq.isMyFamilySData', a: 'faq.yesEveryDatabaseTableEnforces' },
     ],
   },
   {
     id: 'roles-access',
-    label: 'Roles & Access',
+    label: 'faq.rolesAccess',
     items: [
-      { q: 'How do roles work?', a: 'There are six roles: Parent/Admin, Adult, Teen, Child, Caregiver, and Guest. Parents manage everything; adults manage shared household data; teens manage their own items; children complete chores; caregivers see only assigned areas; guests view limited shared events.' },
-      { q: 'Can I invite a babysitter or grandparent?', a: 'Absolutely. Invite them as a Caregiver (sees only assigned areas) or Guest (limited shared events). You control exactly what they can see.' },
+      { q: 'faq.howDoRolesWork', a: 'There are six roles: Parent/Admin, Adult, Teen, Child, Caregiver, and Guest. Parents manage everything; adults manage shared household data; teens manage their own items; children complete chores; caregivers see only assigned areas; guests view limited shared events.' },
+      { q: 'faq.canIInviteABabysitter', a: 'faq.absolutelyInviteThemAsA' },
     ],
   },
   {
     id: 'ai-assistant',
-    label: 'AI Assistant',
+    label: 'faq.aiAssistant',
     items: [
-      { q: 'Does the AI assistant actually do things, or just chat?', a: 'It takes real action. When you ask it to add an event, create chores, set a reminder, plan meals, or build a grocery list, it creates those records in your family’s database — scoped securely to your household.' },
+      { q: 'faq.doesTheAiAssistantActually', a: 'faq.itTakesRealActionWhen' },
     ],
   },
   {
     id: 'kids-safety',
-    label: 'Kids & Safety',
+    label: 'faq.kidsSafety',
     items: [
-      { q: 'Can children use it safely?', a: 'Yes. Children get a simple view of their assigned chores and items, with large tap targets and no access to billing, settings, or other members’ private data.' },
+      { q: 'faq.canChildrenUseItSafely', a: 'faq.yesChildrenGetASimple' },
     ],
   },
   {
     id: 'plans-pricing',
-    label: 'Plans & Pricing',
+    label: 'faq.plansPricing',
     items: [
-      { q: 'What does it cost?', a: 'There’s a free Starter plan and a 5-day trial of paid plans — no credit card required to begin. See the Pricing page for details.' },
+      { q: 'faq.whatDoesItCost', a: 'faq.thereSAFreeStarter' },
     ],
   },
   {
     id: 'mobile-notifications',
-    label: 'Mobile & Alerts',
+    label: 'faq.mobileAlerts',
     items: [
-      { q: 'Is there a mobile app?', a: 'Bubaly is an installable Progressive Web App today, and ships native iOS and Android companion apps built with Expo that share the same data and design.' },
-      { q: 'How do notifications work?', a: 'Bubaly sends timely push and email reminders for due chores, medications, calendar and school/sports events, home maintenance, and expiring documents — based on each member’s preferences.' },
+      { q: 'faq.isThereAMobileApp', a: 'faq.bubalyIsAnInstallableProgressive' },
+      { q: 'faq.howDoNotificationsWork', a: 'faq.bubalySendsTimelyPushAnd' },
     ],
   },
 ];
@@ -74,10 +75,21 @@ export default async function FAQPage() {
   const aeo = await readPublishedAeoQuestions(60);
   const knowledge: FAQ[] = aeo.questions.map((q) => ({ q: q.question, a: q.answer }));
 
+  // FAQ_SECTIONS holds catalogue KEYS (it is module-level, where `t` does not
+  // exist). Resolve them HERE rather than inside FAQAccordion: the accordion
+  // also renders `knowledge`, whose questions and answers are real text authored
+  // in the admin console. A t() call down there would translate the static
+  // entries and pass the database rows through a lookup that cannot match them.
+  const core: FaqSection[] = FAQ_SECTIONS.map((section) => ({
+    ...section,
+    label: t(section.label),
+    items: section.items.map((item) => ({ q: t(item.q), a: t(item.a) })),
+  }));
+
   // The live Knowledge Center becomes its own tab when answers are published.
   const sections: FaqSection[] = knowledge.length > 0
-    ? [...FAQ_SECTIONS, { id: 'knowledge-center', label: 'Knowledge Center', items: knowledge }]
-    : FAQ_SECTIONS;
+    ? [...core, { id: 'knowledge-center', label: t('faq.knowledgeCenter'), items: knowledge }]
+    : core;
 
   // Everything (core + Knowledge Center) participates in the FAQPage schema.
   const schemaItems = sections.flatMap((section) => section.items).slice(0, 100);
@@ -85,15 +97,15 @@ export default async function FAQPage() {
   return (
     <>
       <FaqStructuredData items={schemaItems} />
-      <MarketingPageStructuredData path="/faq" name="FAQ & Family Knowledge Center" description={t('faq.answersToCommonQuestionsAbout')} />
+      <MarketingPageStructuredData path="/faq" name={t('faq.faqFamilyKnowledgeCenter')} description={t('faq.answersToCommonQuestionsAbout')} />
       <Section className="pt-20 text-center">
-        <SectionHeading eyebrow="FAQ" title={t('faq.questionsAnswered')} description={t('faq.everythingYouNeedToKnow')} />
+        <SectionHeading eyebrow={t('marketing.nav.faq')} title={t('faq.questionsAnswered')} description={t('faq.everythingYouNeedToKnow')} />
       </Section>
 
       {!aeo.available && (
         <Section className="pt-0">
           <p className="mx-auto max-w-3xl rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200" role="status">
-            The live Knowledge Center is temporarily unavailable. The core answers below are still available; please refresh shortly for the latest team updates.
+            {t('faq.theLiveKnowledgeCenterIs')}
           </p>
         </Section>
       )}
