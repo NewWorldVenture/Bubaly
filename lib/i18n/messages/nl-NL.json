@@ -1602,6 +1602,7 @@
   "adminWalletReconciliationReconciliationClient.transactionsAcross": "transacties over",
   "adminWalletReconciliationReconciliationClient.warnings": "Waarschuwingen",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "admins.accessRequests": "Toegangsverzoeken",
   "admins.accessRequestsFromUsersWho": "Toegangsverzoeken van mensen die beheerdersrechten nodig hebben verschijnen hier.",
   "admins.actions": "Acties",
@@ -1643,6 +1644,8 @@
   "admins.viewAllActivity": "Alle activiteit bekijken →",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "ads.advertising": "Advertenties",
   "ads.couldNotLoadAdvertisingCampaigns": "Kon de advertentiecampagnes uit Supabase niet laden. Ververs en probeer het opnieuw.",
   "ads.planPaidCampaignsAndTrack": "Plan betaalde campagnes en volg budget en uitgaven. Prestaties (uitgaven, vertoningen, conversies) worden handmatig ingevoerd of uit het advertentieplatform geïmporteerd — nooit verzonnen.",
@@ -1737,6 +1740,7 @@
   "ai.familySafety": "Gezinsveiligheid",
   "ai.finishSettingUpYourFamily": "Rond eerst het instellen van je gezin in Bubaly af.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "ai.itActsItDoesnT": "Hij doet, niet alleen antwoorden",
   "ai.itDoesTheWork": "Het doet het werk.",
   "ai.itDoesnTWaitTo": "Het wacht niet tot je het vraagt. Bubaly werkt op de achtergrond en brengt op het juiste moment het juiste naar voren.",
@@ -1745,6 +1749,10 @@
   "ai.itDoesnTWaitTo": "Het wacht niet tot je het vraagt. Bubaly werkt op de achtergrond en brengt op het juiste moment het juiste naar voren.",
   "ai.itDoesTheWork": "Het doet het werk.",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "ai.itDoesnTWaitTo": "Het wacht niet tot je het vraagt. Bubaly werkt op de achtergrond en brengt op het juiste moment het juiste naar voren.",
+  "ai.itDoesTheWork": "Het doet het werk.",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "ai.meetTheAssistantThatActually": "Maak kennis met de assistent die echt dingen doet",
   "ai.missingVacationid": "vacationId ontbreekt",
   "ai.moneyCoaching": "Geldcoaching",
@@ -1973,12 +1981,18 @@
   "app.backToHome": "← Terug naar start",
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly regelt op de achtergrond de logistiek van het gezinsleven — telefoontjes, e-mails, planning, papierwerk, herinneringen en de dagelijkse afstemming — zodat je gezin minder tijd kwijt is aan het regelen van het leven en meer tijd overhoudt om het te leven.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "app.bubalyTheAiOperatingSystem": "Bubaly — Het AI-besturingssysteem voor het gezinsleven",
 =======
   "App.couldNotSetTheDefaultDashboard": "Kan het standaarddashboard niet instellen.",
   "App.couldNotSwitchActiveFamily": "Kan niet van actief gezin wisselen.",
   "App.couldNotVerifyFamilyMembership": "Kan het gezinslidmaatschap niet verifiëren.",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "App.couldNotSetTheDefaultDashboard": "Kan het standaarddashboard niet instellen.",
+  "App.couldNotSwitchActiveFamily": "Kan niet van actief gezin wisselen.",
+  "App.couldNotVerifyFamilyMembership": "Kan het gezinslidmaatschap niet verifiëren.",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "app.theAiOperatingSystemFor": "Het AI-besturingssysteem voor het gezinsleven.",
   "appLockActions.couldNotLoadAppLockSettings": "Kan de app-vergrendelinstellingen niet laden.",
   "appLockActions.couldNotSaveAppLockSettings": "Kan de app-vergrendelinstellingen niet opslaan.",
@@ -2000,10 +2014,13 @@
   "appLockSettings.turnOn": "Inschakelen",
   "appNotFound.home": "Home",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "appStore.official": "Officieel",
   "approval.basedOn": "Waar Bubaly naar heeft gekeken",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "approval.bubalyWill": "Bubaly gaat:",
   "approval.cancel": "Annuleren",
   "approval.edit": "Bewerken",
@@ -2456,20 +2473,27 @@
   "briefing.meals": "🍽️ Maaltijden",
   "briefing.moreAcrossBillsHomeHealthAmp": "meer bij rekeningen, huis, gezondheid en reizen",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "briefing.moreDecisionsOnHome": "+{count} meer op Home",
   "briefing.needToBuy": "Te kopen:",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "briefing.needsAttentionToday": "Vraagt vandaag aandacht",
   "briefing.needToBuy": "Te kopen:",
   "briefing.noEventsScheduledEnjoyTheOpen": "Geen afspraken gepland — geniet van de vrije dag!",
   "briefing.nothingLoggedYet": "Nog niets vastgelegd",
   "briefing.nothingMoreScheduledToday": "Vandaag niets meer gepland",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "briefing.oneDecisionNeedsYou": "1 beslissing wacht op je",
 =======
   "briefing.notPlanned": "Niet gepland",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "briefing.notPlanned": "Niet gepland",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "briefing.potentialConflicts": "Mogelijke conflicten",
   "briefing.refresh": "Vernieuwen",
   "briefing.reminders": "Herinneringen",
@@ -3175,6 +3199,7 @@
   "completeSetup.setupSavedYourFamilyProfile": "Installatie opgeslagen — je gezinsprofiel is compleet.",
   "completeSetup.whatDoYouWantHelpWith": "Waarmee kunnen we je helpen?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "completedByBubaly.allRuns": "Alle uitvoeringen",
   "completedByBubaly.completedByBubaly": "Afgerond door Bubaly",
   "completedByBubaly.doneWith": "Gedaan met",
@@ -3184,6 +3209,8 @@
   "completedByBubaly.yesterday": "Gisteren",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "concierge.activePlans": "Actieve plannen",
   "concierge.addPlan": "Plan toevoegen",
   "concierge.addPlanManually": "Plan handmatig toevoegen",
@@ -3997,6 +4024,7 @@
   "decisions.travelMin": "Reistijd (min)",
   "decisions.whichVacationThisSummer": "Welke vakantie deze zomer?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "decisionsBand.asksBody": "Deze gebieden wachten altijd op akkoord van een ouder, wat de instelling ook zegt:",
   "decisionsBand.asksTitle": "Eerst aan jou voorgelegd",
   "decisionsBand.eyebrow": "Hoe Bubaly het recht verdient om te handelen",
@@ -4009,6 +4037,8 @@
   "decisionsBand.seeItAct": "Zie het in actie",
   "decisionsBand.title": "Het regelt de routine. Voor de rest vraagt het.",
 =======
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "decisionSimulator.aBigSpend": "Een grote uitgave",
   "decisionSimulator.addACommitment": "Verplichting toevoegen",
   "decisionSimulator.amount": "Bedrag ($)",
@@ -4025,7 +4055,10 @@
   "decisionSimulator.vacation": "Vakantie",
   "decisionSimulator.what": "Wat",
   "decisionSimulator.whatForOptional": "Waarvoor (optioneel)",
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "decisionsModule.askTheQuestionFirst": "Stel eerst de vraag",
   "decisionsModule.couldNotLoadDecisionData": "Kon de beslissingsgegevens niet laden. Ververs en probeer het opnieuw.",
   "decisionsModule.decisionCreated": "Beslissing aangemaakt",
@@ -4810,11 +4843,14 @@
   "featureTopics.planMeals": "Maaltijden plannen",
   "featureTopics.stayOnTopOfSchool": "School bijhouden",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "features.bubalyFeatures": "Bubaly-functies",
   "features.everythingYourFamilyNeedsIn": "Alles wat je gezin nodig heeft op één slimme plek.",
   "features.features": "Functies",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "feedback.bubalyGetsBetterWhenYou": "Bubaly wordt beter als je ons vertelt wat je gezin nodig heeft. Deel een idee, stem op de ideeën die je goed vindt, en zie ze op onze roadmap verschijnen.",
   "feedback.couldNotAddTheComment": "Kan de reactie niet toevoegen.",
   "feedback.couldNotCheckTheVote": "Kan de stem niet controleren.",
@@ -5086,44 +5122,79 @@
   "frontDesk.aiFrontDesk": "AI-receptie",
   "frontDesk.aiGreeting": "AI-begroeting",
   "frontDesk.aiSummary": "AI-samenvatting",
+  "frontDesk.all": "Alles",
   "frontDesk.allowlistOnlyKnownContacts": "Toegestane lijst — alleen bekende contacten",
+  "frontDesk.aNumberHasBeenRequested": "Er is een nummer aangevraagd. Het verschijnt hier zodra het actief is.",
   "frontDesk.back": "Terug",
+  "frontDesk.blocked": "Geblokkeerd",
   "frontDesk.blockSpamRobocalls": "Spam en robocalls blokkeren",
   "frontDesk.blockUnknownCallers": "Onbekende bellers blokkeren",
   "frontDesk.bookRescheduleConfirmOrChaseThe": "Afspraak maken, verzetten, bevestigen of opvolgen — Bubaly schrijft het belplan, een ouder pleegt het gesprek.",
   "frontDesk.byClassification": "Per classificatie",
   "frontDesk.callerName": "Naam beller",
+  "frontDesk.calls": "Gesprekken",
+  "frontDesk.callsToTheFamilyNumber": "Gesprekken naar het gezinsnummer",
+  "frontDesk.callsToTheFamilyNumberReach": "Gesprekken naar het gezinsnummer komen bij de concierge",
   "frontDesk.cancel": "Annuleren",
   "frontDesk.classification": "Classificatie",
+  "frontDesk.conciergeOff": "Concierge uit",
   "frontDesk.contact": "Contact",
+  "frontDesk.couldNotLoadTheFrontDesk": "De receptie kon niet worden geladen. Probeer het opnieuw.",
   "frontDesk.delete": "Verwijderen",
+  "frontDesk.eachOneIsClassifiedBefore": "Elk gesprek wordt ingedeeld voordat iemand wordt gewekt",
+  "frontDesk.earlierCallLog": "Ouder belverslag",
   "frontDesk.enableAiFrontDesk": "AI-receptie inschakelen",
+  "frontDesk.entriesTypedByHandBeforeThe": "Handmatig ingevoerde items van voor het gezinsnummer. Bewaard, niet meer aangevuld.",
+  "frontDesk.everyCallToTheFamilyNumber": "Elk gesprek naar het gezinsnummer wordt uitgeschreven en hier bewaard.",
   "frontDesk.forwardUrgentCallsToOptional": "Dringende oproepen doorschakelen naar (optioneel)",
   "frontDesk.frontDeskSettings": "Receptie-instellingen",
+<<<<<<< HEAD
   "frontDesk.haveBubalyMakeACallFor": "Krijg een belplan van Bubaly",
+=======
+  "frontDesk.handled": "Afgehandeld",
+  "frontDesk.handleItFilesTheMessage": "'Handel af' geeft het bericht door aan de planner",
+  "frontDesk.haveBubalyMakeACallFor": "Laat Bubaly een telefoontje voor je plegen",
+  "frontDesk.hide": "Verbergen",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "frontDesk.high": "Hoog",
   "frontDesk.howItWorks": "Hoe het werkt",
+  "frontDesk.important": "Belangrijk",
   "frontDesk.logACall": "Gesprek vastleggen",
   "frontDesk.logCall": "Gesprek vastleggen",
+  "frontDesk.manage": "Beheren",
+  "frontDesk.manageNumberAndAddress": "Nummer en adres beheren",
   "frontDesk.noCallsHere": "Geen oproepen hier",
+  "frontDesk.noFamilyNumberYet": "Nog geen gezinsnummer",
   "frontDesk.normal": "Normaal",
+  "frontDesk.nothingHasCalledYet": "Er heeft nog niemand gebeld",
+  "frontDesk.nothingWasEverTypedIntoThe": "In het oude belverslag is nooit iets ingevoerd.",
   "frontDesk.number": "Nummer",
   "frontDesk.offRingEverythingThrough": "Uit — laat alles doorkomen",
   "frontDesk.paperworkInboxBubalyReadsItFor": "Papierwerk-inbox — Bubaly leest het voor je",
   "frontDesk.pasteTheVoicemailOrWhatWas": "Plak de voicemail of wat er besproken is…",
   "frontDesk.priority": "Prioriteit",
   "frontDesk.remind": "Herinneren",
+  "frontDesk.screened": "Gefilterd",
   "frontDesk.screeningMode": "Screeningmodus",
   "frontDesk.searchCallsNumbersSummaries": "Zoek oproepen, nummers, samenvattingen…",
+  "frontDesk.seeTheWholeHouseholdInbox": "Bekijk de hele huispostbus",
+  "frontDesk.setOneUpInTheContactCenter": "Stel er een in in het Contact Center.",
   "frontDesk.settings": "Instellingen",
+  "frontDesk.show": "Tonen",
   "frontDesk.slipsFormsFlyersAndBillsWhat": "Briefjes, formulieren, folders en rekeningen → wat te tekenen, betalen en terugsturen, met de data in je agenda.",
   "frontDesk.smartAiDecidesRecommended": "Slim — de AI beslist (aanbevolen)",
   "frontDesk.status": "Status",
   "frontDesk.strictScreenAllUnknownCallers": "Streng — alle onbekende bellers screenen",
+  "frontDesk.theFamilyNumberIsAnswering": "Het gezinsnummer neemt op",
+  "frontDesk.theFrontDeskSettingsCouldNot": "De receptie-instellingen konden niet worden gelezen. Probeer het opnieuw.",
+  "frontDesk.theVoiceInboxCouldNotBe": "De voicemailbox kon niet worden gelezen. Probeer het opnieuw.",
   "frontDesk.transcript": "Transcript",
   "frontDesk.transcriptVoicemailNotes": "Transcript / Voicemail / Notities",
+  "frontDesk.unknownCaller": "Onbekende beller",
   "frontDesk.urgent": "Urgent",
+  "frontDesk.urgentCallsAreForwardedTo": "Dringende gesprekken gaan door naar je reservenummer",
   "frontDesk.voicemail": "Voicemail",
+  "frontDesk.voicemailIsTranscribedInto": "Voicemail wordt uitgeschreven in de postbus",
   "frontDesk.whenTheAiFrontDeskHandles": "Als de AI-receptie een oproep afhandelt, verschijnt die hier.",
   "frontDeskModule.addACallerNameOr": "Voeg een naam of nummer van de beller toe",
   "frontDeskModule.addedToReminders": "Toegevoegd aan herinneringen",
@@ -5788,6 +5859,7 @@
   "inbox.communicationsHub": "Communicatiehub",
   "inbox.contact": "Contact",
   "inbox.contacts": "Contacten",
+  "inbox.couldNotLoadTheHouseholdInbox": "De huispostbus kon niet worden geladen. Probeer het opnieuw.",
   "inbox.dateTime": "Datum / Tijd",
   "inbox.direction": "Richting",
   "inbox.examples": "Voorbeelden",
@@ -5819,6 +5891,10 @@
   "inbox.urgent": "Urgent",
   "inbox.whatWasItAbout": "Waar ging het over?",
   "inbox.whatWasSaidOrWritten": "Wat er is gezegd of geschreven…",
+  "inboxActions.bubalyIsNotConnectedTo": "Bubaly is nog niet gekoppeld aan een AI-motor.",
+  "inboxActions.thatMessageCouldNotBe": "Dat bericht is niet gevonden.",
+  "inboxActions.thereIsNothingInThat": "In dat bericht staat niets om door te geven.",
+  "inboxActions.tooManyRequestsRightNow": "Te veel verzoeken op dit moment. Probeer het over een minuut opnieuw.",
   "inboxModule.addASubjectOrMessage": "Voeg een onderwerp of berichttekst toe",
   "inboxModule.addedToReminders": "Toegevoegd aan herinneringen",
   "inboxModule.allYourFamilyMessagesCalls": "Alle berichten, gesprekken en schoolupdates van je gezin op één plek.",
@@ -5826,6 +5902,28 @@
   "inboxModule.replyCopied": "Antwoord gekopieerd",
   "inboxModule.replyLoggedToTheThread": "Antwoord vastgelegd in de reeks",
   "inboxModule.savedToCommunicationsHub": "Opgeslagen in het communicatiecentrum!",
+  "inboxQueue.aSourceDidNotAnswerRetry": "Eén bron gaf geen antwoord, dus een deel van de lijst ontbreekt.",
+  "inboxQueue.bubalyIsOnIt": "Doorgegeven aan Bubaly.",
+  "inboxQueue.dueOn": "Uiterlijk {date}",
+  "inboxQueue.familyLog": "Gezinslogboek",
+  "inboxQueue.frontDesk": "Receptie",
+  "inboxQueue.handled": "Afgehandeld",
+  "inboxQueue.handleIt": "Handel af",
+  "inboxQueue.mailPaperworkAndCallsRanked": "Post, papierwerk en gesprekken, op volgorde van wat jou het eerst nodig heeft.",
+  "inboxQueue.mailTextsCallsAndPaperwork": "Post, berichten, gesprekken en papierwerk komen hier binnen zodra ze aankomen.",
+  "inboxQueue.needsYouCount": "{count} wachten op je",
+  "inboxQueue.nothingIsWaiting": "Er wacht niets",
+  "inboxQueue.oneHouseholdQueue": "Eén lijst voor het huishouden",
+  "inboxQueue.open": "Openen",
+  "inboxQueue.openTheRun": "Open de uitvoering",
+  "inboxQueue.paperwork": "Papierwerk",
+  "inboxQueue.partOfTheQueueIsMissing": "Een deel van de lijst ontbreekt",
+  "inboxQueue.recent": "Recent",
+  "inboxQueue.retry": "Opnieuw proberen",
+  "inboxQueue.soon": "Binnenkort",
+  "inboxQueue.unread": "Ongelezen",
+  "inboxQueue.untitled": "Zonder titel",
+  "inboxQueue.urgent": "Dringend",
   "independence.achieved": "Behaald (",
   "independence.addABirthdayForAgeTuned": "(voeg een verjaardag toe voor leeftijdsgerichte suggesties)",
   "independence.addAChildOrTeenTo": "Voeg een kind of tiener toe aan het gezin om hun zelfstandigheidsladder te starten.",
@@ -7271,6 +7369,7 @@
   "navigationChoices.sidebarResetToTheDefault": "Zijbalk teruggezet naar de standaardindeling",
   "navigationChoices.youAposReUsingTheDefault": "Je gebruikt de standaardindeling.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "needsAttention.ctaAnswer": "Beantwoorden",
   "needsAttention.ctaCatchUp": "Inhalen",
   "needsAttention.ctaConfirm": "Bevestigen",
@@ -7288,6 +7387,9 @@
 =======
   "navShared.aiAssistant": "AI-assistent",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "navShared.aiAssistant": "AI-assistent",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "needsAttention.needsYourAttention": "Vraagt je aandacht",
   "needsAttention.nothingNeedsYouRightNowBubaly": "Er is nu niets dat jou nodig heeft. Bubaly meldt het zodra dat verandert.",
   "needsAttention.seeAll": "Alles bekijken",
@@ -7392,6 +7494,7 @@
   "notesModule.noteSaved": "Notitie opgeslagen",
   "notesModule.sharedFamilyNotesChecklistsIdeas": "Gedeelde gezinsnotities, checklists, ideeën en herinneringen.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "notificationActions.alsoToday": "Ook vandaag",
   "notificationActions.alsoTodayHint": "Deze laten de bel niet rinkelen: ze staan samengevat in je dagoverzicht.",
   "notificationActions.approve": "Goedkeuren",
@@ -7407,13 +7510,18 @@
   "notificationActions.needsYouNow": "Heeft je nu nodig",
   "notificationActions.openNotification": "Openen: {title}",
 =======
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "notFound.backToHome": "Terug naar home",
   "notFound.goToDashboard": "Naar dashboard",
   "notFound.pageNotFound": "Pagina niet gevonden",
   "notFound.thatWalletIsnTHere": "Die portemonnee staat hier niet",
   "notFound.thePageYouReLooking": "De pagina die je zoekt bestaat niet of is misschien verplaatst. Hier zijn een paar manieren terug.",
   "notFound.thisChildWalletMayHave": "Deze kinderportemonnee is mogelijk verwijderd, of de link is verouderd.",
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "notifications.allCaughtUp": "Helemaal bij",
   "notifications.couldNotLoadAdminNotifications": "Kon de beheerdersmeldingen uit Supabase niet laden. Ververs en probeer het opnieuw.",
   "notifications.delete": "Verwijderen",
@@ -8896,6 +9004,7 @@
   "runControls.resume": "Hervatten",
   "runControls.somethingDidNotGoThrough": "Er is iets niet doorgekomen",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "runHistory.aRequestFromYourFamily": "Een verzoek van je gezin",
   "runHistory.askBubaly": "Vraag het Bubaly",
   "runHistory.everythingBubalyHasBeenAsked": "Alles wat je gezin Bubaly heeft gevraagd, nieuwste eerst.",
@@ -8920,6 +9029,8 @@
   "runTimeline.tool": "Hulpmiddel",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "runs.bubalyCouldNotOpenThat": "Bubaly kon die uitvoering niet openen.",
   "runs.home": "Home",
   "runs.nothingToChange": "Niets te wijzigen.",
@@ -9551,10 +9662,13 @@
   "siteFooter.group.legal": "Juridisch",
   "siteFooter.group.product": "Product",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "siteFooter.handledForYou": "Voor je geregeld",
   "siteFooter.kitchenMode": "Kitchen Mode",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "siteFooter.legalNavLabel": "Juridische en privacylinks",
   "siteFooter.lessManagingLifeMoreLiving": "Minder het leven regelen. Meer het leven leven.",
   "siteFooter.link.aiAssistant": "AI-assistent",
@@ -9704,12 +9818,17 @@
   "socialLinksForm.mustBeHttpsUrl": "Moet een volledige https://-URL zijn om gepubliceerd te worden.",
   "socialLinksForm.noIconsYet": "Nog geen iconen — voeg hierboven een link toe om het hier te zien.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "socialLinksForm.saveSocialLinks": "Sociale links opslaan",
   "socialLinksForm.savedButRejected": "Opgeslagen, maar {fields} was geen geldige https-URL en wordt niet gepubliceerd.",
 =======
   "socialLinksForm.savedButRejected": "Opgeslagen, maar {fields} was geen geldige https-URL en wordt niet gepubliceerd.",
   "socialLinksForm.saveSocialLinks": "Sociale links opslaan",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "socialLinksForm.savedButRejected": "Opgeslagen, maar {fields} was geen geldige https-URL en wordt niet gepubliceerd.",
+  "socialLinksForm.saveSocialLinks": "Sociale links opslaan",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "socialLinksForm.socialLinksUpdated": "Social links bijgewerkt",
   "socialProof.caseStudiesTitle": "Gezinsverhalen",
   "socialProof.customerWords": "In de woorden van het gezin zelf",
@@ -11352,6 +11471,7 @@
   "wishlistsModule.removed": "Verwijderd",
   "wishlistsModule.whatDoYouWishFor": "Wat wens je?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "workSteps.addOrForward": "Voeg iets toe of stuur het door",
   "workSteps.addOrForwardBody": "Stuur e-mails door, fotografeer folders of voeg afspraken, taken en lijsten toe.",
   "workSteps.aiGetsToWork": "De AI gaat aan de slag",
@@ -11365,6 +11485,8 @@
   "workingOn.allRuns": "Alle uitvoeringen",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "workingOn.bubalyIsWorkingOn": "Bubaly werkt aan",
   "workingOn.nothingInProgressAskForSomething": "Niets in behandeling. Vraag hierboven iets en het verschijnt hier.",
   "workload.addFamilyMembersToSeeThe": "Voeg gezinsleden toe om de balans te zien.",
@@ -11401,5 +11523,8 @@
   "workSteps.everyoneInSyncBody": "Agenda's, taken, herinneringen en updates worden in realtime gedeeld.",
   "workSteps.lifeRunsSmoother": "Het leven loopt soepeler",
   "workSteps.lifeRunsSmootherBody": "Bubaly helpt je vooruit te plannen, chaos te vermijden en meer tijd samen te hebben."
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
 }

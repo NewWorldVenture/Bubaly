@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { getOrCreateChannelResult, recordInboundMessage } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult, recordInboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 
@@ -48,10 +48,16 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
-  await recordInboundMessage(admin, {
+  const filed = await recordInboundMessage(admin, {
     familyId, channel: 'voice', from: from ?? undefined, subject: 'Voicemail', body: text,
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
+
+  // M20: a voicemail asking to reschedule is work, not an audio file.
+  await routeInboundToPlanner(admin, {
+    familyId, channel: 'voice', messageId: filed.messageId, body: text,
+    intent: result.intent, providerRef: sid ?? null,
+  }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
 
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }

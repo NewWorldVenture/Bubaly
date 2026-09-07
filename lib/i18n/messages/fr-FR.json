@@ -1602,6 +1602,7 @@
   "adminWalletReconciliationReconciliationClient.transactionsAcross": "transactions réparties sur",
   "adminWalletReconciliationReconciliationClient.warnings": "Avertissements",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "admins.accessRequests": "Demandes d’accès",
   "admins.accessRequestsFromUsersWho": "Les demandes d’accès des personnes ayant besoin de droits d’administration apparaîtront ici.",
   "admins.actions": "Actions",
@@ -1643,6 +1644,8 @@
   "admins.viewAllActivity": "Voir toute l’activité →",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "ads.advertising": "Publicité",
   "ads.couldNotLoadAdvertisingCampaigns": "Impossible de charger les campagnes publicitaires depuis Supabase. Actualisez et réessayez.",
   "ads.planPaidCampaignsAndTrack": "Planifiez des campagnes payantes et suivez budget et dépenses. Les performances (dépenses, impressions, conversions) sont saisies à la main ou importées depuis la régie — jamais inventées.",
@@ -1737,6 +1740,7 @@
   "ai.familySafety": "Sécurité familiale",
   "ai.finishSettingUpYourFamily": "Terminez d’abord la configuration de votre famille dans Bubaly.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "ai.itActsItDoesnT": "Il agit, il ne se contente pas de répondre",
   "ai.itDoesTheWork": "Il fait le travail.",
   "ai.itDoesnTWaitTo": "Il n’attend pas qu’on le lui demande. Bubaly travaille en arrière-plan et fait remonter la bonne chose au bon moment.",
@@ -1745,6 +1749,10 @@
   "ai.itDoesnTWaitTo": "Il n’attend pas qu’on le lui demande. Bubaly travaille en arrière-plan et fait remonter la bonne chose au bon moment.",
   "ai.itDoesTheWork": "Il fait le travail.",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "ai.itDoesnTWaitTo": "Il n’attend pas qu’on le lui demande. Bubaly travaille en arrière-plan et fait remonter la bonne chose au bon moment.",
+  "ai.itDoesTheWork": "Il fait le travail.",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "ai.meetTheAssistantThatActually": "L'assistant qui agit vraiment",
   "ai.missingVacationid": "vacationId manquant",
   "ai.moneyCoaching": "Coaching financier",
@@ -1973,12 +1981,18 @@
   "app.backToHome": "← Retour à l’accueil",
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly s’occupe discrètement de la logistique de la vie de famille — appels, e-mails, planning, paperasse, rappels et coordination quotidienne — pour que votre famille passe moins de temps à gérer la vie et plus de temps à la vivre.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "app.bubalyTheAiOperatingSystem": "Bubaly — Le système d'exploitation par l'IA pour la vie de famille",
 =======
   "App.couldNotSetTheDefaultDashboard": "Impossible de définir le tableau de bord par défaut.",
   "App.couldNotSwitchActiveFamily": "Impossible de changer de famille active.",
   "App.couldNotVerifyFamilyMembership": "Impossible de vérifier l’appartenance à la famille.",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "App.couldNotSetTheDefaultDashboard": "Impossible de définir le tableau de bord par défaut.",
+  "App.couldNotSwitchActiveFamily": "Impossible de changer de famille active.",
+  "App.couldNotVerifyFamilyMembership": "Impossible de vérifier l’appartenance à la famille.",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "app.theAiOperatingSystemFor": "Le système d’exploitation par l’IA pour la vie de famille.",
   "appLockActions.couldNotLoadAppLockSettings": "Impossible de charger les paramètres de verrouillage de l’app.",
   "appLockActions.couldNotSaveAppLockSettings": "Impossible d’enregistrer les paramètres de verrouillage de l’app.",
@@ -2000,10 +2014,13 @@
   "appLockSettings.turnOn": "Activer",
   "appNotFound.home": "Accueil",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "appStore.official": "Officiel",
   "approval.basedOn": "Ce que Bubaly a consulté",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "approval.bubalyWill": "Bubaly va :",
   "approval.cancel": "Annuler",
   "approval.edit": "Modifier",
@@ -2456,20 +2473,27 @@
   "briefing.meals": "🍽️ Repas",
   "briefing.moreAcrossBillsHomeHealthAmp": "de plus sur les factures, la maison, la santé et les voyages",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "briefing.moreDecisionsOnHome": "+{count} de plus sur l’Accueil",
   "briefing.needToBuy": "À acheter :",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "briefing.needsAttentionToday": "Nécessite votre attention aujourd'hui",
   "briefing.needToBuy": "À acheter :",
   "briefing.noEventsScheduledEnjoyTheOpen": "Aucun événement prévu — profitez de cette journée libre !",
   "briefing.nothingLoggedYet": "Rien d'enregistré",
   "briefing.nothingMoreScheduledToday": "Plus rien de prévu aujourd'hui",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "briefing.oneDecisionNeedsYou": "1 décision vous attend",
 =======
   "briefing.notPlanned": "Non prévu",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "briefing.notPlanned": "Non prévu",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "briefing.potentialConflicts": "Conflits potentiels",
   "briefing.refresh": "Actualiser",
   "briefing.reminders": "Rappels",
@@ -3175,6 +3199,7 @@
   "completeSetup.setupSavedYourFamilyProfile": "Configuration enregistrée — le profil de votre famille est complet.",
   "completeSetup.whatDoYouWantHelpWith": "Sur quoi voulez-vous de l'aide ?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "completedByBubaly.allRuns": "Toutes les exécutions",
   "completedByBubaly.completedByBubaly": "Fait par Bubaly",
   "completedByBubaly.doneWith": "Fait avec",
@@ -3184,6 +3209,8 @@
   "completedByBubaly.yesterday": "Hier",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "concierge.activePlans": "Plans actifs",
   "concierge.addPlan": "Ajouter un plan",
   "concierge.addPlanManually": "Ajouter le plan manuellement",
@@ -3997,6 +4024,7 @@
   "decisions.travelMin": "Trajet (min)",
   "decisions.whichVacationThisSummer": "Quelles vacances cet été ?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "decisionsBand.asksBody": "Ces domaines attendent toujours l'accord d'un parent, quel que soit le réglage :",
   "decisionsBand.asksTitle": "Soumis à vous d'abord",
   "decisionsBand.eyebrow": "Comment Bubaly gagne le droit d'agir",
@@ -4009,6 +4037,8 @@
   "decisionsBand.seeItAct": "Le voir agir",
   "decisionsBand.title": "Il gère la routine. Il demande pour le reste.",
 =======
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "decisionSimulator.aBigSpend": "Une grosse dépense",
   "decisionSimulator.addACommitment": "Ajouter un engagement",
   "decisionSimulator.amount": "Montant ($)",
@@ -4025,7 +4055,10 @@
   "decisionSimulator.vacation": "Vacances",
   "decisionSimulator.what": "Quoi",
   "decisionSimulator.whatForOptional": "Pour quoi (facultatif)",
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "decisionsModule.askTheQuestionFirst": "Posez d’abord la question",
   "decisionsModule.couldNotLoadDecisionData": "Impossible de charger les données de décision. Actualisez et réessayez.",
   "decisionsModule.decisionCreated": "Décision créée",
@@ -4810,11 +4843,14 @@
   "featureTopics.planMeals": "Planifier les repas",
   "featureTopics.stayOnTopOfSchool": "Suivre la scolarité",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "features.bubalyFeatures": "Fonctionnalités de Bubaly",
   "features.everythingYourFamilyNeedsIn": "Tout ce dont votre famille a besoin, dans un seul endroit intelligent.",
   "features.features": "Fonctionnalités",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "feedback.bubalyGetsBetterWhenYou": "Bubaly s’améliore quand vous nous dites ce dont votre famille a besoin. Proposez une idée, votez pour celles que vous aimez, et regardez-les rejoindre notre feuille de route.",
   "feedback.couldNotAddTheComment": "Impossible d’ajouter le commentaire.",
   "feedback.couldNotCheckTheVote": "Impossible de vérifier le vote.",
@@ -5086,44 +5122,79 @@
   "frontDesk.aiFrontDesk": "Accueil IA",
   "frontDesk.aiGreeting": "Message d'accueil IA",
   "frontDesk.aiSummary": "Résumé IA",
+  "frontDesk.all": "Tout",
   "frontDesk.allowlistOnlyKnownContacts": "Liste d'autorisation — uniquement les contacts connus",
+  "frontDesk.aNumberHasBeenRequested": "Un numéro a été demandé. Il apparaîtra ici dès qu'il sera actif.",
   "frontDesk.back": "Retour",
+  "frontDesk.blocked": "Bloqués",
   "frontDesk.blockSpamRobocalls": "Bloquer le spam et les appels automatisés",
   "frontDesk.blockUnknownCallers": "Bloquer les appelants inconnus",
   "frontDesk.bookRescheduleConfirmOrChaseThe": "Réserver, reporter, confirmer ou relancer — Bubaly rédige le plan d’appel, un parent passe l’appel.",
   "frontDesk.byClassification": "Par classification",
   "frontDesk.callerName": "Nom de l'appelant",
+  "frontDesk.calls": "Appels",
+  "frontDesk.callsToTheFamilyNumber": "Appels vers le numéro de la famille",
+  "frontDesk.callsToTheFamilyNumberReach": "Les appels vers le numéro de la famille arrivent au concierge",
   "frontDesk.cancel": "Annuler",
   "frontDesk.classification": "Classification",
+  "frontDesk.conciergeOff": "Concierge désactivé",
   "frontDesk.contact": "Contact",
+  "frontDesk.couldNotLoadTheFrontDesk": "Impossible de charger l'accueil. Réessayez.",
   "frontDesk.delete": "Supprimer",
+  "frontDesk.eachOneIsClassifiedBefore": "Chacun est classé avant de réveiller qui que ce soit",
+  "frontDesk.earlierCallLog": "Ancien journal d'appels",
   "frontDesk.enableAiFrontDesk": "Activer l'accueil IA",
+  "frontDesk.entriesTypedByHandBeforeThe": "Entrées saisies à la main avant que la famille ait un numéro. Conservées, plus alimentées.",
+  "frontDesk.everyCallToTheFamilyNumber": "Chaque appel vers le numéro de la famille est transcrit et classé ici.",
   "frontDesk.forwardUrgentCallsToOptional": "Transférer les appels urgents vers (facultatif)",
   "frontDesk.frontDeskSettings": "Paramètres de l'accueil",
+<<<<<<< HEAD
   "frontDesk.haveBubalyMakeACallFor": "Obtenez un plan d’appel de Bubaly",
+=======
+  "frontDesk.handled": "Traité",
+  "frontDesk.handleItFilesTheMessage": "« Traiter » confie le message au planificateur",
+  "frontDesk.haveBubalyMakeACallFor": "Demandez à Bubaly de passer un appel pour vous",
+  "frontDesk.hide": "Masquer",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "frontDesk.high": "Élevée",
   "frontDesk.howItWorks": "Comment ça marche",
+  "frontDesk.important": "Important",
   "frontDesk.logACall": "Noter un appel",
   "frontDesk.logCall": "Noter un appel",
+  "frontDesk.manage": "Gérer",
+  "frontDesk.manageNumberAndAddress": "Gérer le numéro et l'adresse",
   "frontDesk.noCallsHere": "Aucun appel ici",
+  "frontDesk.noFamilyNumberYet": "Pas encore de numéro de famille",
   "frontDesk.normal": "Normal",
+  "frontDesk.nothingHasCalledYet": "Personne n'a encore appelé",
+  "frontDesk.nothingWasEverTypedIntoThe": "Rien n'a jamais été saisi dans l'ancien journal d'appels.",
   "frontDesk.number": "Numéro",
   "frontDesk.offRingEverythingThrough": "Désactivé — laisser tout sonner",
   "frontDesk.paperworkInboxBubalyReadsItFor": "Boîte à paperasse — Bubaly la lit pour vous",
   "frontDesk.pasteTheVoicemailOrWhatWas": "Collez le message vocal ou ce qui a été dit…",
   "frontDesk.priority": "Priorité",
   "frontDesk.remind": "Rappeler",
+  "frontDesk.screened": "Filtrés",
   "frontDesk.screeningMode": "Mode filtrage",
   "frontDesk.searchCallsNumbersSummaries": "Rechercher appels, numéros, résumés…",
+  "frontDesk.seeTheWholeHouseholdInbox": "Voir toute la boîte du foyer",
+  "frontDesk.setOneUpInTheContactCenter": "Configurez-en un dans le Contact Center.",
   "frontDesk.settings": "Paramètres",
+  "frontDesk.show": "Afficher",
   "frontDesk.slipsFormsFlyersAndBillsWhat": "Papiers, formulaires, prospectus et factures → ce qu'il faut signer, payer et rendre, avec les dates dans votre calendrier.",
   "frontDesk.smartAiDecidesRecommended": "Intelligent — l'IA décide (recommandé)",
   "frontDesk.status": "Statut",
   "frontDesk.strictScreenAllUnknownCallers": "Strict — filtrer tous les appelants inconnus",
+  "frontDesk.theFamilyNumberIsAnswering": "Le numéro de la famille répond",
+  "frontDesk.theFrontDeskSettingsCouldNot": "Impossible de lire les réglages de l'accueil. Réessayez.",
+  "frontDesk.theVoiceInboxCouldNotBe": "Impossible de lire la boîte vocale. Réessayez.",
   "frontDesk.transcript": "Transcription",
   "frontDesk.transcriptVoicemailNotes": "Transcription / Message vocal / Notes",
+  "frontDesk.unknownCaller": "Appelant inconnu",
   "frontDesk.urgent": "Urgent",
+  "frontDesk.urgentCallsAreForwardedTo": "Les appels urgents sont transférés vers votre numéro de secours",
   "frontDesk.voicemail": "Messagerie vocale",
+  "frontDesk.voicemailIsTranscribedInto": "Les messages vocaux sont transcrits dans la boîte",
   "frontDesk.whenTheAiFrontDeskHandles": "Lorsque l'accueil IA traite un appel, il apparaît ici.",
   "frontDeskModule.addACallerNameOr": "Ajoutez un nom ou un numéro d’appelant",
   "frontDeskModule.addedToReminders": "Ajouté aux rappels",
@@ -5788,6 +5859,7 @@
   "inbox.communicationsHub": "Hub de communication",
   "inbox.contact": "Contact",
   "inbox.contacts": "Contacts",
+  "inbox.couldNotLoadTheHouseholdInbox": "Impossible de charger la boîte du foyer. Réessayez.",
   "inbox.dateTime": "Date / Heure",
   "inbox.direction": "Sens",
   "inbox.examples": "Exemples",
@@ -5819,6 +5891,10 @@
   "inbox.urgent": "Urgent",
   "inbox.whatWasItAbout": "De quoi s'agissait-il ?",
   "inbox.whatWasSaidOrWritten": "Ce qui a été dit ou écrit…",
+  "inboxActions.bubalyIsNotConnectedTo": "Bubaly n'est pas encore relié à un moteur d'IA.",
+  "inboxActions.thatMessageCouldNotBe": "Ce message est introuvable.",
+  "inboxActions.thereIsNothingInThat": "Ce message ne contient rien à transmettre.",
+  "inboxActions.tooManyRequestsRightNow": "Trop de demandes pour l'instant. Réessayez dans une minute.",
   "inboxModule.addASubjectOrMessage": "Ajoutez un objet ou un corps de message",
   "inboxModule.addedToReminders": "Ajouté aux rappels",
   "inboxModule.allYourFamilyMessagesCalls": "Tous les messages, appels et infos de l’école de votre famille au même endroit.",
@@ -5826,6 +5902,28 @@
   "inboxModule.replyCopied": "Réponse copiée",
   "inboxModule.replyLoggedToTheThread": "Réponse consignée dans le fil",
   "inboxModule.savedToCommunicationsHub": "Enregistré dans le centre de communications !",
+  "inboxQueue.aSourceDidNotAnswerRetry": "Une source n'a pas répondu, une partie de la liste manque donc.",
+  "inboxQueue.bubalyIsOnIt": "Confié à Bubaly.",
+  "inboxQueue.dueOn": "Échéance {date}",
+  "inboxQueue.familyLog": "Journal familial",
+  "inboxQueue.frontDesk": "Accueil",
+  "inboxQueue.handled": "Traité",
+  "inboxQueue.handleIt": "Traiter",
+  "inboxQueue.mailPaperworkAndCallsRanked": "Courrier, paperasse et appels, classés selon ce qui vous attend en premier.",
+  "inboxQueue.mailTextsCallsAndPaperwork": "Le courrier, les SMS, les appels et la paperasse arrivent ici au fil de l'eau.",
+  "inboxQueue.needsYouCount": "{count} vous attendent",
+  "inboxQueue.nothingIsWaiting": "Rien n'attend",
+  "inboxQueue.oneHouseholdQueue": "Une seule liste pour le foyer",
+  "inboxQueue.open": "Ouvrir",
+  "inboxQueue.openTheRun": "Ouvrir l'exécution",
+  "inboxQueue.paperwork": "Paperasse",
+  "inboxQueue.partOfTheQueueIsMissing": "Une partie de la liste manque",
+  "inboxQueue.recent": "Récent",
+  "inboxQueue.retry": "Réessayer",
+  "inboxQueue.soon": "Bientôt",
+  "inboxQueue.unread": "Non lu",
+  "inboxQueue.untitled": "Sans titre",
+  "inboxQueue.urgent": "Urgent",
   "independence.achieved": "Atteint (",
   "independence.addABirthdayForAgeTuned": "(ajoutez une date de naissance pour des suggestions adaptées à l'âge)",
   "independence.addAChildOrTeenTo": "Ajoutez un enfant ou un adolescent à la famille pour lancer son échelle d'autonomie.",
@@ -7271,6 +7369,7 @@
   "navigationChoices.sidebarResetToTheDefault": "Barre latérale réinitialisée à la disposition par défaut",
   "navigationChoices.youAposReUsingTheDefault": "Vous utilisez la disposition par défaut.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "needsAttention.ctaAnswer": "Répondre",
   "needsAttention.ctaCatchUp": "Rattraper",
   "needsAttention.ctaConfirm": "Confirmer",
@@ -7288,6 +7387,9 @@
 =======
   "navShared.aiAssistant": "Assistant IA",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "navShared.aiAssistant": "Assistant IA",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "needsAttention.needsYourAttention": "Nécessite votre attention",
   "needsAttention.nothingNeedsYouRightNowBubaly": "Rien ne requiert votre attention pour l'instant. Bubaly signalera ce qui en aura besoin.",
   "needsAttention.seeAll": "Tout voir",
@@ -7392,6 +7494,7 @@
   "notesModule.noteSaved": "Note enregistrée",
   "notesModule.sharedFamilyNotesChecklistsIdeas": "Notes familiales partagées, checklists, idées et rappels.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "notificationActions.alsoToday": "Également aujourd’hui",
   "notificationActions.alsoTodayHint": "Ceux-ci ne déclenchent pas la cloche : ils sont résumés dans votre point quotidien.",
   "notificationActions.approve": "Approuver",
@@ -7407,13 +7510,18 @@
   "notificationActions.needsYouNow": "Requiert votre attention",
   "notificationActions.openNotification": "Ouvrir : {title}",
 =======
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "notFound.backToHome": "Retour à l'accueil",
   "notFound.goToDashboard": "Aller au tableau de bord",
   "notFound.pageNotFound": "Page introuvable",
   "notFound.thatWalletIsnTHere": "Ce portefeuille n’est pas ici",
   "notFound.thePageYouReLooking": "La page que vous cherchez n’existe pas ou a peut-être été déplacée. Voici quelques façons de revenir.",
   "notFound.thisChildWalletMayHave": "Ce portefeuille enfant a peut-être été supprimé, ou le lien n’est plus à jour.",
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "notifications.allCaughtUp": "Tout est à jour",
   "notifications.couldNotLoadAdminNotifications": "Impossible de charger les notifications d’administration depuis Supabase. Actualisez et réessayez.",
   "notifications.delete": "Supprimer",
@@ -8896,6 +9004,7 @@
   "runControls.resume": "Reprendre",
   "runControls.somethingDidNotGoThrough": "Quelque chose n'est pas passé",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "runHistory.aRequestFromYourFamily": "Une demande de votre famille",
   "runHistory.askBubaly": "Demander à Bubaly",
   "runHistory.everythingBubalyHasBeenAsked": "Tout ce que votre famille a demandé à Bubaly, du plus récent au plus ancien.",
@@ -8920,6 +9029,8 @@
   "runTimeline.tool": "Outil",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "runs.bubalyCouldNotOpenThat": "Bubaly n’a pas pu ouvrir cette exécution.",
   "runs.home": "Accueil",
   "runs.nothingToChange": "Rien à modifier.",
@@ -9551,10 +9662,13 @@
   "siteFooter.group.legal": "Mentions légales",
   "siteFooter.group.product": "Produit",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "siteFooter.handledForYou": "Géré pour vous",
   "siteFooter.kitchenMode": "Kitchen Mode",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "siteFooter.legalNavLabel": "Liens juridiques et de confidentialité",
   "siteFooter.lessManagingLifeMoreLiving": "Moins gérer la vie. Plus la vivre.",
   "siteFooter.link.aiAssistant": "Assistant IA",
@@ -9704,12 +9818,17 @@
   "socialLinksForm.mustBeHttpsUrl": "Doit être une URL https:// complète pour être publiée.",
   "socialLinksForm.noIconsYet": "Aucune icône pour l’instant — ajoutez un lien ci-dessus pour la voir ici.",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "socialLinksForm.saveSocialLinks": "Enregistrer les liens sociaux",
   "socialLinksForm.savedButRejected": "Enregistré, mais {fields} n’était pas une URL https valide et n’est pas publié.",
 =======
   "socialLinksForm.savedButRejected": "Enregistré, mais {fields} n’était pas une URL https valide et n’est pas publié.",
   "socialLinksForm.saveSocialLinks": "Enregistrer les liens sociaux",
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+  "socialLinksForm.savedButRejected": "Enregistré, mais {fields} n’était pas une URL https valide et n’est pas publié.",
+  "socialLinksForm.saveSocialLinks": "Enregistrer les liens sociaux",
+>>>>>>> worktree-wf_80ffc3db-358-1
   "socialLinksForm.socialLinksUpdated": "Liens sociaux mis à jour",
   "socialProof.caseStudiesTitle": "Histoires de familles",
   "socialProof.customerWords": "Dans les mots de la famille",
@@ -11352,6 +11471,7 @@
   "wishlistsModule.removed": "Supprimé",
   "wishlistsModule.whatDoYouWishFor": "Que souhaitez-vous ?",
 <<<<<<< HEAD
+<<<<<<< HEAD
   "workSteps.addOrForward": "Ajoutez ou transférez n'importe quoi",
   "workSteps.addOrForwardBody": "Transférez des e-mails, photographiez des prospectus ou ajoutez événements, tâches et listes.",
   "workSteps.aiGetsToWork": "L'IA se met au travail",
@@ -11365,6 +11485,8 @@
   "workingOn.allRuns": "Toutes les exécutions",
 =======
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
   "workingOn.bubalyIsWorkingOn": "Bubaly travaille sur",
   "workingOn.nothingInProgressAskForSomething": "Rien en cours. Demandez quelque chose ci-dessus et cela apparaîtra ici.",
   "workload.addFamilyMembersToSeeThe": "Ajoutez des membres de la famille pour voir l'équilibre.",
@@ -11401,5 +11523,8 @@
   "workSteps.everyoneInSyncBody": "Calendriers, tâches, rappels et mises à jour sont partagés en temps réel.",
   "workSteps.lifeRunsSmoother": "La vie roule mieux",
   "workSteps.lifeRunsSmootherBody": "Bubaly vous aide à anticiper, à éviter le chaos et à profiter de plus de temps ensemble."
+<<<<<<< HEAD
 >>>>>>> worktree-wf_58fbbfcb-de4-2
+=======
+>>>>>>> worktree-wf_80ffc3db-358-1
 }

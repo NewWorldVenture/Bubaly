@@ -50,6 +50,19 @@ export function routeInbound(intent: InboundIntent): RouteAction {
   return 'auto_reply';
 }
 
+/**
+ * Whether an inbound message is household work the planner should see.
+ *
+ * Appointments, deliveries and personal messages are things a family has to do
+ * something about; sales, spam and 'other' are not, and filing them would fill
+ * the run ledger with noise nobody asked for. Urgent is deliberately absent:
+ * it escalates to a human immediately (`shouldNotifyFamily`), and a run started
+ * behind that escalation would race the person it just woke.
+ */
+export function shouldPlanInbound(intent: string): boolean {
+  return intent === 'appointment' || intent === 'delivery' || intent === 'personal';
+}
+
 /** Whether the family should be pinged now (urgent → yes; the rest wait in the inbox). */
 export function shouldNotifyFamily(intent: InboundIntent): boolean {
   return routeInbound(intent) === 'escalate';
