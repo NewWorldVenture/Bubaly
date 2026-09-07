@@ -8853,6 +8853,7 @@
   "socialFeedModule.tryADifferentTabOr": "Try a different tab or clear the filter.",
   "socialLinks.settings": "Settings",
   "socialLinks.socialLinks": "Social links",
+  "socialLinksForm.defaultsAreDimmed": "Dimmed icons are using the default URL — save your own to replace them.",
   "socialLinksForm.footerPreview": "Footer preview",
   "socialLinksForm.fullHttpsUrlsOnlyClear": "Full https URLs only. Clear a field and save to remove that icon from the footer.",
   "socialLinksForm.mustBeHttpsUrl": "Must be a full https:// URL to be published.",

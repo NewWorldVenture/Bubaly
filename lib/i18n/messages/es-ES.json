@@ -10329,5 +10329,6 @@
   "supportTickets.tab.closed": "Cerrados",
   "walletDashboard.bucket.save": "Ahorrar",
   "walletDashboard.bucket.give": "Donar",
-  "walletDashboard.bucket.invest": "Invertir"
+  "walletDashboard.bucket.invest": "Invertir",
+  "socialLinksForm.defaultsAreDimmed": "Los iconos atenuados usan la URL predeterminada: guarda la tuya para reemplazarla."
 }

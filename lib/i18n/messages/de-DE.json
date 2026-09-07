@@ -10329,5 +10329,6 @@
   "supportTickets.tab.closed": "Geschlossen",
   "walletDashboard.bucket.save": "Sparen",
   "walletDashboard.bucket.give": "Spenden",
-  "walletDashboard.bucket.invest": "Investieren"
+  "walletDashboard.bucket.invest": "Investieren",
+  "socialLinksForm.defaultsAreDimmed": "Abgeblendete Symbole verwenden die Standard-URL — speichern Sie Ihre eigene, um sie zu ersetzen."
 }

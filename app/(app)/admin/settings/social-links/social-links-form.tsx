@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast';
 import {
   SOCIAL_PLATFORMS,
   normalizeSocialUrl,
+  resolveSocialLinks,
   type SocialLinks,
   type SocialPlatform,
 } from '@/lib/marketing/social-links';
@@ -39,11 +40,13 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
   // track every keystroke rather than the last saved value.
   const [draft, setDraft] = useState<SocialLinks>(links);
 
-  // The footer publishes exactly the accounts that survive normalizeSocialUrl —
-  // the same function the server uses — so this row is what the site will show,
-  // not an approximation of it. A field that is typed but not yet a valid https
-  // URL simply does not appear, which is the honest preview of what saving does.
-  const publishable = SOCIAL_PLATFORMS.filter(({ key }) => normalizeSocialUrl(draft[key]));
+  // The footer draws every platform, using a saved URL where there is one and
+  // the brand default otherwise — so the preview does too, through the same
+  // resolveSocialLinks the footer calls. `usingDefault` is what makes the
+  // difference legible: an icon here is not proof that anyone configured it.
+  const resolved = resolveSocialLinks(draft);
+  const usingDefault = (key: (typeof SOCIAL_PLATFORMS)[number]['key']) =>
+    !normalizeSocialUrl(draft[key]);
 
   async function onSubmit(formData: FormData) {
     setSaving(true);
@@ -102,23 +105,23 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
       <div className="rounded-xl border border-border bg-surface/60 p-4">
         <p className="text-xs font-semibold text-muted">{t('socialLinksForm.footerPreview')}</p>
         <div className="mt-2 flex min-h-9 flex-wrap items-center gap-1">
-          {publishable.length === 0 ? (
-            <span className="text-xs text-muted">{t('socialLinksForm.noIconsYet')}</span>
-          ) : (
-            publishable.map(({ key, label }) => {
-              const Icon = ICONS[key];
-              return (
-                <span
-                  key={key}
-                  title={label}
-                  className="grid h-9 w-9 place-items-center rounded-full text-muted"
-                >
-                  <Icon className="h-4 w-4" />
-                </span>
-              );
-            })
-          )}
+          {SOCIAL_PLATFORMS.map(({ key, label }) => {
+            const Icon = ICONS[key];
+            const isDefault = usingDefault(key);
+            return (
+              <span
+                key={key}
+                title={`${label} — ${resolved[key]}`}
+                className={`grid h-9 w-9 place-items-center rounded-full ${
+                  isDefault ? 'text-muted/45' : 'text-muted'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+            );
+          })}
         </div>
+        <p className="mt-2 text-xs text-muted">{t('socialLinksForm.defaultsAreDimmed')}</p>
       </div>
 
       <button

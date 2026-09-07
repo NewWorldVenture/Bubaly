@@ -28,6 +28,33 @@ export const SOCIAL_PLATFORMS = [
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number]['key'];
 export type SocialLinks = Partial<Record<SocialPlatform, string>>;
 
+/**
+ * The brand's canonical profile URLs, used when an admin has not set one.
+ *
+ * Without these the footer showed no icons at all until someone filled the
+ * form in, which is a strange first impression: the row is part of the design,
+ * not an optional extra. Each is the same URL the admin form offers as its
+ * placeholder, so a default and a hand-entered value never disagree about what
+ * the canonical handle is.
+ *
+ * These are defaults, not assertions — anything an admin saves wins, and
+ * clearing a field falls back here rather than to nothing.
+ */
+export const DEFAULT_SOCIAL_LINKS: Record<SocialPlatform, string> = Object.fromEntries(
+  SOCIAL_PLATFORMS.map((p) => [p.key, p.placeholder]),
+) as Record<SocialPlatform, string>;
+
+/**
+ * Configured links over the defaults — what the footer should render.
+ *
+ * Kept separate from the stored value on purpose: the admin page must show
+ * what is actually saved (so an empty field reads as empty), while the footer
+ * wants something to draw for every platform.
+ */
+export function resolveSocialLinks(configured: SocialLinks): Record<SocialPlatform, string> {
+  return { ...DEFAULT_SOCIAL_LINKS, ...sanitizeSocialLinks(configured) };
+}
+
 const PLATFORM_KEYS = new Set<string>(SOCIAL_PLATFORMS.map((p) => p.key));
 
 /** A URL long enough for any real profile and short enough to bound the row. */

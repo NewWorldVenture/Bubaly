@@ -32,6 +32,25 @@ export async function getSocialLinks(supabase: DB): Promise<SocialLinks> {
 }
 
 /**
+ * The same read, but throwing on failure instead of degrading to {}.
+ *
+ * This exists so the cache below can tell "the admin has configured nothing"
+ * apart from "the database did not answer". They are the same value and very
+ * different facts.
+ */
+async function readSocialLinksOrThrow(supabase: DB): Promise<SocialLinks> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  if (error) throw error;
+  return sanitizeSocialLinks(data?.value);
+}
+
+const cachedRead = unstable_cache(
+  async (): Promise<SocialLinks> => readSocialLinksOrThrow(createServiceClient()),
+  ['social-links'],
+  { revalidate: 3600, tags: [SOCIAL_LINKS_TAG] },
+);
+
+/**
  * The links for the marketing footer, cached.
  *
  * The footer renders in the marketing layout, so it renders on EVERY public
@@ -43,12 +62,21 @@ export async function getSocialLinks(supabase: DB): Promise<SocialLinks> {
  * immediately: saveSocialLinksAction revalidates the tag, which drops this
  * entry on the spot. The hour is only a backstop for a write that happened
  * somewhere else (a direct row edit in the Supabase dashboard, say).
+ *
+ * The catch is OUTSIDE the cache on purpose. getSocialLinks degrades a failed
+ * read to {}, which is right for rendering — but caching that would turn one
+ * bad second into an hour of missing icons, and during a database incident
+ * that is exactly when the read fails. Letting the error escape the cached
+ * function means nothing is stored, so the next render tries again.
  */
-export const getCachedSocialLinks = unstable_cache(
-  async (): Promise<SocialLinks> => getSocialLinks(createServiceClient()),
-  ['social-links'],
-  { revalidate: 3600, tags: [SOCIAL_LINKS_TAG] },
-);
+export async function getCachedSocialLinks(): Promise<SocialLinks> {
+  try {
+    return await cachedRead();
+  } catch (e) {
+    console.error('[social-links] cached read failed', e);
+    return {};
+  }
+}
 
 /** Replaces the stored set. Blank/invalid entries are dropped, which is how an
  *  admin removes a link: clear the field and save. */
