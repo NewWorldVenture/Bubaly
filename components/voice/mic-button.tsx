@@ -65,12 +65,20 @@ export function MicButton({ onTranscript, disabled, size = 'md', className, onEr
   // a ref rather than a dependency cycle.
   const dispatchRef = useRef<(event: MicEvent) => void>(() => {});
 
+  /** Read and clear the pending failure. A function, not a direct read: the
+   *  ref is written by useVoice's callback while `record()` is awaiting. */
+  const takeFailure = useCallback((): VoiceErrorInfo | null => {
+    const failure = failureRef.current;
+    failureRef.current = null;
+    return failure;
+  }, []);
+
   /** Record → transcribe, translating every outcome back into a machine event. */
   const record = useCallback(async () => {
     failureRef.current = null;
     const text = await voiceRef.current.startRecording();
     if (text !== null) { dispatchRef.current({ type: 'transcribed', text }); return; }
-    const failure = failureRef.current;
+    const failure = takeFailure();
     // Null with no failure = the person cancelled; nothing went wrong.
     if (!failure) { dispatchRef.current({ type: 'cancel' }); return; }
     if (failure.reason === 'transcribe') {
@@ -78,7 +86,7 @@ export function MicButton({ onTranscript, disabled, size = 'md', className, onEr
       return;
     }
     dispatchRef.current({ type: 'capture_failed', reason: failure.reason === 'permission' ? 'permission' : 'capture_failed' });
-  }, []);
+  }, [takeFailure]);
 
   const runEffect = useCallback((effect: MicEffect) => {
     switch (effect.kind) {
