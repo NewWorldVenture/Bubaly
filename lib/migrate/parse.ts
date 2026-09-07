@@ -307,16 +307,70 @@ export const CSV_CONTACT_COLUMNS = {
 } as const;
 
 /**
+ * A "… - Type" / "… - Label" column holds the label a person gave a detail
+ * ("Mobile", "* "), never the detail itself. Google Contacts puts it directly
+ * BEFORE the matching value column, so a substring match on "phone" lands on
+ * the labels and the real numbers are never read.
+ */
+function isLabelHeader(header: string): boolean {
+  return /[\s_-]+(type|label)$/.test(header);
+}
+
+/**
+ * Resolve a contact column to the header that carries the VALUE.
+ *
+ * Three passes, most specific first: a header that both names the field and
+ * ends in "value" (Google's "E-mail 1 - Value"), then an exact header match,
+ * then the substring fallback. Label columns are excluded throughout — a
+ * substring match that picks "Phone 1 - Type" imports "Mobile" as the phone
+ * number, and because every row then shares that same non-identity the whole
+ * export collapses to one person in `dedupeContacts`.
+ */
+function matchContactColumn(headers: string[], candidates: readonly string[]): number {
+  const lower = headers.map((h) => h.toLowerCase().trim());
+  for (const cand of candidates) {
+    const c = cand.toLowerCase();
+    for (let i = 0; i < lower.length; i++) {
+      if (!isLabelHeader(lower[i]) && lower[i].includes(c) && lower[i].endsWith('value')) return i;
+    }
+  }
+  for (const cand of candidates) {
+    const i = lower.indexOf(cand.toLowerCase());
+    if (i !== -1 && !isLabelHeader(lower[i])) return i;
+  }
+  for (let i = 0; i < lower.length; i++) {
+    if (isLabelHeader(lower[i])) continue;
+    if (candidates.some((c) => lower[i].includes(c.toLowerCase()))) return i;
+  }
+  return -1;
+}
+
+/** One number listed under two headings is still one number. */
+function uniqueByIdentity(values: string[], normalize: (v: string) => string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const key = normalize(value) || value.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+/**
  * Map a contacts CSV (Google Contacts, Outlook, a spreadsheet someone typed)
  * into contacts. Falls back to first + last name columns when there is no
  * single name column, which is how both Google and Outlook actually export.
+ * Google's export is covered by the value-aware column resolution above and by
+ * a case in tests/migrate-contacts-parse.test.ts that uses its real header row.
  */
 export function csvToContacts(table: CsvTable): ImportedContact[] {
   if (table.rows.length === 0) return [];
-  const idx = (cands: readonly string[]) => matchColumn(table.headers, [...cands]);
+  const idx = (cands: readonly string[]) => matchContactColumn(table.headers, cands);
   const firstIdx = idx(CSV_CONTACT_COLUMNS.firstName);
   const lastIdx = idx(CSV_CONTACT_COLUMNS.lastName);
-  // `matchColumn` falls back to a substring match, so the candidate "name"
+  // The resolution falls back to a substring match, so the candidate "name"
   // happily lands on "First Name" — which imported Google's export as a column
   // of first names with the surnames dropped. A full-name column that turned
   // out to BE the first- or last-name column is not one.
@@ -324,7 +378,11 @@ export function csvToContacts(table: CsvTable): ImportedContact[] {
   const nameIdx = namedIdx === firstIdx || namedIdx === lastIdx ? -1 : namedIdx;
   const emailIdx = idx(CSV_CONTACT_COLUMNS.email);
   const phoneIdx = idx(CSV_CONTACT_COLUMNS.phone);
-  const phoneAltIdx = idx(CSV_CONTACT_COLUMNS.phoneAlt);
+  // "Home Phone" answers both the phone and the phone-alt candidates, so a file
+  // with a single phone column resolved both to it and wrote the same number
+  // into `phone` and `phone_alt`. A second column has to be a second column.
+  const altIdx = idx(CSV_CONTACT_COLUMNS.phoneAlt);
+  const phoneAltIdx = altIdx === phoneIdx ? -1 : altIdx;
   const orgIdx = idx(CSV_CONTACT_COLUMNS.organization);
   const notesIdx = idx(CSV_CONTACT_COLUMNS.notes);
 
@@ -334,11 +392,17 @@ export function csvToContacts(table: CsvTable): ImportedContact[] {
     const name = cell(row, nameIdx)
       || [cell(row, firstIdx), cell(row, lastIdx)].filter(Boolean).join(' ').trim();
     if (!name) continue;
-    const emails = cell(row, emailIdx).split(/[;,]/).map((v) => v.trim()).filter(Boolean);
-    const phones = [cell(row, phoneIdx), cell(row, phoneAltIdx)]
-      .flatMap((v) => v.split(/[;,]/))
-      .map((v) => v.trim())
-      .filter(Boolean);
+    const emails = uniqueByIdentity(
+      cell(row, emailIdx).split(/[;,]/).map((v) => v.trim()).filter(Boolean),
+      normalizeEmail,
+    );
+    const phones = uniqueByIdentity(
+      [cell(row, phoneIdx), cell(row, phoneAltIdx)]
+        .flatMap((v) => v.split(/[;,]/))
+        .map((v) => v.trim())
+        .filter(Boolean),
+      normalizePhone,
+    );
     out.push({
       name,
       emails,

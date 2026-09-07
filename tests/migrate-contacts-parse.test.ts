@@ -80,7 +80,7 @@ describe('parseVCard', () => {
 });
 
 describe('csvToContacts', () => {
-  it('maps a Google-style export with separate name columns', () => {
+  it('maps an Outlook export with separate name columns', () => {
     const table = parseCSV(
       'First Name,Last Name,E-mail Address,Phone Number,Organization,Notes\n'
       + 'Dana,Kim,dana@example.com,555-010-2222,Riverside School,Class teacher\n',
@@ -91,6 +91,48 @@ describe('csvToContacts', () => {
     expect(dana.phones).toEqual(['555-010-2222']);
     expect(dana.organization).toBe('Riverside School');
     expect(dana.notes).toBe('Class teacher');
+  });
+
+  // Google Contacts writes the label BEFORE the value ("E-mail 1 - Type" then
+  // "E-mail 1 - Value"), and a substring match on "e-mail"/"phone" reached the
+  // label first: every row imported the address "*" and the number "Mobile",
+  // which then gave the whole export one identity key and collapsed it to a
+  // single person. This is that export's real header row.
+  it('reads the value columns of a real Google Contacts export, not the labels', () => {
+    const table = parseCSV(
+      'Name,Given Name,Family Name,E-mail 1 - Type,E-mail 1 - Value,Phone 1 - Type,Phone 1 - Value\n'
+      + 'Dana Kim,Dana,Kim,*,dana@example.com,Mobile,555-010-2222\n'
+      + 'Sam Ray,Sam,Ray,*,sam@example.com,Work,555-010-3333\n'
+      + 'Coach Dani,Dani,Alvarez,Home,dani@soccer.example,Mobile,555-010-9999\n',
+    );
+    const contacts = csvToContacts(table);
+    expect(contacts.map((c) => c.name)).toEqual(['Dana Kim', 'Sam Ray', 'Coach Dani']);
+    expect(contacts.map((c) => c.emails)).toEqual([
+      ['dana@example.com'], ['sam@example.com'], ['dani@soccer.example'],
+    ]);
+    expect(contacts.map((c) => c.phones)).toEqual([
+      ['555-010-2222'], ['555-010-3333'], ['555-010-9999'],
+    ]);
+
+    // and three different people survive the dedupe as three people
+    const deduped = dedupeContacts(contacts);
+    expect(deduped).toHaveLength(3);
+    expect(deduped.map((c) => c.name)).toEqual(['Dana Kim', 'Sam Ray', 'Coach Dani']);
+  });
+
+  it('does not write one phone column into both phone and phone_alt', () => {
+    // "Home Phone" answers the phone candidates and the phone-alt candidates,
+    // so the number used to arrive twice — and commitImport writes phones[1]
+    // to family_contacts.phone_alt, showing the same number on the card twice.
+    const [sam] = csvToContacts(parseCSV('Name,Home Phone\nSam Ray,555-010-8888\n'));
+    expect(sam.phones).toEqual(['555-010-8888']);
+  });
+
+  it('lists a number once when two columns carry the same number', () => {
+    const [pat] = csvToContacts(parseCSV(
+      'Name,Phone,Work Phone\nPat Lee,(555) 010-4444,+1 555-010-4444\n',
+    ));
+    expect(pat.phones).toEqual(['(555) 010-4444']);
   });
 
   it('prefers a single name column and splits multi-valued cells', () => {
