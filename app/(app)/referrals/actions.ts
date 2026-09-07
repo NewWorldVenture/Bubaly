@@ -5,7 +5,7 @@ import * as React from 'react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { sendReactEmail } from '@/lib/email';
+import { APP_URL, sendReactEmail } from '@/lib/email';
 import { ReferralEmail } from '@/lib/emails/referral';
 import { emailSchema } from '@/lib/validation';
 import {
@@ -85,7 +85,9 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
       inviterName,
       familyName,
       code,
-      link: referralLink(code),
+      // Same origin the member InviteEmail links to, so a preview deploy
+      // does not mail people a link back to production.
+      link: referralLink(code, APP_URL),
       rewardLabel: config.rewardLabel,
     }),
   });

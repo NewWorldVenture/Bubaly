@@ -160,10 +160,13 @@ describe('referral email wiring (source)', () => {
     expect(actions).toContain("t('referralActions.dailyEmailLimitReached', { limit: REFERRAL_EMAIL_POLICY.limit })");
   });
 
-  it('the email carries the code and the signup link', () => {
+  it('the email carries the code and a signup link on this deployment origin', () => {
     expect(email).toContain('{code}');
     expect(email).toContain('href={link}');
     expect(email).toContain('{rewardLabel}');
+    // Same origin the member InviteEmail links to, not a hardcoded one.
+    expect(actions).toContain('link: referralLink(code, APP_URL)');
+    expect(readFileSync('lib/emails/invite.tsx', 'utf8')).toContain('APP_URL');
   });
 
   it('the panel offers the form, translated', () => {
