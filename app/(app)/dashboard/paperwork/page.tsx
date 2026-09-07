@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import type { Tables } from '@/lib/database.types';
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PaperworkPage() {
   const ctx = await requireUserContext();
+  await requireAal2(ctx, 'documents', '/dashboard/paperwork');
   const supabase = await createServer();
 
   // Degrades safely before migration 0169 (renders an empty inbox).

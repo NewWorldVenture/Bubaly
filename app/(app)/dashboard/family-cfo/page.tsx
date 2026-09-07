@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Wallet, Receipt, PiggyBank, TrendingDown, CalendarClock, CreditCard } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
@@ -17,6 +18,7 @@ const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', c
 export default async function FamilyCfoPage() {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const today = new Date().toISOString().slice(0, 10);
