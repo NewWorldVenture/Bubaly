@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { listUnread, markRead, notify } from '@/lib/services/notifications';
+import { DIGEST_NOTIFICATION_TYPES } from '@/lib/notifications/priority';
 import type { ServiceScope } from '@/lib/services/types';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
@@ -292,5 +293,58 @@ describe('markRead / listUnread', () => {
     const { db, calls } = makeDb(() => ({ data: [], error: null }));
     await listUnread(scopeWith(db, { userId: null }));
     expect(calls[0].filters.or).toBeUndefined();
+  });
+
+  // ── Priority, without a priority column ──────────────────────────────────
+  //
+  // `notifications` has no `priority` (0002_tables.sql:405-418), so the split
+  // is on `type` via lib/notifications/priority.ts. What matters here is that
+  // the filter is part of the QUERY: the Daily Brief folds what it reads, and a
+  // filter applied after the read would fold the whole queue.
+  it('narrows to the quiet half when the brief asks for digest rows', async () => {
+    const { db, calls } = makeDb(() => ({ data: [], error: null }));
+    await listUnread(scopeWith(db), { priority: 'digest' });
+    expect(calls[0].filters.type).toEqual([...DIGEST_NOTIFICATION_TYPES]);
+    // Still only what is due, and still scoped to the family.
+    expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', is_read: false, 'lte:send_at': NOW.toISOString() });
+  });
+
+  it("asks for 'now' as not-in, so a new type is never silently silenced", async () => {
+    const { db, calls } = makeDb(() => ({ data: [], error: null }));
+    await listUnread(scopeWith(db), { priority: 'now' });
+    expect(calls[0].filters['not:type:in']).toBe(`(${DIGEST_NOTIFICATION_TYPES.join(',')})`);
+    expect(calls[0].filters.type).toBeUndefined();
+  });
+
+  it('reads both halves when no priority is asked for', async () => {
+    const { db, calls } = makeDb(() => ({ data: [], error: null }));
+    await listUnread(scopeWith(db));
+    expect(calls[0].filters.type).toBeUndefined();
+    expect(calls[0].filters['not:type:in']).toBeUndefined();
+  });
+
+  it('fails closed when the queue cannot be read', async () => {
+    // The brief must be able to tell "nothing quiet today" apart from "the
+    // notifications table did not answer" — an empty list would be a claim.
+    const { db } = makeDb(() => ({ data: null, error: { message: 'timeout' } }));
+    const res = await listUnread(scopeWith(db), { priority: 'digest' });
+    expect(res.ok).toBe(false);
+  });
+});
+
+describe('notify is unchanged by the priority split', () => {
+  it('still writes exactly the columns the table has', async () => {
+    const { db, calls } = makeDb(defaultRespond);
+    const res = await notify(scopeWith(db), {
+      recipients: 'family', type: 'sports_event', title: 'Soccer at 5',
+      relatedType: 'sports_events', relatedId: 'evt-1',
+    });
+    expect(res.ok).toBe(true);
+    const rows = calls.find((c) => c.table === 'notifications' && c.kind === 'insert')?.payload as Record<string, unknown>[];
+    // No `priority` key: the classifier is a function, not a column, and
+    // inventing the column here would fail the insert.
+    expect(Object.keys(rows[0]).sort()).toEqual(
+      ['body', 'family_id', 'related_id', 'related_type', 'send_at', 'title', 'type', 'user_id'],
+    );
   });
 });
