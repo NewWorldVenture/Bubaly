@@ -34,7 +34,7 @@ function firstReadFailure(reads: Array<[string, { error: { message: string } | n
 }
 
 export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date()): Promise<TwinProjectionResult> {
-  const window = eventWindow(now);
+  const eventRange = eventWindow(now);
   const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await Promise.all([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     sb.from('pets').select('id, name, species').eq('family_id', familyId).eq('is_active', true),
@@ -51,7 +51,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   // people/pets/places core so one projection produces one coherent graph.
   const [events, homes, storageLocations, homeAssets, inventory, warranties, projects, bills, paperwork, renewals, preferences] = await Promise.all([
     sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, category, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', window.from).lt('starts_at', window.to).limit(ROW_LIMIT),
+      .eq('family_id', familyId).gte('starts_at', eventRange.from).lt('starts_at', eventRange.to).limit(ROW_LIMIT),
     sb.from('homes').select('id, name').eq('family_id', familyId).is('deleted_at', null),
     sb.from('home_locations').select('id, name, kind').eq('family_id', familyId).limit(ROW_LIMIT),
     sb.from('home_assets').select('id, name, category, home_id, location, warranty_until').eq('family_id', familyId).limit(ROW_LIMIT),

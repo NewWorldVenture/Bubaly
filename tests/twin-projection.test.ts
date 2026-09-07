@@ -164,8 +164,8 @@ describe('runTwinProjection writes one graph', () => {
     const db = household();
     await runTwinProjection(client(db), FAM, null, NOW);
 
-    const id = (table: string, refId: string) => nodeFor(db, table, refId)?.id;
-    const hasEdge = (source: string | undefined, target: string | undefined, relation: string) =>
+    const id = (table: string, refId: string): unknown => nodeFor(db, table, refId)?.id;
+    const hasEdge = (source: unknown, target: unknown, relation: string) =>
       db.table('graph_edges').some((e) => e.source_id === source && e.target_id === target && e.relation === relation);
 
     expect(hasEdge(id('calendar_events', 'ev1'), id('family_members', 'm1'), 'attended_by')).toBe(true);
