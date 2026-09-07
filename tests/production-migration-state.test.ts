@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { CATALOG_QUERY, hasUnrecordedBaseline, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
+import { CATALOG_QUERY, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
 
 const projectRef = 'abcdefghijklmnopqrst';
 const token = 'test-management-token';
@@ -67,5 +67,61 @@ describe('production schema and migration history audit', () => {
     const audit = readFileSync('.github/workflows/supabase-schema-audit.yml', 'utf8');
     expect(audit).not.toContain('db push');
     expect(audit).not.toContain('migration repair');
+  });
+});
+
+// Every other policy in the snapshot is reported as md5(qual)/md5(with_check).
+// On the money tables that produced a loop: a reader could see "permissive
+// INSERT policy on wallet_transactions" and could not see whether it required
+// manager role, because a hash of can_manage_family and a hash of
+// is_family_member are equally opaque — and those two differ by whether a child
+// can mint money. The only safe response was to escalate, which is what
+// happened, three releases running. moneyWriteVerdict resolves the one bit that
+// decides it.
+describe('money write verdict', () => {
+  const guardedTableWithDrift = [
+    { table: 'wallet_transactions', name: 'wallet_transactions_mng_insert', command: 'INSERT', permissive: true, managerGated: true },
+    { table: 'wallet_transactions', name: 'drifted_in', command: 'INSERT', permissive: true, managerGated: false },
+    { table: 'wallet_transactions', name: 'wallet_transactions_manager_insert_guard', command: 'INSERT', permissive: false, managerGated: true },
+  ];
+  // The real shape of production before 0275: right name, wrong rule, no guard.
+  const unguardedTable = [
+    { table: 'bills', name: 'bills_insert', command: 'INSERT', permissive: true, managerGated: false },
+  ];
+
+  it('separates a finding that is reportable from one that is exploitable', () => {
+    // The wallet case: a stray permissive policy, but a restrictive guard ANDs
+    // against it, so a child still cannot write. Worth reporting, not worth
+    // halting a release over — which is the whole point of LB-016.
+    const guarded = moneyWriteVerdict({ moneyWritePolicies: guardedTableWithDrift });
+    expect(guarded.openWrites).toEqual(['wallet_transactions.drifted_in (INSERT)']);
+    expect(guarded.unguarded).toEqual([]);
+    expect(guarded.exploitable).toBe(false);
+
+    // The finance case: an open write on a table with no backstop at all.
+    const open = moneyWriteVerdict({ moneyWritePolicies: [...guardedTableWithDrift, ...unguardedTable] });
+    expect(open.unguarded).toEqual(['bills']);
+    expect(open.exploitable).toBe(true);
+  });
+
+  it('is quiet when every write is manager-gated', () => {
+    const clean = moneyWriteVerdict({ moneyWritePolicies: [
+      { table: 'bills', name: 'bills_insert', command: 'INSERT', permissive: true, managerGated: true },
+      { table: 'bills', name: 'bills_manager_insert_guard', command: 'INSERT', permissive: false, managerGated: true },
+    ] });
+    expect(clean).toMatchObject({ openWrites: [], unguarded: [], exploitable: false });
+  });
+
+  it('points at the runbook instead of leaving the reader to re-derive it', () => {
+    expect(moneyWriteVerdict({ moneyWritePolicies: [] }).runbook)
+      .toBe('docs/runbooks/LB-016-wallet-permissive-policy-finding.md');
+  });
+
+  it('asks the database for the manager-gated bit without exporting any expression', () => {
+    // The hashing posture for every other policy must not regress: this adds a
+    // boolean, not policy text.
+    expect(CATALOG_QUERY).toContain("like '%can_manage_family%'");
+    expect(CATALOG_QUERY).toContain("'moneyWritePolicies'");
+    expect(CATALOG_QUERY).not.toMatch(/'usingExpr'|'checkExpr'|'qual',\s*qual/);
   });
 });
