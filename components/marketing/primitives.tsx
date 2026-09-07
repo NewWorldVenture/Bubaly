@@ -93,3 +93,44 @@ export function TrustStrip({
     </div>
   );
 }
+
+/**
+ * Eyebrow + title + body for the homepage bands. Copy arrives as props (this
+ * module cannot translate — see the header note), so the server band that
+ * renders it passes `t('…')` results in.
+ */
+export function BandHeader({
+  eyebrow,
+  title,
+  body,
+  align = 'left',
+  className,
+}: {
+  eyebrow?: string;
+  title: string;
+  body?: string;
+  align?: 'left' | 'center';
+  className?: string;
+}) {
+  return (
+    <div className={cn('max-w-2xl', align === 'center' && 'mx-auto text-center', className)}>
+      {eyebrow && <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">{eyebrow}</span>}
+      <h2 className="mt-3 text-balance text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{title}</h2>
+      {body && <p className="mt-4 text-base leading-7 text-white/70 sm:text-lg sm:leading-8">{body}</p>}
+    </div>
+  );
+}
+
+/**
+ * The badge every illustrative element on the public site carries. Its label
+ * is `handledProof.sampleBadge` ("Illustrative sample"), passed in by the
+ * caller; the pair stays readable in both themes because the text colour is
+ * the canvas foreground, not the accent.
+ */
+export function SampleBadge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={cn('inline-flex shrink-0 items-center rounded-full border border-violet-400/40 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/85', className)}>
+      {children}
+    </span>
+  );
+}

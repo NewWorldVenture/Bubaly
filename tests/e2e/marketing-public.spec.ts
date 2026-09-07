@@ -98,7 +98,7 @@ test('the mobile menu supports keyboard dismissal and returns focus', async ({ p
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(navigation).toBeVisible();
-  const firstLink = navigation.getByRole('link', { name: 'Features', exact: true });
+  const firstLink = navigation.getByRole('link', { name: 'What Bubaly handles', exact: true });
   expect(await firstLink.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
   await page.keyboard.press('Tab');
   await expect(firstLink).toBeFocused();
@@ -114,11 +114,11 @@ test('mobile navigation closes after a route change and marks the current page',
   const toggle = page.getByRole('button', { name: 'Toggle menu' });
   const navigation = page.getByRole('navigation', { name: 'Mobile navigation' });
   await toggle.click();
-  await navigation.getByRole('link', { name: 'Features', exact: true }).click();
+  await navigation.getByRole('link', { name: 'What Bubaly handles', exact: true }).click();
   await expect(page).toHaveURL(/\/features$/);
   await expect(navigation).toBeHidden();
   await toggle.click();
-  await expect(navigation.getByRole('link', { name: 'Features', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(navigation.getByRole('link', { name: 'What Bubaly handles', exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
 test('mobile navigation stays usable on short screens and resets at desktop width', async ({ page }) => {
