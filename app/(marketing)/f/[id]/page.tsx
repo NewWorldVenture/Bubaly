@@ -35,10 +35,11 @@ function metaString(m: Record<string, unknown>, key: string): string | undefined
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const t = await getTranslations();
   const { id } = await params;
   const form = await getForm(id);
   // Forms are utility pages — keep them out of the search index.
-  if (!form) return { title: 'Not found', robots: { index: false } };
+  if (!form) return { title: t('f.notFound'), robots: { index: false } };
   return { title: metaString(meta(form), 'title') ?? form.name, robots: { index: false } };
 }
 
@@ -57,7 +58,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
       <>
         <Section className="pt-20">
           <SectionHeading
-            eyebrow="Form unavailable"
+            eyebrow={t('f.formUnavailable')}
             title={title}
             description={t('f.thisFormIsTemporarilyUnavailable')}
           />
@@ -70,7 +71,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
   return (
     <>
       <Section className="pt-20">
-        <SectionHeading eyebrow="Form" title={title} description={description} />
+        <SectionHeading eyebrow={t('f.form')} title={title} description={description} />
         <div className="mx-auto mt-12 max-w-xl">
           <PublicForm
             formId={form.id}

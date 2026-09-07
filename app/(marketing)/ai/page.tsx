@@ -14,8 +14,9 @@ import { AiActionDemo } from '@/components/marketing/ai-showcase';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/ai', {
-    title: 'Bubaly AI — the assistant that does the work',
+    title: t('ai.bubalyAiTheAssistantThat'),
     description:
       'Bubaly’s AI doesn’t just answer questions — it creates the events, chores, reminders, meal plans, grocery lists, and follow-ups that keep family life running. Ask in plain language; it takes real action inside your family’s data, privately and model-agnostically.',
   });
@@ -24,30 +25,30 @@ export async function generateMetadata(): Promise<Metadata> {
 const DIFFERENTIATORS = [
   {
     icon: Zap,
-    title: 'It acts, it doesn’t just answer',
+    title: 'ai.itActsItDoesnT',
     body: 'Most assistants hand you a suggestion and leave the work to you. Bubaly writes the actual records — the event lands on the calendar, the chore is assigned, the reminder is set — then tells you exactly what it did.',
   },
   {
     icon: Lock,
-    title: 'Private to your family',
+    title: 'ai.privateToYourFamily',
     body: 'Every action is scoped to your household by the same row-level security that protects the rest of Bubaly. Your family’s life never trains a public model and is never visible to another family.',
   },
   {
     icon: SlidersHorizontal,
-    title: 'Always in your control',
+    title: 'ai.alwaysInYourControl',
     body: 'You stay the parent. Sensitive actions — money moves, anything touching the kids — route through approval, and every action is logged and reversible. Nothing happens behind your back.',
   },
 ];
 
 const CAPABILITIES = [
-  { icon: Calendar, title: 'Calendar & scheduling', body: 'Add events, spot conflicts, and get leave-by nudges that account for drive time.' },
-  { icon: UtensilsCrossed, title: 'Meals & groceries', body: 'Plan the week’s dinners and turn them into an aisle-sorted, pantry-aware list.' },
-  { icon: CheckSquare, title: 'Chores & allowance', body: 'Assign age-appropriate chores, split them fairly, and tie them to points or pay.' },
-  { icon: Bell, title: 'Reminders & follow-ups', body: 'Never drop the invisible stuff — filters, forms, RSVPs, birthdays, refills.' },
-  { icon: PiggyBank, title: 'Money coaching', body: 'Track goals and get plain-language answers about where the family budget stands.' },
-  { icon: FileText, title: 'Documents & paperwork', body: 'Turn a school flyer or permission slip into the events and to-dos it really means.' },
-  { icon: ShieldCheck, title: 'Family safety', body: 'Screen unknown callers, flag risky contacts, and keep an eye out for the kids.' },
-  { icon: Newspaper, title: 'Weekly briefings', body: 'One calm summary of the week ahead — what matters, what’s new, what to prep.' },
+  { icon: Calendar, title: 'ai.calendarScheduling', body: 'Add events, spot conflicts, and get leave-by nudges that account for drive time.' },
+  { icon: UtensilsCrossed, title: 'ai.mealsGroceries', body: 'Plan the week’s dinners and turn them into an aisle-sorted, pantry-aware list.' },
+  { icon: CheckSquare, title: 'ai.choresAllowance', body: 'Assign age-appropriate chores, split them fairly, and tie them to points or pay.' },
+  { icon: Bell, title: 'ai.remindersFollowUps', body: 'Never drop the invisible stuff — filters, forms, RSVPs, birthdays, refills.' },
+  { icon: PiggyBank, title: 'ai.moneyCoaching', body: 'Track goals and get plain-language answers about where the family budget stands.' },
+  { icon: FileText, title: 'ai.documentsPaperwork', body: 'Turn a school flyer or permission slip into the events and to-dos it really means.' },
+  { icon: ShieldCheck, title: 'ai.familySafety', body: 'Screen unknown callers, flag risky contacts, and keep an eye out for the kids.' },
+  { icon: Newspaper, title: 'ai.weeklyBriefings', body: 'One calm summary of the week ahead — what matters, what’s new, what to prep.' },
 ];
 
 const DAY = [
@@ -114,7 +115,7 @@ export default async function AIPage() {
       {/* ── Ask → Act demo (the centerpiece) ─────────────────────────────── */}
       <Section id="demo" className="pt-4">
         <SectionHeading
-          eyebrow="Ask → Act"
+          eyebrow={t('ai.askAct')}
           title={t('ai.sayItInPlainLanguage')}
           description={t('ai.pickAPromptBubalyReplies')}
         />
@@ -126,7 +127,7 @@ export default async function AIPage() {
       {/* ── Differentiators ──────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="Not a chatbot — a doer"
+          eyebrow={t('ai.notAChatbotADoer')}
           title={t('ai.theDifferenceIsWhatHappens')}
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
@@ -145,7 +146,7 @@ export default async function AIPage() {
       {/* ── Capabilities ─────────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="One assistant, the whole household"
+          eyebrow={t('ai.oneAssistantTheWholeHousehold')}
           title={t('ai.everythingItCanTakeOff')}
           description={t('ai.bubalyReachesAcrossYourFamily')}
         />
@@ -165,7 +166,7 @@ export default async function AIPage() {
       {/* ── A day, handled ───────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="A Tuesday, handled"
+          eyebrow={t('ai.aTuesdayHandled')}
           title={t('ai.whatADayFeelsLike')}
           description={t('ai.itDoesnTWaitTo')}
         />

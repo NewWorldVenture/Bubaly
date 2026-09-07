@@ -7,7 +7,7 @@ import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-sectio
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return resolveMarketingMetadata('/how-it-works', {
-    title: 'How It Works',
+    title: t('howItWorks.howItWorks'),
     description: t('howItWorks.howBubalyTurnsScatteredFamily'),
   });
 }

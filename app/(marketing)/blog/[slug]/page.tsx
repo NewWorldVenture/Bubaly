@@ -55,9 +55,10 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const tr = await getTranslations();
   const { slug } = await params;
   const post = await getPost(slug);
-  if (!post) return { title: 'Post not found' };
+  if (!post) return { title: tr('blog.postNotFound') };
   const keywords = articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''));
   const canonical = `${SITE_URL}/blog/${post.slug}`;
   // Closed loop: the SEO Page Registry (/admin/marketing/seo) can override this

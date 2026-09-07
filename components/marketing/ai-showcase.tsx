@@ -27,8 +27,8 @@ const DEMOS: Demo[] = [
     prompt: 'Add soccer practice every Tuesday and Thursday at 5pm.',
     reply: 'Done — I added a repeating practice and a 30-minute leave-by reminder so you’re never late.',
     actions: [
-      { icon: Calendar, title: 'Soccer practice', meta: 'Repeats Tue & Thu · 5:00–6:30 PM', tone: 'brand' },
-      { icon: Bell, title: 'Leave-by reminder', meta: '4:30 PM · 12 min drive to the field', tone: 'accent' },
+      { icon: Calendar, title: 'aiShowcase.soccerPractice', meta: 'Repeats Tue & Thu · 5:00–6:30 PM', tone: 'brand' },
+      { icon: Bell, title: 'aiShowcase.leaveByReminder', meta: '4:30 PM · 12 min drive to the field', tone: 'accent' },
     ],
   },
   {
@@ -44,7 +44,7 @@ const DEMOS: Demo[] = [
     prompt: 'Build a grocery list from our meal plan.',
     reply: 'Added 23 items, grouped by aisle, and merged the ones you already have in the pantry.',
     actions: [
-      { icon: ShoppingCart, title: 'Grocery list · 23 items', meta: 'Produce 8 · Meat 4 · Dairy 3 · Pantry 8', tone: 'green' },
+      { icon: ShoppingCart, title: 'aiShowcase.groceryList23Items', meta: 'Produce 8 · Meat 4 · Dairy 3 · Pantry 8', tone: 'green' },
     ],
   },
   {
@@ -52,8 +52,8 @@ const DEMOS: Demo[] = [
     prompt: 'Give the kids age-appropriate chores for the weekend.',
     reply: 'Assigned and split them fairly. Emma and Jack can check them off from their own logins.',
     actions: [
-      { icon: CheckSquare, title: 'Make your bed → Emma', meta: 'Sat morning · 10 pts', tone: 'brand' },
-      { icon: CheckSquare, title: 'Take out recycling → Jack', meta: 'Sun evening · 15 pts', tone: 'brand' },
+      { icon: CheckSquare, title: 'aiShowcase.makeYourBedEmma', meta: 'Sat morning · 10 pts', tone: 'brand' },
+      { icon: CheckSquare, title: 'aiShowcase.takeOutRecyclingJack', meta: 'Sun evening · 15 pts', tone: 'brand' },
     ],
   },
   {
@@ -61,7 +61,7 @@ const DEMOS: Demo[] = [
     prompt: 'Remind us to change the HVAC filter in 90 days.',
     reply: 'Set for you — and I’ll nudge the whole household, not just whoever asked.',
     actions: [
-      { icon: Bell, title: 'Change HVAC filter', meta: 'Due in 90 days · notifies everyone', tone: 'accent' },
+      { icon: Bell, title: 'aiShowcase.changeHvacFilter', meta: 'Due in 90 days · notifies everyone', tone: 'accent' },
     ],
   },
   {
@@ -69,7 +69,7 @@ const DEMOS: Demo[] = [
     prompt: 'How are we doing on the summer vacation fund?',
     reply: 'You’re 68% there and on pace for July if you keep the current weekly transfer.',
     actions: [
-      { icon: PiggyBank, title: 'Vacation fund · $2,040 / $3,000', meta: 'On track for July · $60/wk', tone: 'green' },
+      { icon: PiggyBank, title: 'aiShowcase.vacationFund20403', meta: 'On track for July · $60/wk', tone: 'green' },
     ],
   },
 ];

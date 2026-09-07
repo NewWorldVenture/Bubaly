@@ -15,9 +15,10 @@ import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/blog', {
-  title: 'Blog — Tips, Stories & Insights for Modern Families',
-  description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+  title: t('blog.blogTipsStoriesInsightsFor'),
+  description: t('blog.practicalAdviceRealStoriesAnd'),
   keywords: [
     'family organization', 'parenting tips', 'family life', 'meal planning', 'family finances',
     'kids activities', 'family wellness', 'family travel', 'home organization', 'bubaly',
@@ -25,8 +26,8 @@ export async function generateMetadata(): Promise<Metadata> {
   alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'}/blog` },
   openGraph: {
     type: 'website',
-    title: 'The Bubaly Blog — Tips, Stories & Insights for Modern Families',
-    description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+    title: t('blog.theBubalyBlogTipsStories'),
+    description: t('blog.practicalAdviceRealStoriesAnd'),
   },
   });
 }

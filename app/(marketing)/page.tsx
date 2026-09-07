@@ -23,9 +23,10 @@ import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/', {
-    title: 'Bubaly — The AI Operating System for Family Life',
-    description: 'Bubaly quietly handles the logistics of family life so your family can spend less time managing life and more time living it.',
+    title: t('app.bubalyTheAiOperatingSystem'),
+    description: t('app.bubalyQuietlyHandlesTheLogistics'),
   });
 }
 

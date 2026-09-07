@@ -5,6 +5,7 @@
 
 import { Fragment } from 'react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { getSocialLinks } from '@/lib/server/social-links';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -30,6 +31,7 @@ export async function SiteStructuredData() {
   // The same admin-entered profiles the footer shows. `sameAs` is how a search
   // engine ties those accounts to the brand, so it reads from one source rather
   // than a second hand-kept list that would drift from the footer.
+  const t = await getTranslations();
   const social = await getSocialLinks(createServiceClient());
 
   const organization = {
@@ -39,7 +41,7 @@ export async function SiteStructuredData() {
     url: SITE_URL,
     logo: `${SITE_URL}/brand/bubaly-logo.png`,
     description:
-      'Bubaly is the AI operating system for family life — it handles the logistics so families spend less time managing life and more time living it.',
+      t('structuredData.bubalyIsTheAiOperating'),
     sameAs: Object.values(social),
   };
 
@@ -58,13 +60,13 @@ export async function SiteStructuredData() {
     applicationCategory: 'LifestyleApplication',
     operatingSystem: 'Web, iOS, Android',
     description:
-      'An AI-native family operating system: shared calendar, chores, meal planning, documents, reminders, and an assistant that takes real action — all private and family-scoped.',
+      t('structuredData.anAiNativeFamilyOperating'),
     url: SITE_URL,
     offers: {
       '@type': 'Offer',
       price: '0',
       priceCurrency: 'USD',
-      description: 'Free Starter plan — no credit card required to begin.',
+      description: t('structuredData.freeStarterPlanNoCredit'),
     },
   };
 
@@ -180,12 +182,13 @@ export function BlogPostStructuredData(post: BlogPostSchemaInput) {
 }
 
 /** Blog (collection) schema for the /blog index — lists recent posts for crawlers. */
-export function BlogListStructuredData({ posts }: { posts: { slug: string; title: string; excerpt: string; date: string }[] }) {
+export async function BlogListStructuredData({ posts }: { posts: { slug: string; title: string; excerpt: string; date: string }[] }) {
+  const t = await getTranslations();
   const data = {
     '@context': 'https://schema.org',
     '@type': 'Blog',
     name: 'The Bubaly Blog',
-    description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+    description: t('structuredData.practicalAdviceRealStoriesAnd'),
     url: `${SITE_URL}/blog`,
     publisher: { '@type': 'Organization', name: 'Bubaly', url: SITE_URL },
     blogPost: posts.slice(0, 25).map((p) => ({

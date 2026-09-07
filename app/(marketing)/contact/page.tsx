@@ -9,9 +9,10 @@ import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-sectio
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/contact', {
-    title: 'Contact',
-    description: 'Get in touch with the Bubaly team. We’d love to hear from your family.',
+    title: t('contact.contact'),
+    description: t('contact.getInTouchWithThe'),
   });
 }
 
@@ -23,13 +24,13 @@ export default async function ContactPage() {
   return (
     <>
     <Section className="pt-20">
-      <SectionHeading eyebrow="Contact" title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
+      <SectionHeading eyebrow={t('contact.contact')} title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[
-            { icon: Mail, title: 'Email us', body: 'support@bubaly.com — we reply within one business day.' },
-            { icon: MessageCircle, title: 'Support', body: 'Logged in? Use the in-app assistant or settings to reach support.' },
-            { icon: Shield, title: 'Privacy', body: 'Your message is sent securely and never shared.' },
+            { icon: Mail, title: t('contact.emailUs'), body: 'support@bubaly.com — we reply within one business day.' },
+            { icon: MessageCircle, title: t('contact.support'), body: 'Logged in? Use the in-app assistant or settings to reach support.' },
+            { icon: Shield, title: t('contact.privacy'), body: 'Your message is sent securely and never shared.' },
           ].map((i) => (
             <div key={i.title} className="flex gap-4">
               <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
