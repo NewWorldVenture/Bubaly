@@ -4,13 +4,21 @@
 //  1. "What Bubaly has learned": the family's accumulated preferences, routines
 //     and traditions (family_facts), shown back to them and fully editable.
 //  2. Life-event playbooks: one-tap templates (New Baby, Moving, School Start,
-//     Vacation, New Pet, New Job) that materialize a real, dated checklist.
+//     Vacation, New Pet, New Job, The Holidays, Emergency Readiness, Camp,
+//     Caring for a Parent, Home Renovation) that materialize a real, dated
+//     checklist — plus the to-dos, reminders and module handoff the launcher
+//     creates alongside it.
+//  3. "Coming up" (M34): the transitions the household's OWN rows say are
+//     already here, each with the evidence it was derived from. The proposals
+//     are computed on the server (see the page) so a failed read shows an
+//     error rather than an empty section that reads as "nothing coming".
 // 100% Supabase-wired + realtime. Launch is atomic via a server action.
 import { useMemo, useState } from 'react';
 import {
   Sparkles, Plus, Pin, PinOff, Pencil, Trash2, Baby, Truck, GraduationCap, Plane,
   PawPrint, Briefcase, ListChecks, ShoppingCart, CalendarCheck, Bell, FileText,
   HeartPulse, Home, PartyPopper, Check, Archive, CheckCircle2, BookHeart, ChevronRight,
+  Gift, ShieldAlert, Tent, HeartHandshake, Hammer, CalendarClock,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -25,6 +33,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { LIFE_EVENT_TEMPLATES } from '@/lib/life-events/templates';
+import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -35,6 +44,7 @@ type Item = Tables<'life_event_plan_items'>;
 
 const TEMPLATE_ICON: Record<string, typeof Baby> = {
   'baby': Baby, 'truck': Truck, 'graduation-cap': GraduationCap, 'plane': Plane, 'paw-print': PawPrint, 'briefcase': Briefcase,
+  'gift': Gift, 'shield-alert': ShieldAlert, 'tent': Tent, 'heart-handshake': HeartHandshake, 'hammer': Hammer,
 };
 const ITEM_ICON: Record<string, typeof ListChecks> = {
   plan: ListChecks, buy: ShoppingCart, book: CalendarCheck, notify: Bell, document: FileText, health: HeartPulse, home: Home, celebrate: PartyPopper,
@@ -43,7 +53,15 @@ const ITEM_ICON: Record<string, typeof ListChecks> = {
 const LEARNED_CATEGORIES = ['preference', 'about', 'important'] as const;
 const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
 
-export function LifeEventsModule() {
+export function LifeEventsModule({
+  suggestions = [],
+  suggestionsUnavailable = false,
+}: {
+  /** M34: transitions the household's own data says are coming, computed on the server. */
+  suggestions?: LifeEventSuggestion[];
+  /** True when the signal read failed — the section says so instead of showing nothing. */
+  suggestionsUnavailable?: boolean;
+} = {}) {
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -67,6 +85,8 @@ export function LifeEventsModule() {
 
   const [factModal, setFactModal] = useState<{ open: true; editing: Fact | null } | null>(null);
   const [startTemplate, setStartTemplate] = useState<string | null>(null);
+  /** Pre-fills the date field when the launch came from a "Coming up" proposal that knows the date. */
+  const [suggestedDate, setSuggestedDate] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
 
   const learned = useMemo(
@@ -85,9 +105,16 @@ export function LifeEventsModule() {
     setLaunching(true);
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
-    if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success(tr('lifeEventsModule.playbookStartedYourChecklistIs'));
+    if (!res.ok) { toastError(res.error ?? tr('lifeEventsModule.couldNotStartThatPlaybook')); return; }
+    // Say what was actually written, from the server's own count — never a
+    // generic "done" for work that may have been partly skipped.
+    success(res.created
+      ? tr('lifeEventsModule.startedWithStepsTodosReminders', {
+        steps: res.created.items, todos: res.created.todos, reminders: res.created.reminders,
+      })
+      : tr('lifeEventsModule.playbookStartedYourChecklistIs'));
     setStartTemplate(null);
+    setSuggestedDate(null);
   }
 
   async function toggleItem(it: Item) {
@@ -163,6 +190,50 @@ export function LifeEventsModule() {
           </div>
         )}
       </section>
+
+      {/* ── Coming up (M34) ─────────────────────────────────────────────────
+          Proposals derived on the server from the family's OWN rows — a term
+          date, a pet added this week, a project still at the planning stage.
+          Each one says why, so it reads as an offer rather than a guess. */}
+      {(suggestionsUnavailable || suggestions.length > 0) && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <CalendarClock className="h-4 w-4 text-brand-text" /> {tr('lifeEvents.comingUp')}
+          </h2>
+          {suggestionsUnavailable ? (
+            /* The proposals are computed on the server, so the only honest
+               retry is one that asks the server again. */
+            <ErrorState message={tr('lifeEventsModule.couldNotWorkOutWhatIsComingUp')} onRetry={() => window.location.reload()} />
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {suggestions.map((s) => {
+                const template = LIFE_EVENT_TEMPLATES.find((t) => t.key === s.templateKey);
+                const Icon = TEMPLATE_ICON[template?.icon ?? ''] ?? Sparkles;
+                return (
+                  <div key={s.templateKey} className="flex flex-col gap-2 rounded-xl border border-brand/30 bg-brand/5 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span>
+                      <span className="text-sm font-semibold">{template?.title ?? s.title}</span>
+                    </div>
+                    <p className="text-xs text-muted">{tr(s.reasonKey, s.reasonParams)}</p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="self-start"
+                      onClick={() => {
+                        setSuggestedDate(launchDateFor(s, new Date().toISOString().slice(0, 10)));
+                        setStartTemplate(s.templateKey);
+                      }}
+                    >
+                      {tr('lifeEvents.startPlaybook')}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Life-event playbooks ────────────────────────────────────────────── */}
       <section className="space-y-3">
@@ -245,7 +316,8 @@ export function LifeEventsModule() {
         <StartModal
           template={LIFE_EVENT_TEMPLATES.find((t) => t.key === startTemplate)!}
           launching={launching}
-          onClose={() => setStartTemplate(null)}
+          initialDate={suggestedDate}
+          onClose={() => { setStartTemplate(null); setSuggestedDate(null); }}
           onLaunch={launch}
         />
       )}
@@ -263,15 +335,17 @@ export function LifeEventsModule() {
   );
 }
 
-function StartModal({ template, launching, onClose, onLaunch }: {
-  template: (typeof LIFE_EVENT_TEMPLATES)[number]; launching: boolean; onClose: () => void; onLaunch: (date: string | null) => void;
+function StartModal({ template, launching, initialDate, onClose, onLaunch }: {
+  template: (typeof LIFE_EVENT_TEMPLATES)[number]; launching: boolean; initialDate?: string | null;
+  onClose: () => void; onLaunch: (date: string | null) => void;
 }) {
   const tr = useTranslations();
   const defaultDate = useMemo(() => {
+    if (initialDate) return initialDate;
     const d = new Date();
     d.setDate(d.getDate() + template.defaultLeadDays);
     return d.toISOString().slice(0, 10);
-  }, [template.defaultLeadDays]);
+  }, [template.defaultLeadDays, initialDate]);
   const [date, setDate] = useState(defaultDate);
   return (
     <Modal open onClose={onClose} title={`Start: ${template.title}`} description={template.description}>

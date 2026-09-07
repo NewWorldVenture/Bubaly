@@ -29,9 +29,11 @@ function ctxOn(todayKey: string, extra: Partial<Parameters<typeof templateContex
 describe('workflow templates are runnable skeletons', () => {
   const ctx = ctxOn('2026-09-05');
 
-  it('covers the seven signature workflows plus the two proactive asks', () => {
+  it('covers the seven signature workflows, the two proactive asks and the outcome workflows', () => {
     expect(allTemplates().map((t) => t.intent).sort()).toEqual([
-      'daily_brief', 'find_vendor', 'organize_weekend', 'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'spending_review', 'what_am_i_forgetting',
+      'back_to_school', 'daily_brief', 'emergency_prep', 'find_vendor', 'holiday', 'life_event', 'organize_weekend',
+      'plan_meals', 'plan_week', 'prepare_vacation', 'remind_everyone', 'school_morning', 'spending_review',
+      'tournament_day', 'what_am_i_forgetting',
     ]);
     for (const intent of INTENT_KEYS) {
       const template = templateFor(intent);
@@ -134,6 +136,57 @@ describe('workflow templates are runnable skeletons', () => {
     expect(parseStepInput(asker.input)).toMatchObject({ ok: true, value: { recipients: ['mem-parent'] } });
     const system = instantiateTemplate(templateFor('what_am_i_forgetting')!, ctxOn('2026-09-05', { viewerMemberId: null })).steps.find((s) => s.key === 'tell_asker')!;
     expect(parseStepInput(system.input)).toMatchObject({ ok: true, value: { recipients: 'managers' } });
+  });
+
+  // M25/M34: the five outcome workflows and the life-event workflow.
+  it('plans the tournament on the day the request named, or the coming Saturday', () => {
+    const named = instantiateTemplate(templateFor('tournament_day')!, ctxOn('2026-09-08', { entities: { day: '2026-09-19' } }));
+    const block = parseStepInput(named.steps.find((s) => s.key === 'block_day')!.input);
+    expect(block.ok && String(block.value.starts_at)).toContain('2026-09-19');
+    const unnamed = instantiateTemplate(templateFor('tournament_day')!, ctxOn('2026-09-08'));
+    const fallback = parseStepInput(unnamed.steps.find((s) => s.key === 'block_day')!.input);
+    // 2026-09-08 is a Tuesday; the coming Saturday is the 12th.
+    expect(fallback.ok && String(fallback.value.starts_at)).toContain('2026-09-12');
+  });
+
+  it('plans the school morning for a weekday and packs the night before', () => {
+    // Friday the 11th → the next school day is Monday the 14th, not Saturday.
+    const plan = instantiateTemplate(templateFor('school_morning')!, ctxOn('2026-09-11'));
+    const reminder = parseStepInput(plan.steps.find((s) => s.key === 'morning_reminder')!.input);
+    expect(reminder.ok && String(reminder.value.remind_at)).toContain('2026-09-14');
+    const pack = parseStepInput(plan.steps.find((s) => s.key === 'pack_bag')!.input);
+    expect(pack.ok && pack.value.due_date).toBe('2026-09-13');
+  });
+
+  it('works back from the first day of school and follows up a week before it', () => {
+    const plan = instantiateTemplate(templateFor('back_to_school')!, ctxOn('2026-09-05', { entities: { date: '2026-10-05' } }));
+    const forms = parseStepInput(plan.steps.find((s) => s.key === 'forms_task')!.input);
+    expect(forms.ok && forms.value.due_date).toBe('2026-09-14');
+    expect(plan.followups[0]?.after).toBe('2026-09-28T09:00:00');
+  });
+
+  it('gives the holiday and the life event a verify that names what the run wrote', () => {
+    for (const intent of ['holiday', 'emergency_prep', 'life_event'] as const) {
+      const plan = instantiateTemplate(templateFor(intent)!, ctx);
+      const verify = plan.steps.find((s) => s.step_type === 'verify')!;
+      const spec = parseStepInput(verify.input);
+      expect(spec.ok, intent).toBe(true);
+      if (!spec.ok) continue;
+      const checks = spec.value.checks as { kind: string; ids?: unknown[] }[];
+      expect(checks.length, intent).toBeGreaterThan(0);
+      for (const check of checks) {
+        expect(check.kind, intent).toBe('records_exist');
+        expect(JSON.stringify(check.ids), intent).toContain('$fromStep');
+      }
+    }
+  });
+
+  it('never asks the life-event template to invent the transition', () => {
+    const plan = instantiateTemplate(templateFor('life_event')!, ctxOn('2026-09-05', { entities: { topic: 'our new puppy', day: '2026-09-26' } }));
+    expect(plan.objective).toContain('our new puppy');
+    const block = parseStepInput(plan.steps.find((s) => s.key === 'block_day')!.input);
+    expect(block.ok && block.value.title).toBe('');
+    expect(templateFor('life_event')!.guidance.join(' ')).toMatch(/never state the transition as a fact/i);
   });
 
   it('puts the vendor issue, not a fabricated provider, into the repair steps', () => {

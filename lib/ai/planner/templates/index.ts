@@ -21,8 +21,14 @@
 import type { AgentId } from '@/lib/agents/roster';
 import type { IntentKey } from '@/lib/ai/context/intents';
 import { encodeStepInput, type Plan, type PlanStep, type PlanStepType } from '../schema';
+import { backToSchoolTemplate } from './back-to-school';
+import { emergencyPrepTemplate } from './emergency-prep';
 import { findVendorTemplate } from './find-vendor';
+import { holidayTemplate } from './holiday';
+import { lifeEventTemplate } from './life-event';
 import { organizeWeekendTemplate } from './organize-weekend';
+import { schoolMorningTemplate } from './school-morning';
+import { tournamentDayTemplate } from './tournament-day';
 import { dailyBriefTemplate } from './daily-brief';
 import { planMealsTemplate } from './plan-meals';
 import { planWeekTemplate } from './plan-week';
@@ -113,6 +119,14 @@ const TEMPLATES: Partial<Record<IntentKey, WorkflowTemplate>> = {
   spending_review: spendingReviewTemplate,
   find_vendor: findVendorTemplate,
   what_am_i_forgetting: whatAmIForgettingTemplate,
+  // M25 — the outcome cards launch these.
+  tournament_day: tournamentDayTemplate,
+  school_morning: schoolMorningTemplate,
+  back_to_school: backToSchoolTemplate,
+  holiday: holidayTemplate,
+  emergency_prep: emergencyPrepTemplate,
+  // M34 — a transition the household is heading into.
+  life_event: lifeEventTemplate,
 };
 
 /** The template for an intent, or null for intents that plan from scratch (answer_question, capture, other…). */
