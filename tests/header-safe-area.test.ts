@@ -33,6 +33,21 @@ describe('the marketing header clears the status bar instead of hiding under it'
     expect(shell).toContain('pr-[var(--safe-right)]');
   });
 
+  // The two other layouts that put a header at the very top of the page. These
+  // do not stick — they scroll away with the content — but they are the FIRST
+  // thing painted, so an unpadded one lands under the status bar on the first
+  // frame and the logo sits behind the clock. Top inset only: `pl`/`pr` here
+  // would be silently undone by the existing `sm:px-*` at >= 640px, which is
+  // worse than not claiming to handle a landscape side notch at all.
+  it.each([
+    ['auth', 'app/(auth)/layout.tsx', 'pt-[calc(1.25rem+var(--safe-top))]'],
+    ['kids', 'app/(app)/kids/layout.tsx', 'pt-[calc(1rem+var(--safe-top))]'],
+  ])('the %s layout header clears the status bar too', (_name, file, padding) => {
+    const src = readFileSync(file, 'utf8');
+    const line = src.split('\n').find((l) => l.includes('<header')) ?? '';
+    expect(line).toContain(padding);
+  });
+
   it('the mobile menu subtracts the same inset from its viewport height', () => {
     // Without this the open menu overflows the screen by exactly the status
     // bar's height, because it measures 100dvh from the same shifted origin.

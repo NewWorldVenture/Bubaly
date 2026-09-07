@@ -11,7 +11,10 @@ export default async function KidsLayout({ children }: { children: React.ReactNo
   await requireUserContext();
   return (
     <div className="min-h-dvh bg-bg">
-      <header className="flex items-center justify-between px-4 py-4 sm:px-6">
+      {/* Safe-area padded — see the marketing header and `.app-topbar`: the
+          top of the viewport sits under the iOS status bar on an installed
+          PWA, and this header is the first thing on the page. */}
+      <header className="flex items-center justify-between px-4 py-4 pt-[calc(1rem+var(--safe-top))] sm:px-6">
         <div className="flex items-center gap-2"><LogoMark className="h-8 w-14" /><span className="text-lg font-black">{t('kids.myBubaly')}</span></div>
         <Link href="/dashboard" className="rounded-full bg-surface px-4 py-2 text-sm font-semibold">{t('kids.grownUpView')}</Link>
       </header>
