@@ -150,11 +150,11 @@ export function RemindersModule() {
   }
 
   async function deleteList(id: string) {
-    if (!confirm('Delete this list? Reminders in it are kept (just un-listed).')) return;
+    if (!confirm(tr('remindersModule.deleteThisListRemindersIn'))) return;
     const { error: err } = await createClient().from('reminder_lists').delete().eq('id', id);
     if (err) { toastError(describeDbError(err)); return; }
     setFilterList('all');
-    success('List deleted');
+    success(tr('remindersModule.listDeleted'));
   }
 
   const overdue = reminders.filter(isOverdue);
@@ -224,7 +224,7 @@ export function RemindersModule() {
       // of them.
       const result = await deleteReminderAction(id);
       if (!result.ok) throw new Error(result.error);
-      success('Reminder deleted');
+      success(tr('remindersModule.reminderDeleted'));
       void refresh();
     });
   }
@@ -245,13 +245,13 @@ export function RemindersModule() {
       });
       if (!result.ok) throw new Error(result.error);
       quickAddIds.current[suggestion.title] = '';
-      success('Reminder added from suggestion');
+      success(tr('remindersModule.reminderAddedFromSuggestion'));
       void refresh();
     });
   }
 
   if (combinedLoading) return <SkeletonList />;
-  if (combinedError) return <ErrorState message="Could not load reminders. Refresh and try again." onRetry={retry} />;
+  if (combinedError) return <ErrorState message={tr('remindersModule.couldNotLoadRemindersRefresh')} onRetry={retry} />;
 
   return (
     <div className="module-page">
@@ -405,11 +405,11 @@ export function RemindersModule() {
       {filtered.length === 0 ? (
         filtersActive ? (
           <EmptyState icon={Bell} title={tr('reminders.noMatchingReminders')}
-            description="Nothing matches the current filters. Clear them to see everything."
+            description={tr('remindersModule.nothingMatchesTheCurrentFilters')}
             action={<Button variant="outline" onClick={clearFilters}><X className="h-4 w-4" /> {tr('reminders.clearFilters')}</Button>} />
         ) : (
           <EmptyState icon={Bell} title={tr('reminders.noReminders')}
-            description="Set time-based, location, medication, or recurring reminders for your family."
+            description={tr('remindersModule.setTimeBasedLocationMedication')}
             action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('reminders.addReminder')}</Button>} />
         )
       ) : (
@@ -641,7 +641,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     }
   }
   async function createList(): Promise<string | null> {
-    const name = window.prompt('New list name')?.trim();
+    const name = window.prompt(tr('remindersModule.newListName'))?.trim();
     if (!name) return null;
     const { data, error } = await createClient().from('reminder_lists')
       .insert({ family_id: familyId, created_by: userId, name }).select('id').single();
@@ -675,17 +675,17 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       tags: finalTags,
     };
     // ── Validation ──
-    if (!payload.title) return toastError('Title is required');
+    if (!payload.title) return toastError(tr('remindersModule.titleIsRequired'));
     if (payload.title.length > 200) return toastError('Title is too long (max 200 characters)');
     // A brand-new time-based reminder in the past would never fire — block it.
     const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
     if (!reminder && timeBased && remindAtRaw) {
       if (new Date(remindAtRaw).getTime() < Date.now() - 60_000) {
-        return toastError('Pick a time in the future for this reminder.');
+        return toastError(tr('remindersModule.pickATimeInThe'));
       }
     }
     if (kind === 'location' && !payload.location_name) {
-      return toastError('Add a location for a location-based reminder.');
+      return toastError(tr('remindersModule.addALocationForA'));
     }
 
     setLoading(true);

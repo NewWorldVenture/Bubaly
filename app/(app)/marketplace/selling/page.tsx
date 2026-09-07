@@ -24,12 +24,13 @@ const CHIP_TONE: Record<AttentionTone, string> = {
   muted: 'bg-border/60 text-muted',
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <PageHeader title="Selling" description="Your seller cockpit is temporarily unavailable." />
-      <ErrorState message="Could not load seller activity from Supabase. Refresh and try again." />
-      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">Refresh selling</Link>
+      <PageHeader title={t('selling.selling')} description={t('selling.yourSellerCockpitIsTemporarily')} />
+      <ErrorState message={t('selling.couldNotLoadSellerActivity')} />
+      <Link href="/marketplace/selling" className="text-sm font-medium text-brand-text underline">{t('selling.refreshSelling')}</Link>
     </div>
   );
 }
@@ -38,6 +39,7 @@ function ReadFailure() {
  *  attention: questions to answer, offers to reply to, pickups to confirm,
  *  overdue returns, plus interest (watchers, bids, offers). */
 export default async function SellingPage() {
+  const t = await getTranslations();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -129,7 +131,7 @@ export default async function SellingPage() {
     <div className="module-page">
       <PageHeader
         title={tr('marketplaceSelling.selling')}
-        description="Everything you're selling, ranked by what needs you — answer questions, reply to offers, confirm pickups, chase returns."
+        description={t('selling.everythingYouReSellingRanked')}
         action={
           <Link href="/marketplace/browse?post=1" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90">
             <Plus className="h-4 w-4" /> {tr('marketplaceSelling.postAnItem')}
@@ -177,7 +179,7 @@ export default async function SellingPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-1 text-xs text-muted">No activity yet</p>
+                      <p className="mt-1 text-xs text-muted">{t('selling.noActivityYet')}</p>
                     )}
                   </div>
                   <ArrowRight className="h-4 w-4 shrink-0 text-muted" />

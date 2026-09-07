@@ -49,16 +49,16 @@ export function BinderModule() {
     success(form.id ? 'Updated' : 'Saved'); setForm(null);
   }
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('binderModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('household_info').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('binderModule.deleted'));
   }
   function edit(i: Info) {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load household binder data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('binderModule.couldNotLoadHouseholdBinder')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -74,7 +74,7 @@ export function BinderModule() {
       </div>
 
       {groups.length === 0 ? (
-        <EmptyState icon={FolderLock} title={t('binder.yourBinderIsEmpty')} description="Add the things everyone forgets: Wi-Fi password, alarm code, water shutoff, insurance policy numbers." />
+        <EmptyState icon={FolderLock} title={t('binder.yourBinderIsEmpty')} description={t('binderModule.addTheThingsEveryoneForgets')} />
       ) : groups.map((g) => (
         <div key={g.category}>
           <h4 className="mb-2 text-sm font-semibold">{binderCategoryLabel(g.category)}</h4>

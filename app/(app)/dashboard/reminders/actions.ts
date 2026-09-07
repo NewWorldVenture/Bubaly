@@ -26,6 +26,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
@@ -97,6 +98,7 @@ function submissionKey(familyId: string, submissionId: unknown): string | null {
 }
 
 export async function createReminderAction(input: CreateReminderActionInput): Promise<ReminderActionResult> {
+  const t = await getTranslations();
   // Outside the try: `requireUserContext` redirects a signed-out caller by
   // throwing, and catching that would show them a toast instead.
   const ctx = await requireUserContext();
@@ -121,12 +123,13 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[reminder-action] create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not set that reminder.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSetThatReminder')) };
   }
 }
 
 export async function deleteReminderAction(reminderId: string): Promise<ReminderActionResult> {
-  if (!reminderId) return { ok: false, error: 'That reminder could not be found.' };
+  const t = await getTranslations();
+  if (!reminderId) return { ok: false, error: t('actions.thatReminderCouldNotBe') };
   // Outside the try: `requireUserContext` redirects by throwing.
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -140,13 +143,14 @@ export async function deleteReminderAction(reminderId: string): Promise<Reminder
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[reminder-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that reminder.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatReminder')) };
   }
 }
 
 /** Push a reminder out by `minutes` from now. */
 export async function snoozeReminderAction(reminderId: string, minutes: number): Promise<ReminderActionResult> {
-  if (!reminderId) return { ok: false, error: 'That reminder could not be found.' };
+  const t = await getTranslations();
+  if (!reminderId) return { ok: false, error: t('actions.thatReminderCouldNotBe') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase);
@@ -159,6 +163,6 @@ export async function snoozeReminderAction(reminderId: string, minutes: number):
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[reminder-action] snooze failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not snooze that reminder.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSnoozeThatReminder')) };
   }
 }

@@ -137,8 +137,8 @@ export function WeatherModule() {
     let cancelled = false;
     setLoading(true); setError(null);
     fetchForecast(active.lat, active.lon, 14)
-      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError('Could not load the forecast.'); } })
-      .catch(() => { if (!cancelled) setError('Could not load the forecast.'); })
+      .then((f) => { if (!cancelled) { if (f) setForecast(f); else setError(t('weatherModule.couldNotLoadTheForecast')); } })
+      .catch(() => { if (!cancelled) setError(t('weatherModule.couldNotLoadTheForecast')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [active?.key, active?.lat, active?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -157,7 +157,7 @@ export function WeatherModule() {
       name: r.name, admin1: r.admin1, country: r.country, latitude: r.latitude, longitude: r.longitude,
       sort_order: saved.length,
     }).select('id').single();
-    if (err || !data) { toastError(describeDbError(err, 'Could not add city')); return; }
+    if (err || !data) { toastError(describeDbError(err, t('weatherModule.couldNotAddCity'))); return; }
     success(`Added ${r.name}`);
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();
@@ -168,7 +168,7 @@ export function WeatherModule() {
     await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
     const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
     if (err) return toastError(describeDbError(err));
-    success('Default city set');
+    success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 
@@ -184,7 +184,7 @@ export function WeatherModule() {
 
   return (
     <div className="module-page space-y-5">
-      <PageHeader title={t('weather.weather')} description="Live conditions and forecasts for your locations." action={<AiInsight kind="weather" />} />
+      <PageHeader title={t('weather.weather')} description={t('weatherModule.liveConditionsAndForecastsFor')} action={<AiInsight kind="weather" />} />
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">

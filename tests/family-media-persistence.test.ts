@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { expectSays } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
@@ -35,7 +36,7 @@ describe('family media persistence boundaries', () => {
   it('keeps storage failures generic in marketplace upload feedback', () => {
     const source = read('components/marketplace/photo-upload.tsx');
 
-    expect(source).toContain("toastError('Upload failed. Please try again.')");
+    expectSays(source, 'photoUpload.uploadFailedPleaseTryAgain', 'Upload failed. Please try again.');
     expect(source).not.toContain('toastError(`Upload failed: ${error.message}`)');
   });
 
@@ -43,6 +44,6 @@ describe('family media persistence boundaries', () => {
     const source = read('components/memories/create-memory.tsx');
 
     expect(source).toContain('const { error: favoriteError }');
-    expect(source).toContain('could not be added to Favorites');
+    expect(source).toContain('createMemory.theMemoryWasSavedBut');
   });
 });

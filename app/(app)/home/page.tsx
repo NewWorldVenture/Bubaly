@@ -92,7 +92,8 @@ function Ring({ value, size = 92, stroke = 8, children }: { value: number; size?
 }
 
 // A two-slice income/expense donut with the remaining balance in the center.
-function FinanceDonut({ income, expenses, remaining, size = 124, stroke = 14 }: { income: number; expenses: number; remaining: number; size?: number; stroke?: number }) {
+async function FinanceDonut({ income, expenses, remaining, size = 124, stroke = 14 }: { income: number; expenses: number; remaining: number; size?: number; stroke?: number }) {
+  const i18nT = await getTranslations();
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const total = Math.max(income, income + Math.max(0, -remaining), 1);
@@ -109,7 +110,7 @@ function FinanceDonut({ income, expenses, remaining, size = 124, stroke = 14 }: 
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">
         <div>
-          <p className="text-[10px] text-muted">Remaining</p>
+          <p className="text-[10px] text-muted">{i18nT('home.remaining')}</p>
           <p className="text-sm font-black">{usd(remaining)}</p>
         </div>
       </div>

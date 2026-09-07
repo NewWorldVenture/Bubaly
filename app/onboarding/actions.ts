@@ -1,6 +1,7 @@
 'use server';
 
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
@@ -71,12 +72,13 @@ async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promis
 export async function previewCalendarImportAction(input: {
   source: 'paste' | 'demo'; icsText?: string;
 }): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
+  const t = await getTranslations();
   const parsed = previewCalendarImportSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid calendar import' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const now = new Date();
   let events: BriefEvent[] = [];
@@ -87,12 +89,12 @@ export async function previewCalendarImportAction(input: {
     source = 'demo';
   } else {
     const text = (parsed.data.icsText ?? '').trim();
-    if (!text) return { ok: false, error: 'Paste your calendar’s .ics text, or try the sample week.' };
+    if (!text) return { ok: false, error: t('actions.pasteYourCalendarSIcs') };
     if (!text.includes('BEGIN:VEVENT')) {
       return { ok: false, error: 'That doesn’t look like a calendar (.ics) export. Try again or use the sample week.' };
     }
     events = toBriefEvents(parseIcs(text)).slice(0, 1000);
-    if (events.length === 0) return { ok: false, error: 'No events found in that calendar.' };
+    if (events.length === 0) return { ok: false, error: t('actions.noEventsFoundInThat') };
     source = 'paste';
   }
 
@@ -110,12 +112,13 @@ export async function previewCalendarImportAction(input: {
 export async function saveOnboardingProfileAction(input: {
   firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const parsed = onboardingProfileSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { firstName, lastName, phone, email, avatarUrl } = parsed.data;
   const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email, avatarUrl: avatarUrl || null });
@@ -131,12 +134,13 @@ export async function saveOnboardingProfileAction(input: {
 
 /** Creates a family, makes the caller its parent (via DB trigger), sets it active. */
 export async function createFamilyAction(input: { name: string; timezone: string }): Promise<Result<{ familyId: string }>> {
+  const t = await getTranslations();
   const parsed = createFamilySchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { data: family, error } = await supabase
     .from('families')
@@ -144,8 +148,8 @@ export async function createFamilyAction(input: { name: string; timezone: string
     .select()
     .single();
   if (error || !family) return error
-    ? onboardingFailure('family creation', error, 'Could not create family.')
-    : { ok: false, error: 'Could not create family.' };
+    ? onboardingFailure('family creation', error, t('actions.couldNotCreateFamily'))
+    : { ok: false, error: t('actions.couldNotCreateFamily') };
 
   // Add the creator as a parent member of the new family. Prefer the name they
   // gave in the onboarding profile step, then signup metadata, then email.
@@ -195,12 +199,13 @@ export async function saveFamilyDetailsAction(input: {
   region?: string; postalCode?: string; country?: string;
   goals: string[]; referralSource?: string; referralDetail?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const parsed = familyDetailsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const d = parsed.data;
   const { error } = await supabase.from('family_onboarding').upsert(
@@ -277,13 +282,14 @@ export async function saveFamilyDetailsAction(input: {
 export async function completeProfileOnboardingAction(input: {
   firstName: string; age?: number | string | null; avatarUrl?: string; color?: string; pin?: string;
 }): Promise<Result<{ familyId: string }>> {
+  const t = await getTranslations();
   const parsed = completeProfileOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid profile details' };
   const { firstName, age: inputAge, avatarUrl, color, pin } = parsed.data;
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   // 1. Save the profile (name + optional avatar). Sets profiles.full_name so the
   //    family trigger names the parent member correctly when we provision next.
@@ -294,7 +300,7 @@ export async function completeProfileOnboardingAction(input: {
 
   // 2. Ensure the family space exists (creates parent member + trial sub).
   const ok = await ensureActiveFamily(supabase, auth.user);
-  if (!ok) return { ok: false, error: 'Could not finish setting up your space. Please try again.' };
+  if (!ok) return { ok: false, error: t('actions.couldNotFinishSettingUp') };
 
   // Steps 3–4 write the member colour and the PIN/age/flag. RLS writes have
   // proven unreliable in this environment (see saveUserProfile + ensure-family),
@@ -311,9 +317,9 @@ export async function completeProfileOnboardingAction(input: {
     .eq('is_active', true)
     .limit(1)
     .maybeSingle();
-  if (membershipError) return onboardingFailure('membership lookup', membershipError, 'Could not finish setting up your space.');
+  if (membershipError) return onboardingFailure('membership lookup', membershipError, t('actions.couldNotFinishSettingUp2'));
   const familyId = membership?.family_id ?? '';
-  if (!familyId) return { ok: false, error: 'Could not finish setting up your space.' };
+  if (!familyId) return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
   if (color) {
     const { error: colorErr } = await admin.from('family_members')
       .update({ color }).eq('user_id', auth.user.id).eq('family_id', familyId);
@@ -407,9 +413,10 @@ export async function completeProfileOnboardingAction(input: {
  * anything). Service-role writes for the same flaky-RLS reason as finalize.
  */
 export async function resetOnboardingAction(): Promise<Result> {
+  const t = await getTranslations();
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const admin = createServiceClient();
 
@@ -444,13 +451,14 @@ export async function resetOnboardingAction(): Promise<Result> {
 export async function addLocalMemberAction(input: {
   familyId: string; displayName: string; role: 'child' | 'teen' | 'adult'; color?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const parsed = localMemberActionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid member details' };
   const { familyId, displayName: name, role, color } = parsed.data;
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { error } = await supabase.from('family_members').insert({
     family_id: familyId,
@@ -471,6 +479,7 @@ export async function addLocalMemberAction(input: {
 export async function inviteMemberAction(input: {
   familyId: string; email: string; role: 'adult' | 'teen' | 'caregiver' | 'guest';
 }): Promise<Result> {
+  const t = await getTranslations();
   const parsedInput = inviteMemberActionSchema.safeParse(input);
   if (!parsedInput.success) return { ok: false, error: parsedInput.error.issues[0]?.message ?? 'Invalid invite' };
   const parsed = inviteSchema.safeParse(parsedInput.data);
@@ -478,7 +487,7 @@ export async function inviteMemberAction(input: {
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { data: invite, error } = await supabase
     .from('invites')
@@ -486,15 +495,15 @@ export async function inviteMemberAction(input: {
     .select('token')
     .single();
   if (error || !invite) return error
-    ? onboardingFailure('invite creation', error, 'Could not create invite.')
-    : { ok: false, error: 'Could not create invite.' };
+    ? onboardingFailure('invite creation', error, t('actions.couldNotCreateInvite'))
+    : { ok: false, error: t('actions.couldNotCreateInvite') };
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
   const link = `${origin}/join?token=${invite.token}`;
   await sendEmail({
     to: parsed.data.email,
     subject: 'You’re invited to a family on Bubaly',
-    html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
+    html: `<p>{t('actions.youVeBeenInvitedTo')}</p><p><a href="${link}">{t('actions.acceptYourInvite')}</a></p>`,
   });
 
   await logAudit(supabase, {
@@ -529,12 +538,13 @@ export async function finalizeOnboardingAction(input: {
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[] };
 }): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+  const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { profile, family, details, members, appearance, calendarImport } = parsed.data;
   const runKey = onboardingRunKey(auth.user.id, parsed.data);
@@ -586,7 +596,7 @@ export async function finalizeOnboardingAction(input: {
     familyId = existingMembership.family_id;
     const { error: adoptErr } = await admin.from('families')
       .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
-    if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, 'Could not finish setting up your space.');
+    if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, t('actions.couldNotFinishSettingUp2'));
   } else {
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership
@@ -598,8 +608,8 @@ export async function finalizeOnboardingAction(input: {
     });
     const familyClaim = familyClaims?.[0];
     if (claimErr || !familyClaim) return claimErr
-      ? onboardingFailure('family claim', claimErr, 'Could not finish setting up your space.')
-      : { ok: false, error: 'Could not finish setting up your space.' };
+      ? onboardingFailure('family claim', claimErr, t('actions.couldNotFinishSettingUp2'))
+      : { ok: false, error: t('actions.couldNotFinishSettingUp2') };
     familyId = familyClaim.family_id;
     newFamily = familyClaim.created;
   }
@@ -623,7 +633,7 @@ export async function finalizeOnboardingAction(input: {
     { onConflict: 'family_id,user_id' },
   );
   if (ownerErr) {
-    return onboardingFailure('parent membership upsert', ownerErr, 'Could not finish setting up your space.');
+    return onboardingFailure('parent membership upsert', ownerErr, t('actions.couldNotFinishSettingUp2'));
   }
 
   // 2c. Ensure a trial subscription exists (the trigger may have created one;
@@ -635,7 +645,7 @@ export async function finalizeOnboardingAction(input: {
       family_id: familyId, plan: 'free', status: 'trialing',
       current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
     });
-    if (subErr) return onboardingFailure('trial subscription creation', subErr, 'Could not finish setting up your space.');
+    if (subErr) return onboardingFailure('trial subscription creation', subErr, t('actions.couldNotFinishSettingUp2'));
   }
 
   // 3. Set this as the active family (service-role + logged: if this silently
@@ -645,7 +655,7 @@ export async function finalizeOnboardingAction(input: {
     { user_id: auth.user.id, active_family_id: familyId },
     { onConflict: 'user_id' },
   );
-  if (activeErr) return onboardingFailure('active family selection', activeErr, 'Could not finish setting up your space.');
+  if (activeErr) return onboardingFailure('active family selection', activeErr, t('actions.couldNotFinishSettingUp2'));
 
   // 4. Save family details / onboarding questionnaire (service-role + logged —
   //    same flaky-RLS rationale as steps 2/3b: a silent failure here loses the
@@ -705,8 +715,8 @@ export async function finalizeOnboardingAction(input: {
       .maybeSingle();
     if (inviteErr) {
       return inviteErr
-        ? onboardingFailure(`invite for ${m.email}`, inviteErr, 'Could not create all household invitations.')
-        : { ok: false, error: 'Could not create all household invitations.' };
+        ? onboardingFailure(`invite for ${m.email}`, inviteErr, t('actions.couldNotCreateAllHousehold'))
+        : { ok: false, error: t('actions.couldNotCreateAllHousehold') };
     }
     let token = invite?.token;
     if (!token) {
@@ -718,8 +728,8 @@ export async function finalizeOnboardingAction(input: {
         .maybeSingle();
       if (existingInviteErr || !existingInvite) {
         return existingInviteErr
-          ? onboardingFailure(`invite for ${m.email} lookup`, existingInviteErr, 'Could not create all household invitations.')
-          : { ok: false, error: 'Could not create all household invitations.' };
+          ? onboardingFailure(`invite for ${m.email} lookup`, existingInviteErr, t('actions.couldNotCreateAllHousehold'))
+          : { ok: false, error: t('actions.couldNotCreateAllHousehold') };
       }
       token = existingInvite.token;
     }
@@ -728,7 +738,7 @@ export async function finalizeOnboardingAction(input: {
     await sendEmail({
       to: m.email,
       subject: 'You’re invited to a family on Bubaly',
-      html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
+      html: `<p>{t('actions.youVeBeenInvitedTo')}</p><p><a href="${link}">{t('actions.acceptYourInvite')}</a></p>`,
     });
   }
 
@@ -809,7 +819,7 @@ export async function finalizeOnboardingAction(input: {
     { user_id: auth.user.id, notification_prefs: mergedPrefs as never },
     { onConflict: 'user_id' },
   );
-  if (prefErr) return onboardingFailure('onboarding preferences save', prefErr, 'Could not finish setting up your space.');
+  if (prefErr) return onboardingFailure('onboarding preferences save', prefErr, t('actions.couldNotFinishSettingUp2'));
 
   // 7. Audit
   await logAudit(supabase, {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGoogleSync } from '@/lib/sync/engine/google';
@@ -7,6 +8,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 // Runs a two-way Google sync for the current user's connected account.
 export async function POST() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const admin = createServiceClient();
 
@@ -18,11 +20,11 @@ export async function POST() {
     .eq('user_id', ctx.user.id)
     .maybeSingle();
 
-  if (!account) return NextResponse.json({ error: 'Google is not connected for this account.' }, { status: 400 });
+  if (!account) return NextResponse.json({ error: t('sync.googleIsNotConnectedFor') }, { status: 400 });
 
   const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:google`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many sync requests. Please try again shortly.' },
+    { error: t('sync.tooManySyncRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 

@@ -55,7 +55,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     .eq('id', id).eq('family_id', familyId).maybeSingle();
   if (listingError) {
     reportRead('Listing', listingError);
-    return <ErrorState message="Could not load this listing from the marketplace. Refresh and try again." />;
+    return <ErrorState message={t('item.couldNotLoadThisListing')} />;
   }
   if (!listing) notFound();
 
@@ -200,7 +200,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
         >
           <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> {t('marketplaceItem.someListingDetailsAreTemporarilyUnavailable')}</p>
-          <p className="mt-1 text-xs">The listing is still shown, but affected trust, offer, auction, or history details may be incomplete. Refresh after the connection is restored.</p>
+          <p className="mt-1 text-xs">{t('item.theListingIsStillShown')}</p>
           <p className="mt-1 text-xs">Unavailable: {Array.from(new Set(dataWarnings)).join(', ')}.</p>
         </div>
       )}

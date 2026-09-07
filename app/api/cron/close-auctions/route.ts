@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { notify } from '@/lib/services/notifications';
@@ -26,8 +27,9 @@ type CloseResult = {
 };
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('closeAuctions.unauthorized') }, { status: 401 });
   }
 
   const admin = createServiceClient();
@@ -55,7 +57,7 @@ export async function GET(req: NextRequest) {
     .eq('sale_format', 'auction').eq('status', 'available')
     .lt('auction_ends_at', nowIso)
     .limit(BATCH);
-  if (error) return NextResponse.json({ ok: false, error: 'Could not load auctions.' }, { status: 500 });
+  if (error) return NextResponse.json({ ok: false, error: t('closeAuctions.couldNotLoadAuctions') }, { status: 500 });
 
   let sold = 0;
   let unsold = 0;

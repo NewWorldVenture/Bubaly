@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
@@ -21,18 +22,19 @@ function normalizeBriefTimezone(candidate: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-briefing:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many briefing requests. Please try again shortly.' },
+      { error: tr('briefing.tooManyBriefingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    if (!boundedBody.ok) return NextResponse.json({ error: tr('briefing.requestBodyIsTooLarge') }, { status: 400 });
     // The caller's `type` is interpolated into the SYSTEM prompt and decides
     // which stored brief this overwrites, so it may only ever be one of these
     // three words. It arrived unchecked: the client's "This Week" tab posts
@@ -402,7 +404,7 @@ ${UNTRUSTED_CONTENT_RULE}
     return NextResponse.json({ briefing, digest, generatedAt: new Date().toISOString() });
   } catch (err) {
     console.error('Briefing error:', err);
-    return NextResponse.json({ error: 'Failed to generate briefing' }, { status: 500 });
+    return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });
   }
 }
 

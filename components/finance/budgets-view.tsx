@@ -40,18 +40,18 @@ export function BudgetsView() {
   const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
 
   async function remove(id: string) {
-    if (!confirm('Delete this budget?')) return;
+    if (!confirm(t('budgetsView.deleteThisBudget'))) return;
     const res = await deleteBudgetAction(id);
-    if (!res.ok) toastError(res.error); else success('Deleted');
+    if (!res.ok) toastError(res.error); else success(t('budgetsView.deleted'));
   }
 
   return (
     <div className="module-page">
-      <PageHeader title={t('budgets.budgetPlanner')} description="Set category budgets and track spending against them."
+      <PageHeader title={t('budgets.budgetPlanner')} description={t('budgetsView.setCategoryBudgetsAndTrack')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
 
       {loading ? <SkeletonList /> : rows.length === 0 ? (
-        <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description="Create a budget for a spending category to track it."
+        <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description={t('budgetsView.createABudgetForA')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -66,7 +66,7 @@ export function BudgetsView() {
                     <p className="font-semibold">{b.category}</p>
                     <p className="text-xs capitalize text-muted">{b.period}</p>
                   </div>
-                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => remove(b.id)} className="rounded-lg p-1 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('budgetsView.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-sm">
                   <span className={cn('font-bold tabular-nums', over ? 'text-rose-400' : 'text-fg')}>{usd(spent)}</span>
@@ -96,7 +96,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.amount) return toastError('Add an amount');
+    if (!v.amount) return toastError(t('budgetsView.addAnAmount'));
     setSaving(true);
     // SETS the category's budget rather than inserting another row: the raw
     // insert let a family end up with two Groceries budgets, each reporting the
@@ -104,7 +104,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
     const res = await setBudgetAction(v.category, Math.abs(parseFloat(v.amount) || 0), v.period as Period);
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Budget added');
+    success(t('budgetsView.budgetAdded'));
     onClose();
   }
 

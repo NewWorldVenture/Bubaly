@@ -143,8 +143,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deleteProvider(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('health_providers').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function uploadCard(side: 'front' | 'back', file: File) {
@@ -183,16 +183,16 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
     setSaving(false);
-    if (err) { toastError('Could not save insurance'); return; }
-    success('Insurance saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
 
   async function deletePolicy(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
-    if (err) { toastError('Could not delete'); return; }
-    success('Deleted');
+    if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    success(t('medicalRecordsModule.deleted'));
   }
 
   async function saveProfile() {
@@ -219,8 +219,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     };
     const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
     setSaving(false);
-    if (err) { toastError('Could not save profile'); return; }
-    success('Profile saved');
+    if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }
 
@@ -483,7 +483,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </Modal>
 
       {/* ── Check-in member picker ────────────────────────── */}
-      <Modal open={checkInPicker} title={t('medicalRecords.atTheDoctorCheckIn')} description="Who is this visit for? We'll show everything you need for the intake form." onClose={() => setCheckInPicker(false)}>
+      <Modal open={checkInPicker} title={t('medicalRecords.atTheDoctorCheckIn')} description={t('medicalRecordsModule.whoIsThisVisitFor')} onClose={() => setCheckInPicker(false)}>
         <div className="space-y-2">
           {selfMember && (
             <button onClick={() => { setCheckInMemberId(selfMember.id); setCheckInPicker(false); }} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-elevated">

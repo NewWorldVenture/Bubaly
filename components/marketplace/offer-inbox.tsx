@@ -67,8 +67,7 @@ export function OfferInbox({ offers }: { offers: InboxOffer[] }) {
               {o.message && <p className="line-clamp-1 text-xs text-muted">{o.message}</p>}
             </div>
             <Button size="sm" onClick={() => act(o.id, 'accept')} disabled={busy === o.id} aria-busy={busy === o.id} className="h-7 gap-1 text-xs">
-              <Check className="h-3.5 w-3.5" /> Accept
-            </Button>
+              <Check className="h-3.5 w-3.5" />{' '}{t('offerInbox.accept')}</Button>
             <button
               type="button"
               onClick={() => act(o.id, 'decline')}

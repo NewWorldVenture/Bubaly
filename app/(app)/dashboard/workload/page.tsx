@@ -39,7 +39,7 @@ export default async function WorkloadPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardWorkload.workloadBalance')}</h1>
-        <ErrorState message="Could not load workload data from Supabase. Refresh and try again." />
+        <ErrorState message={t('workload.couldNotLoadWorkloadData')} />
         <a href="/dashboard/workload" className="text-sm font-medium text-brand-text underline">{t('dashboardWorkload.refreshWorkloadData')}</a>
       </div>
     );

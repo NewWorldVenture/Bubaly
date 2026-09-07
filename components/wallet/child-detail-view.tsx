@@ -190,11 +190,11 @@ function AICoachCard({ childId }: { childId: string }) {
       setCoaching(json.coaching);
       setDismissed(false);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach unavailable'));
+      toastError(describeDbError(err, t('childDetailView.coachUnavailable')));
     } finally {
       setLoading(false);
     }
-  }, [childId, toastError]);
+  }, [childId, toastError, t]);
 
   if (dismissed) return null;
 
@@ -377,8 +377,8 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!desc.trim()) return toastError('What is it for?');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!desc.trim()) return toastError(t('childDetailView.whatIsItFor'));
     setLoading(true);
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
@@ -398,7 +398,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
             : ' A parent will review this request.'}
         </p>
         <Field label={t('childDetail.whatFor')}>
-          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('childDetailView.eGLegoSet')} autoFocus maxLength={120} />}
         </Field>
         <Field label={t('childDetail.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
@@ -435,13 +435,13 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!to) return toastError('Pick a recipient.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
+    if (!to) return toastError(t('childDetailView.pickARecipient'));
     setLoading(true);
     const res = await sendMoneyAction({ fromChildWalletId: child.id, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send money');
-    success('Money sent');
+    success(t('childDetailView.moneySent'));
     onClose();
     router.refresh();
   }
@@ -465,7 +465,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
         </Field>
         <Field label={t('childDetail.noteOptional')}>
-          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('childDetailView.birthdayGift')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
@@ -488,7 +488,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);
@@ -541,12 +541,12 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await requestAllowanceAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), reason: reason.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send request');
-    success('Request sent to a parent');
+    success(t('childDetailView.requestSentToAParent'));
     onClose();
     router.refresh();
   }
@@ -572,7 +572,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
           ))}
         </div>
         <Field label={t('childDetail.reasonOptional')}>
-          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra chores…" maxLength={120} />}
+          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('childDetailView.birthdayMoneyExtraChores')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {t('childDetail.cancel')}</Button>
@@ -780,7 +780,7 @@ export function ChildDetailView({
         </div>
         {history.length === 0 ? (
           <div className="py-4">
-            <EmptyState icon={Receipt} title={t('childDetail.noTransactionsYet')} description="Top-ups, allowance, chores and gifts will show here." />
+            <EmptyState icon={Receipt} title={t('childDetail.noTransactionsYet')} description={t('childDetailView.topUpsAllowanceChoresAnd')} />
           </div>
         ) : (
           <div className="divide-y divide-border/50">

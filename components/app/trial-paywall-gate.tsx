@@ -34,20 +34,20 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.url) { window.location.href = json.url as string; return; }
-      toastError(json.error || 'Could not start checkout. Please try again.');
+      toastError(json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } catch {
-      toastError('Could not start checkout. Please try again.');
+      toastError(t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } finally {
       setBusy(null);
     }
   }
 
   async function close() {
-    if (!window.confirm('Close your account? Nothing is deleted — you can reopen anytime and everything will be here.')) return;
+    if (!window.confirm(t('trialPaywallGate.closeYourAccountNothingIs'))) return;
     setBusy('close');
     const res = await closeAccountAction();
     setBusy(null);
-    if (res.ok) { success('Your account is closed. Your data is safe.'); window.location.reload(); }
+    if (res.ok) { success(t('trialPaywallGate.yourAccountIsClosedYour')); window.location.reload(); }
     else toastError(res.error);
   }
 

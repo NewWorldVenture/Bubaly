@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/recipes/vote/page.tsx', 'utf8');
@@ -17,7 +18,8 @@ describe('recipes/vote page read boundary', () => {
   it('logs and returns an ErrorState on a read failure', () => {
     expect(page).toContain('if (voteError) {');
     expect(page).toContain("console.error('[dashboard/recipes/vote] meal vote read failed', voteError);");
-    expect(page).toContain('return <ErrorState message="Could not load meal voting from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'vote.couldNotLoadMealVoting', "Could not load meal voting from Supabase. Refresh and try again.");
   });
 
   it('derives the vote data only after the fail-closed guard', () => {

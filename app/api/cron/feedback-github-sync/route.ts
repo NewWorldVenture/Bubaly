@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { runGithubFeedbackSync, summarizeSync } from '@/lib/feedback/github-sync';
@@ -13,8 +14,9 @@ export const dynamic = 'force-dynamic';
 // super admin — but only when something actually changed (no empty-run noise).
 // CRON_SECRET-gated like every other cron. Dark until GITHUB_* is configured.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('feedbackGithubSync.unauthorized') }, { status: 401 });
   }
 
   const admin = createServiceClient();

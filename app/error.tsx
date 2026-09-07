@@ -21,10 +21,7 @@ export default function GlobalError({
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6 text-center">
       <h1 className="text-2xl font-semibold">{t('root.somethingWentWrong')}</h1>
-      <p className="mt-2 max-w-md text-sm text-muted">
-        We hit an unexpected error. Your data is safe — try again, and if it keeps happening you have
-        a couple of ways forward below.
-      </p>
+      <p className="mt-2 max-w-md text-sm text-muted">{t('error.weHitAnUnexpectedError')}</p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
         <Button onClick={reset}>{t('root.tryAgain')}</Button>
         <Link href="/dashboard"><Button variant="outline">{t('root.goToDashboard')}</Button></Link>

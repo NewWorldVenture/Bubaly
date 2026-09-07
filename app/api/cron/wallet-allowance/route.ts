@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { creditChildWallet } from '@/lib/wallet/server';
 import { rollForward } from '@/lib/wallet/allowance';
@@ -16,8 +17,9 @@ export const maxDuration = 60;
 // Allowances are a Basic+ feature, so families on the Free plan are skipped.
 // Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('walletAllowance.unauthorized') }, { status: 401 });
   }
   try {
     const supabase = createServiceClient();
@@ -104,6 +106,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, due: (rules ?? []).length, paid, skippedFree });
   } catch (err) {
     console.error('Allowance cron error:', err);
-    return NextResponse.json({ error: 'Allowance run failed' }, { status: 500 });
+    return NextResponse.json({ error: t('walletAllowance.allowanceRunFailed') }, { status: 500 });
   }
 }

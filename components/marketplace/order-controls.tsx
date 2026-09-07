@@ -80,7 +80,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
   const submit = () => {
     startTransition(async () => {
       const res = await leaveReviewAction({ orderId, rating, comment });
-      if (res.ok) { setDone(true); success('Review posted'); }
+      if (res.ok) { setDone(true); success(t('orderControls.reviewPosted')); }
       else toastError(res.error);
     });
   };

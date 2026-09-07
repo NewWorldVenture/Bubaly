@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -18,24 +19,25 @@ export const dynamic = 'force-dynamic';
  * services. Nothing is invented beyond the provided context.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('coach.unauthorized') }, { status: 401 }); }
 
   if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.' }, { status: 503 });
+    return NextResponse.json({ error: t('coach.theAiEngineIsnT') }, { status: 503 });
   }
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('coach.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const question = String(body.question ?? '').slice(0, 2000).trim();
   const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
-  if (!question) return NextResponse.json({ error: 'Ask a question first.' }, { status: 400 });
+  if (!question) return NextResponse.json({ error: t('coach.askAQuestionFirst') }, { status: 400 });
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-health-coach:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many health-coach requests. Please try again shortly.' },
+    { error: t('coach.tooManyHealthCoachRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const familyId = ctx.active.familyId;

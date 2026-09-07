@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setFeatureTier, resetFeatureTiers } from '@/lib/server/feature-tiers';
@@ -12,14 +13,15 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
 type GuardResult = { supabase: AdminClient } | { ok: false; error: string };
 
-function actionFailure(operation: string, error: unknown): ActionResult {
+function actionFailure(operation: string, message: string, error: unknown): ActionResult {
   console.error(`[tier-features] ${operation} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+  return { ok: false, error: describeActionError(error, message) };
 }
 
 async function guard(): Promise<GuardResult> {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
+  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
   return { supabase: createServiceClient() };
 }
 
@@ -30,26 +32,28 @@ function revalidate() {
 }
 
 export async function setFeatureTierAction(key: string, tier: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
-  if (!FEATURE_CATALOG_BY_KEY[key]) return { ok: false, error: 'Choose a valid feature.' };
-  if (!isFeatureTier(tier)) return { ok: false, error: 'Choose a valid tier.' };
+  if (!FEATURE_CATALOG_BY_KEY[key]) return { ok: false, error: t('actions.chooseAValidFeature') };
+  if (!isFeatureTier(tier)) return { ok: false, error: t('actions.chooseAValidTier') };
   try {
     await setFeatureTier(guarded.supabase, key, tier);
   } catch (error) {
-    return actionFailure('save that feature tier', error);
+    return actionFailure('save that feature tier', t('tierFeatures.couldNotSaveThatFeatureTier'), error);
   }
   revalidate();
   return { ok: true };
 }
 
 export async function resetFeatureTiersAction(): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
   try {
     await resetFeatureTiers(guarded.supabase);
   } catch (error) {
-    return actionFailure('reset feature tiers', error);
+    return actionFailure('reset feature tiers', t('tierFeatures.couldNotResetFeatureTiers'), error);
   }
   revalidate();
   return { ok: true };

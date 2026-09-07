@@ -11,19 +11,20 @@ import { StatTile, SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/compo
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Operations' };
+export const metadata: Metadata = { title: 'familyOperations.familyOperations' };
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = {
   high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500',
 };
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">Family Operations</h1>
-      <ErrorState message="Could not load family operations data from Supabase. Refresh and try again." />
-      <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">Refresh family operations</Link>
+      <h1 className="text-2xl font-bold tracking-tight">{t('familyOperations.familyOperations')}</h1>
+      <ErrorState message={t('familyOperations.couldNotLoadFamilyOperations')} />
+      <Link href="/dashboard/family-operations" className="text-sm font-medium text-brand-text underline">{t('familyOperations.refreshFamilyOperations')}</Link>
     </div>
   );
 }
@@ -42,12 +43,12 @@ export default async function FamilyOperationsPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFamilyOperations.familyOperations')}
-        description="One command center for everything your household is running today."
+        description={t('familyOperations.oneCommandCenterForEverything')}
       />
 
       {/* Top row: completion + stress + next actions */}
       <div className="grid gap-5 lg:grid-cols-3">
-        <SectionCard title={t('dashboardFamilyOperations.familyCompletion')} description="Weighted across tasks, bills, school & routines">
+        <SectionCard title={t('dashboardFamilyOperations.familyCompletion')} description={t('familyOperations.weightedAcrossTasksBillsSchool')}>
           <div className="flex items-center gap-6">
             <ScoreRing pct={completion} label={t('dashboardFamilyOperations.onTrack')} />
             <ul className="space-y-2 text-sm">
@@ -58,7 +59,7 @@ export default async function FamilyOperationsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title={t('dashboardFamilyOperations.familyLoad')} description="Predicted stress for the week" viewAllHref="/dashboard/family-stress">
+        <SectionCard title={t('dashboardFamilyOperations.familyLoad')} description={t('familyOperations.predictedStressForTheWeek')} viewAllHref="/dashboard/family-stress">
           <div className="flex items-center gap-6">
             <ScoreRing pct={stress.score} label={stress.level} />
             <div className="space-y-2">
@@ -73,7 +74,7 @@ export default async function FamilyOperationsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title={t('dashboardFamilyOperations.aiNextBestActions')} description="Derived from your real data" viewAllHref="/dashboard/autonomous-family-management">
+        <SectionCard title={t('dashboardFamilyOperations.aiNextBestActions')} description={t('familyOperations.derivedFromYourRealData')} viewAllHref="/dashboard/autonomous-family-management">
           {actions.length > 0 ? (
             <ul className="space-y-2.5">
               {actions.slice(0, 5).map((a) => (
@@ -90,7 +91,7 @@ export default async function FamilyOperationsPage() {
               ))}
             </ul>
           ) : (
-            <MiniEmpty icon={Sparkles} text="All clear — nothing needs attention." />
+            <MiniEmpty icon={Sparkles} text={t('familyOperations.allClearNothingNeedsAttention')} />
           )}
         </SectionCard>
       </div>

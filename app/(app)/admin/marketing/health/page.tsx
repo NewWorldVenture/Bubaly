@@ -8,7 +8,7 @@ import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { customerHealth, summarizeHealth, HEALTH_BAND_LABEL, type Health } from '@/lib/marketing/health';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Customer Health', robots: { index: false } };
+export const metadata: Metadata = { title: 'health.customerHealth', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const BAND_STYLE = {
@@ -95,15 +95,16 @@ export default async function CustomerHealthPage() {
   );
 }
 
-function CustomerHealthReadError() {
+async function CustomerHealthReadError() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Customer Health</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('health.customerHealth')}</h1>
         <p className="mt-1 text-sm text-muted">Per-customer health &amp; churn risk.</p>
       </div>
-      <ErrorState message="Could not load customer health from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/health" className="text-sm font-medium text-brand-text underline">Refresh Customer Health</Link>
+      <ErrorState message={t('health.couldNotLoadCustomerHealth')} />
+      <Link href="/admin/marketing/health" className="text-sm font-medium text-brand-text underline">{t('health.refreshCustomerHealth')}</Link>
     </div>
   );
 }

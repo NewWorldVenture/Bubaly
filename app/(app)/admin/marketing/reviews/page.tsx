@@ -90,7 +90,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={MessageSquareQuote} title={t('adminMarketingReviews.noReviewsHere')} description="Share your review link to start collecting feedback." />
+        <EmptyState icon={MessageSquareQuote} title={t('adminMarketingReviews.noReviewsHere')} description={t('reviews.shareYourReviewLinkTo')} />
       ) : (
         <div className="space-y-2">
           {filtered.map((r) => <ReviewRow key={r.id} review={r} />)}
@@ -118,15 +118,16 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function AdminReviewsReadError() {
+async function AdminReviewsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reviews &amp; Reputation</h1>
-        <p className="mt-1 text-sm text-muted">Collect, review, and publish customer feedback.</p>
+        <p className="mt-1 text-sm text-muted">{t('reviews.collectReviewAndPublishCustomer')}</p>
       </div>
-      <ErrorState message="Could not load reviews from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/reviews" className="text-sm font-medium text-brand-text underline">Refresh reviews</Link>
+      <ErrorState message={t('reviews.couldNotLoadReviewsFrom')} />
+      <Link href="/admin/marketing/reviews" className="text-sm font-medium text-brand-text underline">{t('reviews.refreshReviews')}</Link>
     </div>
   );
 }

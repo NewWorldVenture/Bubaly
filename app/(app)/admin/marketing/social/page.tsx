@@ -32,7 +32,7 @@ export default async function SocialPage() {
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
           {(posts ?? []).length === 0 ? (
-            <EmptyState icon={Share2} title={t('adminMarketingSocial.noPostsPlanned')} description="Draft your first post on the right." />
+            <EmptyState icon={Share2} title={t('adminMarketingSocial.noPostsPlanned')} description={t('social.draftYourFirstPostOn')} />
           ) : (
             (posts ?? []).map((p) => (
               <Card key={p.id} className="space-y-2">
@@ -61,15 +61,16 @@ export default async function SocialPage() {
   );
 }
 
-function AdminSocialReadError() {
+async function AdminSocialReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Social</h1>
-        <p className="mt-1 text-sm text-muted">Plan and schedule social posts across supported platforms.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('social.marketingSocial')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('social.planAndScheduleSocialPosts')}</p>
       </div>
-      <ErrorState message="Could not load marketing social posts from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/social" className="text-sm font-medium text-brand-text underline">Refresh social posts</Link>
+      <ErrorState message={t('social.couldNotLoadMarketingSocial')} />
+      <Link href="/admin/marketing/social" className="text-sm font-medium text-brand-text underline">{t('social.refreshSocialPosts')}</Link>
     </div>
   );
 }

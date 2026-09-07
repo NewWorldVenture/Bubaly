@@ -32,7 +32,7 @@ export default async function FamilyPermissionsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('familyPermissions.rolesPermissions')} description="The access model behind your family — enforced by database row-level security." />
+      <PageHeader title={t('familyPermissions.rolesPermissions')} description={t('permissions.theAccessModelBehindYour')} />
 
       <SectionCard title={t('familyPermissions.roleOverview')}>
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -45,7 +45,7 @@ export default async function FamilyPermissionsPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title={t('familyPermissions.permissionMatrix')} description="Create / Read / Update / Delete per resource & role">
+      <SectionCard title={t('familyPermissions.permissionMatrix')} description={t('permissions.createReadUpdateDeletePer')}>
         {resources.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-xs">
@@ -77,7 +77,7 @@ export default async function FamilyPermissionsPage() {
             </table>
           </div>
         ) : (
-          <MiniEmpty icon={ShieldCheck} text="Permission rules load from the database once the policy seed is applied." />
+          <MiniEmpty icon={ShieldCheck} text={t('permissions.permissionRulesLoadFromThe')} />
         )}
       </SectionCard>
     </div>

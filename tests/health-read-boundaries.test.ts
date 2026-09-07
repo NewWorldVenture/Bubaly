@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 const healthSource = readFileSync('components/modules/health-module.tsx', 'utf8');
@@ -16,7 +17,7 @@ describe('health read boundaries', () => {
   it('coordinates medication, schedule, and dose reads before adherence metrics', () => {
     expect(medicationsSource).toContain('error: schedulesError, refresh: refreshSchedules');
     expect(medicationsSource).toContain('error: dosesError, refresh: refreshDoses');
-    expect(medicationsSource).toContain('Could not load medication data. Refresh and try again.');
+    expectSays(medicationsSource, 'medicationsModule.couldNotLoadMedicationData', 'Could not load medication data. Refresh and try again.');
     expect(medicationsSource).toContain('void refreshMeds(); void refreshSchedules(); void refreshDoses();');
   });
 

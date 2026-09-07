@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
@@ -10,8 +11,9 @@ export const maxDuration = 60;
 // for every family on a schedule so predictions and reversible auto-actions
 // happen WITHOUT anyone opening the app. Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('autopilotScan.unauthorized') }, { status: 401 });
   }
   try {
     const supabase = createServiceClient();
@@ -41,6 +43,6 @@ export async function GET(req: NextRequest) {
     );
   } catch (err) {
     console.error('Autopilot cron error:', err);
-    return NextResponse.json({ error: 'Autopilot cron failed' }, { status: 500 });
+    return NextResponse.json({ error: t('autopilotScan.autopilotCronFailed') }, { status: 500 });
   }
 }

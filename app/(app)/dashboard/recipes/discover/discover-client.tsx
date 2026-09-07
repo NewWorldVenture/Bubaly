@@ -34,10 +34,10 @@ export function DiscoverClient() {
     try {
       const res = await fetch(`/api/recipes/search?q=${encodeURIComponent(query)}`);
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Search failed');
+      if (!res.ok) throw new Error(json.error ?? t('discoverClient.searchFailed'));
       setResults(json.recipes ?? []);
     } catch (err) {
-      toastError(describeDbError(err, 'Search failed'));
+      toastError(describeDbError(err, t('discoverClient.searchFailed')));
       setResults([]);
     } finally {
       setSearching(false);

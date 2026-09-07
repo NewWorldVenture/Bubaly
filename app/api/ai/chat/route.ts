@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -18,6 +19,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     const key = `ai-chat:${ctx.user.id}`;
     const limited = rateLimit(key, { limit: 20, windowMs: 60_000 });
     const rejected = (retryAfter: number) => NextResponse.json(
-      { error: 'Too many AI chat requests. Please try again shortly.' },
+      { error: t('chat.tooManyAiChatRequests') },
       { status: 429, headers: { 'Retry-After': String(retryAfter) } },
     );
     if (!limited.ok) return rejected(limited.retryAfter);
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     const { conversationId, message } = parsed.value;
 
     if (!(await isAIConfigured())) {
-      return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.' }, { status: 503 });
+      return NextResponse.json({ error: t('chat.theAiEngineIsnT') }, { status: 503 });
     }
 
     // Ensure the conversation row exists (the client generates its UUID up front)
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
     );
     if (conversationUpsertError) {
       console.error('[ai-chat] conversation initialization failed', conversationUpsertError);
-      return NextResponse.json({ error: describeActionError(conversationUpsertError, 'Could not start this conversation.') }, { status: 500 });
+      return NextResponse.json({ error: describeActionError(conversationUpsertError, t('chat.couldNotStartThisConversation')) }, { status: 500 });
     }
 
     // The client owns the UUID, but never the conversation's authorization
@@ -77,9 +79,9 @@ export async function POST(req: NextRequest) {
       .select('id').eq('id', conversationId).eq('family_id', familyId).eq('user_id', ctx.user.id).maybeSingle();
     if (conversationReadError) {
       console.error('[ai-chat] conversation ownership read failed', conversationReadError);
-      return NextResponse.json({ error: 'Could not open this conversation.' }, { status: 503 });
+      return NextResponse.json({ error: t('chat.couldNotOpenThisConversation') }, { status: 503 });
     }
-    if (!conversation) return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+    if (!conversation) return NextResponse.json({ error: t('chat.conversationNotFound') }, { status: 404 });
 
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
     const contextError = historyError ?? membersError ?? eventsError ?? choresError ?? mealsError;
     if (contextError) {
       console.error('[ai-chat] family context load failed', contextError);
-      return NextResponse.json({ error: describeActionError(contextError, 'Could not load the family assistant context.') }, { status: 500 });
+      return NextResponse.json({ error: describeActionError(contextError, t('chat.couldNotLoadTheFamily')) }, { status: 500 });
     }
 
     const memberRows = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
@@ -226,7 +228,7 @@ export async function POST(req: NextRequest) {
           }
         }
         if (persistenceError) {
-          send({ type: 'error', error: describeActionError(persistenceError, 'I generated a response, but could not save this conversation.') });
+          send({ type: 'error', error: describeActionError(persistenceError, t('chat.iGeneratedAResponseBut')) });
         }
 
         obs.used(provider.model, undefined);

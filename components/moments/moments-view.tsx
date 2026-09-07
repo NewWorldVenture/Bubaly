@@ -119,7 +119,7 @@ export function MomentsView() {
         },
       });
     } else {
-      success('Already on your list');
+      success(t('momentsView.alreadyOnYourList'));
     }
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
@@ -136,7 +136,7 @@ export function MomentsView() {
     });
     setPending((p) => { const n = new Set(p); n.delete(key); return n; });
     if (!res.ok) return toastError(res.error ?? 'Could not set reminder');
-    success('Reminder set');
+    success(t('momentsView.reminderSet'));
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
@@ -144,7 +144,7 @@ export function MomentsView() {
     <div className="module-page">
       <PageHeader
         title={t('moments.moments')}
-        description="Your next events, already prepped. Bubaly lines up everything each one needs — you just tap."
+        description={t('momentsView.yourNextEventsAlreadyPrepped')}
       />
 
       {!loading && moments.length > 0 && (
@@ -166,7 +166,7 @@ export function MomentsView() {
         <EmptyState
           icon={Sparkles}
           title={t('moments.nothingOnTheHorizon')}
-          description="When your family has upcoming events, Bubaly will assemble the prep for each one here."
+          description={t('momentsView.whenYourFamilyHasUpcoming')}
           action={<Link href="/dashboard/calendar" className="btn-cta">{t('moments.openCalendar')}</Link>}
         />
       ) : (
@@ -255,8 +255,7 @@ export function MomentsView() {
                             disabled={pending.has(key)}
                             className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
                           >
-                            <Bell className="h-3.5 w-3.5" /> Remind
-                          </button>
+                            <Bell className="h-3.5 w-3.5" />{' '}{t('momentsView.remind')}</button>
                         ) : item.actionHref ? (
                           <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={`Open: ${item.label}`}>
                             <ChevronRight className="h-4 w-4" />

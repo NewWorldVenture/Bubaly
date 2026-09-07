@@ -102,7 +102,7 @@ export function LanguageModule() {
   async function deleteCard(c: Card) {
     const { error } = await createClient().from('vocab_cards').delete().eq('id', c.id);
     if (error) return toastError(describeDbError(error));
-    success('Card removed');
+    success(tr('languageModule.cardRemoved'));
   }
 
   async function addStarterDeck() {
@@ -111,7 +111,7 @@ export function LanguageModule() {
     if (!deckCards.length) return toastError(`No starter deck for ${goal.language_label} yet — add cards by hand.`);
     const have = new Set(myCards.map((c) => c.term.toLowerCase()));
     const fresh = deckCards.filter((c) => !have.has(c.term.toLowerCase()));
-    if (!fresh.length) return toastError('The starter deck is already in.');
+    if (!fresh.length) return toastError(tr('languageModule.theStarterDeckIsAlready'));
     setAdding(true);
     const { error } = await createClient().from('vocab_cards').insert(fresh.map((c) => ({ family_id: familyId, goal_id: goal.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: isoDate(new Date()), created_by: userId })));
     setAdding(false);
@@ -122,7 +122,7 @@ export function LanguageModule() {
   async function deleteSession(s: Session) {
     const { error } = await createClient().from('language_sessions').delete().eq('id', s.id);
     if (error) return toastError(describeDbError(error));
-    success('Session removed');
+    success(tr('languageModule.sessionRemoved'));
   }
 
   async function archiveGoal(g: Goal, active: boolean) {
@@ -136,20 +136,20 @@ export function LanguageModule() {
     const { error } = await createClient().from('language_goals').delete().eq('id', g.id);
     if (error) return toastError(describeDbError(error));
     setGoalId('');
-    success('Goal deleted');
+    success(tr('languageModule.goalDeleted'));
   }
 
   const loading = goals.loading || sessions.loading || cards.loading;
   const error = goals.error || sessions.error || cards.error;
   const refresh = () => { void goals.refresh(); void sessions.refresh(); void cards.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load language practice. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('languageModule.couldNotLoadLanguagePractice')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={tr('language.languagePractice')}
-        description="Kids and parents learning a language together: spaced-repetition vocabulary, weekly minutes and streaks, a realistic hours-to-level estimate, and an AI tutor that answers in the language with gentle corrections."
+        description={tr('languageModule.kidsAndParentsLearningA')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="language" iconOnly />
@@ -161,7 +161,7 @@ export function LanguageModule() {
       />
 
       {goals.data.length === 0 || !goal || !deck || !week || !level || !suggestion ? (
-        <EmptyState icon={Languages} title={tr('language.noLanguageGoalsYet')} description="Pick who is learning what and how many minutes a week. A starter deck of twenty words comes with the goal." action={<Button onClick={() => setGoalForm({ open: true, goal: null })}><Languages className="h-4 w-4" /> {tr('language.startALanguage')}</Button>} />
+        <EmptyState icon={Languages} title={tr('language.noLanguageGoalsYet')} description={tr('languageModule.pickWhoIsLearningWhat')} action={<Button onClick={() => setGoalForm({ open: true, goal: null })}><Languages className="h-4 w-4" /> {tr('language.startALanguage')}</Button>} />
       ) : (
         <>
           {goals.data.length > 1 && (
@@ -279,7 +279,7 @@ export function LanguageModule() {
 
           {tab === 'sessions' && (
             mySessions.length === 0 ? (
-              <EmptyState icon={Timer} title={tr('language.nothingLoggedYet')} description="Log anything: a class, ten minutes with the tutor, a film with subtitles. Minutes add up to the level estimate." action={<Button onClick={() => setSessionOpen(true)}><Timer className="h-4 w-4" /> {tr('language.logPractice')}</Button>} />
+              <EmptyState icon={Timer} title={tr('language.nothingLoggedYet')} description={tr('languageModule.logAnythingAClassTen')} action={<Button onClick={() => setSessionOpen(true)}><Timer className="h-4 w-4" /> {tr('language.logPractice')}</Button>} />
             ) : (
               <ul className="space-y-2">
                 {mySessions.slice(0, 40).map((s) => (
@@ -299,13 +299,13 @@ export function LanguageModule() {
       )}
 
       {goalForm.open && (
-        <GoalForm familyId={familyId} userId={userId} members={members} goal={goalForm.goal} defaultMember={selfMember?.id ?? null} onClose={() => setGoalForm({ open: false, goal: null })} onSaved={(id) => { setGoalForm({ open: false, goal: null }); setGoalId(id); success('Goal saved'); }} />
+        <GoalForm familyId={familyId} userId={userId} members={members} goal={goalForm.goal} defaultMember={selfMember?.id ?? null} onClose={() => setGoalForm({ open: false, goal: null })} onSaved={(id) => { setGoalForm({ open: false, goal: null }); setGoalId(id); success(tr('languageModule.goalSaved')); }} />
       )}
       {cardForm.open && goal && (
-        <CardForm familyId={familyId} userId={userId} goalId={goal.id} card={cardForm.card} onClose={() => setCardForm({ open: false, card: null })} onSaved={() => { setCardForm({ open: false, card: null }); success('Card saved'); }} />
+        <CardForm familyId={familyId} userId={userId} goalId={goal.id} card={cardForm.card} onClose={() => setCardForm({ open: false, card: null })} onSaved={() => { setCardForm({ open: false, card: null }); success(tr('languageModule.cardSaved')); }} />
       )}
       {sessionOpen && goal && (
-        <SessionForm familyId={familyId} userId={userId} goal={goal} suggested={suggestion} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success('Practice logged'); }} />
+        <SessionForm familyId={familyId} userId={userId} goal={goal} suggested={suggestion} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('languageModule.practiceLogged')); }} />
       )}
     </div>
   );
@@ -321,12 +321,12 @@ function GoalForm({ familyId, userId, members, goal, defaultMember, onClose, onS
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const memberId = String(f.get('member_id') ?? '');
-    if (!memberId) return toastError('Who is learning?');
+    if (!memberId) return toastError(tr('languageModule.whoIsLearning'));
     const label = code === 'other' ? String(f.get('language_label') ?? '').trim() : languageMeta(code).label;
-    if (!label) return toastError('Name the language');
+    if (!label) return toastError(tr('languageModule.nameTheLanguage'));
     const current = String(f.get('current_level') ?? 'A1') as CefrLevel;
     const target = String(f.get('target_level') ?? 'B1') as Exclude<CefrLevel, 'A0'>;
-    if (CEFR.findIndex((l) => l.value === target) <= CEFR.findIndex((l) => l.value === current)) return toastError('The target level must be above the current level');
+    if (CEFR.findIndex((l) => l.value === target) <= CEFR.findIndex((l) => l.value === current)) return toastError(tr('languageModule.theTargetLevelMustBe'));
     setLoading(true);
     const payload = {
       member_id: memberId, language_code: code, language_label: label, current_level: current, target_level: target,
@@ -383,7 +383,7 @@ function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { family
     const f = new FormData(e.currentTarget);
     const term = String(f.get('term') ?? '').trim();
     const translation = String(f.get('translation') ?? '').trim();
-    if (!term || !translation) return toastError('Term and translation are both needed');
+    if (!term || !translation) return toastError(tr('languageModule.termAndTranslationAreBoth'));
     setLoading(true);
     const payload = { term, translation, example: String(f.get('example') ?? '').trim() || null, part_of_speech: String(f.get('part_of_speech') ?? '').trim() || null, tags: String(f.get('tags') ?? '').split(',').map((t) => t.trim()).filter(Boolean), notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
@@ -440,7 +440,7 @@ function SessionForm({ familyId, userId, goal, suggested, onClose, onSaved }: { 
   }
 
   return (
-    <Modal open title={tr('language.logPractice')} description="Anything counts: class, tutor chat, a show with subtitles, dinner in the language." onClose={onClose}>
+    <Modal open title={tr('language.logPractice')} description={tr('languageModule.anythingCountsClassTutorChat')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('language.what')}>{(id) => <Select id={id} name="kind" defaultValue={suggested?.kind ?? 'vocab'}>{SESSION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>

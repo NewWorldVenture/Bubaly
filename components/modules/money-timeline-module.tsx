@@ -247,9 +247,7 @@ function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
           );
         })}
       </div>
-      <p className="mt-2 text-[11px] text-muted">
-        Projected balance assumes your current liquid balance minus scheduled bills, goal set-asides, and recurring costs. Income isn’t modeled yet.
-      </p>
+      <p className="mt-2 text-[11px] text-muted">{t('moneyTimelineModule.projectedBalanceAssumesYourCurrent')}</p>
     </section>
   );
 }

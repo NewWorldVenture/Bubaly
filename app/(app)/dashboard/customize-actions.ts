@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -81,8 +82,9 @@ export async function resetDashboardLayoutAction(input: { deviceContext?: string
  * without a personal layout inherit this.
  */
 export async function saveFamilyDefaultLayoutAction(input: { featureKeys: string[]; deviceContext?: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can set the family default.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan') };
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const supabase = await createServer();
@@ -119,8 +121,9 @@ export async function logDashboardEventAction(input: { action: string; featureKe
 
 /** Save the family dashboard settings (parent/admin only). */
 export async function saveDashboardSettingsAction(input: { allowChildCustomization: boolean; lockToFamilyDefault: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can change dashboard settings.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan2') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('family_dashboard_settings').upsert(
@@ -135,8 +138,9 @@ export async function saveDashboardSettingsAction(input: { allowChildCustomizati
 
 /** Reset ALL members' personal layouts to the default (parent/admin only). */
 export async function resetAllLayoutsAction(): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can reset everyone’s dashboard.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan3') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');

@@ -32,7 +32,7 @@ export function SignOutButton({
         open={open}
         onClose={() => setOpen(false)}
         title={t('signOutButton.signOut')}
-        description="You’ll need to sign in again to get back to your family."
+        description={t('signOutButton.youLlNeedToSign')}
       >
         <form
           action="/auth/signout"

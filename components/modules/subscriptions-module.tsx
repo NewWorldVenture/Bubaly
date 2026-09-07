@@ -84,16 +84,16 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
 
   async function markUsed(id: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ last_used: new Date().toISOString().slice(0, 10) }).eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Marked used today');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
     if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
-    if (!confirm('Delete this subscription?')) return;
+    if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
     const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);
@@ -102,7 +102,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load subscriptions. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('subscriptionsModule.couldNotLoadSubscriptionsRefresh')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -132,13 +132,13 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
       {reviewMonthly > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong> have recorded use more than 60 days ago. Confirm current household use before deciding what to keep. This amount is not confirmed savings.</p>
+          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong>{' '}{t('subscriptionsModule.haveRecordedUseMoreThan')}</p>
         </div>
       )}
 
       <div className="space-y-2">
         {all.length === 0 ? (
-          <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description="Add streaming, apps and memberships to see your true recurring spend." />
+          <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description={t('subscriptionsModule.addStreamingAppsAndMemberships')} />
         ) : all.map((s) => {
           const usage = subscriptionUsage(s, usageNow);
           const stale = isStale(s as SubLike, 60, usageNow);
@@ -255,7 +255,7 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
         <div className="min-w-0 flex-1">
           <h4 className="font-semibold">{t('subscriptions.reviewRecurringExpenses')}</h4>
           <p className="text-sm text-muted">{t('subscriptions.lookForThreeOrMoreMatching')}</p>
-          <p className="mt-1 text-xs text-muted">Only expenses linked to accessible USD accounts can pre-fill this USD form. Unlinked or other-currency expenses are excluded without conversion.</p>
+          <p className="mt-1 text-xs text-muted">{t('subscriptionsModule.onlyExpensesLinkedToAccessible')}</p>
         </div>
         <Button type="button" disabled={!canReview || visibleReview.loading} onClick={() => { void load(); }}>{visibleReview.loading ? 'Reviewing...' : visibleReview.result || visibleReview.error ? 'Refresh candidates' : 'Find candidates'}</Button>
       </div>

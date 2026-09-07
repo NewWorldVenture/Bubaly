@@ -178,7 +178,7 @@ export function AssistantModule() {
     const failed = [todayRes.error, choresRes.error, upcomingRes.error, remindersRes.error, medsRes.error].find(Boolean);
     if (failed) {
       console.error('[assistant] context rail load failed', failed);
-      setRailError(describeDbError(failed, 'Could not load today’s context.'));
+      setRailError(describeDbError(failed, t('assistantModule.couldNotLoadTodayS')));
       return;
     }
     setRailError(null);
@@ -196,7 +196,7 @@ export function AssistantModule() {
       time: fmtRelative(e.created_at),
       color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
     })));
-  }, [family?.id]);
+  }, [family?.id, t]);
 
   useEffect(() => { void loadRail(); }, [loadRail]);
 
@@ -231,10 +231,10 @@ export function AssistantModule() {
       .order('updated_at', { ascending: false }).limit(25);
     // Keep the prior conversation history on a transient read failure instead of
     // clobbering the sidebar to an empty "no conversations" list.
-    setConversationsError(error ? describeDbError(error, 'Could not load your conversations.') : null);
+    setConversationsError(error ? describeDbError(error, t('assistantModule.couldNotLoadYourConversations')) : null);
     if (error) return;
     setConversations(data ?? []);
-  }, [family?.id]);
+  }, [family?.id, t]);
 
   const loadConversation = useCallback(async (id: string) => {
     const supabase = createClient();
@@ -244,7 +244,7 @@ export function AssistantModule() {
     // A failed message read must not masquerade as an empty conversation (a fresh
     // greeting) — that hides real history. Leave the current view intact so the
     // user can retry rather than switching into a misleading blank thread.
-    setThreadError(error ? describeDbError(error, 'Could not open that conversation.') : null);
+    setThreadError(error ? describeDbError(error, t('assistantModule.couldNotOpenThatConversation')) : null);
     if (error) return;
     setConvId(id);
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
@@ -275,11 +275,11 @@ export function AssistantModule() {
   }
 
   async function deleteConversation(id: string) {
-    if (!confirm('Delete this conversation?')) return;
+    if (!confirm(t('assistantModule.deleteThisConversation'))) return;
     const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
     if (error) {
       console.error('[assistant] conversation delete failed', error);
-      setConversationsError(describeDbError(error, 'Could not delete that conversation.'));
+      setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
       return;
     }
     setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -287,12 +287,12 @@ export function AssistantModule() {
   }
 
   async function renameConversation(id: string, current: string) {
-    const title = window.prompt('Rename conversation', current || '')?.trim();
+    const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
     const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
     if (error) {
       console.error('[assistant] conversation rename failed', error);
-      setConversationsError(describeDbError(error, 'Could not rename that conversation.'));
+      setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
       return;
     }
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
@@ -332,8 +332,8 @@ export function AssistantModule() {
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
       if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: 'Sorry, I had trouble with that.' })) as { error?: string };
-        patchReply((m) => ({ ...m, content: err.error ?? 'Sorry, I had trouble with that.' }));
+        const err = await res.json().catch(() => ({ error: t('assistantModule.sorryIHadTroubleWith') })) as { error?: string };
+        patchReply((m) => ({ ...m, content: err.error ?? t('assistantModule.sorryIHadTroubleWith') }));
         return;
       }
       // Parse the SSE stream: delta (text), action (line), card, run, error, done.

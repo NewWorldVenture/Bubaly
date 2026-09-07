@@ -86,7 +86,7 @@ export function LifeEventsModule() {
     const res = await launchLifeEventAction(startTemplate, eventDate);
     setLaunching(false);
     if (!res.ok) { toastError(res.error ?? 'Could not start'); return; }
-    success('Playbook started — your checklist is ready');
+    success(tr('lifeEventsModule.playbookStartedYourChecklistIs'));
     setStartTemplate(null);
   }
 
@@ -103,19 +103,19 @@ export function LifeEventsModule() {
     if (!res.ok) toastError(res.error);
   }
   async function removeFact(f: Fact) {
-    if (!confirm('Remove this?')) return;
+    if (!confirm(tr('lifeEventsModule.removeThis'))) return;
     const res = await forgetFactAction(f.id);
-    if (!res.ok) toastError(res.error); else success('Removed');
+    if (!res.ok) toastError(res.error); else success(tr('lifeEventsModule.removed'));
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message="Could not load life and milestones data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('lifeEventsModule.couldNotLoadLifeAnd')} onRetry={refresh} />;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title={tr('lifeEvents.lifeMilestones')}
-        description="What Bubaly has learned about your family — and one-tap playbooks for the big moments."
+        description={tr('lifeEventsModule.whatBubalyHasLearnedAbout')}
       />
 
       {/* ── What Bubaly has learned ─────────────────────────────────────────── */}
@@ -125,7 +125,7 @@ export function LifeEventsModule() {
           <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {learned.length === 0 ? (
-          <EmptyState icon={Sparkles} title={tr('lifeEvents.bubalyIsStillGettingToKnow')} description="Preferences, routines and traditions you save here show up across the app — add the first thing your family always does." />
+          <EmptyState icon={Sparkles} title={tr('lifeEvents.bubalyIsStillGettingToKnow')} description={tr('lifeEventsModule.preferencesRoutinesAndTraditionsYou')} />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {learned.map((f) => (
@@ -300,7 +300,7 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
   const [saving, setSaving] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!label.trim() || !value.trim()) { onError('Add a label and a value'); return; }
+    if (!label.trim() || !value.trim()) { onError(tr('lifeEventsModule.addALabelAndA')); return; }
     setSaving(true);
     const res = await saveFactAction(editing?.id ?? null, {
       label: label.trim(), value: value.trim(), category, notes: notes.trim() || null,

@@ -28,11 +28,11 @@ export function SurveyForm(p: Props) {
   const scale = Array.from({ length: p.scaleMax - p.scaleMin + 1 }, (_, i) => p.scaleMin + i);
 
   function submit() {
-    if (score === null) { setError('Please choose a rating.'); return; }
+    if (score === null) { setError(t('surveyForm.pleaseChooseARating')); return; }
     setError('');
     start(async () => {
       const r = await submitResponseAction({ slug: p.slug, score, comment, email });
-      if (r.ok) setDone(true); else setError(r.error ?? 'Something went wrong.');
+      if (r.ok) setDone(true); else setError(r.error ?? t('surveyForm.somethingWentWrong'));
     });
   }
 

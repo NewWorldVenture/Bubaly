@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
@@ -22,15 +23,16 @@ export const dynamic = 'force-dynamic';
  * adds + tips. Deterministic, never-fabricated fallback when AI is unconfigured.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('chef.unauthorized') }, { status: 401 }); }
 
   const familyId = ctx.active.familyId;
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('chef.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const request = String(body.request ?? '').slice(0, 500).trim();
-  if (!request) return NextResponse.json({ error: 'Tell the chef what you need (e.g. "plan quick dinners under $150").' }, { status: 400 });
+  if (!request) return NextResponse.json({ error: t('chef.tellTheChefWhatYou') }, { status: 400 });
 
   const dietary = (Array.isArray(body.dietary) ? body.dietary : []).map((s: unknown) => String(s)).slice(0, 12);
   const weeklyBudget = typeof body.weeklyBudget === 'number' && body.weeklyBudget > 0 ? Math.round(body.weeklyBudget) : null;
@@ -38,7 +40,7 @@ export async function POST(req: Request) {
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-chef:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many chef requests. Please try again shortly.' },
+    { error: t('chef.tooManyChefRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
   const now = new Date();

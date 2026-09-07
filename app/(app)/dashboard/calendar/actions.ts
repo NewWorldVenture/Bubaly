@@ -29,6 +29,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -137,6 +138,7 @@ async function calendarScope(extra?: { idempotencyKey?: string | null }) {
 }
 
 export async function createCalendarEventAction(input: CreateCalendarEventInput): Promise<CalendarActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase, {
@@ -145,7 +147,7 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
 
   try {
     const startsAt = asStoredInstant(input.startsAt);
-    if (!startsAt) return { ok: false, error: 'Pick a start time for that event.' };
+    if (!startsAt) return { ok: false, error: t('actions.pickAStartTimeFor') };
 
     const result = await createEvent(scope, {
       title: input.title ?? '',
@@ -164,7 +166,7 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[calendar-action] create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add that event.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatEvent')) };
   }
 }
 
@@ -172,7 +174,8 @@ export async function updateCalendarEventAction(
   eventId: string,
   patch: CalendarEventFields,
 ): Promise<CalendarActionResult> {
-  if (!eventId) return { ok: false, error: 'That event could not be found.' };
+  const t = await getTranslations();
+  if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
   const scope = await calendarScope();
   try {
     // `undefined` means "leave it alone" all the way down: the service builds its
@@ -195,12 +198,13 @@ export async function updateCalendarEventAction(
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[calendar-action] update failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that event.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatEvent')) };
   }
 }
 
 export async function deleteCalendarEventAction(eventId: string): Promise<CalendarActionResult> {
-  if (!eventId) return { ok: false, error: 'That event could not be found.' };
+  const t = await getTranslations();
+  if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
   const scope = await calendarScope();
   try {
     const result = await deleteEvent(scope, eventId);
@@ -210,7 +214,7 @@ export async function deleteCalendarEventAction(eventId: string): Promise<Calend
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[calendar-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that event.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatEvent')) };
   }
 }
 
@@ -241,6 +245,7 @@ export type ApplyRoutineResult =
  * land and under whose name.
  */
 export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Promise<ApplyRoutineResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase, {
@@ -249,7 +254,7 @@ export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Pr
 
   try {
     const events = input.events ?? [];
-    if (!events.length) return { ok: false, error: 'This routine has no active days.' };
+    if (!events.length) return { ok: false, error: t('actions.thisRoutineHasNoActive') };
 
     const result = await createEvents(scope, events.map((e) => ({
       title: e.title,
@@ -266,7 +271,7 @@ export async function applyRoutineToCalendarAction(input: ApplyRoutineInput): Pr
     return { ok: true, eventIds: result.data.map((e) => e.id) };
   } catch (err) {
     console.error('[calendar-action] apply routine failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add those events.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThoseEvents')) };
   }
 }
 
@@ -276,6 +281,7 @@ export type UndoResult =
 
 /** The undo behind "added 12 events for this week". Family-scoped. */
 export async function undoCalendarEventsAction(eventIds: string[]): Promise<UndoResult> {
+  const t = await getTranslations();
   const scope = await calendarScope();
   try {
     const result = await deleteEvents(scope, eventIds ?? []);
@@ -284,6 +290,6 @@ export async function undoCalendarEventsAction(eventIds: string[]): Promise<Undo
     return { ok: true, removed: result.data.removed };
   } catch (err) {
     console.error('[calendar-action] undo failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not undo those events.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUndoThoseEvents')) };
   }
 }

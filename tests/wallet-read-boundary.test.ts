@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 
 const pages = {
   send: readFileSync('app/(app)/wallet/send/page.tsx', 'utf8'),
@@ -18,9 +19,15 @@ const pages = {
 
 describe('wallet page read boundaries', () => {
   it('distinguishes a failed wallet read from an inactive wallet', () => {
-    for (const source of [pages.send, pages.activity, pages.treasury, pages.cards]) {
-      expect(source).toContain('error: walletError');
-      expect(source).toContain('Could not load the family wallet. Refresh and try again.');
+    // Each page names the notice in its own catalogue namespace, so the key is
+    // per page and the English it resolves to is the same on all four — which
+    // is exactly what a family would see, and what this asserts.
+    for (const [ns, source] of [
+      ['send', pages.send], ['activity', pages.activity],
+      ['treasury', pages.treasury], ['cards', pages.cards],
+    ] as const) {
+      expect(source, ns).toContain('error: walletError');
+      expectSays(source, `${ns}.couldNotLoadTheFamily`, 'Could not load the family wallet. Refresh and try again.');
     }
   });
 
@@ -53,6 +60,6 @@ describe('wallet page read boundaries', () => {
     }
     expect(pages.hub).toContain('accountsError');
     expect(pages.hub).toContain('txnsError');
-    expect(pages.hub).toContain('Could not load your wallet data. Refresh and try again.');
+    expectSays(pages.hub, 'walletHub.couldNotLoadYourWallet', 'Could not load your wallet data. Refresh and try again.');
   });
 });

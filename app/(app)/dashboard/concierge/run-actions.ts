@@ -16,6 +16,7 @@
 // authority, so they pass the feature/plan/allowance check first — a form
 // action must not be the door around what the JSON edge refuses.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { MAX_AI_ANSWER_CHARS, parseAIRequestIntake, runPagePath, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { loadRunDetail, toRunView, type RunView } from '@/lib/ai/runs/detail';
 import {
@@ -37,8 +38,9 @@ const REQUEST_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 /** Controls that start (or restart) execution and therefore need the concierge to be available to this family. */
 const KICKING_CONTROLS: readonly RunControlAction[] = ['resume', 'rerun'];
 
-function rateLimited(): RunActionResult<never> {
-  return { ok: false, error: 'Too many requests. Please try again shortly.', code: 'rate_limited' };
+async function rateLimited(): Promise<RunActionResult<never>> {
+  const t = await getTranslations();
+  return { ok: false, error: t('runActions.tooManyRequestsPleaseTry'), code: 'rate_limited' };
 }
 
 function accessDenied(denial: AIAccessDenial): RunActionResult<never> {
@@ -57,6 +59,7 @@ export async function askBubalyAction(input: {
   answers?: Record<string, string> | null;
   clientRequestId?: string | null;
 }): Promise<RunActionResult<AIRequestResponse>> {
+  const t = await getTranslations();
   const startedAt = Date.now();
   const parsed = parseAIRequestIntake({
     text: input.text,
@@ -79,11 +82,11 @@ export async function askBubalyAction(input: {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
-  if (!limited.ok) return rateLimited();
+  if (!limited.ok) return await rateLimited();
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) return accessDenied(access);
   if (!(await isAIConfigured())) {
-    return { ok: false, error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', code: 'not_configured' };
+    return { ok: false, error: t('runActions.theAiEngineIsnT'), code: 'not_configured' };
   }
 
   const result = await submitRequest(scopeFromUserContext(ctx, supabase), parsed.value, { startedAtMs: startedAt });
@@ -95,16 +98,17 @@ export async function askBubalyAction(input: {
 
 /** Answer the clarifying question a run is waiting on. A model call: rate-limited and gated like a request. */
 export async function answerRunAction(runId: string, answer: string): Promise<RunActionResult<AIRequestResponse>> {
+  const t = await getTranslations();
   const startedAt = Date.now();
   const reply = answer.trim();
-  if (!runId) return { ok: false, error: 'That run could not be found.', code: 'not_found' };
-  if (!reply) return { ok: false, error: 'Type an answer for Bubaly.', code: 'answer_required' };
-  if (reply.length > MAX_AI_ANSWER_CHARS) return { ok: false, error: 'That answer is too long.', code: 'answer_too_long' };
+  if (!runId) return { ok: false, error: t('runActions.thatRunCouldNotBe'), code: 'not_found' };
+  if (!reply) return { ok: false, error: t('runActions.typeAnAnswerForBubaly'), code: 'answer_required' };
+  if (reply.length > MAX_AI_ANSWER_CHARS) return { ok: false, error: t('runActions.thatAnswerIsTooLong'), code: 'answer_too_long' };
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
-  if (!limited.ok) return rateLimited();
+  if (!limited.ok) return await rateLimited();
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) return accessDenied(access);
 
@@ -126,8 +130,9 @@ export async function controlRunAction(
   action: RunControlAction,
   args: { stepId?: string | null } = {},
 ): Promise<RunActionResult<RunControlResult>> {
+  const t = await getTranslations();
   const startedAt = Date.now();
-  if (!runId) return { ok: false, error: 'That run could not be found.', code: 'not_found' };
+  if (!runId) return { ok: false, error: t('runActions.thatRunCouldNotBe'), code: 'not_found' };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   if (KICKING_CONTROLS.includes(action)) {

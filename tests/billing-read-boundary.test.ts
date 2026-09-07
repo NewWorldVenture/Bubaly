@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const routes = {
@@ -12,9 +13,9 @@ const routes = {
 describe('billing API read boundaries', () => {
   it('fails before Stripe mutation when billing state reads fail', () => {
     expect(routes.checkout).toContain('error: existingError');
-    expect(routes.checkout).toContain('Billing account status is temporarily unavailable.');
+    expectTranslates(routes.checkout, 'checkout.billingAccountStatusIsTemporarily', "Billing account status is temporarily unavailable.");
     expect(routes.changePlan).toContain('error: subError');
-    expect(routes.changePlan).toContain('Subscription status is temporarily unavailable.');
+    expectTranslates(routes.changePlan, 'changePlan.subscriptionStatusIsTemporarilyUnavailable', "Subscription status is temporarily unavailable.");
     expect(routes.cancel).toContain('error: subError');
     expect(routes.portal).toContain('error: billingCustomerError');
   });
@@ -31,13 +32,13 @@ describe('billing API read boundaries', () => {
   it('does not report provider mutations as fully synced after local write failure', () => {
     expect(routes.changePlan).toContain('providerUpdated: true');
     expect(routes.cancel).toContain('providerUpdated: true');
-    expect(routes.changePlan).toContain('local billing sync is pending');
-    expect(routes.cancel).toContain('local billing sync is pending');
+    expectTranslates(routes.changePlan, 'changePlan.stripeChangedThePlanBut', "Stripe changed the plan, but local billing sync is pending. Please refresh before retrying.");
+    expectTranslates(routes.cancel, 'cancel.stripeUpdatedTheSubscriptionBut', "Stripe updated the subscription, but local billing sync is pending. Please refresh before retrying.");
   });
 
   it('keeps billing portal mutation access manager-only and validates cancellation input', () => {
     expect(routes.portal).toContain('isAdmin(ctx.active.role)');
-    expect(routes.portal).toContain('Only a parent can open the billing portal.');
+    expectTranslates(routes.portal, 'portal.onlyAParentCanOpen', "Only a parent can open the billing portal.");
     expect(routes.cancel).toContain("typeof resume !== 'boolean'");
   });
 

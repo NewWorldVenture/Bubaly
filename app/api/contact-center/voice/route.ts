@@ -4,6 +4,7 @@
 // If the concierge is off and a fallback number is set, the call is forwarded.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
   validateTwilioSignature, wrapTwiml, twimlSay, twimlDial, twimlRecord, twimlHangup,
@@ -22,6 +23,7 @@ function twiml(body: string): NextResponse {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const form = await readBoundedRequestFormData(req, MAX_BODY);
   if (!form.ok) return new NextResponse('Invalid callback', { status: form.reason === 'too_large' ? 413 : 400 });
   const params = Object.fromEntries(form.value.entries()) as Record<string, string>;
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
   const familyId = routed.familyId;
   if (!familyId) {
-    return twiml(wrapTwiml(twimlSay('This number is not in service.'), twimlHangup()));
+    return twiml(wrapTwiml(twimlSay(t('voice.thisNumberIsNotIn')), twimlHangup()));
   }
 
   const [channelResult, familyResult] = await Promise.all([
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
   // Concierge off → forward to the human fallback if set, else take a message.
   if (channel?.ai_concierge_enabled === false) {
     if (channel.forward_to_phone) {
-      return twiml(wrapTwiml(twimlSay('Please hold while I connect you.'), twimlDial(channel.forward_to_phone, to)));
+      return twiml(wrapTwiml(twimlSay(t('voice.pleaseHoldWhileIConnect')), twimlDial(channel.forward_to_phone, to)));
     }
   }
 
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
       text: 'Please leave your message after the tone, then hang up.',
       maxLength: 120,
     }),
-    twimlSay('Thanks — I’ll pass that along. Goodbye.'),
+    twimlSay(t('voice.thanksILlPassThat')),
     twimlHangup(),
   ));
 }

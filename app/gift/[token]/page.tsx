@@ -73,10 +73,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
         </p>
       )}
 
-      <p className="max-w-xs text-center text-[11px] text-muted">
-        Bubaly is not a bank. Your gift is added to a parent-managed wallet after the family approves it.
-        No fees are charged until you confirm a payment.
-      </p>
+      <p className="max-w-xs text-center text-[11px] text-muted">{t('gift.bubalyIsNotABank')}</p>
     </div>
   );
 }

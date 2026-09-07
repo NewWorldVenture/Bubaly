@@ -16,16 +16,16 @@ export function InviteRowActions({ inviteId }: { inviteId: string }) {
     const res = await adminResendInviteAction(inviteId);
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Invite re-sent');
+    success(t('inviteRowActions.inviteReSent'));
   }
 
   async function revoke() {
-    if (!confirm('Revoke this invite? The link will stop working.')) return;
+    if (!confirm(t('inviteRowActions.revokeThisInviteTheLink'))) return;
     setBusy('revoke');
     const res = await adminRevokeInviteAction(inviteId);
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Invite revoked');
+    success(t('inviteRowActions.inviteRevoked'));
   }
 
   return (

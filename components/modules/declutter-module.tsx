@@ -78,7 +78,7 @@ export function DeclutterModule() {
   const recentDone = missions.data.filter((m) => m.status !== 'planned').sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at)).slice(0, 8);
 
   async function planWeek() {
-    if (!plan.length) return toastError('Every zone already has a mission this week, or nothing needs one. Bump a clutter score to plan more.');
+    if (!plan.length) return toastError(tr('declutterModule.everyZoneAlreadyHasA'));
     setPlanning(true);
     const { error } = await createClient().from('declutter_missions').insert(plan.map((p) => ({
       family_id: familyId, zone_id: p.zone.id, title: p.template.title, minutes: p.template.minutes, points: p.template.points,
@@ -92,20 +92,20 @@ export function DeclutterModule() {
   async function skipMission(m: Mission) {
     const { error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission skipped');
+    success(tr('declutterModule.missionSkipped'));
   }
 
   async function reopenMission(m: Mission) {
     const { error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission back on the list');
+    success(tr('declutterModule.missionBackOnTheList'));
   }
 
   async function deleteMission(m: Mission) {
     if (!confirm(`Delete “${m.title}”?`)) return;
     const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
-    success('Mission deleted');
+    success(tr('declutterModule.missionDeleted'));
   }
 
   async function resetZone(z: Zone) {
@@ -131,7 +131,7 @@ export function DeclutterModule() {
   const error = zones.error || missions.error || sessions.error;
   const refresh = () => { void zones.refresh(); void missions.refresh(); void sessions.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load your declutter zones. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('declutterModule.couldNotLoadYourDeclutter')} onRetry={refresh} />;
 
   const MissionRow = ({ m }: { m: Mission }) => {
   const tr = useTranslations();
@@ -167,7 +167,7 @@ export function DeclutterModule() {
     <div className="space-y-6">
       <PageHeader
         title={tr('declutter.declutterMissions')}
-        description="“Clean the house” becomes 10-minute missions tied to the spots that actually get messy, spread across the family for the week, with streaks and an items-gone counter that make the progress visible."
+        description={tr('declutterModule.cleanTheHouseBecomes10')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="declutter" iconOnly />
@@ -210,7 +210,7 @@ export function DeclutterModule() {
             {zones.data.some((z) => !z.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} archived</button>}
           </div>
           {activeZones.length === 0 ? (
-            <EmptyState icon={Sparkle} title={tr('declutter.noZonesYet')} description="A zone is any spot that gets messy: the kitchen counter, the junk drawer, the garage floor. Score how bad it is and missions follow." action={<Button onClick={() => setZoneForm({ open: true, zone: null })}><Plus className="h-4 w-4" /> {tr('declutter.addAZone')}</Button>} />
+            <EmptyState icon={Sparkle} title={tr('declutter.noZonesYet')} description={tr('declutterModule.aZoneIsAnySpot')} action={<Button onClick={() => setZoneForm({ open: true, zone: null })}><Plus className="h-4 w-4" /> {tr('declutter.addAZone')}</Button>} />
           ) : (
             <ul className="space-y-2">
               {(showArchived ? zones.data : activeZones).map((z) => {
@@ -314,17 +314,17 @@ export function DeclutterModule() {
       </div>
 
       {zoneForm.open && (
-        <ZoneForm familyId={familyId} userId={userId} zone={zoneForm.zone} onClose={() => setZoneForm({ open: false, zone: null })} onSaved={() => { setZoneForm({ open: false, zone: null }); success('Zone saved'); }} />
+        <ZoneForm familyId={familyId} userId={userId} zone={zoneForm.zone} onClose={() => setZoneForm({ open: false, zone: null })} onSaved={() => { setZoneForm({ open: false, zone: null }); success(tr('declutterModule.zoneSaved')); }} />
       )}
       {missionForm.open && (
         <MissionForm familyId={familyId} userId={userId} zones={activeZones} members={members} mission={missionForm.mission} zoneId={missionForm.zoneId} preset={missionForm.preset} defaultAssignee={selfMember?.id ?? null}
-          onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success('Mission saved'); }} />
+          onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
         <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
       )}
       {sessionOpen && (
-        <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success('Session logged'); }} />
+        <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />
       )}
     </div>
   );
@@ -340,7 +340,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Give the zone a name');
+    if (!name) return toastError(tr('declutterModule.giveTheZoneAName'));
     setLoading(true);
     const payload = {
       name, room: String(f.get('room') ?? '').trim() || null, kind: String(f.get('kind') ?? 'surface') as DeclutterZoneKind, clutter_score: score,
@@ -356,13 +356,13 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
   }
 
   return (
-    <Modal open title={zone ? 'Edit zone' : 'Add a zone'} description="A zone is one spot that gets messy. Small is good: a counter, not the whole kitchen." onClose={onClose}>
+    <Modal open title={zone ? 'Edit zone' : 'Add a zone'} description={tr('declutterModule.aZoneIsOneSpot')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('declutter.name')} required>{(id) => <Input id={id} name="name" defaultValue={zone?.name ?? ''} placeholder={tr('declutter.kitchenCounter')} autoFocus />}</Field>
           <Field label={tr('declutter.room')}>{(id) => <Input id={id} name="room" defaultValue={zone?.room ?? ''} placeholder={tr('declutter.kitchen')} />}</Field>
         </div>
-        <Field label={tr('declutter.kind')} hint="Picks the mission templates">{(id) => <Select id={id} name="kind" defaultValue={zone?.kind ?? 'surface'}>{ZONE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+        <Field label={tr('declutter.kind')} hint={tr('declutterModule.picksTheMissionTemplates')}>{(id) => <Select id={id} name="kind" defaultValue={zone?.kind ?? 'surface'}>{ZONE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{tr('declutter.howBadIsItRightNow')}</p>
           <div className="flex gap-2" role="radiogroup" aria-label={tr('declutter.clutterScore')}>
@@ -394,7 +394,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Give the mission a title');
+    if (!title) return toastError(tr('declutterModule.giveTheMissionATitle'));
     const minutes = Math.min(60, Math.max(5, Number(f.get('minutes') ?? 15)));
     setLoading(true);
     const payload = {
@@ -412,7 +412,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
   }
 
   return (
-    <Modal open title={mission ? 'Edit mission' : 'New mission'} description="Keep it to one timer: 5 to 30 minutes, one zone, one person." onClose={onClose}>
+    <Modal open title={mission ? 'Edit mission' : 'New mission'} description={tr('declutterModule.keepItToOneTimer')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('declutter.zone')}>{(id) => <Select id={id} name="zone_id" value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{tr('declutter.noZone')}</option>{zones.map((z) => <option key={z.id} value={z.id}>{zoneKindMeta(z.kind).emoji} {z.name}{z.room ? ` · ${z.room}` : ''}</option>)}</Select>}</Field>
         <Field label={tr('declutter.mission')} required>{(id) => <Input id={id} name="title" list="mission-ideas" defaultValue={mission?.title ?? preset?.title ?? ''} placeholder={tr('declutter.clearEverythingThatDoesntLiveHere')} autoFocus={!preset} />}</Field>
@@ -499,7 +499,7 @@ function SessionForm({ familyId, userId, zones, members, defaultMember, onClose,
   }
 
   return (
-    <Modal open title={tr('declutter.logASession')} description="Any timed tidy counts, mission or not. Sessions feed the streak and the monthly totals." onClose={onClose}>
+    <Modal open title={tr('declutter.logASession')} description={tr('declutterModule.anyTimedTidyCountsMission')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('declutter.minutes')} required>{(id) => <Input id={id} name="minutes" type="number" min={1} max={480} defaultValue={15} autoFocus />}</Field>

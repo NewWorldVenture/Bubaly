@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -49,6 +50,7 @@ function summarize(name: string, a: Record<string, unknown>): string {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
     const limited = await enforceAIRateLimit(supabase, `ai-import:${userId}`, { limit: 20 });
     if (!limited.ok) {
       return NextResponse.json(
-        { error: 'Too many imports. Please try again shortly.' },
+        { error: t('import.tooManyImportsPleaseTry') },
         { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
       );
     }
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
     // ── Phase 1: parse pasted text into proposed actions ───────────────────
     const text = (body.text ?? '').trim();
     if (!text) return NextResponse.json({ error: 'Paste something to import.' }, { status: 400 });
-    if (text.length > 8000) return NextResponse.json({ error: 'That text is too long (8,000 char max).' }, { status: 400 });
+    if (text.length > 8000) return NextResponse.json({ error: t('import.thatTextIsTooLong') }, { status: 400 });
 
     const now = new Date();
     const system = `You are Bubaly's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.

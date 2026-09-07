@@ -32,7 +32,7 @@ export default async function SyncAccountsPage() {
     return (
       <div className="module-page">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardSyncAccounts.connectedAccounts')}</h1>
-        <ErrorState message="Could not load your connected accounts from Supabase. Refresh and try again." />
+        <ErrorState message={t('accounts.couldNotLoadYourConnected')} />
         <Link href="/dashboard/sync/accounts" className="text-sm font-medium text-brand-text underline">{t('dashboardSyncAccounts.refreshConnectedAccounts')}</Link>
       </div>
     );
@@ -59,13 +59,13 @@ export default async function SyncAccountsPage() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{PROVIDER_LABELS[p]}</p>
                     {account
-                      ? <Badge tone="success">Connected</Badge>
-                      : <Badge tone="neutral">Not connected</Badge>}
+                      ? <Badge tone="success">{t('accounts.connected')}</Badge>
+                      : <Badge tone="neutral">{t('accounts.notConnected')}</Badge>}
                   </div>
                   {account?.external_id && <p className="mt-0.5 truncate text-xs text-muted">{account.external_id}</p>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {supportedKinds.length === 0
-                      ? <span className="text-xs text-muted">No supported item types</span>
+                      ? <span className="text-xs text-muted">{t('accounts.noSupportedItemTypes')}</span>
                       : supportedKinds.map((k) => (
                           <Badge key={k} tone="brand" title={CAPABILITIES[p][k].limitation}>{k}</Badge>
                         ))}

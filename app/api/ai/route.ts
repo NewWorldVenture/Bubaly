@@ -9,6 +9,7 @@
 // The assistant executes the shared toolbox plus every lib/ai/actions.ts
 // action (see lib/ai/assistant-engine.ts).
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServer } from '@/lib/supabase/server';
@@ -41,15 +42,16 @@ function unauthorized(message: string, code: string) {
 
 /** Resolve the caller from a bearer token (mobile) or the cookie session (web). */
 async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
+  const tr = await getTranslations();
   const token = extractBearerToken(req.headers.get('authorization'));
   if (token) {
     const bearer = await getBearerUserContext(token);
     if (bearer.ok) return { supabase: bearer.supabase, ctx: bearer.ctx, via: 'bearer' };
     if (bearer.reason === 'invalid_token') return unauthorized('Sign in to use the assistant.', 'invalid_token');
     if (bearer.reason === 'needs_family') {
-      return NextResponse.json({ error: 'Finish setting up your family in Bubaly first.', code: 'needs_family' }, { status: 403 });
+      return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Account context is temporarily unavailable.', code: 'unavailable' }, { status: 503 });
+    return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
   }
 
   const supabase = await createServer();
@@ -60,7 +62,7 @@ async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user && (await ensureActiveFamily(supabase, auth.user))) ctx = await getUserContext();
     if (!ctx || 'needsFamily' in ctx) {
-      return NextResponse.json({ error: 'Finish setting up your family in Bubaly first.', code: 'needs_family' }, { status: 403 });
+      return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
   }
   return { supabase, ctx, via: 'cookie' };
@@ -93,6 +95,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   try {
     const authed = await authenticate(req);
     if (authed instanceof NextResponse) return authed;
@@ -103,7 +106,7 @@ export async function POST(req: NextRequest) {
     // Shared bucket with /api/ai/chat so web + mobile draw from one allowance.
     const key = `ai-chat:${ctx.user.id}`;
     const rejected = (retryAfter: number) => NextResponse.json(
-      { error: 'Too many AI requests. Please try again shortly.' },
+      { error: tr('ai.tooManyAiRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(retryAfter) } },
     );
     const limited = rateLimit(key, AI_RATE_LIMIT);
@@ -131,7 +134,7 @@ export async function POST(req: NextRequest) {
     const json = wantsJsonTransport(req, (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>);
 
     if (!(await isAIConfigured())) {
-      return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', code: 'not_configured' }, { status: 503 });
+      return NextResponse.json({ error: tr('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     }
 
     // The client owns the conversation UUID, never its authorization boundary:
@@ -142,15 +145,15 @@ export async function POST(req: NextRequest) {
     );
     if (upsertError) {
       console.error('[api/ai] conversation initialization failed', upsertError);
-      return NextResponse.json({ error: describeActionError(upsertError, 'Could not start this conversation.') }, { status: 500 });
+      return NextResponse.json({ error: describeActionError(upsertError, tr('ai.couldNotStartThisConversation')) }, { status: 500 });
     }
     const { data: conversation, error: readError } = await supabase.from('ai_conversations')
       .select('id').eq('id', conversationId).eq('family_id', familyId).eq('user_id', ctx.user.id).maybeSingle();
     if (readError) {
       console.error('[api/ai] conversation ownership read failed', readError);
-      return NextResponse.json({ error: 'Could not open this conversation.' }, { status: 503 });
+      return NextResponse.json({ error: tr('ai.couldNotOpenThisConversation') }, { status: 503 });
     }
-    if (!conversation) return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+    if (!conversation) return NextResponse.json({ error: tr('ai.conversationNotFound') }, { status: 404 });
 
     const input: AssistantTurnInput = {
       supabase, familyId, userId: ctx.user.id, role: ctx.active.role,

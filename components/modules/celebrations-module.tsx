@@ -74,21 +74,21 @@ export function CelebrationsModule() {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Celebration added');
+    success(t('celebrationsModule.celebrationAdded'));
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
 
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(describeDbError(error)); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success(t('celebrationsModule.removed'));
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('celebrations.celebrations')}
-        description="Never miss a birthday or anniversary."
+        description={t('celebrationsModule.neverMissABirthdayOr')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="celebrations" iconOnly />
@@ -100,9 +100,9 @@ export function CelebrationsModule() {
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <ErrorState message="Could not load celebrations. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('celebrationsModule.couldNotLoadCelebrationsRefresh')} onRetry={refresh} />
       ) : upcoming.length === 0 ? (
-        <EmptyState icon={Gift} title={t('celebrations.noUpcomingCelebrations')} description="Add birthdays in family member profiles, or add a custom date here." />
+        <EmptyState icon={Gift} title={t('celebrations.noUpcomingCelebrations')} description={t('celebrationsModule.addBirthdaysInFamilyMember')} />
       ) : (
         <ul className="space-y-2">
           {upcoming.map((c) => {
@@ -129,7 +129,7 @@ export function CelebrationsModule() {
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title={t('celebrations.addACelebration')}>
         <form onSubmit={add} className="space-y-4">
-          <Field label={t('celebrations.whatAreWeCelebrating')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mom & Dad's anniversary" required />}</Field>
+          <Field label={t('celebrations.whatAreWeCelebrating')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('celebrationsModule.eGMomDadS')} required />}</Field>
           <Field label={t('celebrations.type')}>{(id) => (
             <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as CelebrationKind)}>
               <option value="birthday">{t('celebrations.birthday')}</option>

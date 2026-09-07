@@ -159,7 +159,7 @@ export function InboxModule() {
         <div className="module-page">
           <PageHeader
             title={tr('inbox.communicationsHub')}
-            description="All your family messages, calls, and school updates in one place."
+            description={tr('inboxModule.allYourFamilyMessagesCalls')}
             action={
               <div className="flex items-center gap-2">
                 <Link href="/dashboard/paperwork"
@@ -406,7 +406,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       if (!res.ok) { toastError(data.error ?? 'Could not draft a reply.'); return; }
       setDraft((data.message ?? '').trim());
     } catch {
-      toastError('Could not reach the AI. Please try again.');
+      toastError(tr('inboxModule.couldNotReachTheAi'));
     } finally {
       setDrafting(false);
     }
@@ -415,7 +415,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   async function copyDraft() {
     try {
       await navigator.clipboard.writeText(draft);
-      setCopied(true); success('Reply copied');
+      setCopied(true); success(tr('inboxModule.replyCopied'));
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard unavailable */ }
   }
@@ -441,7 +441,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Reply logged to the thread');
+    success(tr('inboxModule.replyLoggedToTheThread'));
     setDraft('');
     onRefresh();
   }
@@ -464,7 +464,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     setBusyItem(null);
     if (!result.ok) { toastError(result.error); return; }
     setAddedItems(prev => new Set(prev).add(i));
-    success('Added to reminders');
+    success(tr('inboxModule.addedToReminders'));
   }
 
   return (
@@ -621,7 +621,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
     const contact_id = String(form.get('contact_id') ?? '') || null;
     const received_at = String(form.get('received_at') ?? '') || new Date().toISOString();
 
-    if (!subject && !body) return toastError('Add a subject or message body');
+    if (!subject && !body) return toastError(tr('inboxModule.addASubjectOrMessage'));
 
     setLoading(true);
     const supabase = createClient();
@@ -737,7 +737,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
     });
     setSaving(false);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Saved to Communications Hub!');
+    success(tr('inboxModule.savedToCommunicationsHub'));
     onSaved();
   }
 

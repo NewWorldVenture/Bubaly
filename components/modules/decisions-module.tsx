@@ -76,7 +76,7 @@ export function DecisionsModule() {
     const results = await Promise.all(updates);
     const err = results.find((x) => x.error)?.error;
     if (err) { toastError(describeDbError(err)); return; }
-    success('Scores saved to the decision');
+    success(t('decisionsModule.scoresSavedToTheDecision'));
   }
 
   async function choose(optionId: string) {
@@ -85,7 +85,7 @@ export function DecisionsModule() {
     const { error } = await sb.from('family_decisions')
       .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id);
     if (error) { toastError(describeDbError(error)); return; }
-    success('Decision recorded');
+    success(t('decisionsModule.decisionRecorded'));
   }
 
   const loading = ld || lo;
@@ -95,14 +95,14 @@ export function DecisionsModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('decisions.decisionEngine')}
-        description="Weigh the trade-offs, see the reasoning, then decide together — the AI recommends, your family chooses."
+        description={t('decisionsModule.weighTheTradeOffsSee')}
         action={<Button onClick={() => setAddDecision(true)}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>}
       />
 
       {loading ? (
         <SkeletonList count={4} />
       ) : readError ? (
-        <ErrorState message="Could not load decision data. Refresh and try again." onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
+        <ErrorState message={t('decisionsModule.couldNotLoadDecisionData')} onRetry={() => { void refreshDecisions(); void refreshOptions(); }} />
       ) : (decisions ?? []).length === 0 ? (
         <EmptyState onAdd={() => setAddDecision(true)} />
       ) : (
@@ -214,13 +214,13 @@ export function DecisionsModule() {
       {addDecision && (
         <AddDecisionModal familyId={familyId} userId={userId}
           onClose={() => setAddDecision(false)}
-          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success('Decision created'); }}
+          onSaved={(id) => { setSelectedId(id); setAddDecision(false); success(t('decisionsModule.decisionCreated')); }}
           onError={toastError} />
       )}
       {addOption && selected && (
         <AddOptionModal familyId={familyId} userId={userId} decisionId={selected.id}
           onClose={() => setAddOption(false)}
-          onSaved={() => { setAddOption(false); success('Option added'); }}
+          onSaved={() => { setAddOption(false); success(t('decisionsModule.optionAdded')); }}
           onError={toastError} />
       )}
     </div>
@@ -233,10 +233,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Scale className="mx-auto mb-3 size-8 text-muted" />
       <h3 className="mb-1 text-base font-semibold">{t('decisions.decideTheHardOnesTogether')}</h3>
-      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Which vacation fits the budget and calendar? Is another activity worth the load? Add the
-        options and their trade-offs — the engine scores them, explains why, and you choose.
-      </p>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('decisionsModule.whichVacationFitsTheBudget')}</p>
       <Button onClick={onAdd}><Plus className="size-4" /> {t('decisions.newDecision')}</Button>
     </div>
   );
@@ -254,7 +251,7 @@ function AddDecisionModal({ familyId, userId, onClose, onSaved, onError }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = question.trim();
-    if (!q) { onError('Ask the question first'); return; }
+    if (!q) { onError(t('decisionsModule.askTheQuestionFirst')); return; }
     setSaving(true);
     const sb = createClient();
     const { data, error } = await sb.from('family_decisions').insert({
@@ -300,7 +297,7 @@ function AddOptionModal({ familyId, userId, decisionId, onClose, onSaved, onErro
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const l = label.trim();
-    if (!l) { onError('Name the option'); return; }
+    if (!l) { onError(t('decisionsModule.nameTheOption')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('decision_options').insert({

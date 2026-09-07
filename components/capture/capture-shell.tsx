@@ -70,13 +70,13 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     try {
       await undoCapture(createClient(), created.undo);
       const restore = text || created.title;
-      success('Undone');
+      success(t('captureShell.undone'));
       setCreated(null);
       setText(restore);
       setMode('type');
       textRef.current?.focus();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not undo'));
+      toastError(describeDbError(err, t('captureShell.couldNotUndo')));
     } finally {
       setUndoing(false);
     }
@@ -102,7 +102,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
         setCreated({ ...res, destination: route.destination });
       } catch (err) {
-        toastError(describeDbError(err, 'Could not save'));
+        toastError(describeDbError(err, t('captureShell.couldNotSave')));
       } finally {
         setRouting(false);
       }
@@ -135,7 +135,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     };
     const w = window as unknown as Record<string, unknown>;
     const SR: SRCtor | undefined = (w['SpeechRecognition'] ?? w['webkitSpeechRecognition']) as SRCtor | undefined;
-    if (!SR) { toastError('Voice input is not supported in this browser.'); return; }
+    if (!SR) { toastError(t('captureShell.voiceInputIsNotSupported')); return; }
     const recognition = new SR();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
@@ -146,7 +146,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
       setRecording(false);
       setMode('type');
     };
-    recognition.onerror = () => { setRecording(false); toastError('Could not capture voice. Try again.'); };
+    recognition.onerror = () => { setRecording(false); toastError(t('captureShell.couldNotCaptureVoiceTry')); };
     recognition.onend = () => setRecording(false);
     recognition.start();
   }
@@ -272,7 +272,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
 
         {/* Quick route shortcuts — the member's own picks; customize to edit.
             Shared component = identical behavior in the Quick-capture modal. */}
-        <CaptureShortcuts initialKeys={initialShortcuts} heading="Or jump directly to" columns={3} />
+        <CaptureShortcuts initialKeys={initialShortcuts} heading={t('captureShell.orJumpDirectlyTo')} columns={3} />
       </div>
     </div>
   );

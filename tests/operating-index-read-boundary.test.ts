@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const server = fs.readFileSync('lib/operating-index/server.ts', 'utf8');
@@ -13,7 +14,7 @@ describe('Operating Index and reasoning read boundaries', () => {
     expect(server).toContain('if (recentError)');
     expect(context).toContain('const readError = ents.error ?? edges.error;');
     expect(context).toContain('throw readError;');
-    expect(page).toContain('Could not load your family operating index from Supabase. Refresh and try again.');
+    expectSays(page, 'familyOperatingIndex.couldNotLoadYourFamily', 'Could not load your family operating index from Supabase. Refresh and try again.');
     expect(page).toContain('loadFamilyGraph(supabase, ctx.active.familyId)');
   });
 });

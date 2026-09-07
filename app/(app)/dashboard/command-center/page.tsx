@@ -55,7 +55,7 @@ export default async function CommandCenterPage() {
   ].find(Boolean);
   if (readError) {
     console.error('[dashboard/command-center] command center read failed', readError);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   const { data: members } = membersResult;
@@ -73,7 +73,7 @@ export default async function CommandCenterPage() {
     ({ change } = await loadOperatingIndex(supabase, familyId, now));
   } catch (error) {
     console.error('[dashboard/command-center] operating index read failed', error);
-    return <ErrorState message="Could not load your family command center from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──
@@ -192,8 +192,8 @@ export default async function CommandCenterPage() {
                 <li key={e.id} className="flex items-center gap-3 py-2.5">
                   <span className="w-32 shrink-0 text-xs text-muted">{fmtDate(e.starts_at)} · {e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.title}</span>
-                  {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">Conflict</span>}
-                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted/60">Unassigned</span>}
+                  {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">{t('commandCenter.conflict')}</span>}
+                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted/60">{t('commandCenter.unassigned')}</span>}
                 </li>
               );
             })}

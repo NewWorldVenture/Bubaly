@@ -31,7 +31,7 @@ export default async function AdminSocialPage() {
       <div className="module-page space-y-5">
         <h1 className="text-2xl font-bold tracking-tight">{t('adminSocial.socialPlatform')}</h1>
         <AdminSocialSubnav active="/admin/social" />
-        <ErrorState message="Could not load social platform data from Supabase. Refresh and try again." />
+        <ErrorState message={t('social.couldNotLoadSocialPlatform')} />
         <a href="/admin/social" className="text-sm font-medium text-brand-text underline">{t('adminSocial.refreshSocialOverview')}</a>
       </div>
     );
@@ -67,7 +67,7 @@ export default async function AdminSocialPage() {
           {PLATFORMS.map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">
               <PlatformDot platform={p} />
-              {isProviderConfigured(p) ? <Badge tone="success">Configured</Badge> : <Badge tone="neutral">Missing creds</Badge>}
+              {isProviderConfigured(p) ? <Badge tone="success">{t('social.configured')}</Badge> : <Badge tone="neutral">{t('social.missingCreds')}</Badge>}
             </span>
           ))}
         </div>

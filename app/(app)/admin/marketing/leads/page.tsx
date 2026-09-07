@@ -9,7 +9,7 @@ import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { scoreLead, summarizeLeads, LEAD_BAND_LABEL, type LeadBand } from '@/lib/marketing/lead-score';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Lead Scoring', robots: { index: false } };
+export const metadata: Metadata = { title: 'leads.leadScoring', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const BAND_STYLE: Record<LeadBand, string> = {
@@ -101,15 +101,16 @@ export default async function LeadScoringPage() {
   );
 }
 
-function AdminLeadsReadError() {
+async function AdminLeadsReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Lead Scoring</h1>
-        <p className="mt-1 text-sm text-muted">Prioritize inbound leads using live contact and customer signals.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('leads.leadScoring')}</h1>
+        <p className="mt-1 text-sm text-muted">{tr('leads.prioritizeInboundLeadsUsingLive')}</p>
       </div>
-      <ErrorState message="Could not load lead scoring data from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/leads" className="text-sm font-medium text-brand-text underline">Refresh leads</Link>
+      <ErrorState message={tr('leads.couldNotLoadLeadScoring')} />
+      <Link href="/admin/marketing/leads" className="text-sm font-medium text-brand-text underline">{tr('leads.refreshLeads')}</Link>
     </div>
   );
 }

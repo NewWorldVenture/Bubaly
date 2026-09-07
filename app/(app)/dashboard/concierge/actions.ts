@@ -15,6 +15,7 @@
 // audited in family_automation_runs (0022) with its trust reasoning, so the
 // family always sees what Bubaly did and why. No new schema.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -58,9 +59,10 @@ async function materializePlan(
  * Manual apply — the existing "Make it happen" buttons. Unchanged behavior.
  */
 export async function applyConciergePlanAction(planId: string, kinds: WriteBackKind[]): Promise<Result> {
-  if (!planId) return { ok: false, error: 'Invalid plan' };
+  const t = await getTranslations();
+  if (!planId) return { ok: false, error: t('actions.invalidPlan') };
   const requested = kinds.filter((k): k is WriteBackKind => VALID.includes(k));
-  if (requested.length === 0) return { ok: false, error: 'Nothing to apply' };
+  if (requested.length === 0) return { ok: false, error: t('actions.nothingToApply') };
 
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -71,7 +73,7 @@ export async function applyConciergePlanAction(planId: string, kinds: WriteBackK
     .eq('id', planId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
-  if (!plan) return { ok: false, error: 'Plan not found' };
+  if (!plan) return { ok: false, error: t('actions.planNotFound') };
 
   const applied = await materializePlan(sb, ctx.active.familyId, ctx.user.id, plan, requested);
   revalidatePath(PATH);
@@ -93,7 +95,8 @@ export type LoopResult =
 export async function planAcceptedAction(
   planId: string, prevStatus: string, nextStatus: string,
 ): Promise<LoopResult> {
-  if (!planId) return { ok: false, error: 'Invalid plan' };
+  const t = await getTranslations();
+  if (!planId) return { ok: false, error: t('actions.invalidPlan') };
   if (!isAcceptance(prevStatus, nextStatus)) return { ok: true, mode: 'off', applied: [], summary: null };
 
   const ctx = await requireUserContext();
@@ -106,7 +109,7 @@ export async function planAcceptedAction(
     .eq('id', planId)
     .eq('family_id', familyId)
     .maybeSingle();
-  if (!plan) return { ok: false, error: 'Plan not found' };
+  if (!plan) return { ok: false, error: t('actions.planNotFound') };
 
   // Nothing new to do? Don't open approvals for a no-op.
   const kinds = availableWriteBackKinds(plan);
@@ -180,25 +183,26 @@ export async function planAcceptedAction(
 
 /** Approve a queued run (managers only): execute it and stamp both audits. */
 export async function executeQueuedRunAction(runId: string): Promise<LoopResult> {
-  if (!runId) return { ok: false, error: 'Invalid run' };
+  const t = await getTranslations();
+  if (!runId) return { ok: false, error: t('actions.invalidRun') };
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can approve' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanApprove') };
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
   const { data: run } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', familyId).maybeSingle();
-  if (!run || run.status !== 'pending') return { ok: false, error: 'Run not found or already handled' };
+  if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   const meta = (run.metadata ?? {}) as { plan_id?: string; kinds?: WriteBackKind[]; approval_id?: string | null };
-  if (!meta.plan_id) return { ok: false, error: 'Run has no plan attached' };
+  if (!meta.plan_id) return { ok: false, error: t('actions.runHasNoPlanAttached') };
 
   const { data: plan } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', meta.plan_id).eq('family_id', familyId).maybeSingle();
-  if (!plan) return { ok: false, error: 'Plan no longer exists' };
+  if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
   const applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
@@ -214,7 +218,7 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   }).eq('id', runId).eq('family_id', familyId);
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
-    return { ok: false, error: describeActionError(runErr, 'Applied the plan but could not record the run as executed. Refresh and try again.') };
+    return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
 
   if (meta.approval_id) {
@@ -232,21 +236,22 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
 
 /** Dismiss a queued run (managers only) — nothing executes. */
 export async function dismissQueuedRunAction(runId: string): Promise<Result> {
-  if (!runId) return { ok: false, error: 'Invalid run' };
+  const t = await getTranslations();
+  if (!runId) return { ok: false, error: t('actions.invalidRun') };
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can decline' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanDecline') };
   const sb = await createServer();
 
   const { data: run } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!run || run.status !== 'pending') return { ok: false, error: 'Run not found or already handled' };
+  if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
     .eq('id', runId).eq('family_id', ctx.active.familyId);
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
-    return { ok: false, error: describeActionError(dismissErr, 'Could not dismiss that run. Refresh and try again.') };
+    return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
   }
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
@@ -271,9 +276,10 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
  * auto → allow · ask → require_approval · off → deny.
  */
 export async function setConciergeAutopilotAction(level: AutopilotLevel): Promise<Result> {
-  if (!['auto', 'ask', 'off'].includes(level)) return { ok: false, error: 'Invalid level' };
+  const t = await getTranslations();
+  if (!['auto', 'ask', 'off'].includes(level)) return { ok: false, error: t('actions.invalidLevel') };
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents/guardians can change autopilot' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanChange') };
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const effect = dialEffect(level);

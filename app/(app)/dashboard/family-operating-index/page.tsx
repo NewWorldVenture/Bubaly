@@ -65,7 +65,7 @@ export default async function FamilyOperatingIndexPage() {
     indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const { index, priorComposite, trend, change, orchestrator } = indexResult;
   const band = BAND_COPY[index.band];
@@ -77,7 +77,7 @@ export default async function FamilyOperatingIndexPage() {
     graph = await loadFamilyGraph(supabase, ctx.active.familyId);
   } catch (error) {
     console.error('[dashboard/family-operating-index] graph read failed', error);
-    return <ErrorState message="Could not load your family operating index from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
   }
   const relationshipInsights = graph ? graphReasoningInsights(graph, index.band) : [];
 
@@ -265,10 +265,7 @@ export default async function FamilyOperatingIndexPage() {
         </div>
       </section>
 
-      <p className="mt-5 text-center text-[11px] text-muted">
-        Computed live from your family’s calendar, chores, bills, documents, approvals and goals.
-        Saved once a day so you can watch the trend.
-      </p>
+      <p className="mt-5 text-center text-[11px] text-muted">{t('familyOperatingIndex.computedLiveFromYourFamily')}</p>
     </div>
   );
 }

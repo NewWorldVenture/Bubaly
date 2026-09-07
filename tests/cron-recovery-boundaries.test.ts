@@ -14,7 +14,7 @@ describe('scheduled recovery failure contracts', () => {
 
   it('sanitizes and fails the Network Aggregation cron when its core fails', () => {
     const source = read('app/api/cron/network-aggregate/route.ts');
-    expect(source).toContain("error: 'Network aggregation failed.'");
+    expect(source).toContain("error: t('networkAggregate.networkAggregationFailed')");
     expect(source).toContain('{ status: result.ok ? 200 : 502 }');
     expect(source).not.toContain('return NextResponse.json(result)');
   });

@@ -83,7 +83,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
 
       {/* Saved contractors */}
       {contractors.length === 0 ? (
-        <EmptyState icon={Users} title={tr('prosClient.noSavedContractors')} description="Save your trusted pros so they're one tap away next time something breaks." />
+        <EmptyState icon={Users} title={tr('prosClient.noSavedContractors')} description={tr('prosClient.saveYourTrustedProsSo')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {contractors.map((c) => (
@@ -97,9 +97,9 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
               </div>
               {c.notes && <p className="text-sm text-muted">{c.notes}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
-                {c.phone && <a href={`tel:${c.phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" /> Call</a>}
-                {c.email && <a href={`mailto:${c.email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Mail className="h-3.5 w-3.5" /> Email</a>}
-                {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" /> Site</a>}
+                {c.phone && <a href={`tel:${c.phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" />{' '}{tr('prosClient.call')}</a>}
+                {c.email && <a href={`mailto:${c.email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Mail className="h-3.5 w-3.5" />{' '}{tr('prosClient.email')}</a>}
+                {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" />{' '}{tr('prosClient.site')}</a>}
                 <button onClick={() => start(async () => { await deleteContractorAction(c.id); })} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </Card>

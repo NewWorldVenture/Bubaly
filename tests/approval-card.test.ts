@@ -26,7 +26,12 @@ const row = {
   payload: { name: 'calendar.createEvent', args: { title: 'Soccer', starts_at: '2026-09-06T13:00:00Z', all_day: false, guests: 3, secret_token: 'abc' } },
   payload_kind: 'tool', amount_cents: 4200, confidence: 0.91,
   reasoning: 'CHAIN OF THOUGHT: the model considered three options', required_approvals: 1, approvals: [],
-  status: 'pending', priority: 'normal', created_at: '2026-09-05T10:00:00Z', expires_at: '2026-09-07T10:00:00Z',
+  status: 'pending', priority: 'normal', created_at: '2026-09-05T10:00:00Z',
+  // RELATIVE, because the case below asserts the card says "Expires in". A fixed
+  // timestamp is a date the wall clock eventually passes, and this one did — at
+  // 10:00 UTC on 2026-09-07 the card started saying "Expired" and the test went
+  // red on a tree nobody had touched.
+  expires_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
   run_id: 'run-1', plan_step_id: null, plan_step_ids: [],
   consequences: ['Adds soccer at 9:00 AM Saturday', 'Reserves 12:00–2:00 PM for family lunch', 'Reminds Emma to pack her uniform'],
   edited_payload: null,

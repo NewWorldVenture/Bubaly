@@ -23,10 +23,7 @@ export default async function ConnectPage() {
         <ArrowLeft className="h-4 w-4" /> {t('dashboardSocialAccountsConnect.backToAccounts')}
       </Link>
       <p className="text-sm text-muted">
-        {t('dashboardSocialAccountsConnect.connectAPlatformToPullIts')} <strong>{t('dashboardSocialAccountsConnect.requiresSetup')}</strong> needs its
-        developer-app credentials configured in this environment before it can authorize — we never mark an account
-        connected without a real authorization.
-      </p>
+        {t('dashboardSocialAccountsConnect.connectAPlatformToPullIts')} <strong>{t('dashboardSocialAccountsConnect.requiresSetup')}</strong>{' '}{t('connect.needsItsDeveloperAppCredentials')}</p>
       <ConnectGrid readiness={readiness} />
     </div>
   );

@@ -40,13 +40,13 @@ export function GiftView({ links, pending, childOptions, canManage }: {
   async function dismiss(g: PendingGift) {
     const res = await dismissGiftAction({ giftPaymentId: g.id });
     if (!res.ok) return toastError(res.error ?? 'Could not dismiss');
-    success('Gift declined');
+    success(t('giftView.giftDeclined'));
     router.refresh();
   }
 
   return (
     <div className="module-page">
-      <PageHeader title={t('gift.familyWallet')} description="Let grandparents and relatives gift with a simple link."
+      <PageHeader title={t('gift.familyWallet')} description={t('giftView.letGrandparentsAndRelativesGift')}
         action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       <WalletSubnav />
 
@@ -64,8 +64,8 @@ export function GiftView({ links, pending, childOptions, canManage }: {
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" /> Approve</button>
-                    <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label="Decline"><X className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => approve(g)} className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><Check className="h-3.5 w-3.5" />{' '}{t('giftView.approve')}</button>
+                    <button onClick={() => dismiss(g)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger" aria-label={t('giftView.decline')}><X className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </div>
@@ -78,7 +78,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
       <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-muted">{t('gift.giftLinks')}</h2>
       {links.length === 0 ? (
         <EmptyState icon={Gift} title={t('gift.noGiftLinksYet')}
-          description="Create a link and share it with grandparents — they can gift in seconds."
+          description={t('giftView.createALinkAndShare')}
           action={canManage ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t('gift.newGiftLink')}</Button> : undefined} />
       ) : (
         <div className="space-y-2">
@@ -101,7 +101,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true); success('Link copied');
+      setCopied(true); success(t('giftView.linkCopied'));
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard unavailable */ }
   }
@@ -151,7 +151,7 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!childId) return toastError('Pick a child.');
+    if (!childId) return toastError(t('giftView.pickAChild'));
     const form = new FormData(e.currentTarget);
     setLoading(true);
     const res = await createGiftLinkAction({
@@ -162,7 +162,7 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not create link');
-    success('Gift link created');
+    success(t('giftView.giftLinkCreated'));
     onClose();
     router.refresh();
   }
@@ -181,12 +181,12 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
             )}</Field>
             <Field label={t('gift.occasion')}>{(id) => (
               <select id={id} name="occasion" className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
-                <option value="">None</option>
+                <option value="">{t('giftView.none')}</option>
                 {GIFT_OCCASIONS.map((o) => <option key={o} value={o}>{occasionLabel(o)}</option>)}
               </select>
             )}</Field>
             <Field label={t('gift.suggestedAmountsUsdCommaSeparated')}>{(id) => <Input id={id} name="suggested" placeholder="25, 50, 100" defaultValue="25, 50, 100" />}</Field>
-            <Field label={t('gift.messageToShareOptional')}>{(id) => <Input id={id} name="message" placeholder="Help Mia reach her bike goal!" />}</Field>
+            <Field label={t('gift.messageToShareOptional')}>{(id) => <Input id={id} name="message" placeholder={t('giftView.helpMiaReachHerBike')} />}</Field>
           </>
         )}
         <div className="flex justify-end gap-2 pt-2">

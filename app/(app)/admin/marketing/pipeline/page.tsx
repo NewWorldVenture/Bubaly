@@ -13,7 +13,7 @@ import type { Tables } from '@/lib/database.types';
 import { saveDealAction, setDealStageAction, deleteDealAction } from '../crm/actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sales Pipeline', robots: { index: false } };
+export const metadata: Metadata = { title: 'pipeline.salesPipeline', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Deal = Tables<'crm_deals'>;
@@ -134,15 +134,16 @@ function nextStage(stage: DealStage): DealStage {
   return i >= 0 && i < order.length - 1 ? order[i + 1] : 'won';
 }
 
-function AdminPipelineReadError() {
+async function AdminPipelineReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sales Pipeline</h1>
-        <p className="mt-1 text-sm text-muted">Track opportunities from lead to close.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('pipeline.salesPipeline')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('pipeline.trackOpportunitiesFromLeadTo')}</p>
       </div>
-      <ErrorState message="Could not load the sales pipeline from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/pipeline" className="text-sm font-medium text-brand-text underline">Refresh pipeline</Link>
+      <ErrorState message={t('pipeline.couldNotLoadTheSales')} />
+      <Link href="/admin/marketing/pipeline" className="text-sm font-medium text-brand-text underline">{t('pipeline.refreshPipeline')}</Link>
     </div>
   );
 }

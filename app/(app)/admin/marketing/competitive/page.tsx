@@ -14,7 +14,7 @@ import {
 } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Competitive Intelligence', robots: { index: false } };
+export const metadata: Metadata = { title: 'competitive.competitiveIntelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Competitor = Tables<'competitors'>;
@@ -24,12 +24,13 @@ type Backlink = Tables<'backlinks'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Competitive Intelligence</h1>
-      <ErrorState message="Could not load competitive intelligence from Supabase. Refresh and try again." />
-      <a href="/admin/marketing/competitive" className="text-sm font-medium text-brand-text underline">Refresh competitive intelligence</a>
+      <h1 className="text-xl font-black sm:text-2xl">{t('competitive.competitiveIntelligence')}</h1>
+      <ErrorState message={t('competitive.couldNotLoadCompetitiveIntelligence')} />
+      <a href="/admin/marketing/competitive" className="text-sm font-medium text-brand-text underline">{t('competitive.refreshCompetitiveIntelligence')}</a>
     </div>
   );
 }

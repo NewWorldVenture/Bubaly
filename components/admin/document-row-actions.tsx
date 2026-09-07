@@ -24,12 +24,12 @@ export function DocumentRowActions({ documentId, storagePath }: { documentId: st
   }
 
   async function remove() {
-    if (!confirm('Delete this document permanently? This cannot be undone.')) return;
+    if (!confirm(t('documentRowActions.deleteThisDocumentPermanentlyThis'))) return;
     setBusy('delete');
     const res = await adminDeleteDocumentAction(documentId, storagePath);
     setBusy(null);
     if (!res.ok) return toastError(res.error);
-    success('Document deleted');
+    success(t('documentRowActions.documentDeleted'));
     router.refresh();
   }
 

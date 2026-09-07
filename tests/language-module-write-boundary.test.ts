@@ -39,7 +39,7 @@ describe('language-module writes fail visibly', () => {
     const [form] = bodies('onSubmit').filter((b) => b.includes("from('language_goals')"));
     expect(form).toContain('const { error: deckError } =');
     expect(form).toContain('if (deckError) toastError(describeDbError(deckError))');
-    expect(form).toContain('The target level must be above the current level');
+    expect(form).toContain('languageModule.theTargetLevelMustBe');
   });
   it('deleting a goal is confirmed', () => {
     expect(bodies('deleteGoal')[0]).toMatch(/if \(!confirm\(/);

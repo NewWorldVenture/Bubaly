@@ -39,7 +39,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
   async function ask(e: React.FormEvent) {
     e.preventDefault();
     if (!asking.trim()) return;
-    if (!meId) { toastError('Join the family as a member to ask'); return; }
+    if (!meId) { toastError(t('listingQuestions.joinTheFamilyAsA')); return; }
     setBusy(true);
     const { error } = await createClient().from('marketplace_questions').insert({
       family_id: familyId, listing_id: listingId, asker_member: meId, question: asking.trim(), created_by: userId,
@@ -47,7 +47,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
     setBusy(false);
     if (error) { toastError(describeDbError(error)); return; }
     setAsking('');
-    success('Question sent');
+    success(t('listingQuestions.questionSent'));
   }
 
   const rows = questions ?? [];
@@ -90,9 +90,9 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
                   </div>
                 </div>
               ) : isOwner ? (
-                <AnswerForm question={q} onAnswered={() => success('Answer posted')} onError={toastError} answererId={meId} />
+                <AnswerForm question={q} onAnswered={() => success(t('listingQuestions.answerPosted'))} onError={toastError} answererId={meId} />
               ) : (
-                <p className="mt-1.5 text-xs text-muted">Awaiting the seller’s reply…</p>
+                <p className="mt-1.5 text-xs text-muted">{t('listingQuestions.awaitingTheSellerSReply')}</p>
               )}
             </li>
           ))}

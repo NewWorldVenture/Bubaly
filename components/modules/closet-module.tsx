@@ -109,7 +109,7 @@ export function ClosetModule() {
   const memberName = (id: string) => members.find((m) => m.id === id)?.display_name ?? 'Member';
 
   async function logWear(itemIds: string[], outfitId: string | null) {
-    if (!itemIds.length) return toastError('Pick at least one item first');
+    if (!itemIds.length) return toastError(t('closetModule.pickAtLeastOneItem'));
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.from('outfit_logs').insert({
@@ -124,11 +124,11 @@ export function ClosetModule() {
     setBusy(false);
     const failed = results.find((r) => r.error);
     if (failed?.error) return toastError(describeDbError(failed.error));
-    success('Logged today’s outfit');
+    success(t('closetModule.loggedTodaySOutfit'));
   }
 
   async function saveSuggestionAsOutfit() {
-    if (!suggestion.picks.length) return toastError('Nothing to save yet');
+    if (!suggestion.picks.length) return toastError(t('closetModule.nothingToSaveYet'));
     const band = tempBand(tempC);
     const { error } = await createClient().from('outfits').insert({
       family_id: familyId, member_id: memberId,
@@ -136,7 +136,7 @@ export function ClosetModule() {
       occasion, item_ids: suggestion.picks.map((p) => p.item.id), temp_min_c: band.min, temp_max_c: band.max, created_by: userId,
     });
     if (error) return toastError(describeDbError(error));
-    success('Outfit saved');
+    success(t('closetModule.outfitSaved'));
   }
 
   async function setItemStatus(item: Item, status: WardrobeStatus) {
@@ -149,7 +149,7 @@ export function ClosetModule() {
     if (!confirm(`Remove ${item.name} from the closet?`)) return;
     const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
-    success('Item removed');
+    success(t('closetModule.itemRemoved'));
   }
 
   async function toggleFavorite(outfit: Outfit) {
@@ -161,7 +161,7 @@ export function ClosetModule() {
     if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
     const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
     if (error) return toastError(describeDbError(error));
-    success('Outfit deleted');
+    success(t('closetModule.outfitDeleted'));
   }
 
   const loading = items.loading || outfits.loading || logs.loading;
@@ -169,13 +169,13 @@ export function ClosetModule() {
   const refresh = () => { void items.refresh(); void outfits.refresh(); void logs.refresh(); };
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load the closet. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('closetModule.couldNotLoadTheCloset')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('closet.closetOutfits')}
-        description="Every family member’s closet, today’s outfit picked from what they own, and the laundry, outgrown and cost-per-wear signals that keep it honest."
+        description={t('closetModule.everyFamilyMemberSCloset')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="closet" iconOnly />
@@ -290,7 +290,7 @@ export function ClosetModule() {
       </div>
 
       {memberItems.length === 0 ? (
-        <EmptyState icon={Shirt} title={`${memberName(memberId)}’s closet is empty`} description="Add tops, bottoms, shoes and outerwear with a warmth and formality rating — the outfit engine does the rest." action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addTheFirstItem')}</Button>} />
+        <EmptyState icon={Shirt} title={`${memberName(memberId)}’s closet is empty`} description={t('closetModule.addTopsBottomsShoesAnd')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addTheFirstItem')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
@@ -386,7 +386,7 @@ export function ClosetModule() {
       {builderOpen && memberId && (
         <OutfitBuilder
           familyId={familyId} userId={userId} memberId={memberId} items={memberItems.filter((i) => i.status === 'active')}
-          onClose={() => setBuilderOpen(false)} onSaved={() => { setBuilderOpen(false); success('Outfit saved'); }}
+          onClose={() => setBuilderOpen(false)} onSaved={() => { setBuilderOpen(false); success(t('closetModule.outfitSaved')); }}
         />
       )}
     </div>
@@ -422,7 +422,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Name is required');
+    if (!name) return toastError(t('closetModule.nameIsRequired'));
     setLoading(true);
     const payload = {
       member_id: String(f.get('member_id') ?? memberId),
@@ -467,8 +467,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
           <Field label={t('closet.brand')}>{(id) => <Input id={id} name="brand" defaultValue={item?.brand ?? ''} placeholder={t('closet.optional')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('closet.warmth1Light5Heavy')} hint="Drives the weather match">{(id) => <Input id={id} name="warmth" type="number" min={1} max={5} defaultValue={item?.warmth ?? 3} />}</Field>
-          <Field label={t('closet.formality1Lounge5Dressy')} hint="Drives the occasion match">{(id) => <Input id={id} name="formality" type="number" min={1} max={5} defaultValue={item?.formality ?? 2} />}</Field>
+          <Field label={t('closet.warmth1Light5Heavy')} hint={t('closetModule.drivesTheWeatherMatch')}>{(id) => <Input id={id} name="warmth" type="number" min={1} max={5} defaultValue={item?.warmth ?? 3} />}</Field>
+          <Field label={t('closet.formality1Lounge5Dressy')} hint={t('closetModule.drivesTheOccasionMatch')}>{(id) => <Input id={id} name="formality" type="number" min={1} max={5} defaultValue={item?.formality ?? 2} />}</Field>
         </div>
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{t('closet.seasonsLeaveEmptyForYearRound')}</p>
@@ -486,7 +486,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('closet.purchasedOn')}>{(id) => <Input id={id} name="purchased_on" type="date" defaultValue={item?.purchased_on ?? ''} />}</Field>
-          <Field label={t('closet.price')} hint="Enables cost per wear">{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
+          <Field label={t('closet.price')} hint={t('closetModule.enablesCostPerWear')}>{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
         </div>
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
@@ -519,8 +519,8 @@ function OutfitBuilder({ familyId, userId, memberId, items, onClose, onSaved }: 
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const name = String(f.get('name') ?? '').trim();
-    if (!name) return toastError('Give the outfit a name');
-    if (selected.length === 0) return toastError('Pick at least one item');
+    if (!name) return toastError(t('closetModule.giveTheOutfitAName'));
+    if (selected.length === 0) return toastError(t('closetModule.pickAtLeastOneItem2'));
     setLoading(true);
     const { error } = await createClient().from('outfits').insert({
       family_id: familyId, member_id: memberId, name, occasion: String(f.get('occasion') ?? 'everyday') as OutfitOccasion,

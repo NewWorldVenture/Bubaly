@@ -32,8 +32,8 @@ export function FeedbackAttachmentUpload({
   const [ownedPath, setOwnedPath] = useState<string | null>(null);
 
   async function handleFile(file: File) {
-    if (!OK_TYPES.includes(file.type)) { toastError('Please choose a JPEG, PNG, WebP, GIF or AVIF image.'); return; }
-    if (file.size > FEEDBACK_ATTACHMENT_MAX_BYTES) { toastError('That image is over 10 MB — pick a smaller one.'); return; }
+    if (!OK_TYPES.includes(file.type)) { toastError(t('feedbackAttachmentUpload.pleaseChooseAJpegPng')); return; }
+    if (file.size > FEEDBACK_ATTACHMENT_MAX_BYTES) { toastError(t('feedbackAttachmentUpload.thatImageIsOver10')); return; }
     setUploading(true);
     try {
       const sb = createClient();
@@ -47,7 +47,7 @@ export function FeedbackAttachmentUpload({
       setOwnedPath(data.path);
       onChange(pub.publicUrl);
     } catch {
-      toastError('Upload failed. Please try again.');
+      toastError(t('feedbackAttachmentUpload.uploadFailedPleaseTryAgain'));
     } finally {
       setUploading(false);
     }

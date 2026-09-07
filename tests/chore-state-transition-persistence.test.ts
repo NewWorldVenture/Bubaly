@@ -16,7 +16,7 @@ describe('chore state transition persistence', () => {
 
   it('does not report auto-approval after reward finalization fails', () => {
     expect(source).toContain("await setSubmissionStatus(service, familyId, submission.id, 'parent_review');");
-    expect(source).toContain("return { ok: false, error: 'Could not finish the chore approval. It was sent for parent review.' }");
+    expect(source).toContain("return { ok: false, error: t('actions.couldNotFinishTheChore2') }");
   });
 
   it('rolls back dispute and parent-review follow-up writes', () => {

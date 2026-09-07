@@ -110,7 +110,7 @@ export function TripsModule() {
   }
   async function saveTrip(e: React.FormEvent) {
     e.preventDefault();
-    if (!tripForm.name.trim()) { toastError('Trip name is required'); return; }
+    if (!tripForm.name.trim()) { toastError(tr('tripsModule.tripNameIsRequired')); return; }
     setSavingTrip(true);
     const sb = createClient();
     const fields = {
@@ -131,7 +131,7 @@ export function TripsModule() {
     const sb = createClient();
     const { error: err } = await sb.from('trips').delete().eq('id', t.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Trip deleted');
+    success(tr('tripsModule.tripDeleted'));
     if (selectedId === t.id) setSelectedId(null);
   }
   function toggleTraveler(id: string) {
@@ -143,7 +143,7 @@ export function TripsModule() {
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    if (!itemForm.label.trim()) { toastError('Label is required'); return; }
+    if (!itemForm.label.trim()) { toastError(tr('tripsModule.labelIsRequired')); return; }
     setSavingItem(true);
     const sb = createClient();
     const { error: err } = await sb.from('trip_items').insert({
@@ -153,7 +153,7 @@ export function TripsModule() {
     });
     setSavingItem(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Item added');
+    success(tr('tripsModule.itemAdded'));
     setItemModal(false);
   }
   async function toggleItem(it: TripItem) {
@@ -318,7 +318,7 @@ export function TripsModule() {
     <div>
       <PageHeader
         title={tr('trips.tripPlanner')}
-        description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
+        description={tr('tripsModule.planFamilyTravelEndTo')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="trips" />

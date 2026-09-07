@@ -69,7 +69,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
         title={t('agents.yourFamilyAssistant')}
-        description="One assistant, a team of specialists behind it — each watching its corner of family life."
+        description={t('agentsModule.oneAssistantATeamOf')}
       />
 
       {/* Chief of Staff synthesis */}
@@ -161,7 +161,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
               if (acts.length === 0) return null;
               return (
                 <div className="mt-5">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recent activity</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('agentsModule.recentActivity')}</h3>
                   <ul className="space-y-2">
                     {acts.slice(0, 8).map((a) => (
                       <li key={a.id} className="rounded-xl border border-border bg-bg/30 p-2.5">
@@ -170,9 +170,9 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
                             <p className="truncate text-sm text-fg">{a.title}</p>
                             {a.detail && <p className="truncate text-xs text-muted">{a.detail}</p>}
                           </div>
-                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
-                          <button onClick={() => resolve(a, 'done')} aria-label="Mark done" className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
-                          <button onClick={() => resolve(a, 'dismissed')} aria-label="Dismiss" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label={t('agentsModule.open')}><ArrowRight className="h-4 w-4" /></Link>}
+                          <button onClick={() => resolve(a, 'done')} aria-label={t('agentsModule.markDone')} className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
+                          <button onClick={() => resolve(a, 'dismissed')} aria-label={t('agentsModule.dismiss')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
                         </div>
                         <div className="mt-1.5">
                           <WhyThis

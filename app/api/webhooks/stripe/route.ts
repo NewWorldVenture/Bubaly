@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { markReferralConverted } from '@/lib/referrals/server';
@@ -98,19 +99,20 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
   const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
-  if (!webhookSecret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+  if (!webhookSecret) return NextResponse.json({ error: t('stripe.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
   try {
     const stripe = getStripe();
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
   } catch (err) {
-    return NextResponse.json({ error: 'Webhook signature invalid' }, { status: 400 });
+    return NextResponse.json({ error: t('stripe.webhookSignatureInvalid') }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -125,9 +127,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, duplicate: true });
     }
     claimToken = claim.claimToken ?? '';
-    if (!claimToken) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    if (!claimToken) return NextResponse.json({ error: t('stripe.webhookStorageUnavailable') }, { status: 503 });
   } catch {
-    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    return NextResponse.json({ error: t('stripe.webhookStorageUnavailable') }, { status: 503 });
   }
 
   try {
@@ -193,7 +195,7 @@ export async function POST(req: NextRequest) {
       console.error('[stripe webhook] failed to record handler error', markError);
     }
     console.error('[stripe webhook] handler error', message);
-    return NextResponse.json({ error: 'handler failed' }, { status: 500 });
+    return NextResponse.json({ error: t('stripe.handlerFailed') }, { status: 500 });
   }
 
   try {
@@ -201,6 +203,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error('[stripe webhook] failed to finalize event', err);
-    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    return NextResponse.json({ error: t('stripe.webhookStorageUnavailable') }, { status: 503 });
   }
 }

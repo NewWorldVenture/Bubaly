@@ -93,7 +93,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const contentError = [albumsRes.error, photosRes.error].find((e) => e && !isMissingTableError(e));
   if (contentError) {
     console.error('[dashboard/memories] memories read failed', contentError);
-    return <ErrorState message="Could not load your memories from Supabase. Refresh and try again." />;
+    return <ErrorState message={tr('memories.couldNotLoadYourMemories')} />;
   }
 
   const albums = (albumsRes.data ?? []) as AlbumRow[];
@@ -157,7 +157,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-surface/40 py-16 text-center">
       <Camera className="h-9 w-9 text-muted/40" />
       <p className="mt-3 text-sm text-muted">{label}</p>
-      <Link href="/dashboard/memories/create" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg hover:brightness-110"><Plus className="h-4 w-4" /> Add Memory</Link>
+      <Link href="/dashboard/memories/create" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-fg hover:brightness-110"><Plus className="h-4 w-4" />{' '}{tr('memories.addMemory')}</Link>
     </div>
   );
 
@@ -176,9 +176,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   );
 
   const TimelineView = () => (
-    timeline.length === 0 ? <EmptyBlock label="No highlights yet — add a memory to start your timeline." /> : (
+    timeline.length === 0 ? <EmptyBlock label={tr('memories.noHighlightsYetAddA')} /> : (
       <section>
-        <SectionHeader title="Timeline" />
+        <SectionHeader title={tr('memories.timeline')} />
         <div className="space-y-6">
           {timeline.map((row) => {
             const strip = photosByAlbum.get(row.album.id) ?? [];

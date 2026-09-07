@@ -98,15 +98,16 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   );
 }
 
-function CampaignDetailReadError() {
+async function CampaignDetailReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaign</h1>
-        <p className="mt-1 text-sm text-muted">Review campaign details, audience, and status.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaign')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('campaigns.reviewCampaignDetailsAudienceAnd')}</p>
       </div>
-      <ErrorState message="Could not load this marketing campaign from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Back to campaigns</Link>
+      <ErrorState message={t('campaigns.couldNotLoadThisMarketing')} />
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">{t('campaigns.backToCampaigns')}</Link>
     </div>
   );
 }

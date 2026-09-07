@@ -19,6 +19,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { completeTodo, createTodo, deleteTodo, updateTodo } from '@/lib/services/tasks';
@@ -75,6 +76,7 @@ async function todoScope(extra?: { idempotencyKey?: string | null }) {
 }
 
 export async function createTodoAction(input: CreateTodoActionInput): Promise<TodoActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const scope = scopeFromUserContext(ctx, supabase, {
@@ -98,12 +100,13 @@ export async function createTodoAction(input: CreateTodoActionInput): Promise<To
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[todo-action] create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add that task.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatTask')) };
   }
 }
 
 export async function updateTodoAction(todoId: string, patch: TodoFields): Promise<TodoActionResult> {
-  if (!todoId) return { ok: false, error: 'That task could not be found.' };
+  const t = await getTranslations();
+  if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
 
   try {
@@ -122,7 +125,7 @@ export async function updateTodoAction(todoId: string, patch: TodoFields): Promi
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[todo-action] update failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that task.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatTask')) };
   }
 }
 
@@ -135,7 +138,8 @@ export async function updateTodoAction(todoId: string, patch: TodoFields): Promi
  * week" read quietly misses.
  */
 export async function completeTodoAction(todoId: string, done: boolean): Promise<TodoActionResult> {
-  if (!todoId) return { ok: false, error: 'That task could not be found.' };
+  const t = await getTranslations();
+  if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
 
   try {
@@ -146,12 +150,13 @@ export async function completeTodoAction(todoId: string, done: boolean): Promise
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[todo-action] complete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that task.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatTask')) };
   }
 }
 
 export async function deleteTodoAction(todoId: string): Promise<TodoActionResult> {
-  if (!todoId) return { ok: false, error: 'That task could not be found.' };
+  const t = await getTranslations();
+  if (!todoId) return { ok: false, error: t('actions.thatTaskCouldNotBe') };
   const { scope } = await todoScope();
 
   try {
@@ -162,6 +167,6 @@ export async function deleteTodoAction(todoId: string): Promise<TodoActionResult
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[todo-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that task.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatTask')) };
   }
 }

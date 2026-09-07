@@ -107,7 +107,7 @@ export function VoiceModule() {
       success(
         `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
         { label: 'Undo', onClick: () => {
-          undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo'));
+          undoCapture(createClient(), res.undo).then(() => success(tr('voiceModule.undone'))).catch(() => toastError(tr('voiceModule.couldNotUndo')));
         } },
       );
       journey.complete();
@@ -120,7 +120,7 @@ export function VoiceModule() {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
       }).select('id');
-      toastError(describeDbError(err, 'Could not run that command'));
+      toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       setRunning(false);
     }
@@ -136,7 +136,7 @@ export function VoiceModule() {
     <div className="mx-auto w-full max-w-2xl">
       <PageHeader
         title={tr('voice.voiceControl')}
-        description="Speak a command — Bubaly files it as a task, note, event, or shopping item, automatically."
+        description={tr('voiceModule.speakACommandBubalyFiles')}
       />
 
       {/* Mic + transcript */}
@@ -210,7 +210,7 @@ export function VoiceModule() {
         {loading ? (
           <SkeletonList count={3} />
         ) : error ? (
-          <ErrorState message="Could not load voice history. Refresh and try again." onRetry={refresh} />
+          <ErrorState message={tr('voiceModule.couldNotLoadVoiceHistory')} onRetry={refresh} />
         ) : (history ?? []).length === 0 ? (
           <p className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">
             <Info className="h-4 w-4 shrink-0" /> {tr('voice.yourSpokenCommandsWillAppearHere')}

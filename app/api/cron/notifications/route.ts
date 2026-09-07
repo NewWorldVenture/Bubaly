@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
@@ -15,15 +16,16 @@ export const runtime = 'nodejs';
 // their own delivery columns, so every notification can be BOTH pushed and
 // emailed without one starving the other.
 export async function GET(req: NextRequest) {
+  const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: t('notifications.unauthorized') }, { status: 401 });
   }
 
   const supabase = createServiceClient();
   const { data: families, error } = await supabase.from('families').select('id');
   if (error) {
     console.error('Notification cron read failed:', error);
-    return NextResponse.json({ error: 'Notification processing failed.' }, { status: 500 });
+    return NextResponse.json({ error: t('notifications.notificationProcessingFailed') }, { status: 500 });
   }
 
   let total = 0;

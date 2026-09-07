@@ -93,7 +93,7 @@ export function MovingWorkspace() {
 
   async function generateTasks() {
     if (!move) return;
-    if (!plan.length) return toastError('The full checklist for this move is already here.');
+    if (!plan.length) return toastError(tr('movingModule.theFullChecklistForThis'));
     setPlanning(true);
     const { error } = await createClient().from('move_tasks').insert(plan.map((p) => ({
       family_id: familyId, move_id: move.id, title: p.title, category: p.category, offset_days: p.offsetDays, due_date: p.dueDate, date_mode: 'relative' as const, template_key: p.key, status: 'todo' as const, created_by: userId,
@@ -106,14 +106,14 @@ export function MovingWorkspace() {
   async function setTaskStatus(t: Task, status: Task['status']) {
     const { error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    if (status === 'done') success('Done ✓');
+    if (status === 'done') success(tr('movingModule.done'));
   }
 
   async function deleteTask(t: Task) {
     if (!confirm(`Delete “${t.title}”?`)) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
-    success('Task deleted');
+    success(tr('movingModule.taskDeleted'));
   }
 
   async function advanceBox(b: Box) {
@@ -128,7 +128,7 @@ export function MovingWorkspace() {
     if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
-    success('Box deleted');
+    success(tr('movingModule.boxDeleted'));
   }
 
   async function setMoveStatus(status: MoveStatus) {
@@ -143,14 +143,14 @@ export function MovingWorkspace() {
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');
-    success('Move deleted');
+    success(tr('movingModule.moveDeleted'));
   }
 
   const loading = moves.loading || tasks.loading || boxes.loading;
   const error = moves.error || tasks.error || boxes.error;
   const refresh = () => { void moves.refresh(); void tasks.refresh(); void boxes.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load your move. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('movingModule.couldNotLoadYourMove')} onRetry={refresh} />;
 
   const TaskRow = ({ t }: { t: Task }) => {
   const tr = useTranslations();
@@ -203,7 +203,7 @@ export function MovingWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title={tr('moving.movePlanner')}
-        description="One workflow from “we’re moving” to “settled”: an eight-week checklist built for your family, a numbered box inventory you can search on day one, and a budget that counts the mover’s quote before you spend it."
+        description={tr('movingModule.oneWorkflowFromWeRe')}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="moving" iconOnly />
@@ -215,7 +215,7 @@ export function MovingWorkspace() {
       />
 
       {moves.data.length === 0 || !move || !summary || !budget ? (
-        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description="Add the move date and whether kids, pets or a rental are involved. The eight-week checklist and box inventory follow." action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
+        <EmptyState icon={Truck} title={tr('moving.noMovePlanned')} description={tr('movingModule.addTheMoveDateAnd')} action={<Button onClick={() => setMoveForm({ open: true, move: null })}><Truck className="h-4 w-4" /> {tr('moving.planAMove')}</Button>} />
       ) : (
         <>
           {moves.data.length > 1 && (
@@ -334,7 +334,7 @@ export function MovingWorkspace() {
               {query.trim() ? (
                 found.length ? <ul className="grid gap-2 sm:grid-cols-2">{found.map((b) => <BoxCard key={b.id} b={b} />)}</ul> : <p className="text-sm text-muted">{tr('moving.nothingLabelledOrListedAs')}{query}”.</p>
               ) : rooms.length === 0 ? (
-                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description="Number every box, name its destination room and list what is inside. On day one, search instead of opening boxes." action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
+                <EmptyState icon={Package} title={tr('moving.noBoxesYet')} description={tr('movingModule.numberEveryBoxNameIts')} action={<Button onClick={() => setBoxForm({ open: true, box: null })}><Package className="h-4 w-4" /> {tr('moving.addBox1')}</Button>} />
               ) : (
                 rooms.map(({ room, boxes: list }) => (
                   <section key={room}>
@@ -350,16 +350,16 @@ export function MovingWorkspace() {
 
       {dateMove && (
         <MoveDateRecalculation key={JSON.stringify([moveDateContextKey(context), dateMove.id])} context={context} move={dateMove}
-          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success('Move date and reviewed deadlines saved'); }} />
+          onClose={() => setDateMoveId(null)} onSaved={(result) => { setDateReceipt(result); setDateMoveId(null); refresh(); success(tr('movingModule.moveDateAndReviewedDeadlines')); }} />
       )}
       {moveForm.open && (
-        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success('Move saved'); }} />
+        <MoveForm familyId={familyId} userId={userId} move={moveForm.move} onClose={() => setMoveForm({ open: false, move: null })} onSaved={(id) => { setMoveForm({ open: false, move: null }); setMoveId(id); success(tr('movingModule.moveSaved')); }} />
       )}
       {taskForm.open && move && (
-        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success('Task saved'); }} />
+        <TaskForm familyId={familyId} userId={userId} move={move} members={members} task={taskForm.task} onClose={() => setTaskForm({ open: false, task: null })} onSaved={() => { setTaskForm({ open: false, task: null }); success(tr('movingModule.taskSaved')); }} />
       )}
       {boxForm.open && move && (
-        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success('Box saved'); }} />
+        <BoxForm familyId={familyId} userId={userId} move={move} members={members} box={boxForm.box} nextNumber={nextBoxNumber(boxes.data, move.id)} defaultPacker={selfMember?.id ?? null} onClose={() => setBoxForm({ open: false, box: null })} onSaved={() => { setBoxForm({ open: false, box: null }); success(tr('movingModule.boxSaved')); }} />
       )}
     </div>
   );
@@ -381,9 +381,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
     const moveDate = String(f.get('move_date') ?? '');
-    if (!title) return toastError('Name the move');
-    if (!isMoveDate(moveDate)) return toastError('Pick a valid move date');
-    if (move && moveDate !== move.move_date) return toastError('Use Change date to review the existing deadlines first.');
+    if (!title) return toastError(tr('movingModule.nameTheMove'));
+    if (!isMoveDate(moveDate)) return toastError(tr('movingModule.pickAValidMoveDate'));
+    if (move && moveDate !== move.move_date) return toastError(tr('movingModule.useChangeDateToReview'));
     setLoading(true);
     const payload = {
       title, from_address: String(f.get('from_address') ?? '').trim() || null, to_address: String(f.get('to_address') ?? '').trim() || null,
@@ -406,13 +406,13 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
   );
 
   return (
-    <Modal open title={move ? 'Edit move' : 'Plan a move'} description="The date and the family’s situation decide which checklist steps you get." onClose={onClose}>
+    <Modal open title={move ? 'Edit move' : 'Plan a move'} description={tr('movingModule.theDateAndTheFamily')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
           <Field label={tr('moving.moveDay')} required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
         </div>
-        {move && <p className="text-xs text-muted">Use Change date on the move to review task deadlines before changing this date.</p>}
+        {move && <p className="text-xs text-muted">{tr('movingModule.useChangeDateOnThe')}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.from')}>{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder={tr('moving.12OldRoad')} />}</Field>
           <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder={tr('moving.34MapleStreet')} />}</Field>
@@ -455,11 +455,11 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const title = String(f.get('title') ?? '').trim();
-    if (!title) return toastError('Give the task a title');
+    if (!title) return toastError(tr('movingModule.giveTheTaskATitle'));
     const dueDate = String(f.get('due_date') ?? '') || null;
-    if (dueDate && !isMoveDate(dueDate)) return toastError('Pick a valid task date.');
+    if (dueDate && !isMoveDate(dueDate)) return toastError(tr('movingModule.pickAValidTaskDate'));
     const offset = dueDate ? dayDiff(move.move_date, dueDate) : (task?.offset_days ?? 0);
-    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError('A following deadline needs a date within 365 days of the move. Otherwise keep a fixed date.');
+    if (followDate && (!dueDate || offset < -365 || offset > 365)) return toastError(tr('movingModule.aFollowingDeadlineNeedsA'));
     setLoading(true);
     const payload = {
       title, category: String(f.get('category') ?? 'other') as MoveTaskCategory, due_date: dueDate,
@@ -507,7 +507,7 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const label = String(f.get('label') ?? '').trim();
-    if (!label) return toastError('Give the box a label');
+    if (!label) return toastError(tr('movingModule.giveTheBoxALabel'));
     const boxNumber = Math.max(1, Math.round(Number(f.get('box_number') ?? nextNumber)));
     const contents = String(f.get('contents') ?? '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
     setLoading(true);
@@ -526,7 +526,7 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
   }
 
   return (
-    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description="Write the number and destination room on two sides of the box. List the contents here, not on the cardboard." onClose={onClose}>
+    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-[6rem_1fr] gap-3">
           <Field label={tr('moving.number')} required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>

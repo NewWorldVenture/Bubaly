@@ -77,21 +77,21 @@ export function SleepModule() {
   async function deleteLog(log: Log) {
     const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
     if (error) return toastError(describeDbError(error));
-    success('Night removed');
+    success(t('sleepModule.nightRemoved'));
   }
 
   async function archiveRoutine(r: Routine) {
     if (!confirm(`Retire “${r.name}”?`)) return;
     const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success('Routine retired');
+    success(t('sleepModule.routineRetired'));
   }
 
   const loading = logs.loading || routines.loading || checkins.loading;
   const error = logs.error || routines.error || checkins.error;
   const refresh = () => { void logs.refresh(); void routines.refresh(); void checkins.refresh(); };
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load sleep data. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('sleepModule.couldNotLoadSleepData')} onRetry={refresh} />;
 
   const TrendIcon = summary.trend === 'improving' ? TrendingUp : summary.trend === 'slipping' ? TrendingDown : Minus;
 
@@ -99,7 +99,7 @@ export function SleepModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('sleep.sleepCoach')}
-        description="Age-aware targets for every family member, bedtime routines, a two-minute check-in, and a coach that builds the week’s plan from your own nights."
+        description={t('sleepModule.ageAwareTargetsForEvery')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="sleep" iconOnly />
@@ -156,7 +156,7 @@ export function SleepModule() {
           <span className="text-xs text-muted">{t('sleep.band')} {summary.target.min}–{summary.target.max}{t('sleep.hTarget')}</span>
         </div>
         {fortnight.length === 0 ? (
-          <EmptyState icon={MoonStar} title={t('sleep.noNightsLogged')} description="Log last night and the chart, consistency score and coach all come alive." action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>} />
+          <EmptyState icon={MoonStar} title={t('sleep.noNightsLogged')} description={t('sleepModule.logLastNightAndThe')} action={<Button onClick={() => setLogOpen(true)}><Plus className="h-4 w-4" /> {t('sleep.logLastNight')}</Button>} />
         ) : (
           <div className="relative h-40">
             <div className="absolute inset-x-0 border-t border-dashed border-emerald-400/40" style={{ bottom: `${(summary.target.min * 60 / maxMinutes) * 100}%` }} />
@@ -231,13 +231,13 @@ export function SleepModule() {
       </div>
 
       {logOpen && memberId && (
-        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success('Night logged'); }} />
+        <LogForm familyId={familyId} userId={userId} memberId={memberId} existing={memberLogs.find((l) => l.sleep_date === todayIso()) ?? null} onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); success(t('sleepModule.nightLogged')); }} />
       )}
       {routineOpen && memberId && (
-        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success('Routine saved'); }} />
+        <RoutineForm familyId={familyId} userId={userId} memberId={memberId} age={age} routine={routine} onClose={() => setRoutineOpen(false)} onSaved={() => { setRoutineOpen(false); success(t('sleepModule.routineSaved')); }} />
       )}
       {checkinOpen && memberId && (
-        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success('Check-in saved'); }} />
+        <CheckinForm familyId={familyId} userId={userId} memberId={memberId} existing={todaysCheckin} onClose={() => setCheckinOpen(false)} onSaved={() => { setCheckinOpen(false); success(t('sleepModule.checkInSaved')); }} />
       )}
     </div>
   );
@@ -255,9 +255,9 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
     const f = new FormData(e.currentTarget);
     const bedtime = new Date(String(f.get('bedtime') ?? ''));
     const wake = new Date(String(f.get('wake_time') ?? ''));
-    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError('Enter both times');
+    if (Number.isNaN(bedtime.getTime()) || Number.isNaN(wake.getTime())) return toastError(t('sleepModule.enterBothTimes'));
     const duration = durationMinutes(bedtime.toISOString(), wake.toISOString());
-    if (duration === 0) return toastError('Wake time must be after bedtime');
+    if (duration === 0) return toastError(t('sleepModule.wakeTimeMustBeAfter'));
     setLoading(true);
     const sleepDate = `${wake.getFullYear()}-${String(wake.getMonth() + 1).padStart(2, '0')}-${String(wake.getDate()).padStart(2, '0')}`;
     const { error } = await createClient().from('sleep_logs').upsert({
@@ -271,7 +271,7 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
   }
 
   return (
-    <Modal open title={t('sleep.logANight')} description="The night is filed under the morning it ended." onClose={onClose}>
+    <Modal open title={t('sleep.logANight')} description={t('sleepModule.theNightIsFiledUnder')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('sleep.lightsOut')} required>{(id) => <Input id={id} name="bedtime" type="datetime-local" defaultValue={localInput(defaultBed)} />}</Field>
@@ -302,7 +302,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const steps = String(f.get('steps') ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!days.length) return toastError('Pick at least one night');
+    if (!days.length) return toastError(t('sleepModule.pickAtLeastOneNight'));
     setLoading(true);
     const payload = {
       name: String(f.get('name') ?? '').trim() || 'Bedtime routine',
@@ -381,7 +381,7 @@ function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }:
   );
 
   return (
-    <Modal open title={t('sleep.twoMinuteCheckIn')} description="Today’s habits, so the coach can see what moves your nights." onClose={onClose}>
+    <Modal open title={t('sleep.twoMinuteCheckIn')} description={t('sleepModule.todaySHabitsSoThe')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Scale label={t('sleep.energyToday')} value={energy} onChange={setEnergy} />
         <Scale label={t('sleep.moodToday')} value={mood} onChange={setMood} />

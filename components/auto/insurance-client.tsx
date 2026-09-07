@@ -38,7 +38,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
       </div>
 
       {policies.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={t('insuranceClient.noPoliciesYet')} description="Add your auto policy so claim and roadside numbers are one tap away in an emergency." action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>} />
+        <EmptyState icon={ShieldCheck} title={t('insuranceClient.noPoliciesYet')} description={t('insuranceClient.addYourAutoPolicySo')} action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('insuranceClient.addPolicy')}</Button>} />
       ) : (
         <div className="space-y-3">
           {policies.map((p) => {
@@ -57,8 +57,8 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                 {p.coverage_summary && <p className="mt-2 text-sm">{p.coverage_summary}</p>}
                 {p.liability_limits && <p className="text-xs text-muted">Liability {p.liability_limits}</p>}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-danger px-3 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" /> File a claim</a>}
-                  {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> Roadside</a>}
+                  {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-danger px-3 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" />{' '}{t('insuranceClient.fileAClaim')}</a>}
+                  {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{t('insuranceClient.roadside')}</a>}
                   {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> {p.agent_name ?? 'Agent'}</a>}
                 </div>
 
@@ -76,13 +76,13 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                     ] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => (
                       <div key={k}><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>
                     ))}
-                    {p.notes && <div className="col-span-full"><dt className="text-muted">Notes</dt><dd>{p.notes}</dd></div>}
+                    {p.notes && <div className="col-span-full"><dt className="text-muted">{t('insuranceClient.notes')}</dt><dd>{p.notes}</dd></div>}
                   </dl>
                 )}
 
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
-                  <button onClick={() => { setEditing(p); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                  <button onClick={() => start(async () => { await deletePolicyAction(p.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                  <button onClick={() => { setEditing(p); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('insuranceClient.edit')}</button>
+                  <button onClick={() => start(async () => { await deletePolicyAction(p.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('insuranceClient.delete')}</button>
                 </div>
               </Card>
             );

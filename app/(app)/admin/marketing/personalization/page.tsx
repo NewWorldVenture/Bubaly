@@ -10,7 +10,7 @@ import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/pers
 import { createRuleAction, toggleRuleStatusAction, deleteRuleAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Personalization', robots: { index: false } };
+export const metadata: Metadata = { title: 'personalization.personalization', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Rule = Tables<'marketing_personalization_rules'>;
@@ -18,12 +18,13 @@ type Rule = Tables<'marketing_personalization_rules'>;
 const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
 const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-black sm:text-2xl">Personalization</h1>
-      <ErrorState message="Could not load personalization rules from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/personalization" className="text-sm font-medium text-brand-text underline">Refresh personalization</Link>
+      <h1 className="text-xl font-black sm:text-2xl">{t('personalization.personalization')}</h1>
+      <ErrorState message={t('personalization.couldNotLoadPersonalizationRules')} />
+      <Link href="/admin/marketing/personalization" className="text-sm font-medium text-brand-text underline">{t('personalization.refreshPersonalization')}</Link>
     </div>
   );
 }

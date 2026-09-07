@@ -51,7 +51,7 @@ export default async function AdminDataPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminBackup.dataAmpStorage')}</h1>
           <p className="mt-1 text-sm text-muted">{tr('adminBackup.liveRowCountsAndDocumentStorage')}</p>
         </div>
-        <ErrorState message="Could not load data and storage metrics from Supabase. Refresh and try again." />
+        <ErrorState message={tr('backup.couldNotLoadDataAnd')} />
         <a href="/admin/backup" className="text-sm font-medium text-brand-text underline">{tr('adminBackup.refreshDataOverview')}</a>
       </div>
     );
@@ -107,11 +107,7 @@ export default async function AdminDataPage() {
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-text" />
         <div className="text-sm text-muted">
           <p className="font-medium text-fg">{tr('adminBackup.backups')}</p>
-          <p className="mt-1">
-            Database backups are handled automatically by Supabase (daily point-in-time recovery on supported plans).
-            Manage retention and restore points from your Supabase project dashboard → Database → Backups.
-            Documents live in a private Storage bucket and are covered by Supabase storage redundancy.
-          </p>
+          <p className="mt-1">{tr('backup.databaseBackupsAreHandledAutomatically')}</p>
         </div>
       </Card>
     </div>

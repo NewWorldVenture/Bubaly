@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/social/settings/page.tsx', 'utf8');
@@ -17,7 +18,8 @@ describe('social/settings page read boundary', () => {
   it('logs and returns an ErrorState on a read failure', () => {
     expect(page).toContain('if (socialError) {');
     expect(page).toContain("console.error('[dashboard/social/settings] social settings read failed', socialError);");
-    expect(page).toContain('return <ErrorState message="Could not load your social workspace settings from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'settings.couldNotLoadYourSocial', "Could not load your social workspace settings from Supabase. Refresh and try again.");
   });
 
   it('derives settings only after the fail-closed guard (no default-overwrite trap)', () => {

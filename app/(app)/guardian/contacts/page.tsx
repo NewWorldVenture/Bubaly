@@ -45,9 +45,7 @@ export default async function ContactsPage() {
       </div>
 
       <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-3">
-        <p className="text-xs text-blue-300">
-          Trust levels control how Bubaly handles calls and messages. Bubaly learns from patterns and will suggest updates — you always have final say.
-        </p>
+        <p className="text-xs text-blue-300">{t('contacts.trustLevelsControlHowBubaly')}</p>
       </div>
 
       <ContactList

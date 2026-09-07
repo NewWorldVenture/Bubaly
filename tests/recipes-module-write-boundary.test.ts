@@ -30,7 +30,7 @@ describe('recipes-module write boundaries fail visibly', () => {
   it('markMade only claims success after the error guard', () => {
     const b = body('markMade');
     const guard = b.indexOf('if (error) return toastError');
-    const claim = b.indexOf("success('Marked as made");
+    const claim = b.indexOf("success(tr('recipesModule.markedAsMadeToday')");
     expect(guard).toBeGreaterThan(-1);
     expect(claim).toBeGreaterThan(guard);
   });

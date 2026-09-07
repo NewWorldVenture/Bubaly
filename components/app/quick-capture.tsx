@@ -84,15 +84,15 @@ export function QuickCapture() {
         res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`,
         { label: 'Undo', onClick: () => {
           undoCapture(createClient(), res.undo)
-            .then(() => success('Undone'))
-            .catch(() => toastError('Could not undo'));
+            .then(() => success(tr('quickCapture.undone')))
+            .catch(() => toastError(tr('quickCapture.couldNotUndo')));
         } },
       );
       journey.complete();
       reset();
       setOpen(false);
     } catch (err) {
-      toastError(describeDbError(err, 'Could not save'));
+      toastError(describeDbError(err, tr('quickCapture.couldNotSave')));
     } finally {
       setSaving(false);
     }

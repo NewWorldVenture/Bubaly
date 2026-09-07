@@ -10,13 +10,14 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Social Usage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Usage</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('usage.usage')}</h1>
       <AdminSocialSubnav active="/admin/social/usage" />
-      <ErrorState message="Could not load social usage events from Supabase. Refresh and try again." />
-      <Link href="/admin/social/usage" className="text-sm font-medium text-brand-text underline">Refresh social usage</Link>
+      <ErrorState message={t('usage.couldNotLoadSocialUsage')} />
+      <Link href="/admin/social/usage" className="text-sm font-medium text-brand-text underline">{t('usage.refreshSocialUsage')}</Link>
     </div>
   );
 }
@@ -45,7 +46,7 @@ export default async function AdminUsagePage() {
       <AdminSocialSubnav active="/admin/social/usage" />
       <p className="text-sm text-muted">{t('adminSocialUsage.meteredEventsAiGenerationsPublishesMedia')}</p>
       {rows.length === 0 ? (
-        <EmptyState icon={Gauge} title={t('adminSocialUsage.noUsageRecordedYet')} description="Usage events accrue as families generate AI content and publish." />
+        <EmptyState icon={Gauge} title={t('adminSocialUsage.noUsageRecordedYet')} description={t('usage.usageEventsAccrueAsFamilies')} />
       ) : (
         <Card>
           <div className="overflow-x-auto">

@@ -42,7 +42,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
       )}
 
       {records.length === 0 ? (
-        <EmptyState icon={Wrench} title={t('serviceClient.noServiceHistoryYet')} description="Log repairs and maintenance as they happen to build a full home record." action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>} />
+        <EmptyState icon={Wrench} title={t('serviceClient.noServiceHistoryYet')} description={t('serviceClient.logRepairsAndMaintenanceAs')} action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>} />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border">
           <table className="w-full min-w-[560px] text-sm">

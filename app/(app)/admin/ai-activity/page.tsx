@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { Bot, AlertTriangle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
@@ -54,6 +55,7 @@ function tokensOf(row: AiActivityRow): string {
 type Params = { searchParams: Promise<{ q?: string; status?: string; feature?: string; family?: string; page?: string }> };
 
 export default async function AdminAIActivityPage({ searchParams }: Params) {
+  const t = await getTranslations();
   const sp = await searchParams;
   const supabase = createServiceClient();
   const since = new Date(Date.now() - SUMMARY_WINDOW_HOURS * 3600_000).toISOString();
@@ -88,11 +90,8 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
     <div className="module-page">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <Bot className="h-6 w-6 text-brand-text" /> AI Activity
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          Every AI request across all families — which model answered, how long it took, what it cost, and what broke.
-        </p>
+          <Bot className="h-6 w-6 text-brand-text" />{' '}{t('aiActivity.aiActivity')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('aiActivity.everyAiRequestAcrossAll')}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -103,7 +102,7 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
 
       <Card>
         <FilterForm action="/admin/ai-activity" hidden={{ family: sp.family }}>
-          <FilterSearchInput name="q" defaultValue={sp.q} placeholder="Search by feature or error…" />
+          <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('aiActivity.searchByFeatureOrError')} />
           <FilterSelect name="status" defaultValue={sp.status} options={[
             { value: '', label: 'All statuses' },
             ...AI_REQUEST_STATES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') })),
@@ -118,35 +117,30 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
           <p className="mt-3 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-fg">
             <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
             <span>
-              <span className="font-mono">{ignoredStatus}</span> is not a request status, so it was ignored.
-              These results are unfiltered by status rather than empty.
-            </span>
+              <span className="font-mono">{ignoredStatus}</span>{' '}{t('aiActivity.isNotARequestStatus')}</span>
           </p>
         )}
 
         {sp.family && (
-          <p className="mt-3 text-xs text-muted">
-            Scoped to family <span className="font-mono">{sp.family}</span>.{' '}
-            <a href={`/admin/ai-activity?${new URLSearchParams({ ...hidden, family: '' })}`} className="text-brand-text underline">
-              Show all families
-            </a>
+          <p className="mt-3 text-xs text-muted">{t('aiActivity.scopedToFamily')}{' '}<span className="font-mono">{sp.family}</span>.{' '}
+            <a href={`/admin/ai-activity?${new URLSearchParams({ ...hidden, family: '' })}`} className="text-brand-text underline">{t('aiActivity.showAllFamilies')}</a>
           </p>
         )}
 
         {rows.length === 0 ? (
-          <div className="mt-6"><EmptyState icon={Bot} title="No AI requests match these filters" /></div>
+          <div className="mt-6"><EmptyState icon={Bot} title={t('aiActivity.noAiRequestsMatchThese')} /></div>
         ) : (
           <div className="table-responsive mt-4">
             <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">Surface</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Model</th>
-                  <th className="px-3 py-2 font-medium text-right">Tokens</th>
-                  <th className="px-3 py-2 font-medium text-right">Latency</th>
-                  <th className="px-3 py-2 font-medium">Family</th>
-                  <th className="px-3 py-2 font-medium">When</th>
+                  <th className="px-3 py-2 font-medium">{t('aiActivity.surface')}</th>
+                  <th className="px-3 py-2 font-medium">{t('aiActivity.status')}</th>
+                  <th className="px-3 py-2 font-medium">{t('aiActivity.model')}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t('aiActivity.tokens')}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t('aiActivity.latency')}</th>
+                  <th className="px-3 py-2 font-medium">{t('aiActivity.family')}</th>
+                  <th className="px-3 py-2 font-medium">{t('aiActivity.when')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -209,9 +203,7 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
         </div>
       </Card>
 
-      <p className="text-xs text-muted">
-        Surfaces that have not adopted <span className="font-mono">withAiRequest</span> leave no row here at all.
-        The count still open is capped by <span className="font-mono">tests/ai-observability-coverage.test.ts</span>.
+      <p className="text-xs text-muted">{t('aiActivity.surfacesThatHaveNotAdopted')}{' '}<span className="font-mono">withAiRequest</span>{' '}{t('aiActivity.leaveNoRowHereAt')}{' '}<span className="font-mono">tests/ai-observability-coverage.test.ts</span>.
       </p>
     </div>
   );
@@ -227,18 +219,18 @@ function SummaryTile({ label, value, tone }: { label: string; value: number; ton
   );
 }
 
-function AIActivityReadError({ message }: { message: string }) {
+async function AIActivityReadError({ message }: { message: string }) {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <Bot className="h-6 w-6 text-brand-text" /> AI Activity
-        </h1>
+          <Bot className="h-6 w-6 text-brand-text" />{' '}{t('aiActivity.aiActivity')}</h1>
       </div>
       {/* An empty table and a broken query look the same to a reader, and one of
           them means "Bubaly is fine". */}
       <ErrorState message={message} />
-      <a href="/admin/ai-activity" className="text-sm font-medium text-brand-text underline">Try again</a>
+      <a href="/admin/ai-activity" className="text-sm font-medium text-brand-text underline">{t('aiActivity.tryAgain')}</a>
     </div>
   );
 }

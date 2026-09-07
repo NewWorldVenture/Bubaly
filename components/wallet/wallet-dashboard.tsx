@@ -69,7 +69,7 @@ export type PendingApproval = {
 };
 
 const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string }[] = [
-  { kind: 'spend', label: 'Spend', icon: ShoppingBag, color: 'text-blue-400' },
+  { kind: 'spend', label: 'walletDashboard.spend', icon: ShoppingBag, color: 'text-blue-400' },
   { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400' },
   { kind: 'give', label: 'Give', icon: HeartHandshake, color: 'text-rose-400' },
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
@@ -104,7 +104,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not get coaching');
       setCoach(json.coaching);
     } catch (err) {
-      toastError(describeDbError(err, 'Coach failed'));
+      toastError(describeDbError(err, tr('walletDashboard.coachFailed')));
     } finally {
       setCoachLoading(false);
     }
@@ -112,7 +112,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
   return (
     <div className="module-page">
-      <PageHeader title={tr('walletDashboard.familyWallet')} description="Spend, save, give, and invest — for the whole family."
+      <PageHeader title={tr('walletDashboard.familyWallet')} description={tr('walletDashboard.spendSaveGiveAndInvest')}
         action={hasCoach ? (
           <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> {tr('walletDashboard.moneyCoach')}</Button>
         ) : undefined}
@@ -203,7 +203,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
 
       {childWallets.length === 0 ? (
         <EmptyState icon={Wallet} title={tr('walletDashboard.noChildWalletsYet')}
-          description="Add children to your family and they'll each get a wallet here." />
+          description={tr('walletDashboard.addChildrenToYourFamily')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {childWallets.map((c) => (
@@ -219,8 +219,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setRequestFor(c)}
                     className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text">
-                    <HandCoins className="h-3.5 w-3.5" /> Spend
-                  </button>
+                    <HandCoins className="h-3.5 w-3.5" />{' '}{tr('walletDashboard.spend')}</button>
                   {canManage && (
                     <button onClick={() => setAddFor(c)}
                       className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
@@ -430,6 +429,7 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
 
 /** Request to spend from a child's Spend bucket → completes or queues for approval. */
 function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -441,8 +441,8 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
-    if (!desc.trim()) return toastError('What is it for?');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
+    if (!desc.trim()) return toastError(tr('walletDashboard.whatIsItFor'));
     setLoading(true);
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
@@ -457,7 +457,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
       <form onSubmit={submit} className="space-y-4">
         <p className="text-xs text-muted">{formatCents(spendable)} {tr('walletDashboard.availableInSpendLargerAmountsNeed')}</p>
         <Field label={tr('walletDashboard.whatFor')}>
-          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('walletDashboard.eGLegoSet')} autoFocus maxLength={120} />}
         </Field>
         <Field label={tr('walletDashboard.amountUsd')}>
           {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
@@ -473,6 +473,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
 
 /** Move money between two child wallets (parent-initiated, money-conserving). */
 function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onClose: () => void }) {
+  const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -485,14 +486,14 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (from === to) return toastError('Pick two different wallets.');
+    if (from === to) return toastError(tr('walletDashboard.pickTwoDifferentWallets'));
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await sendMoneyAction({ fromChildWalletId: from, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not send money');
-    success('Money sent');
+    success(tr('walletDashboard.moneySent'));
     onClose();
     router.refresh();
   }
@@ -521,7 +522,7 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
         </Field>
         {fromWallet && <p className="text-xs text-muted">{formatCents(fromWallet.buckets.spend ?? 0)} {tr('walletDashboard.availableIn')} {fromWallet.name}{tr('walletDashboard.aposSSpendBucket')}</p>}
         <Field label={tr('walletDashboard.noteOptional')}>
-          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('walletDashboard.birthdayGift')} maxLength={120} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('walletDashboard.cancel')}</Button>
@@ -542,7 +543,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const dollars = Number(amount);
-    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError(tr('walletDashboard.enterAnAmountGreaterThan'));
     setLoading(true);
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);

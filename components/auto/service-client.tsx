@@ -33,7 +33,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
       </div>
 
       {records.length === 0 ? (
-        <EmptyState icon={Wrench} title={t('serviceClient.noServiceHistory')} description="Log maintenance as it happens to protect resale value and stay on schedule." action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>} />
+        <EmptyState icon={Wrench} title={t('serviceClient.noServiceHistory')} description={t('serviceClient.logMaintenanceAsItHappens')} action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>} />
       ) : (
         <>
           <Badge tone="neutral">{t('serviceClient.totalLogged')}{totalSpend.toLocaleString()}</Badge>

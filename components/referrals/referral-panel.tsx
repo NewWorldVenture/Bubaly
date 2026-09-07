@@ -34,7 +34,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
       await navigator.clipboard.writeText(text);
       setCopied(which);
       setTimeout(() => setCopied(null), 1500);
-    } catch { toastError('Could not copy'); }
+    } catch { toastError(t('referralPanel.couldNotCopy')); }
   }
 
   async function share() {
@@ -52,7 +52,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
     if (!raw) return;
     startTransition(async () => {
       const res = await applyReferralCodeAction(raw);
-      if (res.ok) { success('Referral code applied! 🎉'); setEntry(''); }
+      if (res.ok) { success(t('referralPanel.referralCodeApplied')); setEntry(''); }
       else toastError(res.reason);
     });
   }

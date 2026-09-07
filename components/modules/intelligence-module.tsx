@@ -67,11 +67,11 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
     persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
 
   if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
-  if (error) return <ErrorState message="Could not load intelligence preferences. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('intelligence.intelligenceNetwork')} description="Opt in to learn from anonymized patterns across similar families — or stay fully private. Your choice, always reversible." />
+      <PageHeader title={t('intelligence.intelligenceNetwork')} description={t('intelligenceModule.optInToLearnFrom')} />
 
       {/* Privacy promise */}
       <div className="rounded-xl border border-border bg-card p-4">
@@ -94,10 +94,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
             <Info className="size-5 text-brand-text" />
             <h3 className="font-semibold">{t('intelligence.whatYoudContribute')}</h3>
           </div>
-          <p className="mb-3 text-sm text-muted">
-            Only these coarse, anonymized bands — never names, exact ages, or precise counts. Shown
-            here from your own data so you can decide with your eyes open. Nothing is shared unless you join.
-          </p>
+          <p className="mb-3 text-sm text-muted">{t('intelligenceModule.onlyTheseCoarseAnonymizedBands')}</p>
           <div className="flex flex-wrap gap-2">
             {contribution.map((b) => (
               <span key={b.label} className="rounded-full border border-border px-3 py-1 text-xs">

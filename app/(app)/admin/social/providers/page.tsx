@@ -12,13 +12,14 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Social Providers', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Providers</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('providers.providers')}</h1>
       <AdminSocialSubnav active="/admin/social/providers" />
-      <ErrorState message="Could not load social providers from Supabase. Refresh and try again." />
-      <Link href="/admin/social/providers" className="text-sm font-medium text-brand-text underline">Refresh social providers</Link>
+      <ErrorState message={t('providers.couldNotLoadSocialProviders')} />
+      <Link href="/admin/social/providers" className="text-sm font-medium text-brand-text underline">{t('providers.refreshSocialProviders')}</Link>
     </div>
   );
 }
@@ -50,7 +51,7 @@ export default async function AdminProvidersPage() {
               <div className="mb-2 flex items-center gap-2">
                 <PlatformDot platform={p} />
                 <span className="text-sm font-semibold">{d.label}</span>
-                {configured ? <Badge tone="success" className="ml-auto">Configured</Badge> : <Badge tone="neutral" className="ml-auto">Missing creds</Badge>}
+                {configured ? <Badge tone="success" className="ml-auto">{t('providers.configured')}</Badge> : <Badge tone="neutral" className="ml-auto">{t('providers.missingCreds')}</Badge>}
               </div>
               <div className="grid grid-cols-2 gap-1 text-xs text-muted">
                 <span>Auth: {d.auth}</span>

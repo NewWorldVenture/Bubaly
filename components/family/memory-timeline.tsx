@@ -80,9 +80,9 @@ export function MemoryTimeline({ memories, nameById }: {
           })}
         </ul>
       ) : memories.length > 0 ? (
-        <MiniEmpty icon={Search} text="No memories match your search." />
+        <MiniEmpty icon={Search} text={t('memoryTimeline.noMemoriesMatchYourSearch')} />
       ) : (
-        <MiniEmpty icon={Camera} text="No memories yet — capture your first above." />
+        <MiniEmpty icon={Camera} text={t('memoryTimeline.noMemoriesYetCaptureYour')} />
       )}
     </div>
   );

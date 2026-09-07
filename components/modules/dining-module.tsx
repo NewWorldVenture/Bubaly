@@ -84,7 +84,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
         visitedAt: logForm.when ? new Date(logForm.when + 'T19:00:00').toISOString() : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
-      success('Visit logged.');
+      success(t('diningModule.visitLogged'));
       setLogOpen(false);
       setLogForm({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
       router.refresh();
@@ -95,7 +95,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
     <div className="space-y-5 pb-28">
       <PageHeader
         title={t('dining.diningOut')}
-        description="Discover restaurants, save favorites, and track your dining-out history."
+        description={t('diningModule.discoverRestaurantsSaveFavoritesAnd')}
         action={
           <>
             <Button variant="outline" onClick={() => setLogOpen(true)}><Receipt className="h-4 w-4" /> {t('dining.logVisit')}</Button>
@@ -188,7 +188,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       {addOpen && (
         <Modal open onClose={() => setAddOpen(false)} title={t('dining.addAPlace')}>
           <form onSubmit={submitAdd} className="space-y-3">
-            <Field label={t('dining.name')}>{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Nonna's Trattoria" autoFocus />}</Field>
+            <Field label={t('dining.name')}>{(id) => <Input id={id} value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder={t('diningModule.nonnaSTrattoria')} autoFocus />}</Field>
             <div className="grid grid-cols-3 gap-3">
               <Field label={t('dining.cuisine')}>{(id) => <Input id={id} value={addForm.cuisine} onChange={e => setAddForm({ ...addForm, cuisine: e.target.value })} placeholder={t('dining.italian')} />}</Field>
               <Field label={t('dining.price')}>{(id) => (

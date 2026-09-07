@@ -38,7 +38,7 @@ export function ReportButton({ listingId }: { listingId: string }) {
       const res = await reportListingAction({ listingId, reason, details });
       if (!res.ok) { toastError(res.error); return; }
       setOpen(false); setDone(true);
-      success('Report sent to our safety team.');
+      success(t('reportButton.reportSentToOurSafety'));
     });
   }
 

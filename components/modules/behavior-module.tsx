@@ -83,9 +83,9 @@ export function BehaviorModule() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
     const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {
@@ -103,7 +103,7 @@ export function BehaviorModule() {
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message="Could not load behavior logs. Refresh and try again." onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('behaviorModule.couldNotLoadBehaviorLogs')} onRetry={refresh} />;
 
   return (
     <div className="space-y-5">
@@ -191,7 +191,7 @@ export function BehaviorModule() {
       {/* Recent log */}
       <div className="space-y-2">
         {scoped.length === 0 ? (
-          <EmptyState icon={Smile} title={tr('behavior.noBehaviorLoggedYet')} description="Log positive moments and concerns to build parenting insights." />
+          <EmptyState icon={Smile} title={tr('behavior.noBehaviorLoggedYet')} description={tr('behaviorModule.logPositiveMomentsAndConcerns')} />
         ) : scoped.map((l) => {
           const Icon = KIND_ICON[l.kind as keyof typeof KIND_ICON] ?? Minus;
           const meta = kindMeta(l.kind);

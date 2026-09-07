@@ -38,10 +38,10 @@ export function FindPhoneView() {
 
   return (
     <div className="module-page">
-      <PageHeader title={t('findPhone.findPhone')} description="See each family member's last known device location."
+      <PageHeader title={t('findPhone.findPhone')} description={t('findPhoneView.seeEachFamilyMemberS')}
         action={<Link href="/dashboard/locator" className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-elevated px-5 text-sm font-semibold transition hover:bg-elevated/70"><MapPinned className="h-4 w-4" /> {t('findPhone.familyMap')}</Link>} />
 
-      {loading ? <SkeletonList /> : error ? <ErrorState message="Could not load phone locations. Refresh and try again." onRetry={refresh} /> : (
+      {loading ? <SkeletonList /> : error ? <ErrorState message={t('findPhoneView.couldNotLoadPhoneLocations')} onRetry={refresh} /> : (
         <div className="grid gap-3 sm:grid-cols-2">
           {activeMembers.map((m) => {
             const loc = locByMember.get(m.id);
@@ -75,8 +75,7 @@ export function FindPhoneView() {
                   {hasCoords ? (
                     <a href={`https://maps.google.com/?q=${loc!.latitude},${loc!.longitude}`} target="_blank" rel="noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-elevated px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated/70">
-                      <Navigation className="h-3.5 w-3.5" /> Open in Maps
-                    </a>
+                      <Navigation className="h-3.5 w-3.5" />{' '}{t('findPhoneView.openInMaps')}</a>
                   ) : (
                     <span className="text-xs text-muted">{loc?.is_sharing ? 'Waiting for a location update…' : 'Location sharing is off for this member.'}</span>
                   )}

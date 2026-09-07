@@ -14,6 +14,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createGoal, deleteGoal, setGoalProgress, updateGoal, type UpdateGoalInput } from '@/lib/services/goals';
@@ -35,6 +36,7 @@ export async function saveGoalAction(
   goalId: string | null,
   input: UpdateGoalInput & { title: string },
 ): Promise<GoalActionResult> {
+  const t = await getTranslations();
   const scope = await goalScope();
 
   try {
@@ -51,7 +53,7 @@ export async function saveGoalAction(
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[goal-action] save failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not save that goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotSaveThatGoal')) };
   }
 }
 
@@ -62,7 +64,8 @@ export async function saveGoalAction(
  * `is_complete` is derived by the service, not sent from here.
  */
 export async function setGoalProgressAction(goalId: string, progress: number): Promise<GoalActionResult> {
-  if (!goalId) return { ok: false, error: 'That goal could not be found.' };
+  const t = await getTranslations();
+  if (!goalId) return { ok: false, error: t('actions.thatGoalCouldNotBe') };
   const scope = await goalScope();
 
   try {
@@ -73,12 +76,13 @@ export async function setGoalProgressAction(goalId: string, progress: number): P
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[goal-action] progress failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatGoal')) };
   }
 }
 
 export async function deleteGoalAction(goalId: string): Promise<GoalActionResult> {
-  if (!goalId) return { ok: false, error: 'That goal could not be found.' };
+  const t = await getTranslations();
+  if (!goalId) return { ok: false, error: t('actions.thatGoalCouldNotBe') };
   const scope = await goalScope();
 
   try {
@@ -89,6 +93,6 @@ export async function deleteGoalAction(goalId: string): Promise<GoalActionResult
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[goal-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that goal.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatGoal')) };
   }
 }

@@ -86,7 +86,7 @@ export function ActivityProjection({
     startTransition(async () => {
       const res = await saveSimulationAction(currentInput(), result);
       if (!res.ok) { toastError(res.error); return; }
-      success('Scenario saved.'); router.refresh();
+      success(t('activityProjection.scenarioSaved')); router.refresh();
     });
   }
   function remove(id: string) {
@@ -180,7 +180,7 @@ export function ActivityProjection({
                   s.verdict === 'clear' ? 'bg-emerald-400' : s.verdict === 'tight' ? 'bg-amber-400' : 'bg-rose-400')} />
                 <span className="min-w-0 flex-1 truncate">{s.activityName}</span>
                 <span className="shrink-0 text-xs text-muted">{s.weeklyHours}h/wk</span>
-                <button type="button" onClick={() => remove(s.id)} disabled={pending} aria-label="Delete scenario"
+                <button type="button" onClick={() => remove(s.id)} disabled={pending} aria-label={t('activityProjection.deleteScenario')}
                   className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

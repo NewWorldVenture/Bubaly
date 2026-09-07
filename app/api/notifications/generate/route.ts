@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
@@ -8,6 +9,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 export const runtime = 'nodejs';
 
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
@@ -18,7 +20,7 @@ export async function POST() {
     );
     if (!limited.ok) {
       return NextResponse.json(
-        { error: 'Too many notification refreshes. Please try again shortly.' },
+        { error: t('generate.tooManyNotificationRefreshesPlease') },
         { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
       );
     }
@@ -32,6 +34,6 @@ export async function POST() {
     return NextResponse.json({ created });
   } catch (err) {
     console.error('Notification generate error:', err);
-    return NextResponse.json({ error: 'Could not refresh notifications.' }, { status: 500 });
+    return NextResponse.json({ error: t('generate.couldNotRefreshNotifications') }, { status: 500 });
   }
 }

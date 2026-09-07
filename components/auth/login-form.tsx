@@ -55,7 +55,7 @@ export function LoginForm() {
       router.push(destination);
       router.refresh();
     } catch (err) {
-      toastError(describeDbError(err, 'Could not sign in'));
+      toastError(describeDbError(err, t('loginForm.couldNotSignIn')));
     } finally {
       setLoading(false);
     }

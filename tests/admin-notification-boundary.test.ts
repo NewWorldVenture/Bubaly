@@ -12,7 +12,7 @@ describe('Super Admin notification delivery boundary', () => {
     const source = readFileSync('app/(app)/admin/notifications-actions.ts', 'utf8');
     expect(source).toContain('if (!(await isSuperAdmin()))');
     expect(source).toContain('describeActionError');
-    expect(source).toContain("if (error) return { ok: false, error: describeActionError(error, 'Could not update notifications.') }");
+    expect(source).toContain("if (error) return { ok: false, error: describeActionError(error, t('notificationsActions.couldNotUpdateNotifications')) }");
   });
 
   it('does not refresh the UI after a failed mark-read mutation', () => {

@@ -260,7 +260,7 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Account added');
+    success(tr('billingModule.accountAdded'));
     reset(); onClose(); onDone();
   }
 
@@ -314,7 +314,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Transaction added');
+    success(tr('billingModule.transactionAdded'));
     reset(); onClose(); onDone();
   }
 
@@ -370,7 +370,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
     const res = await setBudgetAction(category, parseFloat(amount), period);
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Budget added');
+    success(tr('billingModule.budgetAdded'));
     reset(); onClose(); onDone();
   }
 
@@ -424,7 +424,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
     });
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    success('Bill added');
+    success(tr('billingModule.billAdded'));
     reset(); onClose(); onDone();
   }
 
@@ -486,7 +486,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error);
-    success('Savings goal added');
+    success(tr('billingModule.savingsGoalAdded'));
     reset(); onClose(); onDone();
   }
 
@@ -600,14 +600,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       try {
         const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
         const json = await res.json();
-        if (!res.ok) { toastError(json.error ?? 'Could not change the plan.'); return; }
+        if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
         if (json.url) { window.location.href = json.url; return; }       // Free → Checkout
-        if (json.changed) { success('Plan updated. Your next invoice is prorated.'); }
+        if (json.changed) { success(tr('billingModule.planUpdatedYourNextInvoice')); }
         else if (json.message) { success(json.message); }
         await loadSub();
-      } catch { toastError('Could not change the plan.'); }
+      } catch { toastError(tr('billingModule.couldNotChangeThePlan')); }
     });
-  }, [loadSub, success, toastError]);
+  }, [loadSub, success, toastError, tr]);
 
   // One-tap checkout from the demo upgrade flow: if `?checkout=basic|plus` is
   // present and the family is still on Free, open Stripe Checkout for that tier
@@ -630,12 +630,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       try {
         const res = await fetch('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume }) });
         const json = await res.json();
-        if (!res.ok) { toastError(json.error ?? 'Could not update the subscription.'); return; }
+        if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotUpdateTheSubscription')); return; }
         success(resume ? 'Your plan will continue.' : 'Your plan will end at the period’s end.');
         await loadSub();
-      } catch { toastError('Could not update the subscription.'); }
+      } catch { toastError(tr('billingModule.couldNotUpdateTheSubscription')); }
     });
-  }, [loadSub, success, toastError]);
+  }, [loadSub, success, toastError, tr]);
 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
@@ -803,14 +803,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   async function deleteTransaction(id: string) {
     const res = await deleteTransactionAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Transaction removed');
+    success(tr('billingModule.transactionRemoved'));
     void refreshTransactions();
   }
 
   async function deleteBudget(id: string) {
     const res = await deleteBudgetAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Budget removed');
+    success(tr('billingModule.budgetRemoved'));
     void refreshBudgets();
   }
 
@@ -818,7 +818,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const supabase = createClient();
     const { error } = await supabase.from('bills').delete().eq('id', id);
     if (error) return toastError(describeDbError(error));
-    success('Bill removed');
+    success(tr('billingModule.billRemoved'));
     void refreshBills();
   }
 
@@ -826,14 +826,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const supabase = createClient();
     const { error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id);
     if (error) return toastError(describeDbError(error));
-    success('Bill marked as paid');
+    success(tr('billingModule.billMarkedAsPaid'));
     void refreshBills();
   }
 
   async function deleteGoal(id: string) {
     const res = await deleteSavingsGoalAction(id);
     if (!res.ok) return toastError(res.error);
-    success('Goal removed');
+    success(tr('billingModule.goalRemoved'));
     void refreshGoals();
   }
 
@@ -841,7 +841,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const supabase = createClient();
     const { error } = await supabase.from('financial_accounts').delete().eq('id', id);
     if (error) return toastError(describeDbError(error));
-    success('Account removed');
+    success(tr('billingModule.accountRemoved'));
     void refreshAccounts();
   }
 
@@ -1120,7 +1120,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add</Button>
       </div>
       {transactions.length === 0 ? (
-        <EmptyState icon={Receipt} title={tr('billing.noTransactions')} description="Add your first transaction to start tracking your finances."
+        <EmptyState icon={Receipt} title={tr('billing.noTransactions')} description={tr('billingModule.addYourFirstTransactionTo')}
           action={<Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>} />
       ) : (
         <div className="rounded-2xl border border-border bg-surface/40 divide-y divide-border">
@@ -1153,7 +1153,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>
       </div>
       {budgetProgress.length === 0 ? (
-        <EmptyState icon={Wallet} title={tr('billing.noBudgets')} description="Set spending limits by category to stay on track."
+        <EmptyState icon={Wallet} title={tr('billing.noBudgets')} description={tr('billingModule.setSpendingLimitsByCategory')}
           action={<Button onClick={() => setShowAddBudget(true)}><Plus className="h-4 w-4" /> {tr('billing.addBudget')}</Button>} />
       ) : (
         <div className="space-y-4">
@@ -1198,7 +1198,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>
       </div>
       {bills.length === 0 ? (
-        <EmptyState icon={Receipt} title={tr('billing.noBills')} description="Track your recurring bills and due dates."
+        <EmptyState icon={Receipt} title={tr('billing.noBills')} description={tr('billingModule.trackYourRecurringBillsAnd')}
           action={<Button onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>} />
       ) : (
         <div className="space-y-3">
@@ -1243,7 +1243,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <Button size="sm" onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>
       </div>
       {savingsGoals.length === 0 ? (
-        <EmptyState icon={PiggyBank} title={tr('billing.noSavingsGoals')} description="Set a savings goal to track your progress."
+        <EmptyState icon={PiggyBank} title={tr('billing.noSavingsGoals')} description={tr('billingModule.setASavingsGoalTo')}
           action={<Button onClick={() => setShowAddGoal(true)}><Plus className="h-4 w-4" /> {tr('billing.addGoal')}</Button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1360,7 +1360,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="module-main module-page">
         <PageHeader
           title={tr('billing.finances')}
-          description="Stay on top of your family's money, budgets, and goals."
+          description={tr('billingModule.stayOnTopOfYour')}
           action={
             <div className="flex items-center gap-2">
               <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>

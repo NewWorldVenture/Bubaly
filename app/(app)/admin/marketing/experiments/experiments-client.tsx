@@ -22,7 +22,7 @@ export function NewExperimentForm() {
         <form
           action={(fd) => start(async () => {
             const res = await createExperiment(fd);
-            if (res?.ok) { success('Experiment created'); setOpen(false); }
+            if (res?.ok) { success(t('experimentsClient.experimentCreated')); setOpen(false); }
             else toastError(res?.error ?? 'Could not create');
           })}
           className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4"
@@ -53,7 +53,7 @@ export function ExperimentControls({ id, status, variants }: {
   function go(fn: () => Promise<{ ok: boolean; error?: string }>) {
     start(async () => {
       const res = await fn();
-      if (res?.ok) success('Updated'); else toastError(res?.error ?? 'Failed');
+      if (res?.ok) success(t('experimentsClient.updated')); else toastError(res?.error ?? 'Failed');
     });
   }
 

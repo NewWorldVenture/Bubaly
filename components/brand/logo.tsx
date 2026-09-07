@@ -1,4 +1,10 @@
+'use client';
+
+// Client for the same reason as `components/a11y/skip-link.tsx`: it calls
+// `useTranslations()` for the link's accessible name and is rendered from the
+// server layouts under `app/(app)/kids` and `app/(auth)`.
 import Image from 'next/image';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import Link from 'next/link';
 import { cn } from '@/lib/utils/cn';
 
@@ -36,16 +42,17 @@ export function Logo({
   showText?: boolean;
   markVariant?: 'family' | 'home';
 }) {
+  const t = useTranslations();
   return (
     <Link
       href={href}
-      aria-label="Bubaly home"
+      aria-label={t('logo.bubalyHome')}
       className={cn('inline-flex shrink-0 items-center', className)}
     >
       {showText ? (
         <Image
           src="/brand/bubaly-logo.png"
-          alt="Bubaly"
+          alt={t('logo.bubaly')}
           width={1143}
           height={618}
           priority

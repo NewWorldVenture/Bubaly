@@ -99,7 +99,7 @@ export function RidesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) { toastError('Title is required'); return; }
+    if (!form.title.trim()) { toastError(tr('ridesModule.titleIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const fields = {
@@ -128,7 +128,7 @@ export function RidesModule() {
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }
-    success('Ride deleted');
+    success(tr('ridesModule.rideDeleted'));
   }
 
   async function setStatus(r: Ride, status: RideStatus) {
@@ -151,7 +151,7 @@ export function RidesModule() {
     <div>
       <PageHeader
         title={t('rides.ridesCarpool')}
-        description="Coordinate who's driving whom, when, and where — with conflict detection."
+        description={tr('ridesModule.coordinateWhoSDrivingWhom')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rides" iconOnly />
@@ -181,10 +181,7 @@ export function RidesModule() {
         </div>
       )}
 
-      <p className="mb-4 text-xs text-muted">
-        Checks compare recorded pickup and drop-off times only. Travel between rides is not assessed.
-        Missing, invalid, or overnight times cannot establish a clear schedule.
-      </p>
+      <p className="mb-4 text-xs text-muted">{tr('ridesModule.checksCompareRecordedPickupAnd')}</p>
 
       <div className="flex items-center gap-1.5 mb-4">
         <button onClick={() => setShowPast(false)}

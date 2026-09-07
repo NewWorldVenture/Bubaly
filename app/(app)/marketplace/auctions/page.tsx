@@ -14,12 +14,13 @@ export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page space-y-4">
-      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" /> Live Auctions</h1>
-      <ErrorState message="Could not load live auctions from Supabase. Refresh and try again." />
-      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">Refresh auctions</Link>
+      <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl"><Gavel className="h-6 w-6 text-brand-text" />{' '}{t('auctions.liveAuctions')}</h1>
+      <ErrorState message={t('auctions.couldNotLoadLiveAuctions')} />
+      <Link href="/marketplace/auctions" className="text-sm font-medium text-brand-text underline">{t('auctions.refreshAuctions')}</Link>
     </div>
   );
 }

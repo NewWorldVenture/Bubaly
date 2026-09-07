@@ -37,7 +37,7 @@ export default async function CalendarPage() {
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={CalendarClock} title={t('dashboardSocialCalendar.nothingScheduled')} description="Schedule a post in the studio and it will appear here grouped by day." />
+        <EmptyState icon={CalendarClock} title={t('dashboardSocialCalendar.nothingScheduled')} description={t('calendar.scheduleAPostInThe')} />
       ) : (
         <div className="space-y-4">
           {days.map((day) => (

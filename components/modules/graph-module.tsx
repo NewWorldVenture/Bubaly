@@ -95,7 +95,7 @@ export function GraphModule() {
     const res = await projectTwinAction();
     setProjecting(false);
     if (!res.ok) { toastError(res.error ?? 'Could not rebuild the twin'); return; }
-    if (res.entities === 0) { toastError('No family data to project yet — add members, teams, etc.'); return; }
+    if (res.entities === 0) { toastError(t('graphModule.noFamilyDataToProject')); return; }
     success(`Twin synced — ${res.entities} entities, ${res.edges} links from your data`);
   }
 
@@ -103,7 +103,7 @@ export function GraphModule() {
     <div className="space-y-6">
       <PageHeader
         title={t('graph.knowledgeGraph')}
-        description="The household modelled as linked, typed relationships — so the AI can reason, not just retrieve."
+        description={t('graphModule.theHouseholdModelledAsLinked')}
         action={
           <>
             <Button onClick={rebuildFromData} disabled={projecting}>
@@ -120,7 +120,7 @@ export function GraphModule() {
       {loading ? (
         <SkeletonList count={4} />
       ) : error ? (
-        <ErrorState message="Could not load the knowledge graph. Refresh and try again." onRetry={refresh} />
+        <ErrorState message={t('graphModule.couldNotLoadTheKnowledge')} onRetry={refresh} />
       ) : graph.entities.length === 0 ? (
         <EmptyState onAdd={() => setAddEntity(true)} onRebuild={rebuildFromData} projecting={projecting} />
       ) : (
@@ -263,7 +263,7 @@ export function GraphModule() {
         <AddEdgeModal
           familyId={familyId} userId={userId} entities={graph.entities}
           onClose={() => setAddEdge(false)}
-          onSaved={() => { success('Linked'); setAddEdge(false); }}
+          onSaved={() => { success(t('graphModule.linked')); setAddEdge(false); }}
           onError={toastError}
         />
       )}
@@ -277,11 +277,7 @@ function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onReb
     <div className="rounded-xl border border-dashed border-border p-10 text-center">
       <Network className="mx-auto mb-3 size-8 text-muted" />
       <h3 className="mb-1 text-base font-semibold">{t('graph.buildYourFamilyAposSGraph')}</h3>
-      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
-        Pull in the people, activities, schools, teams, vehicles and places you already track —
-        or add them by hand. Once relationships are explicit, the AI can trace dependencies and
-        predict ripple effects.
-      </p>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">{t('graphModule.pullInThePeopleActivities')}</p>
       <div className="flex justify-center gap-2">
         <Button onClick={onRebuild} disabled={projecting}>
           <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Build from my family data'}
@@ -303,7 +299,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const n = name.trim();
-    if (!n) { onError('Name is required'); return; }
+    if (!n) { onError(t('graphModule.nameIsRequired')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('graph_entities').insert({ family_id: familyId, name: n, kind, created_by: userId });
@@ -314,7 +310,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   return (
     <Modal open onClose={onClose} title={t('graph.addEntity')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label={t('graph.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emma, Soccer, Grandma's house…" autoFocus />}</Field>
+        <Field label={t('graph.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('graphModule.emmaSoccerGrandmaSHouse')} autoFocus />}</Field>
         <Field label={t('graph.kind')}>{(id) => (
           <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as EntityKind)}>
             {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -341,10 +337,10 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
   const [saving, setSaving] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!sourceId || !targetId) { onError('Pick both ends'); return; }
-    if (sourceId === targetId) { onError('An entity can’t link to itself'); return; }
+    if (!sourceId || !targetId) { onError(t('graphModule.pickBothEnds')); return; }
+    if (sourceId === targetId) { onError(t('graphModule.anEntityCanTLink')); return; }
     const rel = relation.trim();
-    if (!rel) { onError('Describe the relationship'); return; }
+    if (!rel) { onError(t('graphModule.describeTheRelationship')); return; }
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('graph_edges').insert({

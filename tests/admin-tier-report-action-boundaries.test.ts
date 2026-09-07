@@ -10,7 +10,7 @@ describe('privileged tier and report action boundaries', () => {
     expect(tierActions).toContain('describeActionError');
     expect(tierActions).toContain("if (!('supabase' in guarded)) return guarded;");
     expect(tierActions).toContain('FEATURE_CATALOG_BY_KEY[key]');
-    expect(tierActions).toContain("if (!isFeatureTier(tier)) return { ok: false, error: 'Choose a valid tier.' }");
+    expect(tierActions).toContain("if (!isFeatureTier(tier)) return { ok: false, error: t('actions.chooseAValidTier') }");
     expect(tierActions).toContain('try {');
   });
 
@@ -23,15 +23,15 @@ describe('privileged tier and report action boundaries', () => {
 
   it('checks report reads, target rows, and listing withdrawal writes', () => {
     expect(reportActions).toContain('reportError');
-    expect(reportActions).toContain("if (!updated) return { ok: false, error: 'Report not found or already resolved.' }");
+    expect(reportActions).toContain("if (!updated) return { ok: false, error: t('actions.reportNotFoundOrAlready') }");
     expect(reportActions).toContain('listingError');
     expect(reportActions).toContain('withdrawalError');
-    expect(reportActions).toContain("if (!withdrawn) return { ok: false, error: 'The reported listing changed before it could be withdrawn.' }");
+    expect(reportActions).toContain("if (!withdrawn) return { ok: false, error: t('actions.theReportedListingChangedBefore') }");
   });
 
   it('prevents stale report claims from being reported as successful', () => {
     expect(reportActions).toContain(".eq('status', 'open')");
-    expect(reportActions).toContain("if (!data) return { ok: false, error: 'Report not found or already claimed.' }");
+    expect(reportActions).toContain("if (!data) return { ok: false, error: t('actions.reportNotFoundOrAlready2') }");
     expect(reportActions).toContain("if (!('admin' in guarded)) return guarded;");
   });
 });

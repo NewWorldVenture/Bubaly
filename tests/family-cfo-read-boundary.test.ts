@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-cfo/page.tsx', 'utf8');
@@ -18,7 +19,8 @@ describe('family-cfo page read boundary', () => {
   it('logs and returns an ErrorState on a finance read failure', () => {
     expect(page).toContain('if (financeError) {');
     expect(page).toContain("console.error('[dashboard/family-cfo] finance read failed', financeError);");
-    expect(page).toContain('return <ErrorState message="Could not load your family finances from Supabase. Refresh and try again." />;');
+    expect(page).toContain("return <ErrorState message={");
+    expectSays(page, 'familyCfo.couldNotLoadYourFamily', "Could not load your family finances from Supabase. Refresh and try again.");
   });
 
   it('derives the finance data only after the fail-closed guard', () => {

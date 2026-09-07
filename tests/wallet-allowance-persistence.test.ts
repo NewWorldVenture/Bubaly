@@ -6,7 +6,7 @@ const source = readFileSync('app/(app)/wallet/actions.ts', 'utf8');
 describe('wallet allowance persistence boundaries', () => {
   it('fails closed when due rules cannot be read', () => {
     expect(source).toContain('const { data: rules, error: rulesError }');
-    expect(source).toContain("return actionFailure(rulesError, 'Could not load due allowances.')");
+    expect(source).toContain("return actionFailure(rulesError, t('actions.couldNotLoadDueAllowances'))");
   });
 
   it('checks the schedule advance and rolls it back when crediting fails', () => {

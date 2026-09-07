@@ -3,6 +3,7 @@
 // order to fix things in — the paperwork risks first, because those have
 // deadlines the trip does not move.
 import { Gauge, AlertTriangle } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { cn } from '@/lib/utils/cn';
 import type { ReadinessCard } from '@/lib/ai/result-cards';
 import { CardFrame } from './index';
@@ -23,6 +24,7 @@ const RING: Record<'success' | 'warning' | 'danger', string> = {
 };
 
 export function ReadinessCardView({ card, compact = false, className }: { card: ReadinessCard; compact?: boolean; className?: string }) {
+  const t = useTranslations();
   const tone = scoreTone(card.score);
   const recs = card.recommendations.slice(0, compact ? COMPACT_RECS : FULL_RECS);
   const risks = compact ? card.risks.slice(0, 1) : card.risks.slice(0, 4);
@@ -44,7 +46,7 @@ export function ReadinessCardView({ card, compact = false, className }: { card: 
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(card.score)}
-          aria-label="Readiness"
+          aria-label={t('readiness.readiness')}
           className={cn('grid shrink-0 place-items-center rounded-full border-[3px] font-bold tabular-nums', compact ? 'h-11 w-11 text-sm' : 'h-14 w-14 text-base', RING[tone])}
         >
           {Math.round(card.score)}

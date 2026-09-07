@@ -94,7 +94,7 @@ export function HomeMomentCard() {
     });
     if (!res.ok) { setRemindState('idle'); toastError(res.error ?? 'Could not set reminder'); return; }
     setRemindState('done');
-    success('Reminder set');
+    success(t('homeMomentCard.reminderSet'));
   }
 
   return (
@@ -144,13 +144,13 @@ export function HomeMomentCard() {
           type="button"
           onClick={setReminder}
           disabled={remindState !== 'idle'}
-          aria-label={remindState === 'done' ? 'Reminder set' : `Remind me: ${primaryReminder.title}`}
+          aria-label={remindState === 'done' ? t('homeMomentCard.reminderSet') : `Remind me: ${primaryReminder.title}`}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text transition hover:bg-brand/15 disabled:opacity-60"
         >
           {remindState === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" />
             : remindState === 'done' ? <Check className="h-4 w-4" />
             : <Bell className="h-4 w-4" />}
-          <span className="hidden sm:inline">{remindState === 'done' ? 'Reminder set' : 'Remind me'}</span>
+          <span className="hidden sm:inline">{remindState === 'done' ? t('homeMomentCard.reminderSet') : 'Remind me'}</span>
         </button>
       ) : (
         <Link href="/dashboard/moments" aria-label={t('homeMoment.openMoments')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand-text">

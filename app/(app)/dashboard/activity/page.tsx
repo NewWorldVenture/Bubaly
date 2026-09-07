@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
@@ -9,6 +10,7 @@ export const metadata: Metadata = { title: 'Activity' };
 export const dynamic = 'force-dynamic';
 
 export default async function ActivityPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -34,7 +36,7 @@ export default async function ActivityPage() {
   ].find(Boolean);
   if (readError) {
     console.error('[dashboard/activity] activity feed read failed', readError);
-    return <ErrorState message="Could not load family activity from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('activity.couldNotLoadFamilyActivity')} />;
   }
 
   const { data: members } = membersResult;
@@ -57,7 +59,7 @@ export default async function ActivityPage() {
     : { data: [] as { id: string; title: string }[], error: null };
   if (choreResult.error) {
     console.error('[dashboard/activity] chore title read failed', choreResult.error);
-    return <ErrorState message="Could not load family activity from Supabase. Refresh and try again." />;
+    return <ErrorState message={t('activity.couldNotLoadFamilyActivity')} />;
   }
   const { data: choreRows } = choreResult;
   const choreTitle = new Map((choreRows ?? []).map((c) => [c.id, c.title]));

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -16,21 +17,22 @@ type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredient
 // gluten-free, etc.) from a saved recipe. Server-side AI via the configured
 // engine; rate-limited; nutrition/health disclaimers baked into the result.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('transform.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-recipe-transform:${ctx.user.id}`, { limit: 12 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many recipe transformations. Please try again shortly.' },
+    { error: t('transform.tooManyRecipeTransformationsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('transform.requestBodyIsTooLarge') }, { status: 400 });
   const { recipeId, actionId } = (boundedBody.value ?? {}) as { recipeId?: string; actionId?: string };
   if (!recipeId || !actionId || !getRecipeAiAction(actionId)) {
-    return NextResponse.json({ error: 'recipeId and a valid actionId are required' }, { status: 422 });
+    return NextResponse.json({ error: t('transform.recipeidAndAValidActionid') }, { status: 422 });
   }
 
   const { data: recipe } = await supabase
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
     .eq('id', recipeId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
-  if (!recipe) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
+  if (!recipe) return NextResponse.json({ error: t('transform.recipeNotFound') }, { status: 404 });
 
   const prompt = buildTransformPrompt({
     name: recipe.name, cuisine: recipe.cuisine, servings: recipe.servings,
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
     instructions: (recipe.instructions as unknown as { step: number; text: string }[]) ?? [],
     allergyFlags: recipe.allergy_flags ?? [],
   }, actionId as RecipeAiActionId);
-  if (!prompt) return NextResponse.json({ error: 'Unknown action' }, { status: 422 });
+  if (!prompt) return NextResponse.json({ error: t('transform.unknownAction') }, { status: 422 });
 
   let result;
   try {
@@ -68,9 +70,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (err) {
     console.error('Recipe transform error:', err);
-    return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });
+    return NextResponse.json({ error: t('transform.aiIsTemporarilyUnavailable') }, { status: 502 });
   }
-  if (!result) return NextResponse.json({ error: 'Could not generate a variant — please try again.' }, { status: 502 });
+  if (!result) return NextResponse.json({ error: t('transform.couldNotGenerateAVariant') }, { status: 502 });
 
   const action = getRecipeAiAction(actionId)!;
   const { data: saved, error } = await supabase
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
     .single();
   if (error || !saved) {
     console.error('Recipe variant save failed:', error);
-    return NextResponse.json({ error: 'Could not save variant.' }, { status: 500 });
+    return NextResponse.json({ error: t('transform.couldNotSaveVariant') }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, id: saved.id });

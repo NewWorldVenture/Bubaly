@@ -2,6 +2,7 @@
 // who has it and when it is due. Done rows stay visible but struck through,
 // because "3 of 5 done" is the number a parent wants.
 import { ListChecks } from 'lucide-react';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import type { TaskGroupCard } from '@/lib/ai/result-cards';
 import { CardFrame, CardRow, MoreRow } from './index';
 
@@ -9,6 +10,7 @@ const COMPACT_ROWS = 4;
 const FULL_ROWS = 12;
 
 export function TaskGroupCardView({ card, compact = false, className }: { card: TaskGroupCard; compact?: boolean; className?: string }) {
+  const tr = useTranslations();
   const rows = card.tasks.slice(0, compact ? COMPACT_ROWS : FULL_ROWS);
   const done = card.tasks.filter((t) => t.done).length;
   return (
@@ -22,7 +24,7 @@ export function TaskGroupCardView({ card, compact = false, className }: { card: 
       className={className}
     >
       {card.tasks.length === 0 ? (
-        <p className="text-sm text-muted">Nothing on the list.</p>
+        <p className="text-sm text-muted">{tr('taskGroup.nothingOnTheList')}</p>
       ) : (
         <ul className="divide-y divide-border/60">
           {rows.map((t, i) => (

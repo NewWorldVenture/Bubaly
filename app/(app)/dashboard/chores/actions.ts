@@ -27,6 +27,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -90,7 +91,8 @@ export async function setChoreStatusAction(
   assignmentId: string,
   status: 'todo' | 'in_progress' | 'submitted',
 ): Promise<ChoreStatusResult> {
-  if (!assignmentId) return { ok: false, error: 'That chore could not be found.' };
+  const t = await getTranslations();
+  if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
   const { scope } = await choreScope();
 
   try {
@@ -103,12 +105,13 @@ export async function setChoreStatusAction(
     return { ok: true, id: result.data.id, status: result.data.status };
   } catch (err) {
     console.error('[chore-action] status failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update that chore.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatChore')) };
   }
 }
 
 export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreActionResult> {
-  if (!assignmentId) return { ok: false, error: 'That chore could not be found.' };
+  const t = await getTranslations();
+  if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
   const { scope } = await choreScope();
 
   try {
@@ -119,7 +122,7 @@ export async function deleteChoreAssignmentAction(assignmentId: string): Promise
     return { ok: true, id: result.data.id };
   } catch (err) {
     console.error('[chore-action] delete failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not remove that chore.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotRemoveThatChore')) };
   }
 }
 
@@ -141,6 +144,7 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
 const RECURRENCES: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
 
 export async function createChoreAction(input: CreateChoreActionInput): Promise<ChoreActionResult> {
+  const t = await getTranslations();
   // The submission id now reaches something. `createChore` keys the chore and its
   // assignment as ONE unit — the piece of work this comment used to say was still
   // outstanding — so a double-tapped Add adds one chore, and the second tap gets
@@ -168,6 +172,6 @@ export async function createChoreAction(input: CreateChoreActionInput): Promise<
     return { ok: true, id: result.data.chore.id };
   } catch (err) {
     console.error('[chore-action] create failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not add that chore.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatChore')) };
   }
 }

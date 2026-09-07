@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
 import { clientIp } from '@/lib/server/rate-limit';
@@ -31,13 +32,14 @@ function clean(v: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   // Public service-role ingest → must be rate-limited like the other trackers.
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `mkt:${ip}`, { limit: 60 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many requests' },
+      { error: t('track.tooManyRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
   const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as TrackBody;
 
   const anonymousId = clean(body.anonymousId);
-  if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
+  if (!anonymousId) return NextResponse.json({ error: t('track.anonymousidRequired') }, { status: 400 });
 
   const source = clean(body.source);
   const medium = clean(body.medium);
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
     consent = await getConsentState(supabase, anonymousId, { gpc: body.gpc === true });
   } catch (error) {
     console.error('[mkt-track] consent read failed', error);
-    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+    return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
   }
   if (!canRecordAnalytics(consent)) {
     return NextResponse.json({ ok: true, recorded: false, reason: 'analytics_consent_absent' });
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (existingError) {
     console.error('[mkt-track] visitor read failed', existingError);
-    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+    return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
   }
 
   let visitorId: string | null = existing?.id ?? null;
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
     }).eq('id', visitorId);
     if (updateError) {
       console.error('[mkt-track] visitor update failed', updateError);
-      return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
     }
   } else {
     const { data: created, error: createError } = await supabase.from('mkt_visitors').insert({
@@ -105,11 +107,11 @@ export async function POST(req: NextRequest) {
     }).select('id').single();
     if (createError) {
       console.error('[mkt-track] visitor create failed', createError);
-      return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+      return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
     }
     visitorId = created?.id ?? null;
   }
-  if (!visitorId) return NextResponse.json({ error: 'Could not record visitor' }, { status: 500 });
+  if (!visitorId) return NextResponse.json({ error: t('track.couldNotRecordVisitor') }, { status: 500 });
 
   const [{ error: sessionError }, { error: touchpointError }] = await Promise.all([
     supabase.from('mkt_sessions').insert({ visitor_id: visitorId, source, medium, campaign, landing_path: clean(body.landingPath) }),
@@ -117,7 +119,7 @@ export async function POST(req: NextRequest) {
   ]);
   if (sessionError || touchpointError) {
     console.error('[mkt-track] attribution write failed', sessionError ?? touchpointError);
-    return NextResponse.json({ error: 'Analytics is temporarily unavailable.' }, { status: 503 });
+    return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
   }
 
   return NextResponse.json({ ok: true, recorded: true });

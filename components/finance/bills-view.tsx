@@ -59,9 +59,9 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     if (error) toastError(error.message); else success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
-    if (!confirm('Delete this bill?')) return;
+    if (!confirm(t('billsView.deleteThisBill'))) return;
     const { error } = await createClient().from('bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(error.message); else success(t('billsView.deleted'));
   }
 
   const Row = ({ b }: { b: Bill }) => {
@@ -145,7 +145,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!v.name.trim() || !v.amount) return toastError('Add a name and amount');
+    if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
     const { error } = await createClient().from('bills').insert({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
@@ -154,14 +154,14 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
     });
     setSaving(false);
     if (error) return toastError(error.message);
-    success('Bill added');
+    success(t('billsView.billAdded'));
     onClose();
   }
 
   return (
     <Modal open onClose={onClose} title={t('bills.addBill')}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="Electric bill" required autoFocus />}</Field>
+        <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
           <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>

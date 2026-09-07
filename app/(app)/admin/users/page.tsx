@@ -246,7 +246,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                   <EmptyState
                     icon={UsersRound}
                     title={tr('adminUsers.noMembersYet')}
-                    description="When families add members — or you add a user with “Add User” above — they’ll appear here. The console is reading live from Supabase."
+                    description={tr('users.whenFamiliesAddMembersOr')}
                   />
                 ) : (
                   <EmptyState icon={UsersRound} title={tr('adminUsers.noMembersMatchTheseFilters')} />
@@ -271,7 +271,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <tr key={u.member.id}>
                           <td className="px-3 py-2.5">
                             <p className="font-medium">{u.name || '—'}</p>
-                            <p className="text-xs text-muted">{u.email ?? <span className="italic">No login account</span>}</p>
+                            <p className="text-xs text-muted">{u.email ?? <span className="italic">{tr('users.noLoginAccount')}</span>}</p>
                           </td>
                           <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{ROLE_LABELS[u.role]}</Badge> : '—'}</td>
@@ -459,7 +459,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               </table></div>
             </div>
           ) : (
-            <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description="Run supabase/seed.sql against this project to populate roles & permissions." />
+            <EmptyState icon={ShieldCheck} title={tr('adminUsers.permissionMatrixNotSeeded')} description={tr('users.runSupabaseSeedSqlAgainst')} />
           )}
         </Card>
       )}
@@ -467,15 +467,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   );
 }
 
-function AdminUsersReadError() {
+async function AdminUsersReadError() {
+  const tr = await getTranslations();
   return (
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Users &amp; Families</h1>
-        <p className="mt-1 text-sm text-muted">Manage all users, families, and their access levels.</p>
+        <p className="mt-1 text-sm text-muted">{tr('users.manageAllUsersFamiliesAnd')}</p>
       </div>
-      <ErrorState message="Could not load users and family access data from Supabase. Refresh and try again." />
-      <a href="/admin/users" className="text-sm font-medium text-brand-text underline">Refresh users</a>
+      <ErrorState message={tr('users.couldNotLoadUsersAnd')} />
+      <a href="/admin/users" className="text-sm font-medium text-brand-text underline">{tr('users.refreshUsers')}</a>
     </div>
   );
 }

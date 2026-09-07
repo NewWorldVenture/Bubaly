@@ -42,7 +42,7 @@ export default async function ContentPage() {
         <div>
           <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>
           {(items ?? []).length === 0 ? (
-            <EmptyState icon={FileText} title={t('adminMarketingContent.noContentPlanned')} description="Add an idea or brief on the right." />
+            <EmptyState icon={FileText} title={t('adminMarketingContent.noContentPlanned')} description={t('content.addAnIdeaOrBrief')} />
           ) : (
             <div className="space-y-2">
               {(items ?? []).map((it) => {
@@ -73,31 +73,30 @@ export default async function ContentPage() {
                               {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <input name="author" defaultValue={blog.author ?? ''} placeholder="Author (default: The Bubaly Team)" className={smCls} />
-                            <input name="tags" defaultValue={(blog.tags ?? []).join(', ')} placeholder="Tags, comma-separated" className={smCls} />
+                            <input name="tags" defaultValue={(blog.tags ?? []).join(', ')} placeholder={t('content.tagsCommaSeparated')} className={smCls} />
                             <input name="excerpt" defaultValue={blog.excerpt ?? ''} placeholder="Excerpt (auto from body)" className={`${smCls} col-span-2`} />
-                            <label className="col-span-2 flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="featured" defaultChecked={blog.featured === true} className="h-4 w-4 accent-[var(--brand)]" /> Featured post</label>
+                            <label className="col-span-2 flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="featured" defaultChecked={blog.featured === true} className="h-4 w-4 accent-[var(--brand)]" />{' '}{t('content.featuredPost')}</label>
                           </div>
                         )}
                         <div className="flex items-center gap-2">
                           <select name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
                             {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
                           </select>
-                          <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">Save</button>
+                          <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</button>
                         </div>
                       </form>
                       {isBlog && canPublish && (
                         <form action={publishContentToBlogAction} className="mt-2">
                           <input type="hidden" name="id" value={it.id} />
                           <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
-                            <Send className="h-3.5 w-3.5" /> Publish to blog
-                          </button>
-                          <span className="ml-2 text-xs text-muted">Save the body first. Creates/updates the public /blog post.</span>
+                            <Send className="h-3.5 w-3.5" />{' '}{t('content.publishToBlog')}</button>
+                          <span className="ml-2 text-xs text-muted">{t('content.saveTheBodyFirstCreates')}</span>
                         </form>
                       )}
                     </details>
                     <form action={archiveContentAction} className="mt-2">
                       <input type="hidden" name="id" value={it.id} />
-                      <button type="submit" className="text-xs text-muted hover:text-rose-400">Archive</button>
+                      <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.archive')}</button>
                     </form>
                   </Card>
                 );
@@ -122,7 +121,7 @@ export default async function ContentPage() {
                     <Badge tone={p.published ? 'success' : 'neutral'}>{p.published ? 'Live' : 'Draft'}</Badge>
                     {p.published && (
                       <form action={unpublishBlogPostAction.bind(null, p.slug)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Unpublish</button>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.unpublish')}</button>
                       </form>
                     )}
                   </div>
@@ -148,15 +147,16 @@ export default async function ContentPage() {
   );
 }
 
-function AdminContentReadError() {
+async function AdminContentReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Content</h1>
-        <p className="mt-1 text-sm text-muted">Manage the content pipeline and published blog posts.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('content.marketingContent')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('content.manageTheContentPipelineAnd')}</p>
       </div>
-      <ErrorState message="Could not load marketing content from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">Refresh content</Link>
+      <ErrorState message={t('content.couldNotLoadMarketingContent')} />
+      <Link href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">{t('content.refreshContent')}</Link>
     </div>
   );
 }

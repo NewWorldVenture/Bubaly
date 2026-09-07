@@ -33,7 +33,7 @@ export default async function FormsPage() {
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
         {(forms ?? []).length === 0 ? (
-          <EmptyState icon={ClipboardList} title={t('adminMarketingForms.noFormsYet')} description="Build a lead-capture form on the right." />
+          <EmptyState icon={ClipboardList} title={t('adminMarketingForms.noFormsYet')} description={t('forms.buildALeadCaptureForm')} />
         ) : (
           (forms ?? []).map((f) => {
             const fields = Array.isArray(f.fields) ? f.fields as { label: string }[] : [];
@@ -51,8 +51,7 @@ export default async function FormsPage() {
                   <div className="mt-2 flex items-center gap-3 text-xs">
                     {active && (
                       <a href={`/f/${f.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">
-                        <ExternalLink className="h-3 w-3" /> View public form
-                      </a>
+                        <ExternalLink className="h-3 w-3" />{' '}{t('forms.viewPublicForm')}</a>
                     )}
                     <form action={setFormStatus}>
                       <input type="hidden" name="id" value={f.id} />
@@ -86,15 +85,16 @@ export default async function FormsPage() {
   );
 }
 
-function AdminFormsReadError() {
+async function AdminFormsReadError() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Forms</h1>
-        <p className="mt-1 text-sm text-muted">Create and monitor public lead-capture forms.</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('forms.marketingForms')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('forms.createAndMonitorPublicLead')}</p>
       </div>
-      <ErrorState message="Could not load marketing forms from Supabase. Refresh and try again." />
-      <Link href="/admin/marketing/forms" className="text-sm font-medium text-brand-text underline">Refresh forms</Link>
+      <ErrorState message={t('forms.couldNotLoadMarketingForms')} />
+      <Link href="/admin/marketing/forms" className="text-sm font-medium text-brand-text underline">{t('forms.refreshForms')}</Link>
     </div>
   );
 }

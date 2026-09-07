@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -20,6 +21,7 @@ export const runtime = 'nodejs';
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const limited = await enforceAIRateLimit(supabase, `ai-pantry-chef:${userId}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many fridge scans. Please try again shortly.' },
+      { error: t('pantryChef.tooManyFridgeScansPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (body.addToPlan && typeof body.addToPlan === 'object') {
       const plan = body.addToPlan;
       const title = typeof plan.title === 'string' ? plan.title.trim().slice(0, 200) : '';
-      if (!title) return NextResponse.json({ error: 'Recipe title is required.' }, { status: 400 });
+      if (!title) return NextResponse.json({ error: t('pantryChef.recipeTitleIsRequired') }, { status: 400 });
       const planDate = normalizePlanDate(plan.planDate);
       const ingredients = [...(Array.isArray(plan.have) ? plan.have : []), ...(Array.isArray(plan.need) ? plan.need : [])]
         .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
       }).select('id').single();
       if (mealError || !meal?.id) {
         console.error('[ai/pantry-chef] meal create failed', mealError);
-        return NextResponse.json({ error: 'Could not save that recipe.' }, { status: 500 });
+        return NextResponse.json({ error: t('pantryChef.couldNotSaveThatRecipe') }, { status: 500 });
       }
       const { error: planError } = await supabase.from('meal_plans').insert({
         family_id: familyId, created_by: userId, meal_id: meal.id,
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
       });
       if (planError) {
         console.error('[ai/pantry-chef] meal plan insert failed', planError);
-        return NextResponse.json({ error: 'Could not add that recipe to your meal plan.' }, { status: 500 });
+        return NextResponse.json({ error: t('pantryChef.couldNotAddThatRecipe') }, { status: 500 });
       }
       return NextResponse.json({ planned: true, planDate });
     }
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (listError) {
         console.error('[ai/pantry-chef] grocery list read failed', listError);
-        return NextResponse.json({ error: 'Could not open your grocery list.' }, { status: 500 });
+        return NextResponse.json({ error: t('pantryChef.couldNotOpenYourGrocery') }, { status: 500 });
       }
       let listId = list?.id;
       if (!listId) {
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
           .single();
         if (createError || !created) {
           console.error('[ai/pantry-chef] grocery list create failed', createError);
-          return NextResponse.json({ error: 'Could not create your grocery list.' }, { status: 500 });
+          return NextResponse.json({ error: t('pantryChef.couldNotCreateYourGrocery') }, { status: 500 });
         }
         listId = created.id;
       }
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest) {
       const { data: inserted, error: insertError } = await supabase.from('grocery_items').insert(rows).select('id');
       if (insertError) {
         console.error('[ai/pantry-chef] grocery insert failed', insertError);
-        return NextResponse.json({ error: 'Could not add those items to your grocery list.' }, { status: 500 });
+        return NextResponse.json({ error: t('pantryChef.couldNotAddThoseItems') }, { status: 500 });
       }
       return NextResponse.json({ added: inserted?.length ?? 0 });
     }
@@ -119,9 +121,9 @@ export async function POST(req: NextRequest) {
     // ── Phase 1: photo → allergy-aware recipe suggestions ────────────────────
     const data = body.data ?? '';
     const mediaType = body.mediaType ?? '';
-    if (!data) return NextResponse.json({ error: 'No photo received.' }, { status: 400 });
-    if (!IMAGE_TYPES.includes(mediaType)) return NextResponse.json({ error: 'Upload a photo (JPG/PNG/WebP).' }, { status: 400 });
-    if (data.length > 8_000_000) return NextResponse.json({ error: 'Photo is too large (≈5 MB max).' }, { status: 400 });
+    if (!data) return NextResponse.json({ error: t('pantryChef.noPhotoReceived') }, { status: 400 });
+    if (!IMAGE_TYPES.includes(mediaType)) return NextResponse.json({ error: t('pantryChef.uploadAPhotoJpgPng') }, { status: 400 });
+    if (data.length > 8_000_000) return NextResponse.json({ error: t('pantryChef.photoIsTooLarge5') }, { status: 400 });
 
     // Read the family's allergies with the service client so the safety filter
     // works for every member (medical_profiles is manager-gated to clients); the
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
     const aiConfig = await getAIConfig(service);
     const apiKey = aiConfig.openaiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'Fridge Chef needs an OpenAI API key. Add one in Admin → AI Engine.' }, { status: 503 });
+      return NextResponse.json({ error: t('pantryChef.fridgeChefNeedsAnOpenai') }, { status: 503 });
     }
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
@@ -160,7 +162,7 @@ export async function POST(req: NextRequest) {
     if (!aiRes.ok) {
       const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
       console.error('[ai/pantry-chef] OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
-      return NextResponse.json({ error: 'Could not read that photo. Try a clearer, well-lit shot of your fridge or pantry.' }, { status: 502 });
+      return NextResponse.json({ error: t('pantryChef.couldNotReadThatPhoto') }, { status: 502 });
     }
     const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1024 * 1024);
     const text = aiJson.choices?.[0]?.message?.content ?? '[]';
@@ -169,6 +171,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ recipes, allergiesConsidered: allergies.length });
   } catch (error) {
     console.error('[ai/pantry-chef] request failed', error);
-    return NextResponse.json({ error: 'Fridge Chef is unavailable right now. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 500 });
   }
 }

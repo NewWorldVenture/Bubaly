@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/modules/finances-module.tsx', 'utf8');
@@ -10,7 +11,7 @@ describe('finances read boundary', () => {
     expect(source).toContain('error: budgetsError, refresh: refreshBudgets');
     expect(source).toContain('error: billsError, refresh: refreshBills');
     expect(source).toContain('error: goalsError, refresh: refreshGoals');
-    expect(source).toContain('Could not load financial data. Refresh and try again.');
+    expectSays(source, 'financesModule.couldNotLoadFinancialData', 'Could not load financial data. Refresh and try again.');
     expect(source).toContain('void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals();');
   });
 });

@@ -29,7 +29,7 @@ export default async function WalletGoalsPage() {
   ]);
   if (goalsError) {
     console.error('[wallet-goals] Goals read failed', goalsError);
-    return <ErrorState message="Could not load wallet goals. Refresh and try again." />;
+    return <ErrorState message={tr('goals.couldNotLoadWalletGoals')} />;
   }
   if (childWalletsError) { console.error('[wallet-goals] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
   if (membersError) { console.error('[wallet-goals] Family members read failed', membersError); dataWarnings.push('Family members'); }

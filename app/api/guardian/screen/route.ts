@@ -3,6 +3,7 @@
 // Continues the conversation or ends it with a decision.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { screeningTurn, summarizeScreening, type ScreeningTurn } from '@/lib/guardian/ai-screen';
@@ -23,6 +24,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('sessionId') ?? '';
   const turn = Number(searchParams.get('turn') ?? '1');
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
   const callbackId = `${callSid}:screen:${turn}`;
   const eventClaimed = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
-  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlSay('Thank you for calling. Goodbye.'), twimlHangup()));
+  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlSay(tr('screen.thankYouForCallingGoodbye')), twimlHangup()));
   const finish = async (xml: string) => {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return twimlResponse(xml);
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
 
   if (!session || (session as { status: string }).status !== 'active') {
     return finish(wrapTwiml(
-      twimlSay('Thank you for calling. Goodbye.'),
+      twimlSay(tr('screen.thankYouForCallingGoodbye')),
       twimlHangup(),
     ));
   }
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest) {
   const storedTurn = Number((session as { turn?: number }).turn ?? 0);
   if (!isNextScreeningTurn(storedTurn, turn)) {
     return finish(wrapTwiml(
-      twimlSay('Thank you for calling. Goodbye.'),
+      twimlSay(tr('screen.thankYouForCallingGoodbye')),
       twimlHangup(),
     ));
   }
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
       resolution_summary: `Scam detected (${scamCheck.scamType}). Call ended.`,
     });
     return finish(wrapTwiml(
-      twimlSay('We\'re not interested. Thank you and goodbye.'),
+      twimlSay(tr('screen.weReNotInterestedThank')),
       twimlHangup(),
     ));
   }
@@ -158,7 +160,7 @@ export async function POST(req: NextRequest) {
         resolution_summary: decision?.summary ?? 'Call ended by AI.',
       });
       return finish(wrapTwiml(
-        twimlSay(responseText || 'Thank you. Goodbye.'),
+        twimlSay(responseText || tr('screen.thankYouGoodbye')),
         twimlHangup(),
       ));
     }
@@ -184,13 +186,13 @@ export async function POST(req: NextRequest) {
 
       if (memberPhone) {
         return finish(wrapTwiml(
-          twimlSay(responseText || 'Connecting you now. One moment.'),
+          twimlSay(responseText || tr('screen.connectingYouNowOneMoment')),
           `<Dial>${memberPhone}</Dial>`,
         ));
       }
 
       return finish(wrapTwiml(
-        twimlSay('I\'ll let them know you called. Please leave a message after the tone.'),
+        twimlSay('I’ll let them know you called. Please leave a message after the tone.'),
         twimlRecord({
           action: `${BASE_URL}/api/guardian/status/voicemail?commId=${sess.communication_id ?? ''}`,
           text: '',
@@ -219,7 +221,7 @@ export async function POST(req: NextRequest) {
     }
 
     return finish(wrapTwiml(
-      twimlSay(responseText || 'Thank you. I\'ll pass along your message.'),
+      twimlSay(responseText || tr('screen.thankYouILlPass')),
       twimlRecord({
         action: `${BASE_URL}/api/guardian/status/voicemail?commId=${sess.communication_id ?? ''}`,
         text: 'Please leave your message after the tone. Press any key when done.',
@@ -236,7 +238,7 @@ export async function POST(req: NextRequest) {
       timeout: 8,
       speechTimeout: 'auto',
     }),
-    twimlSay('I didn\'t catch that. Could you please repeat that?'),
+    twimlSay(tr('screen.iDidnTCatchThat')),
     twimlGather({
       action: `${BASE_URL}/api/guardian/screen?sessionId=${sess.id}&turn=${turn + 1}`,
       text: '',

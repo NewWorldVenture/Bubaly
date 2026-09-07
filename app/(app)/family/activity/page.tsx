@@ -39,7 +39,7 @@ export default async function FamilyActivityPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('familyActivity.familyActivity')} description="A running log of changes across your household." />
+      <PageHeader title={t('familyActivity.familyActivity')} description={t('activity.aRunningLogOfChanges')} />
       <SectionCard title={t('familyActivity.recentActivity')}>
         {lines.length > 0 ? (
           <ul className="space-y-1">
@@ -56,7 +56,7 @@ export default async function FamilyActivityPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={Activity} text="No activity recorded yet." />}
+        ) : <MiniEmpty icon={Activity} text={t('activity.noActivityRecordedYet')} />}
       </SectionCard>
     </div>
   );

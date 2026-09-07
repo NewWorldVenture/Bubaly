@@ -69,7 +69,7 @@ export function QuickPost({ className }: { className?: string }) {
 
   const makeDraft = () => {
     const text = input.trim();
-    if (!text) { toastError('Describe the item first — one sentence is plenty'); return; }
+    if (!text) { toastError(t('quickPost.describeTheItemFirstOne')); return; }
     const d = draftListing(text);
     setDraft(d);
     setPrice(d.priceCents != null ? String(d.priceCents / 100) : '');
@@ -79,7 +79,7 @@ export function QuickPost({ className }: { className?: string }) {
   const cleanupPhoto = async (path = ownedPhotoPath) => {
     if (!path) return;
     const { error } = await removeMarketplacePhotoPath(createClient(), path);
-    if (error) toastError('The uploaded photo could not be cleaned up.');
+    if (error) toastError(t('quickPost.theUploadedPhotoCouldNot'));
     setOwnedPhotoPath((current) => (current === path ? null : current));
   };
 
@@ -95,7 +95,7 @@ export function QuickPost({ className }: { className?: string }) {
 
   async function post() {
     if (!draft) return;
-    if (!draft.title.trim()) { toastError('Give it a title'); return; }
+    if (!draft.title.trim()) { toastError(t('quickPost.giveItATitle')); return; }
     setPosting(true);
     const sb = createClient();
     const priced = kindHasPrice(draft.kind);

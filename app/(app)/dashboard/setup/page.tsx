@@ -49,7 +49,7 @@ export default async function CompleteSetupPage() {
     <div className="space-y-5">
       <PageHeader
         title={result.headline}
-        description="Finish a few details so Bubaly fits how your family runs — and unlock the full experience."
+        description={t('setup.finishAFewDetailsSo')}
       />
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
@@ -91,7 +91,7 @@ export default async function CompleteSetupPage() {
 
         <SectionCard
           title={t('dashboardSetup.aboutYourFamily')}
-          description="Tell us your household makeup and what you want help with. This tailors your dashboard and never creates a second family."
+          description={t('setup.tellUsYourHouseholdMakeup')}
         >
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5 text-xs text-muted">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />

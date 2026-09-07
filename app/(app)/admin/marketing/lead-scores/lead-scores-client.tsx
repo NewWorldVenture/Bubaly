@@ -9,13 +9,14 @@ import { recomputeLeadScoresAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function RecomputeButton() {
+  const t = useTranslations();
   const [pending, startTransition] = useTransition();
   const { success, error } = useToast();
   return (
     <button
       onClick={() => startTransition(async () => {
         try { const { scored } = await recomputeLeadScoresAction(); success(`Recomputed ${scored} lead score${scored === 1 ? '' : 's'}`); }
-        catch { error('Could not recompute scores'); }
+        catch { error(t('leadScoresClient.couldNotRecomputeScores')); }
       })}
       disabled={pending}
       className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60"

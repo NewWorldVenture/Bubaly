@@ -29,7 +29,7 @@ export default async function AutoOverviewPage() {
       <EmptyState
         icon={Car}
         title={t('dashboardAuto.setUpYourGarage')}
-        description="Add a vehicle, your driver's license, registration, inspection, and insurance — all with renewal reminders and one-tap emergency access."
+        description={t('auto.addAVehicleYourDriver')}
         action={<Link href="/dashboard/auto/vehicles" className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> {t('dashboardAuto.addAVehicle')}</Link>}
       />
     );
@@ -63,9 +63,9 @@ export default async function AutoOverviewPage() {
                   </div>
                   {p.coverage_summary && <p className="mt-1 text-xs text-muted">{p.coverage_summary}</p>}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-danger px-2.5 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" /> File a claim</a>}
-                    {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> Roadside</a>}
-                    {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> Agent</a>}
+                    {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-danger px-2.5 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.fileAClaim')}</a>}
+                    {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.roadside')}</a>}
+                    {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{' '}{t('auto.agent')}</a>}
                   </div>
                 </div>
               ))}
@@ -93,7 +93,7 @@ export default async function AutoOverviewPage() {
           <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> {t('dashboardAuto.upcomingRenewals')}</h2>
         </div>
         {renewals.length === 0 ? (
-          <p className="text-sm text-muted">No renewal dates on file yet. Add expiry dates to your license, registration, inspection, and insurance to get reminders here.</p>
+          <p className="text-sm text-muted">{t('auto.noRenewalDatesOnFile')}</p>
         ) : (
           <div className="space-y-1.5">
             {renewals.slice(0, 12).map((r) => (

@@ -12,13 +12,14 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Social Audit', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-function ReadFailure() {
+async function ReadFailure() {
+  const t = await getTranslations();
   return (
     <div className="module-page">
-      <h1 className="text-2xl font-bold tracking-tight">Audit log</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t('audit.auditLog')}</h1>
       <AdminSocialSubnav active="/admin/social/audit" />
-      <ErrorState message="Could not load social audit entries from Supabase. Refresh and try again." />
-      <Link href="/admin/social/audit" className="text-sm font-medium text-brand-text underline">Refresh social audit</Link>
+      <ErrorState message={t('audit.couldNotLoadSocialAudit')} />
+      <Link href="/admin/social/audit" className="text-sm font-medium text-brand-text underline">{t('audit.refreshSocialAudit')}</Link>
     </div>
   );
 }
@@ -42,7 +43,7 @@ export default async function AdminAuditPage() {
       <AdminSocialSubnav active="/admin/social/audit" />
       <p className="text-sm text-muted">{t('adminSocialAudit.accountPostAndPublishResultMutations')}</p>
       {(logs ?? []).length === 0 ? (
-        <EmptyState icon={ClipboardList} title={t('adminSocialAudit.noAuditEntriesYet')} description="Connection, draft, and publish activity will be recorded here." />
+        <EmptyState icon={ClipboardList} title={t('adminSocialAudit.noAuditEntriesYet')} description={t('audit.connectionDraftAndPublishActivity')} />
       ) : (
         <Card>
           <div className="space-y-1.5 text-sm">
