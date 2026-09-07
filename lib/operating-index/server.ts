@@ -10,6 +10,7 @@
 // inventory, events missing a location, and threads the family hasn't caught up
 // on. Nothing is hardcoded to a stub.
 import 'server-only';
+import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, TaskStatus, EventCategory } from '@/lib/database.types';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
@@ -56,7 +57,7 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
     membersRes, eventsRes, remindersRes, recentChoresRes, openChoresRes,
     docsRes, maintRes, billsRes, approvalsRes, mealVotesRes, pollsRes, goalsRes,
     budgetsRes, expensesRes, accountsRes, pantryRes, messagesRes,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
       .eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in7).order('starts_at').limit(400),
@@ -199,7 +200,7 @@ async function buildOrchestratorReport(
   const nowIso = now.toISOString();
   const in14 = new Date(now.getTime() + 14 * DAY_MS).toISOString();
 
-  const [tomorrowRes, autoRes, approvalsRes, missingRes] = await Promise.all([
+  const [tomorrowRes, autoRes, approvalsRes, missingRes] = await settleAll([
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
       .eq('family_id', familyId).gte('starts_at', startOfTomorrow.toISOString()).lt('starts_at', startOfDayAfter.toISOString()).order('starts_at').limit(200),
     supabase.from('autopilot_suggestions').select('id, title, action_label')

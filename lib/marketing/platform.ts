@@ -1,4 +1,5 @@
 import 'server-only';
+import { settleAll } from '@/lib/supabase/settle';
 
 import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
@@ -253,7 +254,7 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   if (!job.target_id) throw new Error('Regeneration job is missing target_id.');
   const { data: page, error: pageError } = await supabase.from('marketing_pages').select('*').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
   if (pageError || !page) throw pageError ?? new Error('Marketing page not found.');
-  const [templateResult, rulesResult] = await Promise.all([
+  const [templateResult, rulesResult] = await settleAll([
     supabase.from('marketing_content_templates').select('instructions, defaults').eq('page_type', page.page_type).eq('status', 'active').eq('is_default', true).maybeSingle(),
     supabase.from('marketing_brand_rules').select('name, instructions, value').eq('active', true).order('name'),
   ]);

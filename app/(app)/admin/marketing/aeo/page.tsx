@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -28,7 +29,7 @@ const LIST_LIMIT = 50;
 export default async function AeoPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [totalRes, answeredRes, listRes] = await Promise.all([
+  const [totalRes, answeredRes, listRes] = await settleAll([
     supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }),
     supabase.from('marketing_aeo_questions').select('id', { count: 'exact', head: true }).in('status', ['answered', 'published']),
     supabase

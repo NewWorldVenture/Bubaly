@@ -1,26 +1,12 @@
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
-import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { FamilyDashboard } from '@/components/dashboard/family-dashboard';
 import { PersonalDashboard } from '@/components/dashboard/personal-dashboard';
 import { AiHomeDashboard } from '@/components/dashboard/ai-home-dashboard';
-import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'dashboard.home' };
-
-async function ReadFailure() {
-  const t = await getTranslations();
-  return (
-    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <h1 className="text-2xl font-bold tracking-tight">{t('dashboard.home')}</h1>
-      <ErrorState message={t('dashboard.couldNotLoadYourDashboard')} />
-      <Link href="/dashboard" className="text-sm font-medium text-brand-text underline">{t('dashboard.refreshHome')}</Link>
-    </div>
-  );
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -43,9 +29,15 @@ export default async function DashboardPage({
     .select('default_dashboard')
     .eq('user_id', ctx.user.id)
     .maybeSingle();
+  // A preference read that fails is not a dashboard that failed. This lookup
+  // only answers "did they pin the family view?", and the honest answer when
+  // the row cannot be read is "we don't know" — which is the same as "no", and
+  // lands them on the default home. Returning an error page here meant an
+  // unreachable user_preferences table (or one flaky read against a database
+  // reporting CONNECT_TIMEOUT) cost the user their entire dashboard over a
+  // setting most of them never touched.
   if (prefsError) {
-    console.error('[dashboard-home] dashboard preference read failed', prefsError);
-    return <ReadFailure />;
+    console.warn('[dashboard-home] preference read failed — defaulting to AI home', prefsError.message);
   }
 
   const savedView: DashboardView | null = isDashboardView(prefs?.default_dashboard) ? (prefs!.default_dashboard as DashboardView) : null;

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CreditCard, Landmark, ShieldCheck, AlertTriangle, Radio, ToggleLeft, ToggleRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { readMoneyFlagsWithError, readStripeEnv, resolveCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
@@ -46,7 +47,7 @@ export default async function AdminStripeMoneyPage() {
   const [
     flagsResult, accountsResult, financialCountResult,
     cardsResult, authsResult, webhooksResult,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('feature_flags').select('key, enabled').in('key', MONEY_FLAG_KEYS),
     supabase.from('stripe_connected_accounts').select('status'),
     supabase.from('stripe_financial_accounts').select('id', { count: 'exact', head: true }),

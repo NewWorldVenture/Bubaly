@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { RefreshCw, Plug, AlertTriangle, Webhook, KeyRound } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -17,7 +18,7 @@ export default async function AdminSyncPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  const [conns, errors, deadJobs, webhookFails, providers] = await Promise.all([
+  const [conns, errors, deadJobs, webhookFails, providers] = await settleAll([
     supabase.from('sync_connections').select('id, health', { count: 'exact' }),
     supabase.from('sync_provider_errors').select('id', { count: 'exact', head: true }).eq('is_fatal', true),
     supabase.from('sync_jobs').select('id', { count: 'exact', head: true }).eq('status', 'dead_letter'),

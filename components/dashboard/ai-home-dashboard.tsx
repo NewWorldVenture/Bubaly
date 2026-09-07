@@ -3,6 +3,7 @@ import {
   Sparkles, Calendar, ArrowRight, Bell, ChevronRight, Sun, Clock, MessageSquare, Plane, PhoneCall,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
@@ -70,6 +71,14 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const todayStart = new Date(dayBounds.start);
   const todayEnd = new Date(dayBounds.end);
 
+  // Not a { data, error } read, so it sits beside the batch rather than inside
+  // it. A failure costs the plan tier — defaulting to the free tier — instead
+  // of rejecting every other read in the batch alongside it.
+  const famPlanLevel = await resolveFamilyPlanLevel(supabase, familyId).catch((cause) => {
+    console.warn('[dashboard-home] plan level read failed — assuming free', cause);
+    return 0 as Awaited<ReturnType<typeof resolveFamilyPlanLevel>>;
+  });
+
   const [
     { count: pendingChores },
     { data: todayEvents },
@@ -85,7 +94,6 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: activeConcierge },
     { count: unreadCallsCount },
     { data: layoutRows },
-    famPlanLevel,
     { data: relDateRows },
     { data: dueReminderRows },
     { data: weekReminderRows },
@@ -95,7 +103,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: documentRows },
     { data: homeworkRows },
     { count: plannedDinnerCount },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
     supabase.from('calendar_events')
@@ -138,7 +146,6 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('is_read', false),
     supabase.from('dashboard_layouts').select('feature_keys, scope, user_id')
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
-    resolveFamilyPlanLevel(supabase, familyId),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
     supabase.from('family_reminders').select('id, title, remind_at, status, member_id, priority')
@@ -188,7 +195,14 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // approvals inbox, whose failure is logged loudly because "nothing needs
   // you" is a claim.
   const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
-  const [activeRunsRes, completedRunsRes, agentRes, recsRes, aiApprovalsRes, todosDueRes, choresDueRes] = await Promise.all([
+  // listPending returns a ServiceResult, not a Postgrest response, so it is
+  // awaited beside the batch rather than inside it — settleAll's fallback is
+  // the { data, error } shape and would not fit it.
+  const aiApprovalsRes = await listPending(scopeFromUserContext(ctx, supabase)).catch((cause) => {
+    console.warn('[dashboard-home] pending AI approvals read threw', cause);
+    return { ok: false as const, error: String(cause) };
+  });
+  const [activeRunsRes, completedRunsRes, agentRes, recsRes, todosDueRes, choresDueRes] = await settleAll([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
     supabase.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at')
@@ -199,7 +213,6 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
-    listPending(scopeFromUserContext(ctx, supabase)),
     supabase.from('todo_items').select('id, title, due_date, priority, assigned_to_id')
       .eq('family_id', familyId).eq('is_done', false).lte('due_date', todayKey).order('due_date', { ascending: true }).limit(20),
     supabase.from('chore_assignments').select('id, chore_id, member_id, status, due_at')
@@ -217,7 +230,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const activePlanIds = activeRuns.map((r) => r.plan_id).filter((x): x is string => !!x);
   const choresDue = (choresDueRes.data ?? []) as TodayChoreRow[];
   const choreIds = [...new Set(choresDue.map((c) => c.chore_id))];
-  const [{ data: activeStepRows, error: activeStepError }, { data: choreDefs, error: choreDefsError }] = await Promise.all([
+  const [{ data: activeStepRows, error: activeStepError }, { data: choreDefs, error: choreDefsError }] = await settleAll([
     activePlanIds.length
       ? supabase.from('ai_plan_steps').select('plan_id, status').eq('family_id', familyId).in('plan_id', activePlanIds)
       : Promise.resolve({ data: [] as WorkingStepRow[], error: null }),

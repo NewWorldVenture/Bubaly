@@ -5,6 +5,7 @@ import {
   Wand2, ScanLine, Monitor, Sun, Bell, MessageCircle,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { isManager } from '@/lib/constants/roles';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
@@ -68,7 +69,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     { count: totalCount },
     { data: overdueReminders },
     { count: unreadMessages },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('calendar_events').select('*').eq('family_id', familyId)
       .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(8),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })

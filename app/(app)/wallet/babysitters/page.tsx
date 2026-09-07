@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { BabysittersView, type BabysitterRow, type PaymentRow } from '@/components/wallet/babysitters-view';
@@ -14,7 +15,7 @@ export default async function WalletBabysittersPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: profiles, error: profilesError }, { data: payments, error: paymentsError }] = await Promise.all([
+  const [{ data: profiles, error: profilesError }, { data: payments, error: paymentsError }] = await settleAll([
     supabase.from('babysitter_profiles')
       .select('id, name, phone, email, rate_cents, notes')
       .eq('family_id', familyId).eq('is_active', true).order('name'),

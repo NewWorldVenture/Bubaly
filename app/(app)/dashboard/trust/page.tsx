@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -25,7 +26,7 @@ export default async function TrustPage() {
     approvalsRes,
     emergenciesRes,
     { data: audit },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('trust_policies').select('*').eq('family_id', familyId).order('priority', { ascending: false }),
     supabase.from('permission_grants').select('id, member_id, domain, capability, effect').eq('family_id', familyId),

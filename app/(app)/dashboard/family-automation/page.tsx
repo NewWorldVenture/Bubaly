@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Zap, Bell, Plus, CheckCircle2, Clock, ToggleRight, ToggleLeft } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
@@ -52,7 +53,7 @@ export default async function FamilyAutomationPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [rulesResult, pendingResult, recentResult] = await Promise.all([
+  const [rulesResult, pendingResult, recentResult] = await settleAll([
     supabase.from('family_automation_rules').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(10),
     supabase.from('family_automation_runs').select('*').eq('family_id', familyId).in('status', ['approved', 'executed', 'skipped']).order('created_at', { ascending: false }).limit(8),

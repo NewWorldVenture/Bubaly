@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { MomentsView } from '@/components/moments/moments-view';
 import { MomentOrganizer, type OrganizerMoment } from '@/components/moments/moment-organizer';
@@ -27,7 +28,7 @@ export default async function Page() {
     const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);
 
-    const [members, trips, holidays, homework, dismissedRows] = await Promise.all([
+    const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),
       supabase.from('vacations').select('title, start_date').eq('family_id', familyId).not('start_date', 'is', null).gte('start_date', todayIso).order('start_date').limit(1),
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', familyId).eq('category', 'holiday').gte('starts_at', now.toISOString()).lte('starts_at', in21).order('starts_at').limit(1),

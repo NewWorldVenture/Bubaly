@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { findFreeSlots, isCalendarContext, type BusyEvent, type CalendarContext } from '@/lib/calendar/scheduling';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     const fromISO = new Date(windowStart - 24 * 60 * 60 * 1000).toISOString(); // catch spanning events
     const toISO = new Date(windowEnd).toISOString();
 
-    const [{ data: events }, { data: school }, { data: sports }] = await Promise.all([
+    const [{ data: events }, { data: school }, { data: sports }] = await settleAll([
       supabase.from('calendar_events').select('*').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
       supabase.from('school_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
       supabase.from('sports_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),

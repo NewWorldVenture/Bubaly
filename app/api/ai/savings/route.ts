@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -31,7 +32,7 @@ export async function POST() {
   );
 
   const monthStart = new Date().toISOString().slice(0, 8) + '01';
-  const [{ data: txns }, { data: budgets }, { data: bills }, { data: subs }] = await Promise.all([
+  const [{ data: txns }, { data: budgets }, { data: bills }, { data: subs }] = await settleAll([
     supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId).eq('type', 'expense').gte('date', monthStart),
     supabase.from('budgets').select('category, amount, period').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),

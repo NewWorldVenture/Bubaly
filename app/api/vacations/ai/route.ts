@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   if (!trip) return NextResponse.json({ error: t('ai.tripNotFound') }, { status: 404 });
 
   // Gather trip context (all RLS-scoped).
-  const contextResults = await Promise.all([
+  const contextResults = await settleAll([
     supabase.from('vacation_members').select('*').eq('vacation_id', vacationId),
     supabase.from('vacation_lodging').select('*').eq('vacation_id', vacationId),
     supabase.from('vacation_flights').select('*').eq('vacation_id', vacationId),

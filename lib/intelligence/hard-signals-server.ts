@@ -14,6 +14,7 @@ import {
 } from './hard-signals';
 import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 import { describeActionError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -31,7 +32,7 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   const yearStart = `${now.getUTCFullYear()}-01-01`;
 
   // ── Read sources in parallel ──
-  const [reminders, events, choreRows, routines, budgetsRes, expensesRes] = await Promise.all([
+  const [reminders, events, choreRows, routines, budgetsRes, expensesRes] = await settleAll([
     sb.from('family_reminders')
       .select('id, title, remind_at, status, completed_at, member_id')
       .eq('family_id', familyId).not('remind_at', 'is', null)

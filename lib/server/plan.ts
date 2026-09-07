@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { planLevel } from '@/lib/constants/plans';
 import { computeEntitlement } from '@/lib/server/entitlement';
 
@@ -32,7 +33,7 @@ export async function resolveFamilyPlanLevel(
   familyId: string,
 ): Promise<number> {
   const admin = createServiceClient();
-  const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await Promise.all([
+  const [{ data: subs, error: subscriptionsError }, { data: fam, error: familyError }] = await settleAll([
     admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']),
     admin.from('families').select('trial_ends_at, closed_at').eq('id', familyId).maybeSingle(),
   ]);

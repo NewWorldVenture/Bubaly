@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
@@ -39,7 +40,7 @@ export default async function AdminReportsPage() {
   const supabase = createServiceClient();
   const fourteenDaysAgo = new Date(Date.now() - 14 * MS_DAY).toISOString();
 
-  const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await Promise.all([
+  const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),

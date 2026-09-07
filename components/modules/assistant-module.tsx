@@ -22,6 +22,7 @@ import { ConversationPane } from '@/components/assistant/conversation-pane';
 import { ResultPane, cardId, type ConversationMessage } from '@/components/assistant/result-pane';
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -161,7 +162,7 @@ export function AssistantModule() {
     const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
     setRailLoading(true);
 
-    const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await Promise.all([
+    const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([
       supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
         .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })

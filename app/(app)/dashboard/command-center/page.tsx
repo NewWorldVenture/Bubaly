@@ -5,6 +5,7 @@ import {
   FileWarning, Users, ArrowRight,
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime, fmtDate } from '@/lib/utils/format';
@@ -34,7 +35,7 @@ export default async function CommandCenterPage() {
   const weekEnd = new Date(start); weekEnd.setDate(weekEnd.getDate() + 7);
   const in30 = new Date(start); in30.setDate(in30.getDate() + 30);
 
-  const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await Promise.all([
+  const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
       .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),

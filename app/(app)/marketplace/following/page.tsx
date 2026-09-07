@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, UserCheck, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
@@ -21,7 +22,7 @@ export default async function MarketplaceFollowingPage() {
   const meId = ctx.active.member.id;
   const dataWarnings: string[] = [];
 
-  const [{ data: follows, error: followsError }, { data: saves, error: savesError }] = await Promise.all([
+  const [{ data: follows, error: followsError }, { data: saves, error: savesError }] = await settleAll([
     sb.from('marketplace_follows').select('store_id').eq('family_id', familyId).eq('member_id', meId),
     sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).eq('member_id', meId),
   ]);

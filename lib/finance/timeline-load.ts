@@ -5,6 +5,7 @@
 // just orchestrates queries on whatever client it's handed.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import {
   buildCashflowTimeline,
@@ -24,7 +25,7 @@ export async function loadMoneyTimeline(
 ): Promise<CashflowTimeline> {
   const horizonEnd = new Date(now.getTime() + 13 * 7 * 86_400_000).toISOString();
 
-  const [billsQ, goalsQ, acctQ, eventsQ] = await Promise.all([
+  const [billsQ, goalsQ, acctQ, eventsQ] = await settleAll([
     supabase.from('bills')
       .select('name, amount, due_date, is_recurring, recurrence, status, category')
       .eq('family_id', familyId).limit(1000),

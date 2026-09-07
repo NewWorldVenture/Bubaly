@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { reconcileLedger, type ReconTxn } from '@/lib/wallet/reconcile';
 import { ErrorState } from '@/components/ui/states';
 import { ReconciliationClient } from './reconciliation-client';
@@ -14,7 +15,7 @@ export default async function ReconciliationPage() {
   const supabase = createServiceClient();
 
   // Pull buckets to map bucket_id → kind, then the ledger rows.
-  const [bucketsResult, txnsResult] = await Promise.all([
+  const [bucketsResult, txnsResult] = await settleAll([
     supabase.from('wallet_buckets').select('id, kind').limit(20000),
     supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, direction, amount_cents, status, type, reverses_id, created_at')

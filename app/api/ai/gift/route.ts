@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { resolveProvider } from '@/lib/ai/provider';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   let goalTargetCents: number | null = null;
 
   if (link.child_wallet_id) {
-    const [{ data: cw }, { data: goal }] = await Promise.all([
+    const [{ data: cw }, { data: goal }] = await settleAll([
       supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle(),
       supabase.from('wallet_goals')
         .select('title, saved_cents, target_cents')

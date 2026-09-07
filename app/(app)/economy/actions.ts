@@ -7,6 +7,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFrom, canAfford, normalizeTokenAmount, normalizeEmoji } from '@/lib/economy/ledger';
@@ -78,7 +79,7 @@ export async function awardTokensAction(input: { currencyId: string; memberId: s
   const supabase = await createServer();
 
   // Confirm the currency + member belong to this family.
-  const [{ data: cur, error: curError }, { data: mem, error: memError }] = await Promise.all([
+  const [{ data: cur, error: curError }, { data: mem, error: memError }] = await settleAll([
     supabase.from('family_currencies').select('id').eq('id', input.currencyId).eq('family_id', familyId).maybeSingle(),
     supabase.from('family_members').select('id').eq('id', input.memberId).eq('family_id', familyId).maybeSingle(),
   ]);

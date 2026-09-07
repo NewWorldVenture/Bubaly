@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FileText, Send, CheckCircle2, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -31,7 +32,7 @@ const STATUS_TINT: Record<QuoteStatus, string> = {
 export default async function ProposalsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [quotesResult, contactsResult] = await Promise.all([
+  const [quotesResult, contactsResult] = await settleAll([
     supabase.from('crm_quotes').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
   ]);

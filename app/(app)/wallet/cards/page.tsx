@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
@@ -51,7 +52,7 @@ export default async function WalletCardsPage({
     }
   }
 
-  const [{ data: account, error: accountError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: cards, error: cardsError }] = await Promise.all([
+  const [{ data: account, error: accountError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: cards, error: cardsError }] = await settleAll([
     supabase.from('stripe_connected_accounts')
       .select('status, charges_enabled, details_submitted, card_issuing_enabled').eq('family_id', familyId).maybeSingle(),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList } from '@/components/ui/states';
 import { fmtTime } from '@/lib/utils/format';
@@ -66,7 +67,7 @@ function FocusQueue() {
       if (memberErr) { setLoadError(true); setItems([]); return; }
       const myMemberId = member?.id ?? null;
 
-      const [{ data: events, error: evErr }, { data: chores, error: chErr }, { data: todos, error: tdErr }] = await Promise.all([
+      const [{ data: events, error: evErr }, { data: chores, error: chErr }, { data: todos, error: tdErr }] = await settleAll([
         supabase.from('calendar_events').select('id, title, starts_at, all_day, location')
           .eq('family_id', familyId)
           .gte('starts_at', dayStart.toISOString()).lt('starts_at', dayEnd.toISOString())

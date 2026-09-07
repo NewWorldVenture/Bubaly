@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckSquare, ShoppingCart, CalendarDays, Repeat, Wrench, ArrowRight } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
@@ -25,7 +26,7 @@ export default async function FamilyCooPage() {
   const now = new Date().toISOString();
   const in7 = new Date(Date.now() + 7 * 86400000).toISOString();
 
-  const [membersRes, openChoresRes, eventsRes, groceryRes, routinesRes, maintRes] = await Promise.all([
+  const [membersRes, openChoresRes, eventsRes, groceryRes, routinesRes, maintRes] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, due_at, status, member_id, chore_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(8),
     supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in7).order('starts_at').limit(6),

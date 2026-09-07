@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -28,7 +29,7 @@ export async function POST() {
     const today = toISODate(new Date());
     const since = toISODate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
 
-    const [{ data: habits }, { data: logs }] = await Promise.all([
+    const [{ data: habits }, { data: logs }] = await settleAll([
       supabase
         .from('habits')
         .select('id, title, cadence, target_per_period, weekdays')
