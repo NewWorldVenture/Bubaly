@@ -57,7 +57,14 @@ function breakInsert(table: string) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  db = createInMemorySupabase();
+  // The column default 0245 actually declares (`status text NOT NULL DEFAULT
+  // 'planning'`), so a move the service opens carries the same status in the
+  // fake as it does in Postgres. The moving service leaves `status` to the
+  // database on purpose — it is the table's business what a new move starts
+  // as — and a fake with no default would read that as `undefined` and fail
+  // an assertion the real column would pass. Same precedent as the routing
+  // test's defaults for family_inbox_messages.
+  db = createInMemorySupabase({ defaults: { moves: { status: 'planning' } } });
 });
 
 describe('the pure halves of a launch', () => {
