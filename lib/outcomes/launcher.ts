@@ -14,6 +14,7 @@
 // what `tests/outcomes-launch-request.test.ts` pins: an outcome must never fall
 // through to the classifier model and be planned as something else.
 import type { IntentKey } from '@/lib/ai/context/intents';
+import { runPagePath, type AIRequestResponse } from '@/lib/ai/chat-request';
 
 export type OutcomeId =
   | 'run_today' | 'feed_family' | 'plan_trip' | 'prepare_school'
@@ -193,4 +194,38 @@ export function buildOutcomeLaunchRequest(id: OutcomeId): OutcomeLaunchRequest {
     text: OUTCOME_REQUEST_TEXT[id],
     context: { module: `outcomes:${id}` },
   };
+}
+
+/**
+ * What the launcher may honestly say once the server has answered.
+ *
+ *   - `working`  — a plan on a real run: work IS in flight and `runHref` opens it;
+ *   - `question` — the run is PARKED on a clarifying question and is waiting on
+ *                  the family; nothing is happening until they answer;
+ *   - `reply`    — the request was answered or a recommendation was filed
+ *                  inline. `submitRequest` returns `runId: null` for both, so
+ *                  there is no run row, nothing to follow, and no work under way.
+ */
+export type OutcomeLaunchReport =
+  | { kind: 'working'; runHref: string }
+  | { kind: 'question'; question: string; runHref: string | null }
+  | { kind: 'reply'; reply: string };
+
+/**
+ * Turn a `POST /api/ai/requests` response into the one claim that is true of it.
+ *
+ * Pure, and separate from the component, because the honesty rule this enforces
+ * is the kind that regresses silently: rendering "Bubaly is working on it" for
+ * every 2xx tells a family that work is under way when the planner in fact
+ * answered them inline (`outcome: 'answer'`) or is waiting on them
+ * (`outcome: 'clarification'`). `tests/outcomes-launch-request.test.ts` feeds
+ * real `submitRequest` results through this.
+ */
+export function describeOutcomeLaunch(
+  result: Pick<AIRequestResponse, 'outcome' | 'runId' | 'redirect' | 'summary'>,
+): OutcomeLaunchReport {
+  const runHref = result.redirect ?? (result.runId ? runPagePath(result.runId) : null);
+  if (result.outcome === 'plan' && runHref) return { kind: 'working', runHref };
+  if (result.outcome === 'clarification') return { kind: 'question', question: result.summary ?? '', runHref };
+  return { kind: 'reply', reply: result.summary ?? '' };
 }

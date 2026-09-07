@@ -38,7 +38,12 @@ export default async function LifeEventsPage() {
     supabase.from('home_projects').select('title, status').eq('family_id', familyId)
       .in('status', ['idea', 'planning', 'quoting']).limit(20),
     supabase.from('family_facts').select('label, value').eq('family_id', familyId).limit(100),
-    supabase.from('life_event_plans').select('template_key, status').eq('family_id', familyId).neq('status', 'archived').limit(50),
+    // ACTIVE only. `activePlanKeys` suppresses a proposal, so a completed plan
+    // in this set would silence the transition for good: a family who ran "The
+    // Holidays" in 2026 and ticked it off would never be offered it again in
+    // 2027, and the same for school_start and camp — the recurring transitions
+    // this detector exists to catch. Completed and archived are both history.
+    supabase.from('life_event_plans').select('template_key').eq('family_id', familyId).eq('status', 'active').limit(50),
   ]);
 
   const readError = termsRes.error ?? petsRes.error ?? projectsRes.error ?? factsRes.error ?? plansRes.error;
