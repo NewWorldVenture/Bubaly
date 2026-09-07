@@ -181,6 +181,39 @@ const PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.join('|')})="([^"{}
  */
 const DATA_PATTERN = new RegExp(
   String.raw`(?:^|[\s,{[])(?:${COPY_PROPS.join('|')})\s*:\s*'([^'\\\n]{3,})'`, 'gm');
+
+/**
+ * Copy in an ARRAY under a copy-carrying property:
+ *
+ *   { heading: 'Managing cookies', body: ['You can control cookies through…'] }
+ *
+ * The legal pages — cookies, privacy, terms, acceptable use — are written this
+ * way, so their entire policy text was invisible: the scanner saw the headings
+ * (a `prop: 'value'`) and none of the paragraphs under them. Nested arrays are
+ * included, since a `body` mixes paragraphs with bullet lists.
+ *
+ * The span is bounded by the matching bracket rather than a lazy `[^\]]*`, so a
+ * body containing an apostrophe or a nested list still reads to its real end.
+ */
+const ARRAY_PROP_PATTERN = new RegExp(String.raw`\b(?:${COPY_PROPS.concat(['body', 'items', 'bullets', 'points', 'paragraphs']).join('|')})\s*:\s*\[`, 'g');
+const STRING_IN_ARRAY = /'((?:[^'\\\n]|\\.){3,})'/g;
+
+function arrayFindings(source) {
+  const out = [];
+  for (const m of source.matchAll(ARRAY_PROP_PATTERN)) {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    let depth = 0;
+    let end = open;
+    for (let i = open; i < source.length; i += 1) {
+      const c = source[i];
+      if (c === '[') depth += 1;
+      else if (c === ']') { depth -= 1; if (depth === 0) { end = i; break; } }
+    }
+    const span = source.slice(open, end);
+    for (const s of span.matchAll(STRING_IN_ARRAY)) out.push([s[1], open + (s.index ?? 0)]);
+  }
+  return out;
+}
 // Copy passed as a CALL ARGUMENT, which the two patterns above cannot see: the
 // string is in expression position, not in a tag or an attribute. This is the
 // third and last blind spot the migration found, and the loudest of its kind —
@@ -270,7 +303,7 @@ function toastPattern(source) {
 // Whitespace is normalised below so multi-line prose reads as one string.
 const TEXT_PATTERN = />([^<>{}]{3,})</g;
 
-function looksLikeCopy(raw) {
+export function looksLikeCopy(raw) {
   const s = raw.trim();
   if (s.length < 3) return false;
   if (NOT_COPY.some((re) => re.test(s))) return false;
@@ -308,8 +341,12 @@ export function scanFile(file) {
 
   const push = (value, index) => {
     // Collapse the indentation JSX leaves around a text node so `\n   New
-    // family\n` and ` New family ` are recognised as the same string.
-    const text = value.replace(/\s+/g, ' ').trim();
+    // family\n` and ` New family ` are recognised as the same string, and undo
+    // the source's own string escapes: `'another family\\'s data'` is the JS
+    // spelling of an apostrophe, not a backslash a reader should see. Reporting
+    // the escaped form put a literal `family\\'s` into 29 catalogue values, which
+    // is what every locale would then have rendered.
+    const text = value.replace(/\\(['"\\])/g, '$1').replace(/\s+/g, ' ').trim();
     if (!looksLikeCopy(text)) return;
     const key = `${text}@${index}`;
     if (seen.has(key)) return;
@@ -323,6 +360,7 @@ export function scanFile(file) {
   if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(DATA_PATTERN)) push(m[1], m.index ?? 0);
+  for (const [text, at] of arrayFindings(source)) push(text, at);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);

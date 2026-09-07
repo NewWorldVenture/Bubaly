@@ -10,70 +10,70 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return resolveMarketingMetadata('/acceptable-use', {
   title: t('acceptableUse.acceptableUsePolicy'),
-  description: 'The rules for using Bubaly responsibly and keeping every family safe.',
+  description: t('acceptableUse.theRulesForUsingBubaly'),
   });
 }
 
 const SECTIONS: LegalSection[] = [
   {
     id: 'purpose',
-    heading: 'Purpose',
+    heading: 'acceptableUse.purpose',
     body: [
-      'Bubaly exists to help families organize their lives together. This Acceptable Use Policy describes what you can and can\'t do with the Service so that it stays safe, reliable, and welcoming for everyone. It is part of our Terms of Service.',
+      'acceptableUse.bubalyExistsToHelpFamilies',
     ],
   },
   {
     id: 'respect-families',
-    heading: 'Respect other families and members',
+    heading: 'acceptableUse.respectOtherFamiliesAndMembers',
     body: [
-      'Bubaly is built so that each family\'s data is private and isolated. You agree not to:',
+      'acceptableUse.bubalyIsBuiltSoThat',
       [
-        'Attempt to access, probe, or interfere with another family\'s account or data.',
-        'Harass, threaten, or harm other members of your family or anyone else through the Service.',
-        'Impersonate another person or misrepresent who you are.',
+        'acceptableUse.attemptToAccessProbeOr',
+        'acceptableUse.harassThreatenOrHarmOther',
+        'acceptableUse.impersonateAnotherPersonOrMisrepresent',
       ],
     ],
   },
   {
     id: 'content',
-    heading: 'Content standards',
+    heading: 'acceptableUse.contentStandards',
     body: [
-      'You are responsible for the content you add. Do not upload, store, or share content that:',
+      'acceptableUse.youAreResponsibleForThe',
       [
-        'Is illegal, or that infringes someone else\'s intellectual property or privacy rights.',
-        'Sexually exploits or endangers children in any way.',
-        'Promotes violence, self‑harm, or hatred against people based on who they are.',
-        'Contains malware, or is designed to deceive or defraud.',
+        'acceptableUse.isIllegalOrThatInfringes',
+        'acceptableUse.sexuallyExploitsOrEndangersChildren',
+        'acceptableUse.promotesViolenceSelfHarmOr',
+        'acceptableUse.containsMalwareOrIsDesigned',
       ],
-      'We may remove content that violates this policy and take action on accounts involved.',
+      'acceptableUse.weMayRemoveContentThat',
     ],
   },
   {
     id: 'security',
-    heading: 'Protect the Service',
+    heading: 'acceptableUse.protectTheService',
     body: [
-      'To keep Bubaly dependable for everyone, you agree not to:',
+      'acceptableUse.toKeepBubalyDependableFor',
       [
-        'Break, disable, or overload the Service, its infrastructure, or its AI features.',
-        'Reverse engineer the Service or attempt to extract source code, except where the law allows.',
-        'Use bots, scrapers, or automated means to access the Service in ways that burden it or evade limits.',
-        'Resell, sublicense, or commercially exploit the Service without our permission.',
+        'acceptableUse.breakDisableOrOverloadThe',
+        'acceptableUse.reverseEngineerTheServiceOr',
+        'acceptableUse.useBotsScrapersOrAutomated',
+        'acceptableUse.resellSublicenseOrCommerciallyExploit',
       ],
     ],
   },
   {
     id: 'ai',
-    heading: 'Responsible use of AI',
+    heading: 'acceptableUse.responsibleUseOfAi',
     body: [
-      'The AI assistant is there to help you run your household. Do not use it to generate unlawful content, to attempt to access data that isn\'t yours, or to produce harmful, deceptive, or abusive material. Always review AI output before acting on anything important.',
+      'acceptableUse.theAiAssistantIsThere',
     ],
   },
   {
     id: 'enforcement',
-    heading: 'Enforcement',
+    heading: 'acceptableUse.enforcement',
     body: [
-      'If you violate this policy, we may warn you, remove content, limit features, or suspend or terminate your account, depending on the severity. Serious violations — especially anything that endangers a child — may be reported to the appropriate authorities.',
-      'To report misuse, email support@bubaly.com.',
+      'acceptableUse.ifYouViolateThisPolicy',
+      'acceptableUse.toReportMisuseEmailSupport',
     ],
   },
 ];
@@ -85,7 +85,7 @@ export default async function AcceptableUsePage() {
       <LegalPage
         title={t('acceptableUse.acceptableUsePolicy')}
         summary={t('acceptableUse.simpleRulesThatKeepBubaly')}
-        lastUpdated="June 24, 2026"
+        lastUpdated="2026-06-24"
         path="/acceptable-use"
         sections={SECTIONS}
       />
