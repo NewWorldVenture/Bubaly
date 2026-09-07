@@ -6,7 +6,7 @@ import {
   FileWarning, Users, ArrowRight,
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime, fmtDate } from '@/lib/utils/format';
@@ -56,7 +56,7 @@ export default async function CommandCenterPage() {
     ['expiring docs', expiringDocsResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
