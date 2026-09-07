@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { briefSchema, buildBrief, type BriefInput } from '@/lib/briefing/build';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
+import { BriefDecisionSchema } from '@/lib/briefing/response-schema';
 import type { NeedItem } from '@/lib/home/needs-attention';
 import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
@@ -160,6 +161,28 @@ describe('readBriefDecisions', () => {
     expect(res.data.approvals['ap-gated']).toMatchObject({ id: 'ap-gated', title: 'Book the plumber for Tuesday 9am', runId: 'run-gated', requestedBy: 'Bubaly' });
     expect(res.data.moneyApprovalKinds).toEqual({ 'pa-1': 'card_spend' });
     expect(res.data.canDecide).toBe(true);
+  });
+
+  it('keeps a decision whose own href points off the app, but sends it to the decisions page instead', async () => {
+    // `cta_href` is free text any member can write through the generic
+    // record action; the client schema refuses an off-app href, so without
+    // this the one bad row would fail the whole brief for every tab.
+    const db = seededDb();
+    db.seed('family_ai_recommendations', [
+      { id: 'rec-bad', family_id: 'fam-1', title: 'Look at this', status: 'pending', priority: 'normal', cta_href: 'https://evil.example/approve', created_at: '2026-09-07T10:05:00Z' },
+      { id: 'rec-rel', family_id: 'fam-1', title: 'No leading slash', status: 'pending', priority: 'normal', cta_href: 'dashboard/somewhere', created_at: '2026-09-07T10:06:00Z' },
+    ]);
+    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const bad = res.data.items.find((i) => i.id === 'recommendation:rec-bad');
+    const rel = res.data.items.find((i) => i.id === 'recommendation:rec-rel');
+    expect(bad).toMatchObject({ href: '/dashboard/needs-you' });
+    expect(rel).toMatchObject({ href: '/dashboard/needs-you' });
+    // The well-formed rows are untouched.
+    expect(res.data.items.find((i) => i.id === 'run:run-q')).toMatchObject({ href: '/dashboard/concierge/runs/run-q' });
+    // And the whole list still satisfies the schema the client enforces.
+    for (const item of res.data.items) expect(BriefDecisionSchema.safeParse(item).success).toBe(true);
   });
 
   it('never reads the money table for a child, and hands them a read-only list', async () => {

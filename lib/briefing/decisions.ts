@@ -24,6 +24,7 @@
 import 'server-only';
 import { viewerFor } from '@/lib/ai/context/policy';
 import type { ApprovalCardData } from '@/lib/approvals/card-data';
+import { isAppPath } from '@/lib/briefing/response-schema';
 import type { NeedItem } from '@/lib/home/needs-attention';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
@@ -53,6 +54,9 @@ const WAITING_ON_A_PERSON = ['awaiting_approval', 'awaiting_context'] as const;
  * the API route, the service client for the cron — and every read filters
  * `family_id` itself, as every service in this repo does.
  */
+/** Where a decision points when its own href cannot be trusted. */
+const DECISIONS_FALLBACK_HREF = '/dashboard/needs-you';
+
 export async function readBriefDecisions(scope: ServiceScope): Promise<ServiceResult<BriefDecisions>> {
   const now = scopeNow(scope);
   const viewer = viewerFor(scope);
@@ -102,8 +106,15 @@ export async function readBriefDecisions(scope: ServiceScope): Promise<ServiceRe
       recommendations: (recsRes.data ?? []) as RecommendationRow[],
     });
 
+    // A decision deep-links into the app and nowhere else (the client pins
+    // this with `BriefDecisionSchema`). A recommendation's `cta_href` is free
+    // text on a row any member can write, so one off-app value must not fail
+    // the whole brief: the item keeps its place and points at the page that
+    // lists every decision instead.
+    const safeItems = items.map((item) => (isAppPath(item.href) ? item : { ...item, href: DECISIONS_FALLBACK_HREF }));
+
     return ok({
-      items,
+      items: safeItems,
       approvals: Object.fromEntries(aiApprovals.map((a) => [a.id, a])),
       moneyApprovalKinds: Object.fromEntries(money.map((a) => [a.id, a.kind])),
       canDecide: viewer.canManage,

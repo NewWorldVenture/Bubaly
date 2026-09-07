@@ -96,7 +96,13 @@ export type BriefingResponse = z.infer<typeof BriefingResponseSchema>;
 // inbox renders in full.
 
 /** A same-origin path. A decision deep-links into the app and nowhere else. */
-const appPath = z.string().regex(/^\/(?!\/)/);
+const APP_PATH = /^\/(?!\/)/;
+const appPath = z.string().regex(APP_PATH);
+
+/** True for a same-origin path — the only kind of href a decision may carry. */
+export function isAppPath(href: string): boolean {
+  return APP_PATH.test(href);
+}
 
 /** One decision — the `NeedItem` shape of `lib/home/needs-attention.ts`, pinned. */
 export const BriefDecisionSchema = z.object({
