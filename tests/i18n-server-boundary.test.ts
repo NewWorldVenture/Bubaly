@@ -57,15 +57,34 @@ function withoutComments(source: string): string {
     .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, lead: string) => lead + blank(m.slice(lead.length)));
 }
 
-type Entry = { declaresClient: boolean; callsHook: boolean; imports: string[] };
+/**
+ * The `'use client'` / `'use server'` directive, or null.
+ *
+ * A directive may sit BELOW a leading comment — 14 action files in this repo
+ * open with a header explaining what the write path is for — so a plain
+ * `startsWith` reads them as having no directive at all, and the import-graph
+ * rule below then calls every one of them a client module.
+ */
+function directive(source: string): string | null {
+  const body = withoutComments(source).trimStart();
+  const m = /^['"](use (?:client|server))['"]/.exec(body);
+  return m ? m[1] : null;
+}
+
+type Entry = { declaresClient: boolean; declaresServer: boolean; callsHook: boolean; imports: string[] };
 
 const files = sourceFiles();
 const sources = new Map<string, Entry>();
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
   sources.set(file, {
-    declaresClient: /^['"]use client['"]/.test(src.trimStart()),
+    declaresClient: directive(src) === 'use client',
     callsHook: /\buseTranslations\s*\(/.test(withoutComments(src)),
+    // A `'use server'` file is SERVER code however it is imported. Importing a
+    // server action from a client component is the normal shape — that is what
+    // a server action is for — and reading it as client made 81 action files
+    // look like browser modules the moment they carried their own failure copy.
+    declaresServer: directive(src) === 'use server',
     // `import type … from` is ERASED at compile time and says nothing about
     // whether a module reaches the browser. Counting it made
     // `app/(app)/dashboard/contact-center/page.tsx` look client, because the
@@ -92,6 +111,7 @@ function isClientModule(file: string, seen = new Set<string>()): boolean {
   if (seen.has(abs)) return false;          // an import cycle proves nothing
   seen.add(abs);
 
+  if (sources.get(abs)?.declaresServer) { clientCache.set(abs, false); return false; }
   let answer = Boolean(sources.get(abs)?.declaresClient);
   if (!answer) {
     for (const importer of importers.get(abs) ?? []) {
@@ -115,6 +135,19 @@ describe('lib/i18n/server never reaches the browser', () => {
       'these are client modules and must use useTranslations() from '
         + '@/components/i18n/locale-provider instead',
     ).toEqual([]);
+  });
+
+  it("does not read a 'use server' file as client just because a client imports it", () => {
+    // `account/actions.ts` is imported by the client component that renders the
+    // Close Account button. It is still server code, and it reads the request's
+    // locale to word its own refusal.
+    const action = resolve(ROOT, 'app/(app)/account/actions.ts');
+    expect(sources.get(action)?.declaresServer, "it declares 'use server'").toBe(true);
+    expect(isClientModule(action), 'so it is not a client module').toBe(false);
+    expect(
+      readFileSync(action, 'utf8'),
+      'and it may therefore use the server translator',
+    ).toContain("from '@/lib/i18n/server'");
   });
 
   it('does not count a type-only import as making a module client', () => {

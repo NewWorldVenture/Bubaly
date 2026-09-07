@@ -22,3 +22,18 @@ export function expectSays(source: string, key: string, english: string): void {
   expect(source, `should render ${key}`).toContain(key);
   expect(MESSAGES[key], `${key} should still say "${english}"`).toBe(english);
 }
+
+/**
+ * The same two-part assertion for a string a SERVER ACTION or route handler
+ * words itself: the source must call the translator on that key, and the
+ * catalogue must still say the English.
+ *
+ * Stricter than `expectSays` on the source half — `toContain(key)` would pass
+ * on a bare key sitting in a data array, which is exactly the mistake that
+ * renders `actions.orderNotFound` at a user. The call has to be there.
+ */
+export function expectTranslates(source: string, key: string, english: string): void {
+  const call = new RegExp(`\\b(?:t|tr|tx|translate_)\\('${key.replace(/\./g, '\\.')}'\\)`);
+  expect(source, `should translate ${key}, not hand back the key`).toMatch(call);
+  expect(MESSAGES[key], `${key} should still say "${english}"`).toBe(english);
+}

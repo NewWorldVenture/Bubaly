@@ -332,8 +332,8 @@ export function AssistantModule() {
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
       if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: 'Sorry, I had trouble with that.' })) as { error?: string };
-        patchReply((m) => ({ ...m, content: err.error ?? 'Sorry, I had trouble with that.' }));
+        const err = await res.json().catch(() => ({ error: t('assistantModule.sorryIHadTroubleWith') })) as { error?: string };
+        patchReply((m) => ({ ...m, content: err.error ?? t('assistantModule.sorryIHadTroubleWith') }));
         return;
       }
       // Parse the SSE stream: delta (text), action (line), card, run, error, done.

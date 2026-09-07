@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -10,24 +11,25 @@ export const runtime = 'nodejs';
 // Pulls a real daily forecast (Open-Meteo) for a trip's destination and caches
 // it into vacation_weather_snapshots. Family-scoped through the authed client (RLS).
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('weather.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceRequestRateLimit(supabase, `vac-weather:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many weather requests. Please try again shortly.' },
+    { error: t('weather.tooManyWeatherRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('weather.requestBodyIsTooLarge') }, { status: 400 });
   const { vacationId, location } = (boundedBody.value ?? {}) as { vacationId?: string; location?: string };
-  if (!vacationId || !location?.trim()) return NextResponse.json({ error: 'Missing vacationId or location' }, { status: 400 });
+  if (!vacationId || !location?.trim()) return NextResponse.json({ error: t('weather.missingVacationidOrLocation') }, { status: 400 });
 
   // Verify the trip belongs to the caller's family (RLS-enforced read).
   const { data: trip } = await supabase.from('vacations').select('id, start_date, end_date').eq('id', vacationId).maybeSingle();
-  if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+  if (!trip) return NextResponse.json({ error: t('weather.tripNotFound') }, { status: 404 });
 
   let geo, days;
   try {
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
     days = await fetchForecast(geo.latitude, geo.longitude, trip.start_date, trip.end_date);
   } catch (err) {
     console.error('Weather fetch error:', err);
-    return NextResponse.json({ error: 'Weather service is temporarily unavailable.' }, { status: 502 });
+    return NextResponse.json({ error: t('weather.weatherServiceIsTemporarilyUnavailable') }, { status: 502 });
   }
 
   if (days.length === 0) return NextResponse.json({ snapshots: [], note: 'No forecast available for these dates yet (forecasts reach ~16 days out).' });
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest) {
     .upsert(rows, { onConflict: 'vacation_id,location_label,forecast_date' });
   if (error) {
     console.error('Vacation weather write failed:', error);
-    return NextResponse.json({ error: 'Could not save the weather forecast.' }, { status: 500 });
+    return NextResponse.json({ error: t('weather.couldNotSaveTheWeather') }, { status: 500 });
   }
 
   return NextResponse.json({ snapshots: rows.length, location: geo.name });

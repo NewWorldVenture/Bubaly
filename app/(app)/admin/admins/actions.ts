@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -16,53 +17,58 @@ function actionFailure(operation: string, error: unknown): ActionResult {
 }
 
 async function guard(): Promise<GuardResult> {
-  if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
+  const t = await getTranslations();
+  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
   return { supabase: createServiceClient() };
 }
 
 export async function deactivateAdminAction(adminId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
-  if (!adminId.trim()) return { ok: false, error: 'An admin record is required.' };
+  if (!adminId.trim()) return { ok: false, error: t('actions.anAdminRecordIsRequired') };
   const { data, error } = await guarded.supabase.from('admin_users').update({ status: 'inactive' })
     .eq('id', adminId).select('id').maybeSingle();
   if (error) return actionFailure('deactivate that admin', error);
-  if (!data) return { ok: false, error: 'Admin record not found.' };
+  if (!data) return { ok: false, error: t('actions.adminRecordNotFound') };
   revalidatePath('/admin/admins');
   return { ok: true };
 }
 
 export async function activateAdminAction(adminId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
-  if (!adminId.trim()) return { ok: false, error: 'An admin record is required.' };
+  if (!adminId.trim()) return { ok: false, error: t('actions.anAdminRecordIsRequired') };
   const { data, error } = await guarded.supabase
     .from('admin_users')
     .update({ status: 'active', last_active_at: new Date().toISOString() })
     .eq('id', adminId).select('id').maybeSingle();
   if (error) return actionFailure('activate that admin', error);
-  if (!data) return { ok: false, error: 'Admin record not found.' };
+  if (!data) return { ok: false, error: t('actions.adminRecordNotFound') };
   revalidatePath('/admin/admins');
   return { ok: true };
 }
 
 export async function revokeAdminAction(adminId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
-  if (!adminId.trim()) return { ok: false, error: 'An admin record is required.' };
+  if (!adminId.trim()) return { ok: false, error: t('actions.anAdminRecordIsRequired') };
   const { data, error } = await guarded.supabase.from('admin_users').delete()
     .eq('id', adminId).select('id').maybeSingle();
   if (error) return actionFailure('revoke that admin', error);
-  if (!data) return { ok: false, error: 'Admin record not found.' };
+  if (!data) return { ok: false, error: t('actions.adminRecordNotFound') };
   revalidatePath('/admin/admins');
   return { ok: true };
 }
 
 export async function inviteAdminAction(formData: FormData): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
   const parsedEmail = emailSchema.safeParse(String(formData.get('email') ?? ''));
-  if (!parsedEmail.success) return { ok: false, error: 'Enter a valid email address.' };
+  if (!parsedEmail.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
   const email = parsedEmail.data;
   const full_name = String(formData.get('full_name') ?? '').trim().slice(0, 120) || null;
   const requestedRole = String(formData.get('admin_role') ?? 'administrator');

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setFeatureTier, resetFeatureTiers } from '@/lib/server/feature-tiers';
@@ -18,8 +19,9 @@ function actionFailure(operation: string, error: unknown): ActionResult {
 }
 
 async function guard(): Promise<GuardResult> {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
+  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
   return { supabase: createServiceClient() };
 }
 
@@ -30,10 +32,11 @@ function revalidate() {
 }
 
 export async function setFeatureTierAction(key: string, tier: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const guarded = await guard();
   if (!('supabase' in guarded)) return guarded;
-  if (!FEATURE_CATALOG_BY_KEY[key]) return { ok: false, error: 'Choose a valid feature.' };
-  if (!isFeatureTier(tier)) return { ok: false, error: 'Choose a valid tier.' };
+  if (!FEATURE_CATALOG_BY_KEY[key]) return { ok: false, error: t('actions.chooseAValidFeature') };
+  if (!isFeatureTier(tier)) return { ok: false, error: t('actions.chooseAValidTier') };
   try {
     await setFeatureTier(guarded.supabase, key, tier);
   } catch (error) {

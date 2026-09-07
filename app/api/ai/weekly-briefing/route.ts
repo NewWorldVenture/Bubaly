@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -15,6 +16,7 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/serve
  * can both prep the week ahead and reflect on what got done.
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
@@ -23,16 +25,16 @@ export async function POST(req: NextRequest) {
     // Plus-only — guard here too (the page already gates, but the endpoint is
     // independently reachable). Return 402 so the client can prompt an upgrade.
     if ((await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId))) < 2) {
-      return NextResponse.json({ error: 'Weekly AI Briefing is a Family+ feature.' }, { status: 402 });
+      return NextResponse.json({ error: t('weeklyBriefing.weeklyAiBriefingIsA') }, { status: 402 });
     }
     const limited = await enforceAIRateLimit(supabase, `ai-weekly-briefing:${ctx.user.id}`, { limit: 5 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many weekly briefing requests. Please try again shortly.' },
+      { error: t('weeklyBriefing.tooManyWeeklyBriefingRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    if (!boundedBody.ok) return NextResponse.json({ error: t('weeklyBriefing.requestBodyIsTooLarge') }, { status: 400 });
 
     const now = new Date();
     const w = weekWindow(now);
@@ -216,6 +218,6 @@ Rules:
     return NextResponse.json({ briefing, generatedAt: new Date().toISOString(), weekKey: w.days[0] });
   } catch (err) {
     console.error('Weekly briefing error:', err);
-    return NextResponse.json({ error: 'Failed to generate weekly briefing' }, { status: 500 });
+    return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 500 });
   }
 }

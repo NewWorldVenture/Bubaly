@@ -5,6 +5,7 @@
 // a member from stacking open reports on the same listing. Resolutions are
 // written only by the super-admin (service role) — never here.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isValidReason, canReport, reasonLabel } from '@/lib/marketplace/reports';
@@ -21,19 +22,20 @@ function actionFailure(operation: string, error: unknown): Result {
 export async function reportListingAction(
   input: { listingId: string; reason: string; details?: string },
 ): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  if (!input.listingId) return { ok: false, error: 'Invalid listing.' };
-  if (!isValidReason(input.reason)) return { ok: false, error: 'Pick a reason.' };
+  if (!input.listingId) return { ok: false, error: t('actions.invalidListing') };
+  if (!isValidReason(input.reason)) return { ok: false, error: t('actions.pickAReason') };
   const details = input.details?.trim() || null;
-  if (details && details.length > 1000) return { ok: false, error: 'Keep the details under 1000 characters.' };
+  if (details && details.length > 1000) return { ok: false, error: t('actions.keepTheDetailsUnder1000') };
 
   // The listing must exist + be reachable; can't report your own.
   const { data: listing } = await supabase
     .from('marketplace_listings').select('id, member_id').eq('id', input.listingId).maybeSingle();
-  if (!listing) return { ok: false, error: 'That listing no longer exists.' };
+  if (!listing) return { ok: false, error: t('actions.thatListingNoLongerExists') };
   if (!canReport(listing.member_id, ctx.active.member.id)) {
-    return { ok: false, error: 'You can’t report your own family’s listing.' };
+    return { ok: false, error: t('actions.youCanTReportYour') };
   }
 
   const { error } = await supabase.from('marketplace_reports').insert({
@@ -42,7 +44,7 @@ export async function reportListingAction(
   });
   if (error) {
     // Unique violation → they already have an open report on this listing.
-    if (error.code === '23505') return { ok: false, error: 'You’ve already reported this — our team is on it.' };
+    if (error.code === '23505') return { ok: false, error: t('actions.youVeAlreadyReportedThis') };
     return actionFailure('submit the report', error);
   }
 

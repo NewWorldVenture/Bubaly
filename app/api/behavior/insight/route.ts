@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -20,16 +21,17 @@ const CANNED_INSIGHT = 'Keep logging — patterns will sharpen over time.';
  * 3 concrete, age-appropriate tips. Degrades gracefully if AI is unconfigured.
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-behavior-insight:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many behavior insight requests. Please try again shortly.' },
+    { error: t('insight.tooManyBehaviorInsightRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('insight.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as { memberId?: string };
 
   const since = new Date(Date.now() - 60 * 86_400_000).toISOString();

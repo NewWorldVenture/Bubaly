@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -17,12 +18,13 @@ const MAX_FORM_REQUEST_BYTES = 65_536;
  * active `form_submitted` automation workflow (best-effort, deduped per submission).
  */
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   const ip = clientIp(req.headers);
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `form:${ip}`, { limit: 10 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many submissions. Please try again shortly.' },
+      { error: t('submit.tooManySubmissionsPleaseTry') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const formId = typeof body.formId === 'string' ? body.formId.trim() : '';
   const values = (body.values && typeof body.values === 'object') ? body.values as Record<string, unknown> : {};
-  if (!formId) return NextResponse.json({ error: 'formId is required' }, { status: 422 });
+  if (!formId) return NextResponse.json({ error: t('submit.formidIsRequired') }, { status: 422 });
 
   const { data: form } = await supabase
     .from('marketing_forms')
@@ -49,13 +51,13 @@ export async function POST(req: NextRequest) {
     .eq('status', 'active')
     .is('deleted_at', null)
     .maybeSingle();
-  if (!form) return NextResponse.json({ error: 'This form is no longer available.' }, { status: 404 });
+  if (!form) return NextResponse.json({ error: t('submit.thisFormIsNoLonger') }, { status: 404 });
 
   const fields = parseFormFields(form.fields);
-  if (fields.length === 0) return NextResponse.json({ error: 'This form has no fields.' }, { status: 422 });
+  if (fields.length === 0) return NextResponse.json({ error: t('submit.thisFormHasNoFields') }, { status: 422 });
 
   const { ok, errors, cleaned } = validateSubmission(fields, values);
-  if (!ok) return NextResponse.json({ error: 'Validation failed', fields: errors }, { status: 422 });
+  if (!ok) return NextResponse.json({ error: t('submit.validationFailed'), fields: errors }, { status: 422 });
 
   const email = submissionEmail(fields, cleaned);
   const { data: inserted, error } = await supabase
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
     .select('id')
     .single();
   if (error || !inserted) {
-    return NextResponse.json({ error: 'We couldn’t record your submission. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('submit.weCouldnTRecordYour') }, { status: 500 });
   }
 
   // Fire any event-driven "form_submitted" automation workflows in real time.

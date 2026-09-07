@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
@@ -78,6 +79,7 @@ function icsRruleToDb(rrule: string | undefined): string {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
@@ -89,20 +91,20 @@ export async function POST(req: NextRequest) {
     try {
       body = JSON.parse(rawBody) as { icsUrl?: unknown; label?: unknown };
     } catch {
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+      return NextResponse.json({ error: t('sync.invalidRequestBody') }, { status: 400 });
     }
     const icsUrl = typeof body.icsUrl === 'string' ? body.icsUrl : '';
     const label = typeof body.label === 'string' ? body.label : undefined;
 
     if (!icsUrl || typeof icsUrl !== 'string') {
-      return NextResponse.json({ error: 'icsUrl is required' }, { status: 400 });
+      return NextResponse.json({ error: t('sync.icsurlIsRequired') }, { status: 400 });
     }
 
     const fetched = await fetchPublicCalendarText(icsUrl);
     if (!fetched.ok) return NextResponse.json({ error: fetched.error }, { status: fetched.status });
     const icsText = fetched.text;
     if (!icsText.includes('BEGIN:VCALENDAR')) {
-      return NextResponse.json({ error: 'URL does not appear to be a valid ICS calendar' }, { status: 422 });
+      return NextResponse.json({ error: t('sync.urlDoesNotAppearTo') }, { status: 422 });
     }
 
     const events = parseIcs(icsText);

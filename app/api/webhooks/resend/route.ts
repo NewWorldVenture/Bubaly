@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
@@ -52,11 +53,12 @@ const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
 };
 
 export async function POST(req: NextRequest) {
+  const tr = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, 256_000);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
   const body = boundedBody.text;
   if (!verify(body, req.headers)) {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    return NextResponse.json({ error: tr('resend.invalidSignature') }, { status: 401 });
   }
 
   const svixId = req.headers.get('svix-id')!;
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
   try {
     event = JSON.parse(body);
   } catch {
-    return NextResponse.json({ error: 'Bad payload' }, { status: 400 });
+    return NextResponse.json({ error: tr('resend.badPayload') }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
     .select('status, received_at')
     .eq('svix_id', svixId)
     .maybeSingle();
-  if (priorError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  if (priorError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
 
   const priorAge = prior?.received_at ? Date.now() - new Date(prior.received_at).getTime() : 0;
   if (prior?.status === 'processed' || (prior?.status === 'processing' && priorAge < 10 * 60_000)) {
@@ -86,7 +88,7 @@ export async function POST(req: NextRequest) {
       .from('resend_webhook_events')
       .update({ status: 'processing', received_at: new Date().toISOString(), processed_at: null, error: null })
       .eq('svix_id', svixId);
-    if (claimError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    if (claimError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
   } else {
     const { error: insertError } = await supabase.from('resend_webhook_events').insert({
       svix_id: svixId,
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
     });
     if (insertError) {
       if (insertError.code === '23505') return NextResponse.json({ received: true, duplicate: true });
-      return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+      return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
     }
   }
 
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
     const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
       .update({ status: 'processed', processed_at: new Date().toISOString() })
       .eq('svix_id', svixId).select('svix_id').maybeSingle();
-    if (processedError || !processed) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    if (processedError || !processed) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
     return NextResponse.json({ received: true });
   }
 
@@ -112,12 +114,12 @@ export async function POST(req: NextRequest) {
 
   if (campaignId) {
     const { data: row, error: campaignReadError } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
-    if (campaignReadError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    if (campaignReadError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
     if (row) {
       const current = (row as Record<string, number>)[field] ?? 0;
       const { data: updated, error: counterError } = await supabase.from('marketing_email_campaigns')
         .update({ [field]: current + 1 } as never).eq('id', campaignId).select('id').maybeSingle();
-      if (counterError || !updated) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+      if (counterError || !updated) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
     }
   }
 
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
     for (const to of tos) {
       const { error: suppressionError } = await supabase.from('marketing_suppressions')
         .upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
-      if (suppressionError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+      if (suppressionError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
     }
   }
 
@@ -154,7 +156,7 @@ export async function POST(req: NextRequest) {
   const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
     .update({ status: 'processed', processed_at: new Date().toISOString(), error: null })
     .eq('svix_id', svixId).select('svix_id').maybeSingle();
-  if (processedError || !processed) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  if (processedError || !processed) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
 
   return NextResponse.json({ received: true });
 }

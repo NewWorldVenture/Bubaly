@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { SOCIAL_PLATFORMS, type SocialLinks } from '@/lib/marketing/social-links';
@@ -19,8 +20,9 @@ export type SaveSocialLinksResult =
  * take, not left believing the footer now has a Facebook link.
  */
 export async function saveSocialLinksAction(formData: FormData): Promise<SaveSocialLinksResult> {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: 'Forbidden' };
+  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.forbidden') };
 
   const submitted: SocialLinks = {};
   const nonEmpty: string[] = [];
@@ -40,6 +42,6 @@ export async function saveSocialLinksAction(formData: FormData): Promise<SaveSoc
     return { ok: true, saved, rejected };
   } catch (e) {
     console.error('[admin-social-links] save failed', e);
-    return { ok: false, error: describeActionError(e, 'Could not save social links.') };
+    return { ok: false, error: describeActionError(e, t('actions.couldNotSaveSocialLinks')) };
   }
 }

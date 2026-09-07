@@ -9,6 +9,7 @@
 // executes with the run's authority, exactly what a family whose concierge is
 // off or lapsed must not be able to start from a parked run.
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { MAX_AI_ANSWER_CHARS } from '@/lib/ai/chat-request';
 import { answerClarification, statusForServiceCode } from '@/lib/ai/runs/intake';
 import { accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
@@ -22,31 +23,32 @@ export const maxDuration = 300;
 const ANSWER_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const startedAt = Date.now();
   try {
     const authed = await authenticateAI(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
     const { id } = await params;
-    if (!id) return NextResponse.json({ error: 'Run not found.', code: 'not_found' }, { status: 404 });
+    if (!id) return NextResponse.json({ error: t('answer.runNotFound'), code: 'not_found' }, { status: 404 });
 
     const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, ANSWER_RATE_LIMIT);
     if (!limited.ok) {
       return NextResponse.json(
-        { error: 'Too many requests. Please try again shortly.', code: 'rate_limited' },
+        { error: t('answer.tooManyRequestsPleaseTry'), code: 'rate_limited' },
         { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
       );
     }
 
     const body = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
     if (!body.ok) {
-      if (body.reason === 'too_large') return NextResponse.json({ error: 'Request body is too large.', code: 'too_large' }, { status: 413 });
-      return NextResponse.json({ error: 'Invalid request body', code: 'invalid_body' }, { status: 400 });
+      if (body.reason === 'too_large') return NextResponse.json({ error: t('answer.requestBodyIsTooLarge'), code: 'too_large' }, { status: 413 });
+      return NextResponse.json({ error: t('answer.invalidRequestBody'), code: 'invalid_body' }, { status: 400 });
     }
     const record = body.value && typeof body.value === 'object' ? (body.value as Record<string, unknown>) : {};
     const answer = typeof record.answer === 'string' ? record.answer.trim() : '';
-    if (!answer) return NextResponse.json({ error: 'Type an answer for Bubaly.', code: 'answer_required' }, { status: 400 });
-    if (answer.length > MAX_AI_ANSWER_CHARS) return NextResponse.json({ error: 'That answer is too long.', code: 'answer_too_long' }, { status: 400 });
+    if (!answer) return NextResponse.json({ error: t('answer.typeAnAnswerForBubaly'), code: 'answer_required' }, { status: 400 });
+    if (answer.length > MAX_AI_ANSWER_CHARS) return NextResponse.json({ error: t('answer.thatAnswerIsTooLong'), code: 'answer_too_long' }, { status: 400 });
 
     const access = await assertAIAccess(ctx, { db: supabase });
     if (!access.ok) return accessDeniedResponse(access);
@@ -57,6 +59,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(result.data, { status: 202 });
   } catch (error) {
     console.error('[api/ai/runs/answer] answer failed', error);
-    return NextResponse.json({ error: 'Bubaly could not take that answer right now.', code: 'unknown' }, { status: 500 });
+    return NextResponse.json({ error: t('answer.bubalyCouldNotTakeThat'), code: 'unknown' }, { status: 500 });
   }
 }

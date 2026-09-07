@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { profileUpdateSchema } from '@/lib/validation';
@@ -17,12 +18,13 @@ function actionFailure(operation: string, error: unknown): { ok: false; error: s
 export async function updateMyProfileAction(input: {
   firstName: string; lastName: string; phone: string; avatarUrl?: string;
 }): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const parsed = profileUpdateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const res = await saveUserProfile(auth.user.id, parsed.data);
   if (!res.ok) return res;
@@ -33,9 +35,10 @@ export async function updateMyProfileAction(input: {
 
 /** Switches the user's active family (used by the family switcher). */
 export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   // Verify membership before switching (defense in depth; RLS also guards reads).
   const { data: member, error: memberError } = await supabase
@@ -45,7 +48,7 @@ export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boo
     .eq('user_id', auth.user.id)
     .maybeSingle();
   if (memberError) return actionFailure('verify family membership', memberError);
-  if (!member) return { ok: false, error: 'Not a member of that family' };
+  if (!member) return { ok: false, error: t('actions.notAMemberOfThat') };
 
   const { error } = await supabase
     .from('user_preferences')
@@ -60,11 +63,12 @@ export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boo
 export async function setDefaultDashboardAction(
   view: DashboardView,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!isDashboardView(view)) return { ok: false, error: 'Invalid dashboard' };
+  const t = await getTranslations();
+  if (!isDashboardView(view)) return { ok: false, error: t('actions.invalidDashboard') };
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: 'Not signed in' };
+  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
   const { error } = await supabase
     .from('user_preferences')

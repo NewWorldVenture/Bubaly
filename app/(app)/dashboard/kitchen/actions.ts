@@ -4,6 +4,7 @@
 // differentiator) + Family Food Health Score snapshots. Family-scoped via RLS.
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -21,11 +22,12 @@ export async function addLeftoverAction(input: {
   useBy?: string | null;
   location?: string;
 }): Promise<Result<{ id: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const name = input.name.trim();
-  if (!name) return { ok: false, error: 'Give the leftover a name.' };
+  if (!name) return { ok: false, error: t('actions.giveTheLeftoverAName') };
   const location = LOCATIONS.includes((input.location ?? 'fridge') as never) ? input.location! : 'fridge';
 
   const { data, error } = await supabase
@@ -49,9 +51,10 @@ export async function addLeftoverAction(input: {
 }
 
 export async function updateLeftoverStatusAction(input: { id: string; status: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  if (!STATUSES.includes(input.status as never)) return { ok: false, error: 'Invalid status.' };
+  if (!STATUSES.includes(input.status as never)) return { ok: false, error: t('actions.invalidStatus') };
 
   const { error } = await supabase
     .from('leftover_inventory')

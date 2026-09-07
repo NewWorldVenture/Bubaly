@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -24,19 +25,20 @@ const MAX_MESSAGES = 30;
 const MAX_CHARS = 8000;
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const userId = ctx.user.id;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-assist:${userId}`, { limit: 30 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many AI requests. Please try again shortly.' },
+      { error: t('assist.tooManyAiRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
     if (!(await isAIConfigured())) {
       return NextResponse.json(
-        { error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.' },
+        { error: t('assist.theAiEngineIsnT') },
         { status: 503 },
       );
     }
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
     const body = (boundedBody.value ?? {}) as Body;
     const incoming = Array.isArray(body.messages) ? body.messages : [];
-    if (incoming.length === 0) return NextResponse.json({ error: 'No messages provided.' }, { status: 400 });
+    if (incoming.length === 0) return NextResponse.json({ error: t('assist.noMessagesProvided') }, { status: 400 });
 
     // Sanitize: clamp count + length, keep only valid roles/content.
     const messages: AIMessage[] = incoming
@@ -53,9 +55,9 @@ export async function POST(req: NextRequest) {
       .slice(-MAX_MESSAGES)
       .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_CHARS) }));
 
-    if (messages.length === 0) return NextResponse.json({ error: 'No valid messages provided.' }, { status: 400 });
+    if (messages.length === 0) return NextResponse.json({ error: t('assist.noValidMessagesProvided') }, { status: 400 });
     if (messages[messages.length - 1].role !== 'user') {
-      return NextResponse.json({ error: 'The last message must be from the user.' }, { status: 400 });
+      return NextResponse.json({ error: t('assist.theLastMessageMustBe') }, { status: 400 });
     }
 
     const system = (body.systemPrompt && body.systemPrompt.trim())
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
         return completion.text || '';
       },
     )).trim();
-    if (!text) return NextResponse.json({ error: 'Could not generate a response. Please try again.' }, { status: 502 });
+    if (!text) return NextResponse.json({ error: t('assist.couldNotGenerateAResponse') }, { status: 502 });
 
     return NextResponse.json({ message: text });
   } catch (err) {

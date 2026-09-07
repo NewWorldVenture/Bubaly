@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -19,12 +20,13 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
  * AI is unconfigured — never fabricates numbers.
  */
 export async function POST() {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-savings:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many savings requests. Please try again shortly.' },
+    { error: tr('savings.tooManySavingsRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 

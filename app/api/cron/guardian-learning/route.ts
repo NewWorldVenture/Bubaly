@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
@@ -13,8 +14,9 @@ export const maxDuration = 60;
 // suggestions past their expiry. The AI only proposes — parents approve.
 // Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
+  const tr = await getTranslations();
   if (!hasCronAuthorization(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: tr('guardianLearning.unauthorized') }, { status: 401 });
   }
   try {
     const supabase = createServiceClient();
@@ -58,6 +60,6 @@ export async function GET(req: NextRequest) {
     );
   } catch (err) {
     console.error('Guardian learning cron error:', err);
-    return NextResponse.json({ error: 'Learning run failed' }, { status: 500 });
+    return NextResponse.json({ error: tr('guardianLearning.learningRunFailed') }, { status: 500 });
   }
 }

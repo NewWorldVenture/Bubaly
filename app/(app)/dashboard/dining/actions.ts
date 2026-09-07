@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -19,10 +20,11 @@ export async function toggleFavoriteAction(id: string, next: boolean): Promise<R
 export async function addRestaurantAction(input: {
   name: string; cuisine?: string; priceLevel?: number; rating?: number; distanceKm?: number;
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const name = (input.name ?? '').trim();
-  if (name.length < 2) return { ok: false, error: 'Give the place a name.' };
+  if (name.length < 2) return { ok: false, error: t('actions.giveThePlaceAName') };
   const { error } = await supabase.from('dining_out').insert({
     family_id: ctx.active.familyId,
     name,
@@ -41,10 +43,11 @@ export async function addRestaurantAction(input: {
 export async function logVisitAction(input: {
   name: string; amountCents?: number; itemCount?: number; visitedAt?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const name = (input.name ?? '').trim();
-  if (name.length < 2) return { ok: false, error: 'Which restaurant was it?' };
+  if (name.length < 2) return { ok: false, error: t('actions.whichRestaurantWasIt') };
   const { error } = await supabase.from('dining_out').insert({
     family_id: ctx.active.familyId,
     name,

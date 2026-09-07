@@ -6,6 +6,7 @@
 // code, which also advances the order to 'completed'. Family-scoped via
 // requireUserContext + RLS on marketplace_handoffs.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
@@ -21,7 +22,7 @@ function actionFailure<T = undefined>(operation: string, error: unknown): Result
 const COMPLETE_REASON: Record<string, string> = {
   unauthenticated: 'Please sign in to complete the pickup.',
   invalid_request: 'Enter a valid hand-off code.',
-  order_not_found: 'Order not found.',
+  order_not_found: 'actions.orderNotFound',
   forbidden: 'You are not part of this marketplace exchange.',
   order_not_open: 'This order is already closed.',
   handoff_not_found: 'This pickup could not be found.',
@@ -43,11 +44,12 @@ async function loadOrderRole(orderId: string) {
 export async function proposeHandoffAction(input: {
   orderId: string; meetAtIso?: string | null; locationLabel: string; locationKind?: LocationKind; notes?: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, sb, order, orderError } = await loadOrderRole(input.orderId);
   if (orderError) return actionFailure('load the order', orderError);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: 'This order is closed.' };
-  if (!input.locationLabel?.trim()) return { ok: false, error: 'Pick or type a meetup spot.' };
+  if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
+  if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
 
   const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
   const { error } = await sb.from('marketplace_handoffs').upsert({
@@ -66,17 +68,18 @@ export async function proposeHandoffAction(input: {
 
 /** The other party confirms the proposal → calendar event + hand-off code. */
 export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
+  const t = await getTranslations();
   const { ctx, sb, order, orderError } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', orderError);
-  if (!order) return { ok: false, error: 'Order not found.' };
+  if (!order) return { ok: false, error: t('actions.orderNotFound') };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
     .select('id, proposer_role, status, meet_at, location_label').eq('order_id', orderId).maybeSingle();
   if (handoffError) return actionFailure('load the pickup', handoffError);
-  if (!handoff) return { ok: false, error: 'No pickup to confirm.' };
-  if (handoff.status !== 'proposed') return { ok: false, error: 'This pickup can’t be confirmed anymore.' };
+  if (!handoff) return { ok: false, error: t('actions.noPickupToConfirm') };
+  if (handoff.status !== 'proposed') return { ok: false, error: t('actions.thisPickupCanTBe') };
   const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
-  if (role === handoff.proposer_role) return { ok: false, error: 'Wait for the other person to confirm your proposal.' };
+  if (role === handoff.proposer_role) return { ok: false, error: t('actions.waitForTheOtherPerson') };
 
   const code = generateHandoffCode();
 
@@ -107,9 +110,10 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
 
 /** Cancel a proposed/confirmed pickup (either party). */
 export async function cancelHandoffAction(orderId: string): Promise<Result> {
+  const t = await getTranslations();
   const { sb, order, orderError } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', orderError);
-  if (!order) return { ok: false, error: 'Order not found.' };
+  if (!order) return { ok: false, error: t('actions.orderNotFound') };
   const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
     .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
   if (error) return actionFailure('cancel the pickup', error);
@@ -119,6 +123,7 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
 
 /** Complete the hand-off in person by entering the code → order completed. */
 export async function completeHandoffAction(input: { orderId: string; code: string }): Promise<Result> {
+  const t = await getTranslations();
   await requireUserContext();
   const sb = await createServer();
   const { data, error } = await sb.rpc('marketplace_complete_handoff', {
@@ -131,7 +136,7 @@ export async function completeHandoffAction(input: { orderId: string; code: stri
   }
   const result = data as { ok?: unknown; reason?: unknown };
   if (result.ok !== true) {
-    return { ok: false, error: COMPLETE_REASON[String(result.reason)] ?? 'Could not complete the pickup.' };
+    return { ok: false, error: t(COMPLETE_REASON[String(result.reason)] ?? 'actions.couldNotCompleteThePickup') };
   }
 
   revalidatePath('/marketplace/orders');

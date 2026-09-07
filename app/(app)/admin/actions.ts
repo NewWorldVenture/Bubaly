@@ -1,6 +1,7 @@
 'use server';
 
 import * as React from 'react';
+import { getTranslations } from '@/lib/i18n/server';
 import { revalidatePath } from 'next/cache';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -23,7 +24,8 @@ function actionFailure(error: unknown, fallback = 'Could not complete that admin
 }
 
 async function assertSuperAdmin(): Promise<Result> {
-  if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized' };
+  const t = await getTranslations();
+  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
   return { ok: true };
 }
 
@@ -46,17 +48,18 @@ export async function adminCreateUserAction(input: {
   familyId?: string;
   role?: MemberRole;
 }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const parsedEmail = emailSchema.safeParse(input.email);
-  if (!parsedEmail.success) return { ok: false, error: 'Enter a valid email address' };
+  if (!parsedEmail.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(parsedEmail.data, {
     redirectTo: `${APP_URL}/onboarding`,
   });
-  if (error || !data.user) return error ? actionFailure(error, 'Could not create user.') : { ok: false, error: 'Could not create user.' };
+  if (error || !data.user) return error ? actionFailure(error, t('actions.couldNotCreateUser')) : { ok: false, error: t('actions.couldNotCreateUser') };
 
   if (input.familyId) {
     const { error: memberError } = await supabase.from('family_members').insert({
@@ -82,19 +85,20 @@ export async function adminCreateFamilyAction(input: {
   timezone: string;
   ownerEmail: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const name = input.name.trim();
-  if (name.length < 2) return { ok: false, error: 'Give the family a name' };
+  if (name.length < 2) return { ok: false, error: t('actions.giveTheFamilyAName') };
   const parsedEmail = emailSchema.safeParse(input.ownerEmail);
-  if (!parsedEmail.success) return { ok: false, error: 'Enter the owner’s email address' };
+  if (!parsedEmail.success) return { ok: false, error: t('actions.enterTheOwnerSEmail') };
 
   const supabase = createServiceClient();
   const { data: owner, error: ownerLookupError } = await supabase
     .from('profiles').select('id, full_name, email').eq('email', parsedEmail.data).maybeSingle();
   if (ownerLookupError) return actionFailure(ownerLookupError, 'Could not look up the family owner.');
-  if (!owner) return { ok: false, error: 'No account found with that email — create the user first' };
+  if (!owner) return { ok: false, error: t('actions.noAccountFoundWithThat') };
 
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
@@ -161,11 +165,12 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
 
 /** Updates a member's display name and role. */
 export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const displayName = input.displayName.trim();
-  if (!displayName) return { ok: false, error: 'Name is required' };
+  if (!displayName) return { ok: false, error: t('actions.nameIsRequired') };
 
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
@@ -186,12 +191,13 @@ const ASSIGNABLE_PLANS = new Set<PlanId>(['free', 'basic', 'basic_annual', 'plus
  * none exists. 'free' yields planLevel 0. Super-admin only, audited.
  */
 export async function adminSetFamilyPlanAction(input: { familyId: string; plan: string }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const plan = input.plan as PlanId;
-  if (!ASSIGNABLE_PLANS.has(plan)) return { ok: false, error: 'Unknown plan' };
-  if (!input.familyId) return { ok: false, error: 'A family is required' };
+  if (!ASSIGNABLE_PLANS.has(plan)) return { ok: false, error: t('actions.unknownPlan') };
+  if (!input.familyId) return { ok: false, error: t('actions.aFamilyIsRequired') };
 
   const supabase = createServiceClient();
   // Update the family's current active/trialing subscription if it has one;
@@ -226,19 +232,20 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
  * admin can't remove their own access (no self-lockout). Super-admin only, audited.
  */
 export async function adminSetSuperAdminAction(input: { email: string; makeAdmin: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const parsed = emailSchema.safeParse(input.email.trim().toLowerCase());
-  if (!parsed.success) return { ok: false, error: 'Enter a valid email address' };
+  if (!parsed.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
   const email = parsed.data;
 
   const me = await getUser();
   if (!input.makeAdmin && me?.email && me.email.toLowerCase() === email) {
-    return { ok: false, error: 'You can’t remove your own super-admin access.' };
+    return { ok: false, error: t('actions.youCanTRemoveYour') };
   }
   if (!input.makeAdmin && isSuperAdminEmail(email)) {
-    return { ok: false, error: 'This admin is set via code/env and can’t be removed here.' };
+    return { ok: false, error: t('actions.thisAdminIsSetVia') };
   }
 
   const supabase = createServiceClient();
@@ -302,12 +309,13 @@ export async function saveStripeSettingsAction(input: {
 
 /** Verifies the configured Stripe secret key by retrieving the account. */
 export async function testStripeConnectionAction(): Promise<Result<{ livemode: boolean; currencies: number }>> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
   try {
     const settings = await getStripeSettings();
     const key = effectiveSecretKey(settings);
-    if (!key) return { ok: false, error: 'No Stripe secret key configured.' };
+    if (!key) return { ok: false, error: t('actions.noStripeSecretKeyConfigured') };
     // balance.retrieve needs no id and fails fast on a bad/expired key.
     const balance = await stripeFromKey(key).balance.retrieve();
     return { ok: true, data: { livemode: balance.livemode, currencies: balance.available.length } };
@@ -318,12 +326,13 @@ export async function testStripeConnectionAction(): Promise<Result<{ livemode: b
 
 /** Re-sends an existing pending invite's email. */
 export async function adminResendInviteAction(inviteId: string): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data: invite } = await supabase.from('invites').select('*').eq('id', inviteId).maybeSingle();
-  if (!invite || invite.status !== 'pending') return { ok: false, error: 'Invite is no longer pending' };
+  if (!invite || invite.status !== 'pending') return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
   const { data: family } = await supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle();
   const inviterName = invite.invited_by
@@ -340,7 +349,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
       role: invite.role,
     }),
   });
-  if (!ok) return { ok: false, error: 'Could not send the invite email' };
+  if (!ok) return { ok: false, error: t('actions.couldNotSendTheInvite') };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'resend', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');
@@ -368,17 +377,19 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
  * access to actual family members, and the admin isn't a member of every family.
  */
 export async function adminGetDocumentUrlAction(storagePath: string): Promise<Result<{ url: string }>> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 120);
-  if (error || !data) return error ? actionFailure(error, 'Could not create a document link.') : { ok: false, error: 'Could not create a document link.' };
+  if (error || !data) return error ? actionFailure(error, t('actions.couldNotCreateADocument')) : { ok: false, error: t('actions.couldNotCreateADocument') };
   return { ok: true, data: { url: data.signedUrl } };
 }
 
 /** Deletes a document's storage object and database row. Not reversible — confirmed client-side first. */
 export async function adminDeleteDocumentAction(documentId: string, _storagePath: string): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
@@ -389,7 +400,7 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   const { data: doc, error: docError } = await supabase
     .from('documents').select('family_id, title, storage_path').eq('id', documentId).maybeSingle();
   if (docError) return actionFailure(docError, 'Could not load that document.');
-  if (!doc) return { ok: false, error: 'Document not found.' };
+  if (!doc) return { ok: false, error: t('actions.documentNotFound') };
 
   const { error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);
   if (storageError) return actionFailure(storageError, 'Could not remove the document from storage.');
@@ -397,7 +408,7 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   const { data: deleted, error } = await supabase
     .from('documents').delete().eq('id', documentId).select('id').maybeSingle();
   if (error) return actionFailure(error, 'Could not delete that document.');
-  if (!deleted) return { ok: false, error: 'Document was not deleted.' };
+  if (!deleted) return { ok: false, error: t('actions.documentWasNotDeleted') };
 
   await adminAuditLog({ familyId: doc?.family_id ?? null, action: 'delete', resource: 'documents', resourceId: documentId, metadata: { title: doc?.title } });
   revalidatePath('/admin/content');
@@ -406,11 +417,12 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
 
 /** Bans or unbans an auth account. Banning blocks sign-in until reversed; you can't ban yourself. */
 export async function adminSetUserBanAction(userId: string, banned: boolean): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const me = await getUser();
-  if (me?.id === userId) return { ok: false, error: 'You can’t ban your own account' };
+  if (me?.id === userId) return { ok: false, error: t('actions.youCanTBanYour') };
 
   const supabase = createServiceClient();
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
@@ -424,11 +436,12 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
 
 /** Sends a password-reset email to an existing account (e.g. to help a locked-out user). */
 export async function adminSendPasswordResetAction(email: string): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
 
   const parsedEmail = emailSchema.safeParse(email);
-  if (!parsedEmail.success) return { ok: false, error: 'Enter a valid email address' };
+  if (!parsedEmail.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
 
   const supabase = createServiceClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
@@ -445,9 +458,10 @@ export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 /** Moves a support ticket through its lifecycle (open → pending → resolved/closed). */
 export async function adminUpdateTicketStatusAction(ticketId: string, status: TicketStatus): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
-  if (!TICKET_STATUSES.includes(status)) return { ok: false, error: 'Invalid status' };
+  if (!TICKET_STATUSES.includes(status)) return { ok: false, error: t('actions.invalidStatus') };
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId);
@@ -461,9 +475,10 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
 /** Toggle a global feature flag (e.g. wallet_virtual_ledger_enabled, stripe_*).
  *  Super-admin only; the single source of truth for what the wallet exposes. */
 export async function adminToggleFeatureFlagAction(key: string, enabled: boolean): Promise<Result> {
+  const t = await getTranslations();
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
-  if (!key || key.length > 100) return { ok: false, error: 'Invalid flag key' };
+  if (!key || key.length > 100) return { ok: false, error: t('actions.invalidFlagKey') };
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);

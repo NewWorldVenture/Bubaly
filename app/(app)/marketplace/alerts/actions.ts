@@ -3,6 +3,7 @@
 // Server actions for Marketplace saved searches / alerts. Family-scoped via RLS;
 // a write against another family's row is a silent no-op.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { KIND_ORDER, CATEGORY_LABELS, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
@@ -29,6 +30,7 @@ export type CreateAlertInput = {
 
 /** Create a saved search for the current member. Requires at least one criterion. */
 export async function createSavedSearchAction(input: CreateAlertInput): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -39,7 +41,7 @@ export async function createSavedSearchAction(input: CreateAlertInput): Promise<
   const maxPriceCents = input.maxPrice && Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : null;
 
   if (!query && !kind && !category && maxPriceCents === null) {
-    return { ok: false, error: 'Add a keyword or a filter so we know what to watch for.' };
+    return { ok: false, error: t('actions.addAKeywordOrA') };
   }
 
   const { error } = await supabase.from('marketplace_saved_searches').insert({
@@ -56,7 +58,8 @@ export async function createSavedSearchAction(input: CreateAlertInput): Promise<
 
 /** Delete a saved search. */
 export async function deleteSavedSearchAction(id: string): Promise<Result> {
-  if (!id) return { ok: false, error: 'Invalid alert' };
+  const t = await getTranslations();
+  if (!id) return { ok: false, error: t('actions.invalidAlert') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase
@@ -71,7 +74,8 @@ export async function deleteSavedSearchAction(id: string): Promise<Result> {
 
 /** Clear the "new" badge by advancing the last-seen cursor to now. */
 export async function markSearchSeenAction(id: string): Promise<Result> {
-  if (!id) return { ok: false, error: 'Invalid alert' };
+  const t = await getTranslations();
+  if (!id) return { ok: false, error: t('actions.invalidAlert') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase

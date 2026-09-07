@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushConfigured } from '@/lib/server/push';
@@ -13,13 +14,14 @@ export const dynamic = 'force-dynamic';
  * notification engine. Honest: reports counts and whether push is configured.
  */
 export async function POST() {
+  const t = await getTranslations();
   const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user) return NextResponse.json({ error: t('test.unauthorized') }, { status: 401 });
 
   const cfg = pushConfigured();
   if (!cfg.web && !cfg.native) {
     return NextResponse.json(
-      { ok: false, error: 'Push isn’t configured on the server yet (no VAPID/FCM keys).', configured: cfg },
+      { ok: false, error: t('test.pushIsnTConfiguredOn'), configured: cfg },
       { status: 503 },
     );
   }
@@ -29,7 +31,7 @@ export async function POST() {
   const limited = await enforceRequestRateLimit(supabase, `push:test:${user.id}`, { limit: 5 });
   if (!limited.ok) {
     return NextResponse.json(
-      { error: 'Too many test pushes. Please try again shortly.' },
+      { error: t('test.tooManyTestPushesPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }

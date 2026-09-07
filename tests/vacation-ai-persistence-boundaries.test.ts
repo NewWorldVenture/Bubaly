@@ -28,7 +28,7 @@ describe('Vacation AI persistence boundaries', () => {
 
   it('scopes existing conversations to the active family and vacation', () => {
     expect(source).toContain(".eq('family_id', familyId).eq('vacation_id', vacationId).maybeSingle()");
-    expect(source).toContain("if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });");
+    expect(source).toContain("if (!conversation) return NextResponse.json({ error: t('ai.conversationNotFound') }, { status: 404 });");
     expect(source).toContain('const { error: userMessageError }');
     expect(source).toContain('const { error: assistantMessageError }');
   });

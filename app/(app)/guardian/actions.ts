@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
@@ -17,8 +18,9 @@ type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: strin
 // so these server actions are the authorization boundary: only a family manager
 // (parent/adult) may change safety config. The failure-only shape is assignable
 // to every ActionResult<T>.
-function guardianForbidden(): { ok: false; error: string } {
-  return { ok: false, error: 'Only a parent or guardian can change safety settings.' };
+async function guardianForbidden(): Promise<{ ok: false; error: string }> {
+  const t = await getTranslations();
+  return { ok: false, error: t('actions.onlyAParentOrGuardian') };
 }
 
 function actionFailure<T = void>(operation: string, error: unknown): ActionResult<T> {
@@ -250,6 +252,7 @@ export async function assignGuardianPhoneAction(input: {
   member_id: string;
   phone: string;
 }): Promise<ActionResult<{ phone: string | null }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
@@ -266,7 +269,7 @@ export async function assignGuardianPhoneAction(input: {
     else if (digits.length === 11 && digits.startsWith('1')) phone = `+${digits}`;
     else phone = `+${digits.replace(/^\+/, '')}`;
     if (!/^\+\d{8,15}$/.test(phone)) {
-      return { ok: false, error: 'Enter a valid phone number (e.g. (555) 123-4567).' };
+      return { ok: false, error: t('actions.enterAValidPhoneNumber') };
     }
   }
 
@@ -279,7 +282,7 @@ export async function assignGuardianPhoneAction(input: {
       .neq('member_id', input.member_id)
       .maybeSingle();
     if (clashError) return actionFailure('check Guardian phone assignments', clashError);
-    if (clash) return { ok: false, error: 'That number is already assigned to another family member.' };
+    if (clash) return { ok: false, error: t('actions.thatNumberIsAlreadyAssigned') };
   }
 
   const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)

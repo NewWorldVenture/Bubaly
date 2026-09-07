@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { normalizeIdea, isFeedbackStatus, type IdeaDraft } from '@/lib/feedback/board';
@@ -83,10 +84,11 @@ export async function toggleVoteAction(ideaId: string): Promise<Result & { voted
 
 /** Add a comment to an idea. */
 export async function addCommentAction(input: { ideaId: string; body: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const body = input.body.trim();
-  if (!body) return { ok: false, error: 'Write something first.' };
-  if (body.length > 2000) return { ok: false, error: 'That comment is a little long — please trim it.' };
+  if (!body) return { ok: false, error: t('actions.writeSomethingFirst') };
+  if (body.length > 2000) return { ok: false, error: t('actions.thatCommentIsALittle') };
 
   const supabase = await createServer();
   const admin = await isSuperAdmin();
@@ -105,9 +107,10 @@ export async function addCommentAction(input: { ideaId: string; body: string }):
 /** Move an idea through the roadmap pipeline. Super-admin only (service role,
  *  since there is no public UPDATE policy on feedback_ideas). */
 export async function setIdeaStatusAction(input: { ideaId: string; status: string; note?: string }): Promise<Result> {
+  const t = await getTranslations();
   await requireUserContext();
-  if (!(await isSuperAdmin())) return { ok: false, error: 'Only the Bubaly team can change an idea’s status.' };
-  if (!isFeedbackStatus(input.status)) return { ok: false, error: 'Unknown status.' };
+  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.onlyTheBubalyTeamCan') };
+  if (!isFeedbackStatus(input.status)) return { ok: false, error: t('actions.unknownStatus') };
 
   const svc = createServiceClient();
   const note = (input.note ?? '').trim();

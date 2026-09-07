@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -16,10 +17,11 @@ export async function submitResponseAction(input: {
   comment?: string;
   email?: string;
 }): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const supabase = createServiceClient();
   const limited = await enforceRequestRateLimit(supabase, `survey:${clientIp(await headers())}`, { limit: 10 });
-  if (!limited.ok) return { ok: false, error: 'Too many survey responses. Please try again shortly.' };
+  if (!limited.ok) return { ok: false, error: t('actions.tooManySurveyResponsesPlease') };
 
   const slug = typeof payload.slug === 'string' ? payload.slug.trim().slice(0, 200) : '';
   const { data: survey } = await supabase
@@ -29,12 +31,12 @@ export async function submitResponseAction(input: {
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (!survey) return { ok: false, error: 'Survey not found.' };
-  if (survey.status !== 'active') return { ok: false, error: 'This survey is no longer accepting responses.' };
+  if (!survey) return { ok: false, error: t('actions.surveyNotFound') };
+  if (survey.status !== 'active') return { ok: false, error: t('actions.thisSurveyIsNoLonger') };
 
   const score = Math.round(Number(payload.score));
   if (!Number.isFinite(score) || score < survey.scale_min || score > survey.scale_max) {
-    return { ok: false, error: 'Please choose a valid rating.' };
+    return { ok: false, error: t('actions.pleaseChooseAValidRating') };
   }
 
   const ua = (await headers()).get('user-agent')?.slice(0, 300) ?? null;
@@ -46,6 +48,6 @@ export async function submitResponseAction(input: {
     channel: 'link',
     user_agent: ua,
   });
-  if (error) return { ok: false, error: 'Could not save your response. Please try again.' };
+  if (error) return { ok: false, error: t('actions.couldNotSaveYourResponse') };
   return { ok: true };
 }

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -24,8 +25,9 @@ const EFFECTS = ['allow', 'deny', 'require_approval', 'auto_approve'] as const;
 const SUBJECT_KINDS = ['role', 'member', 'ai', 'everyone'] as const;
 
 async function managerCtx() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ctx: null, error: 'Only a parent or adult can manage the Trust Engine.' as const };
+  if (!isManager(ctx.active.role)) return { ctx: null, error: t('actions.onlyAParentOrAdult') };
   return { ctx, error: null };
 }
 
@@ -49,15 +51,16 @@ export async function savePolicyAction(input: {
   priority?: number;
   enabled?: boolean;
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
 
   const name = input.name.trim();
-  if (!name) return { ok: false, error: 'Give the policy a name.' };
-  if (!isDomain(input.domain)) return { ok: false, error: 'Unknown domain.' };
-  if (!isCapability(input.capability)) return { ok: false, error: 'Unknown capability.' };
-  if (!(EFFECTS as readonly string[]).includes(input.effect)) return { ok: false, error: 'Unknown effect.' };
-  if (!(SUBJECT_KINDS as readonly string[]).includes(input.subjectKind)) return { ok: false, error: 'Unknown subject.' };
+  if (!name) return { ok: false, error: t('actions.giveThePolicyAName') };
+  if (!isDomain(input.domain)) return { ok: false, error: t('actions.unknownDomain') };
+  if (!isCapability(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
+  if (!(EFFECTS as readonly string[]).includes(input.effect)) return { ok: false, error: t('actions.unknownEffect') };
+  if (!(SUBJECT_KINDS as readonly string[]).includes(input.subjectKind)) return { ok: false, error: t('actions.unknownSubject') };
   const model = input.approvalModel && (APPROVAL_MODELS as readonly string[]).includes(input.approvalModel) ? input.approvalModel : 'single';
   // The model IS the rule (lib/approvals/threshold.ts). Storing a count that
   // disagrees with it is how "Two-parent" came to approve on one vote, so the
@@ -116,10 +119,11 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
 export async function setPermissionGrantAction(input: {
   memberId: string; domain: string; capability: string; effect: 'allow' | 'deny' | 'clear';
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
-  if (!isDomain(input.domain) || input.domain === 'all') return { ok: false, error: 'Pick a specific domain.' };
-  if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: 'Unknown capability.' };
+  if (!isDomain(input.domain) || input.domain === 'all') return { ok: false, error: t('actions.pickASpecificDomain') };
+  if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
 
   const supabase = await createServer();
   if (input.effect === 'clear') {
@@ -141,11 +145,12 @@ export async function setPermissionGrantAction(input: {
 export async function createDelegationAction(input: {
   fromMemberId: string; toMemberId: string; domains: string[]; reason?: string; expiresAt: string;
 }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
-  if (input.fromMemberId === input.toMemberId) return { ok: false, error: 'Delegate to a different member.' };
+  if (input.fromMemberId === input.toMemberId) return { ok: false, error: t('actions.delegateToADifferentMember') };
   const expires = new Date(input.expiresAt);
-  if (Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) return { ok: false, error: 'Pick a future expiry.' };
+  if (Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) return { ok: false, error: t('actions.pickAFutureExpiry') };
   const domains = input.domains.filter(d => isDomain(d) && d !== 'all');
 
   const supabase = await createServer();
@@ -180,8 +185,9 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
  * 0251's RLS both enforce it again.
  */
 export async function decideApprovalAction(input: { id: string; decision: 'approved' | 'rejected'; note?: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent or adult can decide approvals.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentOrAdult2') };
   const scope = scopeFromUserContext(ctx, await createServer());
   const result = await decide(scope, input.id, input.decision, input.note ?? null);
   if (!result.ok) return { ok: false, error: result.error };
@@ -193,6 +199,7 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
 
 // ─── Emergency mode ──────────────────────────────────────────────────────────
 export async function activateEmergencyAction(input: { kind: string; reason?: string; elevatedDomains: string[] }): Promise<Result> {
+  const t = await getTranslations();
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const kinds = ['medical', 'missing_person', 'severe_weather', 'natural_disaster', 'vehicle_accident', 'general'];
@@ -203,7 +210,7 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
   // Emergency elevation outranks every deny, policy and risk tier, so it must
   // name what it is elevating. Defaulting an empty selection to ['all'] turned
   // "I did not choose" into "everything, including money and medical".
-  if (!domains.length) return { ok: false, error: 'Choose which areas the emergency should unlock.' };
+  if (!domains.length) return { ok: false, error: t('actions.chooseWhichAreasTheEmergency') };
 
   const { error: e } = await supabase.from('emergency_sessions').insert({
     family_id: ctx.active.familyId, kind, reason: input.reason?.trim() || null,

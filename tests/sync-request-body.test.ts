@@ -1,3 +1,4 @@
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -25,7 +26,7 @@ describe('provider sync request boundary', () => {
     expect(route).toContain('MAX_SYNC_REQUEST_BYTES = 4_096');
     expect(route).toContain('readBoundedRequestText(req, MAX_SYNC_REQUEST_BYTES)');
     expect(route).toContain('typeof providerValue === \'string\'');
-    expect(route).toContain('Unsupported sync provider.');
+    expectTranslates(route, 'run.unsupportedSyncProvider', "Unsupported sync provider.");
     expect(route).not.toContain('req.json()');
   });
 });

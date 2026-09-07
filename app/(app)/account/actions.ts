@@ -4,6 +4,7 @@
 // disappears from active use, but NOTHING is deleted, so the family can reopen
 // and pick up exactly where they left off. Parent-only.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isAdmin } from '@/lib/constants/roles';
@@ -17,8 +18,9 @@ function actionFailure(operation: string, error: unknown): Result {
 }
 
 export async function closeAccountAction(): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isAdmin(ctx.active.role)) return { ok: false, error: 'Only a parent can close the account.' };
+  if (!isAdmin(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanClose') };
   const admin = createServiceClient();
   const { error } = await admin
     .from('families')
@@ -30,8 +32,9 @@ export async function closeAccountAction(): Promise<Result> {
 }
 
 export async function reopenAccountAction(): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isAdmin(ctx.active.role)) return { ok: false, error: 'Only a parent can reopen the account.' };
+  if (!isAdmin(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanReopen') };
   const admin = createServiceClient();
   const { error } = await admin
     .from('families')

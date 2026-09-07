@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -24,21 +25,22 @@ function logDatabaseFailure(operation: string, error: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('ai.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-vacations:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many trip AI requests. Please try again shortly.' },
+    { error: t('ai.tooManyTripAiRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('ai.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Body;
   const { action, vacationId } = body;
-  if (!vacationId) return NextResponse.json({ error: 'Missing vacationId' }, { status: 400 });
+  if (!vacationId) return NextResponse.json({ error: t('ai.missingVacationid') }, { status: 400 });
 
   const familyId = ctx.active.familyId;
   const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', vacationId).eq('family_id', familyId).maybeSingle();
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
     logDatabaseFailure('trip context read', tripError);
     return databaseUnavailable('Trip data is temporarily unavailable.');
   }
-  if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+  if (!trip) return NextResponse.json({ error: t('ai.tripNotFound') }, { status: 404 });
 
   // Gather trip context (all RLS-scoped).
   const contextResults = await Promise.all([
@@ -135,11 +137,11 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
           return validated;
         },
       );
-      if (!built) return NextResponse.json({ error: 'AI builder returned an invalid trip plan. Please try again.' }, { status: 502 });
+      if (!built) return NextResponse.json({ error: t('ai.aiBuilderReturnedAnInvalid') }, { status: 502 });
       plan = built;
     } catch (err) {
       console.error('Vacation build error:', err);
-      return NextResponse.json({ error: 'AI builder is temporarily unavailable.' }, { status: 502 });
+      return NextResponse.json({ error: t('ai.aiBuilderIsTemporarilyUnavailable') }, { status: 502 });
     }
 
     let added = { activities: 0, items: 0, budget: 0, packing: 0 };
@@ -258,7 +260,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
   // ---------- CONCIERGE (chat) ----------
   if (action === 'concierge') {
     const message = body.message?.trim();
-    if (!message) return NextResponse.json({ error: 'Empty message' }, { status: 400 });
+    if (!message) return NextResponse.json({ error: t('ai.emptyMessage') }, { status: 400 });
 
     let conversationId = body.conversationId;
     if (!conversationId) {
@@ -274,7 +276,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
         logDatabaseFailure('conversation ownership read', error);
         return databaseUnavailable('Trip conversation is temporarily unavailable.');
       }
-      if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      if (!conversation) return NextResponse.json({ error: t('ai.conversationNotFound') }, { status: 404 });
     }
     const { error: userMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id }).select('id').single();
     if (userMessageError) {
@@ -321,7 +323,7 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
       );
     } catch (err) {
       console.error('Concierge error:', err);
-      return NextResponse.json({ error: 'AI is temporarily unavailable.' }, { status: 502 });
+      return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
     }
 
     const { error: assistantMessageError } = await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'assistant', content: reply, created_by: ctx.user.id }).select('id').single();
@@ -332,5 +334,5 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
     return NextResponse.json({ conversationId, reply });
   }
 
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  return NextResponse.json({ error: t('ai.unknownAction') }, { status: 400 });
 }

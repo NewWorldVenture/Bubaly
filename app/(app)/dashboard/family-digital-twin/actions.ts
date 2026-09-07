@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -93,10 +94,11 @@ export interface ActivityProjectionInput {
 
 /** Assemble the real household context and run the pure projection. No writes. */
 export async function projectActivityAction(input: ActivityProjectionInput): Promise<{ ok: true; data: ProjectionResult } | { ok: false; error: string }> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   if (!input.activityName?.trim() || !input.startsAt || !(input.durationMin > 0)) {
-    return { ok: false, error: 'Fill in an activity, time and duration to project.' };
+    return { ok: false, error: tr('actions.fillInAnActivityTime') };
   }
   const supabase = await createServer();
   const now = new Date();

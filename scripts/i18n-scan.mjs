@@ -52,7 +52,7 @@ function walk(dir, out = []) {
     const full = join(dir, entry);
     const st = statSync(full);
     if (st.isDirectory()) walk(full, out);
-    else if (/\.tsx$/.test(entry)) out.push(full);
+    else if (/\.tsx?$/.test(entry)) out.push(full);
   }
   return out;
 }
@@ -114,6 +114,10 @@ const NOT_COPY = [
   // "Download statement as CSV" and "Print / Save as PDF" are both real copy —
   // so this lists the types that only ever appear in code.
   /\bas\s+(?:Record|Array|Partial|Readonly|Promise|unknown|any|const)\b/,
+  // A tone map keys its Tailwind classes by name, and `error:` is one of those
+  // names: `error: 'text-rose-300 bg-rose-500/10 border-rose-500/30'` is a
+  // class list, not a sentence. Two or more Tailwind-shaped tokens say so.
+  /(?:^|\s)(?:text|bg|border|ring|from|to|via|hover|focus)[-:][\w[\]/.-]+(?:\s|$).*(?:^|\s)(?:text|bg|border|ring|from|to|via|hover|focus)[-:]/,
   /^\s*:\s.*\?\s*$/,           // `: error ?` — the middle of a ternary
   /\s\?\s*$/,                   // `on ?` — the head of one. English copy does
                                 //   not put a space before its question mark;
@@ -143,6 +147,20 @@ const PROP_PATTERN =
 // Only functions whose argument is UNCONDITIONALLY user-facing are listed. A
 // generic `t(`, `push(` or `set(` would drag in identifiers, table names and
 // sort keys, and a scanner that cries wolf gets its findings ignored.
+/**
+ * A server action's failure message. These reach the user unchanged — the
+ * client does `toastError(res.error)` at 149 sites — so an English literal here
+ * is English on the screen no matter what language the family chose.
+ *
+ * They translate on the SERVER, inside the action, where `getTranslations()` is
+ * available: that keeps the wire format a finished sentence and leaves all 149
+ * call sites alone. `describeActionError(err, '…')`'s second argument is the
+ * fallback text shown when the database error has no friendlier form, so it is
+ * the same kind of string and matched too.
+ */
+const ACTION_ERROR_PATTERN =
+  /(?:\berror:\s*|describeActionError\([^,()]+,\s*)'([^'\\\n]{4,})'/g;
+
 // Fixed names: a browser dialog says exactly what it is called.
 const DIALOG_PATTERN = /\b(?:window\.confirm|confirm|alert|prompt)\(\s*'([^'\\\n]{3,})'/g;
 
@@ -226,9 +244,13 @@ export function scanFile(file) {
     findings.push({ text, line: source.slice(0, index).split('\n').length });
   };
 
-  for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
+  // A JSX text node can only exist in a .tsx file. Running the rule over .ts
+  // read `<em>${topicLabel}</em> — wrote:</p>` inside an HTML email template as
+  // page copy — and that email goes to the operator, not to the visitor.
+  if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
   const toasts = toastPattern(source);
   if (toasts) for (const m of source.matchAll(toasts)) push(m[1], m.index ?? 0);
 
@@ -242,7 +264,7 @@ function filesUnder(paths) {
     try {
       const st = statSync(full);
       if (st.isDirectory()) walk(full, files);
-      else if (/\.tsx$/.test(full)) files.push(full);
+      else if (/\.tsx?$/.test(full)) files.push(full);
     } catch {
       // A gated surface pointing at a path that no longer exists is a real
       // problem — say so rather than passing vacuously.

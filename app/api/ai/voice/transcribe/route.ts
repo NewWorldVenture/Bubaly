@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
@@ -17,19 +18,20 @@ const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
 // never leaves the server. Honest 503 when OpenAI isn't configured — no faked
 // transcript is ever returned.
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     // Auth: only signed-in family members may transcribe.
     const ctx = await requireUserContext();
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many voice requests. Please try again shortly.' },
+      { error: t('transcribe.tooManyVoiceRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Voice isn’t configured. Add an OpenAI key in Admin → AI Engine.' },
+        { error: t('transcribe.voiceIsnTConfiguredAdd') },
         { status: 503 },
       );
     }
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
     const file = boundedForm.value.get('audio');
     if (!(file instanceof Blob)) {
-      return NextResponse.json({ error: 'No audio provided' }, { status: 400 });
+      return NextResponse.json({ error: t('transcribe.noAudioProvided') }, { status: 400 });
     }
     const check = isValidAudioUpload(file.size, file.type);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
@@ -75,11 +77,11 @@ export async function POST(req: NextRequest) {
     const data = await readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
     const text = cleanTranscript(data.text ?? '');
     if (!text) {
-      return NextResponse.json({ error: 'I couldn’t hear anything. Try again.' }, { status: 422 });
+      return NextResponse.json({ error: t('transcribe.iCouldnTHearAnything') }, { status: 422 });
     }
     return NextResponse.json({ text });
   } catch (err) {
     console.error('Transcription route error', err);
-    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
+    return NextResponse.json({ error: t('transcribe.somethingWentWrongPleaseTry') }, { status: 500 });
   }
 }

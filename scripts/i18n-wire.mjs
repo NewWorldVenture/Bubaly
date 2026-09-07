@@ -27,11 +27,24 @@
 // person, because a wrong `await` in the wrong scope is worse than a red build.
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { withoutComments } from './i18n-scan.mjs';
 
 const ROOT = process.cwd();
 const SOURCE_DIRS = ['app', 'components', 'lib', 'hooks'];
 
-/** Every source file, its 'use client' flag, and what it imports. */
+/**
+ * The `'use client'` / `'use server'` directive, or null.
+ *
+ * A directive may sit BELOW a leading comment; 14 action files here open with a
+ * header explaining the write path. A plain `startsWith` reads those as having
+ * no directive, and the import-graph rule then calls each one client.
+ */
+function directive(source) {
+  const m = /^['"](use (?:client|server))['"]/.exec(withoutComments(source).trimStart());
+  return m ? m[1] : null;
+}
+
+/** Every source file, its directive, and what it imports. */
 function indexSources() {
   const files = [];
   const walk = (dir) => {
@@ -58,7 +71,15 @@ function indexSources() {
     const specifiers = [...src.matchAll(/(?:^|\n)\s*(?:export|import)\s+(type\s+)?[^;]*?from\s+['"]([^'"]+)['"]/g)]
       .filter((m) => !m[1])
       .map((m) => m[2]);
-    index.set(file, { declaresClient: /^['"]use client['"]/.test(src.trimStart()), specifiers });
+    index.set(file, {
+      declaresClient: directive(src) === 'use client',
+      // A `'use server'` file is server code no matter who imports it. Without
+      // this, the import-graph rule below read 79 action files as client — a
+      // client component importing a server action is the NORMAL shape, and it
+      // proves the opposite of what the rule assumed.
+      declaresServer: directive(src) === 'use server',
+      specifiers,
+    });
   }
   return index;
 }
@@ -100,6 +121,7 @@ function isClientModule(file, seen = new Set()) {
   seen.add(abs);
 
   const entry = SOURCES.get(abs);
+  if (entry?.declaresServer) { clientCache.set(abs, false); return false; }
   let answer = Boolean(entry?.declaresClient);
   if (!answer) {
     for (const importer of IMPORTERS.get(abs) ?? []) {
@@ -183,16 +205,60 @@ let unplaced = 0;
  * name, track ( ) < > depth, and take the first `{` seen at depth zero.
  */
 function bodyBrace(src, at) {
-  let paren = 0;
-  let angle = 0;
-  for (let i = src.indexOf('(', at); i !== -1 && i < src.length; i += 1) {
+  // Step 1: past the parameter list, balancing so a nested arrow's own
+  // parentheses do not end it early.
+  let i = src.indexOf('(', at);
+  if (i === -1) return -1;
+  let depth = 0;
+  for (; i < src.length; i += 1) {
+    if (src[i] === '(') depth += 1;
+    else if (src[i] === ')') { depth -= 1; if (depth === 0) { i += 1; break; } }
+  }
+  const skipSpace = () => { while (i < src.length && /\s/.test(src[i])) i += 1; };
+  skipSpace();
+
+  // Step 2: no return type — the next `{` is the body.
+  if (src[i] !== ':') return src.indexOf('{', i);
+
+  // Step 3: a return type, which may itself be an object literal:
+  //
+  //   function guardianForbidden(): { ok: false; error: string } {
+  //
+  // Both braces sit at depth zero, so "first `{`" picks the TYPE and the
+  // declaration lands inside it. Consume the type as a sequence of atoms
+  // joined by `|`, `&`, `.` and generics; the body is the `{` that follows a
+  // complete atom with no joining operator in between.
+  i += 1;
+  let expectAtom = true;
+  const pairs = { '{': '}', '<': '>', '(': ')', '[': ']' };
+  while (i < src.length) {
+    skipSpace();
     const c = src[i];
-    if (c === '(') paren += 1;
-    else if (c === ')') paren -= 1;
-    else if (c === '<') angle += 1;
-    else if (c === '>' && src[i - 1] !== '=') angle -= 1;   // `=>` is not a close
-    else if (c === '{' && paren === 0 && angle === 0) return i;
-    else if (c === ';' && paren === 0 && angle === 0) return -1;  // an overload
+    if (c === undefined) return -1;
+    if (c in pairs) {
+      if (c === '{' && !expectAtom) return i;     // the body
+      // Balance this group, whatever it is.
+      const close = pairs[c];
+      let d = 0;
+      for (; i < src.length; i += 1) {
+        if (src[i] === c) d += 1;
+        else if (src[i] === close) { d -= 1; if (d === 0) { i += 1; break; } }
+      }
+      expectAtom = false;
+      continue;
+    }
+    if (/[|&,:]/.test(c) || src.startsWith('=>', i)) {
+      i += src.startsWith('=>', i) ? 2 : 1;
+      expectAtom = true;
+      continue;
+    }
+    if (/[\w$.]/.test(c)) {
+      while (i < src.length && /[\w$.]/.test(src[i])) i += 1;
+      expectAtom = false;
+      continue;
+    }
+    if (c === ';') return -1;                     // an overload signature
+    i += 1;
   }
   return -1;
 }
@@ -251,7 +317,7 @@ for (const [path, byName] of wanted) {
   }
 
   writeFileSync(path, src);
-  const why = /^['"]use client['"]/.test(src.trimStart()) ? '' : ' (via an importer)';
+  const why = directive(src) === 'use client' ? '' : ' (via an importer)';
   console.log(`  ${isClient ? `client${why}` : 'server'}  ${relative(ROOT, resolve(ROOT, path))}  (${wired} component(s))`);
 }
 

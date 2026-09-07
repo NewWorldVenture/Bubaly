@@ -13,6 +13,7 @@
 // answers with a sentence instead, and says out loud what the file header used
 // to get wrong.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
@@ -26,7 +27,13 @@ function actionFailure(operation: string, error: unknown): Result {
 }
 
 /** The household's money is the adults'. Mirrors 0267, in words a person reads. */
-const NOT_YOURS: Result = { ok: false, error: 'Only a parent or another adult can change the household accounts.' };
+// A refusal message belongs to the REQUEST, not to module load: the locale is
+// resolved per request, so a constant evaluated once would freeze whichever
+// language happened to be first. A function reads it each time.
+async function notYours(): Promise<Result> {
+  const t = await getTranslations();
+  return { ok: false, error: t('hubActions.onlyAParentOrAnother') };
+}
 
 const ACCOUNT_TYPES: AccountType[] = ['checking', 'savings', 'credit', 'investment', 'retirement'];
 const CARD_BRANDS = ['visa', 'mastercard', 'amex', 'discover', 'other'];
@@ -44,10 +51,11 @@ const dollars = (v: unknown): number => {
 const cents = (v: unknown): number => Math.round(dollars(v) * 100);
 
 export async function addAccountAction(input: Record<string, unknown>): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return NOT_YOURS;
+  if (!isManager(ctx.active.role)) return notYours();
   const name = str(input.name);
-  if (!name) return { ok: false, error: 'Account name is required' };
+  if (!name) return { ok: false, error: t('hubActions.accountNameIsRequired') };
   const type = ACCOUNT_TYPES.includes(input.type as AccountType) ? (input.type as AccountType) : 'checking';
   const supabase = await createServer();
   const { error } = await supabase.from('financial_accounts').insert({
@@ -61,9 +69,10 @@ export async function addAccountAction(input: Record<string, unknown>): Promise<
 }
 
 export async function addCardAction(input: Record<string, unknown>): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const name = str(input.name);
-  if (!name) return { ok: false, error: 'Card name is required' };
+  if (!name) return { ok: false, error: t('hubActions.cardNameIsRequired') };
   const supabase = await createServer();
   const { error } = await supabase.from('wallet_cards').insert({
     family_id: ctx.active.familyId, name,
@@ -79,9 +88,10 @@ export async function addCardAction(input: Record<string, unknown>): Promise<Res
 }
 
 export async function addPassAction(input: Record<string, unknown>): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const name = str(input.name);
-  if (!name) return { ok: false, error: 'Pass name is required' };
+  if (!name) return { ok: false, error: t('hubActions.passNameIsRequired') };
   const supabase = await createServer();
   const { error } = await supabase.from('wallet_passes').insert({
     family_id: ctx.active.familyId, name,
@@ -95,9 +105,10 @@ export async function addPassAction(input: Record<string, unknown>): Promise<Res
 }
 
 export async function addRewardAction(input: Record<string, unknown>): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const name = str(input.name);
-  if (!name) return { ok: false, error: 'Program name is required' };
+  if (!name) return { ok: false, error: t('hubActions.programNameIsRequired') };
   const kind = REWARD_KINDS.includes(String(input.kind)) ? String(input.kind) : 'points';
   const unit = kind === 'miles' ? 'miles' : kind === 'cashback' ? '$' : 'points';
   const supabase = await createServer();
@@ -112,10 +123,11 @@ export async function addRewardAction(input: Record<string, unknown>): Promise<R
 }
 
 export async function addTransactionAction(input: Record<string, unknown>): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return NOT_YOURS;
+  if (!isManager(ctx.active.role)) return notYours();
   const name = str(input.name);
-  if (!name) return { ok: false, error: 'Description is required' };
+  if (!name) return { ok: false, error: t('hubActions.descriptionIsRequired') };
   const supabase = await createServer();
   const { error } = await supabase.from('transactions').insert({
     family_id: ctx.active.familyId, name,
@@ -136,11 +148,12 @@ const DELETABLE = new Set(['wallet_cards', 'wallet_passes', 'wallet_rewards', 'f
 const MANAGER_ONLY_DELETES = new Set(['financial_accounts', 'transactions']);
 
 export async function deleteWalletRowAction(input: { table: string; id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!DELETABLE.has(input.table) || !input.id) return { ok: false, error: 'Invalid request' };
+  if (!DELETABLE.has(input.table) || !input.id) return { ok: false, error: t('hubActions.invalidRequest') };
   // Narrowed to the two household-money tables on purpose: a teen tidying
   // their own wallet cards, passes and rewards is not what 0267 is about.
-  if (MANAGER_ONLY_DELETES.has(input.table) && !isManager(ctx.active.role)) return NOT_YOURS;
+  if (MANAGER_ONLY_DELETES.has(input.table) && !isManager(ctx.active.role)) return notYours();
   const supabase = await createServer();
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should

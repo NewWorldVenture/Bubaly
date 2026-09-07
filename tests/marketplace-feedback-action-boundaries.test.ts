@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 
 const actionFiles = [
@@ -36,8 +37,8 @@ describe('Marketplace and Feedback action boundaries', () => {
     const community = readFileSync('app/(app)/marketplace/community/actions.ts', 'utf8');
     const marketplace = readFileSync('app/(app)/marketplace/actions.ts', 'utf8');
     expect(feedback).toContain("error.code !== '23505'");
-    expect(community).toContain('No circle found with that code');
-    expect(marketplace).toContain('You already reviewed this exchange');
+    expectTranslates(community, 'actions.noCircleFoundWithThat', "No circle found with that code — double-check it");
+    expectTranslates(marketplace, 'actions.youAlreadyReviewedThisExchange', "You already reviewed this exchange");
   });
 
   it('completes the hand-off and order in one authorized transaction', () => {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -30,20 +31,21 @@ function logDatabaseFailure(operation: string, error: unknown) {
  * and clearing the targeted slots first), so it's a true one-click planner.
  */
 export async function POST(req: Request) {
+  const t = await getTranslations();
   let ctx;
-  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('plan.unauthorized') }, { status: 401 }); }
   if (!(await isAIConfigured())) {
-    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
+    return NextResponse.json({ error: t('plan.aiIsNotConfiguredOpenai') }, { status: 503 });
   }
 
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
-  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  if (!boundedBody.ok) return NextResponse.json({ error: t('plan.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const weekStart = String(body.weekStart ?? '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-    return NextResponse.json({ error: 'A valid weekStart (YYYY-MM-DD) is required.' }, { status: 400 });
+    return NextResponse.json({ error: t('plan.aValidWeekstartYyyyMm') }, { status: 400 });
   }
   const mealTypes = (Array.isArray(body.mealTypes) ? body.mealTypes : ['dinner'])
     .filter((t: string): t is MealType => PLAN_MEAL_TYPES.includes(t as MealType));
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-meals-plan:${userId}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
-    { error: 'Too many meal-plan requests. Please try again shortly.' },
+    { error: t('plan.tooManyMealPlanRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
 
   const assignments = parsePlan(text, request);
   if (assignments.length === 0) {
-    return NextResponse.json({ error: 'The planner could not produce a plan. Try adding a few meals or recipes first.' }, { status: 422 });
+    return NextResponse.json({ error: t('plan.thePlannerCouldNotProduce') }, { status: 422 });
   }
 
   if (!write) return NextResponse.json({ assignments, written: false });

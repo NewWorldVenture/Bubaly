@@ -17,6 +17,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createEvent, deleteEvent } from '@/lib/services/calendar';
@@ -39,7 +40,8 @@ export type ToggleDateCalendarResult =
  * so the event that lands says what the stored row says.
  */
 export async function toggleDateOnCalendarAction(dateId: string): Promise<ToggleDateCalendarResult> {
-  if (!dateId) return { ok: false, error: 'That date could not be found.' };
+  const t = await getTranslations();
+  if (!dateId) return { ok: false, error: t('actions.thatDateCouldNotBe') };
 
   // Outside the try: `requireUserContext` redirects by throwing.
   const ctx = await requireUserContext();
@@ -55,9 +57,9 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
       .maybeSingle();
     if (readError) {
       console.error('[relationship-action] date read failed', readError);
-      return { ok: false, error: 'Could not load that date.' };
+      return { ok: false, error: t('actions.couldNotLoadThatDate') };
     }
-    if (!row) return { ok: false, error: 'That date could not be found.' };
+    if (!row) return { ok: false, error: t('actions.thatDateCouldNotBe') };
 
     // ── Off the calendar ────────────────────────────────────────────────────
     if (row.calendar_event_id) {
@@ -79,7 +81,7 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
         .eq('family_id', ctx.active.familyId);
       if (unlinkError) {
         console.error('[relationship-action] unlink failed', unlinkError);
-        return { ok: false, error: 'The event was removed but the date still shows it. Refresh and try again.' };
+        return { ok: false, error: t('actions.theEventWasRemovedBut') };
       }
 
       revalidatePath(PATH);
@@ -127,13 +129,13 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
       // report rather than delete work they can already use. Logged so a second
       // tap creating a second event is traceable.
       console.error('[relationship-action] link failed', { dateId: row.id, eventId: created.data.id, error: linkError });
-      return { ok: false, error: 'It is on your calendar, but this date did not record the link. Refresh before trying again.' };
+      return { ok: false, error: t('actions.itIsOnYourCalendar') };
     }
 
     revalidatePath(PATH);
     return { ok: true, onCalendar: true, eventId: created.data.id };
   } catch (err) {
     console.error('[relationship-action] toggle failed', err);
-    return { ok: false, error: describeActionError(err, 'Could not update your calendar.') };
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateYourCalendar')) };
   }
 }

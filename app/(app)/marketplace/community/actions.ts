@@ -5,6 +5,7 @@
 // from migration 0176; share/unshare ride plain RLS (a family may only share
 // its OWN listings into circles it belongs to). All family-scoped via ctx.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isValidJoinCode, normalizeJoinCode } from '@/lib/marketplace/community';
@@ -20,8 +21,9 @@ function actionFailure(operation: string, error: unknown): Result {
 }
 
 export async function createCircleAction(name: string, emoji?: string): Promise<Result> {
+  const t = await getTranslations();
   const trimmed = name.trim().slice(0, 60);
-  if (!trimmed) return { ok: false, error: 'Give your circle a name' };
+  if (!trimmed) return { ok: false, error: t('actions.giveYourCircleAName') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { data, error } = await sb.rpc('marketplace_create_circle', {
@@ -33,14 +35,15 @@ export async function createCircleAction(name: string, emoji?: string): Promise<
 }
 
 export async function joinCircleAction(code: string): Promise<Result> {
-  if (!isValidJoinCode(code)) return { ok: false, error: 'That code doesn’t look complete — it has 8 characters' };
+  const t = await getTranslations();
+  if (!isValidJoinCode(code)) return { ok: false, error: t('actions.thatCodeDoesnTLook') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { data, error } = await sb.rpc('marketplace_join_circle', {
     p_family: ctx.active.familyId, p_code: normalizeJoinCode(code),
   });
   if (error) {
-    if (/no circle/i.test(error.message)) return { ok: false, error: 'No circle found with that code — double-check it' };
+    if (/no circle/i.test(error.message)) return { ok: false, error: t('actions.noCircleFoundWithThat') };
     return actionFailure('join the circle', error);
   }
   revalidatePath(PATH);
@@ -48,7 +51,8 @@ export async function joinCircleAction(code: string): Promise<Result> {
 }
 
 export async function leaveCircleAction(circleId: string): Promise<Result> {
-  if (!circleId) return { ok: false, error: 'Invalid circle' };
+  const t = await getTranslations();
+  if (!circleId) return { ok: false, error: t('actions.invalidCircle') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.rpc('marketplace_leave_circle', {
@@ -60,7 +64,8 @@ export async function leaveCircleAction(circleId: string): Promise<Result> {
 }
 
 export async function shareListingAction(listingId: string, circleId: string): Promise<Result> {
-  if (!listingId || !circleId) return { ok: false, error: 'Invalid share' };
+  const t = await getTranslations();
+  if (!listingId || !circleId) return { ok: false, error: t('actions.invalidShare') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.from('marketplace_listing_shares').insert({
@@ -73,7 +78,8 @@ export async function shareListingAction(listingId: string, circleId: string): P
 }
 
 export async function unshareListingAction(listingId: string, circleId: string): Promise<Result> {
-  if (!listingId || !circleId) return { ok: false, error: 'Invalid share' };
+  const t = await getTranslations();
+  if (!listingId || !circleId) return { ok: false, error: t('actions.invalidShare') };
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { error } = await sb.from('marketplace_listing_shares')

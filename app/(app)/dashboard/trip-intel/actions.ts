@@ -6,6 +6,7 @@
 // it in sync on every refresh. 100% Supabase-wired, family-scoped via RLS.
 
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -29,12 +30,13 @@ export async function saveTripPlanAction(input: {
   weatherSummary?: string | null;
   eventId?: string | null;
 }): Promise<Result<{ id: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const title = input.title.trim();
   const destination = input.destination.trim();
-  if (!title || !destination) return { ok: false, error: 'A title and destination are required.' };
+  if (!title || !destination) return { ok: false, error: t('actions.aTitleAndDestinationAre') };
 
   const { data, error } = await supabase
     .from('trip_plans')
@@ -122,12 +124,13 @@ async function upsertHeadOutEvent(
 }
 
 export async function saveDeparturePlanAction(input: DeparturePlanInput): Promise<Result<{ id: string; leaveBy: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const title = input.title.trim();
-  if (!title) return { ok: false, error: 'A title is required.' };
-  if (!input.eventStart) return { ok: false, error: 'Missing event time.' };
+  if (!title) return { ok: false, error: t('actions.aTitleIsRequired') };
+  if (!input.eventStart) return { ok: false, error: t('actions.missingEventTime') };
 
   const plan = computeDeparture({
     eventStartISO: input.eventStart,
@@ -192,6 +195,7 @@ export async function refreshDeparturePlanAction(input: {
   weatherDelayMinutes: number;
   weatherSummary?: string | null;
 }): Promise<Result<{ leaveBy: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -200,7 +204,7 @@ export async function refreshDeparturePlanAction(input: {
     .select('id, title, event_start, prep_minutes, park_minutes, buffer_minutes, destination, origin, reminder_event_id')
     .eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
   if (fetchErr) return { ok: false, error: describeDbError(fetchErr) };
-  if (!existing) return { ok: false, error: 'Departure plan not found.' };
+  if (!existing) return { ok: false, error: t('actions.departurePlanNotFound') };
 
   const plan = computeDeparture({
     eventStartISO: existing.event_start,

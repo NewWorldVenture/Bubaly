@@ -7,6 +7,7 @@
 // tables via the service client. No secrets ever reach the client. All financial
 // state changes are mirrored from Stripe, never forged locally.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -41,11 +42,12 @@ async function origin(): Promise<string> {
 
 /** Begin (or resume) parent onboarding. Returns a hosted Stripe onboarding URL. */
 export async function startConnectOnboardingAction(): Promise<Result<{ url: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can set up payments.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanSetUp') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.connectOnboarding) return { ok: false, error: 'Payments setup is not available yet.' };
+  if (!caps.connectOnboarding) return { ok: false, error: t('actions.paymentsSetupIsNotAvailable') };
 
   try {
     const { accountId } = await ensureConnectedAccount(svc, {
@@ -65,13 +67,14 @@ export async function startConnectOnboardingAction(): Promise<Result<{ url: stri
 
 /** Pull the latest onboarding status from Stripe into our mirror. */
 export async function refreshConnectStatusAction(): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can do this.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
   if (acctError) return actionFailure('load the connected account', acctError);
-  if (!acct) return { ok: false, error: 'No account to refresh yet.' };
+  if (!acct) return { ok: false, error: t('actions.noAccountToRefreshYet') };
   try {
     await syncConnectedAccount(svc, ctx.active.familyId, acct.stripe_account_id);
     revalidatePath('/wallet/cards');
@@ -83,15 +86,16 @@ export async function refreshConnectStatusAction(): Promise<Result> {
 
 /** Open the family's Treasury financial account (requires Treasury capability). */
 export async function activateTreasuryAction(): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can do this.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.treasury) return { ok: false, error: 'This feature is not available yet.' };
+  if (!caps.treasury) return { ok: false, error: t('actions.thisFeatureIsNotAvailable') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('id, stripe_account_id, treasury_enabled').eq('family_id', ctx.active.familyId).maybeSingle();
   if (acctError) return actionFailure('load the Treasury account', acctError);
-  if (!acct?.treasury_enabled) return { ok: false, error: 'Finish account setup first.' };
+  if (!acct?.treasury_enabled) return { ok: false, error: t('actions.finishAccountSetupFirst') };
   try {
     await ensureFinancialAccount(svc, {
       familyId: ctx.active.familyId, connectedAccountRowId: acct.id, accountId: acct.stripe_account_id,
@@ -107,12 +111,13 @@ export async function activateTreasuryAction(): Promise<Result> {
 export async function issueCardAction(input: {
   childWalletId: string; type: 'virtual' | 'physical'; spendLimitCents: number | null; spendWindow: string;
 }): Promise<Result<{ cardId: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can issue cards.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanIssueCards') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
-  if (input.type === 'physical' && !caps.physicalCards) return { ok: false, error: 'Physical cards are not available yet.' };
+  if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
+  if (input.type === 'physical' && !caps.physicalCards) return { ok: false, error: t('actions.physicalCardsAreNotAvailable') };
 
   const [{ data: acct, error: acctError }, { data: wallet, error: walletError }] = await Promise.all([
     svc.from('stripe_connected_accounts').select('stripe_account_id, card_issuing_enabled').eq('family_id', ctx.active.familyId).maybeSingle(),
@@ -120,8 +125,8 @@ export async function issueCardAction(input: {
   ]);
   if (acctError) return actionFailure('load card-issuing capabilities', acctError);
   if (walletError) return actionFailure('load the child wallet', walletError);
-  if (!acct?.card_issuing_enabled) return { ok: false, error: 'Finish account setup first.' };
-  if (!wallet) return { ok: false, error: 'Child wallet not found.' };
+  if (!acct?.card_issuing_enabled) return { ok: false, error: t('actions.finishAccountSetupFirst') };
+  if (!wallet) return { ok: false, error: t('actions.childWalletNotFound') };
 
   // Trust Engine governs issuing a payment instrument (Trust TODO #1).
   const { decision } = await evaluateTrust(svc, ctx.active.familyId, {
@@ -159,17 +164,18 @@ export async function issueCardAction(input: {
 
 /** Freeze or unfreeze a child's card. */
 export async function setCardFrozenAction(input: { cardId: string; frozen: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can do this.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
   const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
   if (cardError) return actionFailure('load the card', cardError);
-  if (!card) return { ok: false, error: 'Card not found.' };
+  if (!card) return { ok: false, error: t('actions.cardNotFound') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
   if (acctError) return actionFailure('load the connected account', acctError);
-  if (!acct) return { ok: false, error: 'No account configured.' };
+  if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
   try {
     await setCardFrozen(svc, {
       familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
@@ -191,20 +197,21 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
 export async function updateCardControlsAction(input: {
   cardId: string; spendLimitCents: number | null; spendWindow: string; blockedCategories: string[];
 }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can set spending controls.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanSetSpending') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
+  if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
 
   const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
   if (cardError) return actionFailure('load the card', cardError);
-  if (!card) return { ok: false, error: 'Card not found.' };
+  if (!card) return { ok: false, error: t('actions.cardNotFound') };
   const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
   if (acctError) return actionFailure('load the connected account', acctError);
-  if (!acct) return { ok: false, error: 'No account configured.' };
+  if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
 
   // Normalize all inputs server-side so a bad client can't set out-of-range values.
   const spendLimitCents = clampSpendLimitCents(input.spendLimitCents);
@@ -239,12 +246,13 @@ export async function updateCardControlsAction(input: {
 export async function createCardRevealAction(input: {
   cardId: string; nonce: string;
 }): Promise<Result<{ ephemeralKeySecret: string; stripeCardId: string; publishableKey: string; stripeAccount: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can reveal card details.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanRevealCard') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
-  if (!input.nonce?.trim()) return { ok: false, error: 'Missing reveal session.' };
+  if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
+  if (!input.nonce?.trim()) return { ok: false, error: t('actions.missingRevealSession') };
 
   const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await Promise.all([
     svc.from('stripe_issuing_cards').select('id, stripe_card_id')
@@ -254,11 +262,11 @@ export async function createCardRevealAction(input: {
   ]);
   if (cardError) return actionFailure('load the card', cardError);
   if (acctError) return actionFailure('load the connected account', acctError);
-  if (!card) return { ok: false, error: 'Card not found.' };
-  if (!acct) return { ok: false, error: 'No account configured.' };
+  if (!card) return { ok: false, error: t('actions.cardNotFound') };
+  if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
 
   const publishableKey = effectivePublishableKey(null);
-  if (!publishableKey) return { ok: false, error: 'Card reveal is not configured (missing publishable key).' };
+  if (!publishableKey) return { ok: false, error: t('actions.cardRevealIsNotConfigured') };
 
   try {
     const key = await getStripe().ephemeralKeys.create(
@@ -291,11 +299,12 @@ export async function createCardRevealAction(input: {
  */
 export async function prepareCardRevealAction(cardId: string):
   Promise<Result<{ stripeCardId: string; publishableKey: string; stripeAccount: string }>> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can reveal card details.' };
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanRevealCard') };
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
-  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
+  if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
 
   const [{ data: card }, { data: acct }] = await Promise.all([
     svc.from('stripe_issuing_cards').select('stripe_card_id')
@@ -303,10 +312,10 @@ export async function prepareCardRevealAction(cardId: string):
     svc.from('stripe_connected_accounts').select('stripe_account_id')
       .eq('family_id', ctx.active.familyId).maybeSingle(),
   ]);
-  if (!card) return { ok: false, error: 'Card not found.' };
-  if (!acct) return { ok: false, error: 'No account configured.' };
+  if (!card) return { ok: false, error: t('actions.cardNotFound') };
+  if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
   const publishableKey = effectivePublishableKey(null);
-  if (!publishableKey) return { ok: false, error: 'Card reveal is not configured (missing publishable key).' };
+  if (!publishableKey) return { ok: false, error: t('actions.cardRevealIsNotConfigured') };
 
   return { ok: true, data: { stripeCardId: card.stripe_card_id, publishableKey, stripeAccount: acct.stripe_account_id } };
 }

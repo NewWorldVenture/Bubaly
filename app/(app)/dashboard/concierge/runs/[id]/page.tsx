@@ -95,13 +95,13 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
     'use server';
     const actor = await requireUserContext();
     const db = await createServer();
-    if (actor.active.familyId !== familyId) return { ok: false, error: 'That run could not be found.', code: 'not_found' };
-    if (!edits || typeof edits !== 'object' || Array.isArray(edits)) return { ok: false, error: 'Nothing to change.', code: 'invalid_input' };
+    if (actor.active.familyId !== familyId) return { ok: false, error: t('runs.thatRunCouldNotBe'), code: 'not_found' };
+    if (!edits || typeof edits !== 'object' || Array.isArray(edits)) return { ok: false, error: t('runs.nothingToChange'), code: 'invalid_input' };
 
     const current = await loadRunDetail(db, familyId, runId, { viewerRole: actor.active.role });
     if (!current.ok) return { ok: false, error: current.error, code: current.code };
     const step = current.data?.steps.find((s) => s.id === stepId);
-    if (!step) return { ok: false, error: 'That step is not part of this run.', code: 'not_found' };
+    if (!step) return { ok: false, error: t('runs.thatStepIsNotPart'), code: 'not_found' };
     const allowed = new Set(editableFieldsFor(step.input_json as Record<string, unknown>).map((f) => f.key));
     const merged: Record<string, unknown> = { ...(step.input_json as Record<string, unknown>) };
     for (const [key, value] of Object.entries(edits)) {

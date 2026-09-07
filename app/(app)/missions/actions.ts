@@ -1,6 +1,7 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { getTranslations } from '@/lib/i18n/server';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
@@ -97,18 +98,19 @@ function rewardConfig(c: Record<string, unknown>): ChoreReward {
  * chore allows and the score clears the threshold) or routes to parent review.
  */
 export async function submitProofAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const assignmentId = str(formData, 'assignment_id');
-  if (!assignmentId) return { ok: false, error: 'Missing assignment.' };
+  if (!assignmentId) return { ok: false, error: t('actions.missingAssignment') };
 
   // Load the assignment + its chore (RLS guarantees same-family).
   const { data: assignment } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', familyId).maybeSingle();
-  if (!assignment) return { ok: false, error: 'Chore not found.' };
+  if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
   const { data: chore } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
-  if (!chore) return { ok: false, error: 'Chore not found.' };
+  if (!chore) return { ok: false, error: t('actions.choreNotFound') };
 
   const proofKind = (chore.proof_required as string) ?? 'none';
   const note = str(formData, 'note');
@@ -124,7 +126,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
     if (error) {
       await cleanupProofMedia(supabase, mediaPaths);
-      return { ok: false, error: 'Could not upload proof media.' };
+      return { ok: false, error: t('actions.couldNotUploadProofMedia') };
     }
     mediaPaths.push(path);
     if (VISION_TYPES.has(file.type)) {
@@ -134,7 +136,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   }
 
   if (proofKind !== 'none' && mediaPaths.length === 0) {
-    return { ok: false, error: 'This chore needs a photo or video as proof.' };
+    return { ok: false, error: t('actions.thisChoreNeedsAPhoto') };
   }
 
   // Create the submission row.
@@ -147,7 +149,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     .select('id').single();
   if (subErr || !submission) {
     await cleanupProofMedia(supabase, mediaPaths);
-    return { ok: false, error: 'Could not save your submission.' };
+    return { ok: false, error: t('actions.couldNotSaveYourSubmission') };
   }
 
   await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, actorId: assignment.member_id, action: 'submit', note });
@@ -166,7 +168,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     });
   } catch {
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
-    return { ok: false, error: 'Could not review your proof. Please try again.' };
+    return { ok: false, error: t('actions.couldNotReviewYourProof') };
   }
 
   // The AI verdict, the auto-approve payout, and every manager-decision status
@@ -186,7 +188,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   });
   if (validationError) {
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
-    return { ok: false, error: 'Could not save the proof review.' };
+    return { ok: false, error: t('actions.couldNotSaveTheProof') };
   }
 
   const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments')
@@ -194,7 +196,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
   if (assignmentError || !updatedAssignment) {
     await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
-    return { ok: false, error: 'Could not update the chore submission.' };
+    return { ok: false, error: t('actions.couldNotUpdateTheChore') };
   }
   await logChoreEvent({ familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
 
@@ -207,7 +209,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   if (autoOk && verdict.status === 'approved') {
     if (!await setSubmissionStatus(service, familyId, submission.id, 'approved')) {
       await restoreAssignmentState(supabase, familyId, assignment);
-      return { ok: false, error: 'Could not finish the chore approval.' };
+      return { ok: false, error: t('actions.couldNotFinishTheChore') };
     }
     try {
       // Auto-approval is a trusted, server-decided payout and runs in the CHILD's
@@ -220,21 +222,21 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
         .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
       if (fallbackAssignmentError) console.error('[chore state] parent-review fallback failed', fallbackAssignmentError);
-      return { ok: false, error: 'Could not finish the chore approval. It was sent for parent review.' };
+      return { ok: false, error: t('actions.couldNotFinishTheChore2') };
     }
   } else {
     const subStatus = verdict.status === 'needs_improvement' ? 'needs_improvement'
       : verdict.status === 'rejected' ? 'rejected' : verdict.status === 'approved' ? 'parent_review' : 'parent_review';
     if (!await setSubmissionStatus(service, familyId, submission.id, subStatus)) {
       await restoreAssignmentState(supabase, familyId, assignment);
-      return { ok: false, error: 'Could not finish the proof review.' };
+      return { ok: false, error: t('actions.couldNotFinishTheProof') };
     }
     const { data: submittedAssignment, error: submittedAssignmentError } = await supabase.from('chore_assignments')
       .update({ status: 'submitted' }).eq('id', assignmentId).eq('family_id', familyId).select('id').single();
     if (submittedAssignmentError || !submittedAssignment) {
       await setSubmissionStatus(service, familyId, submission.id, 'pending');
       await restoreAssignmentState(supabase, familyId, assignment);
-      return { ok: false, error: 'Could not finish the proof review.' };
+      return { ok: false, error: t('actions.couldNotFinishTheProof') };
     }
   }
 
@@ -429,7 +431,8 @@ export async function createChoreAction(formData: FormData): Promise<void> {
 
 /** AI chore-plan generator — returns suggestions for the parent to review. */
 export async function generatePlanAction(prompt: string, kidAges: number[]): Promise<{ items: ChorePlanItem[]; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!prompt.trim()) return { items: [], error: 'Describe what you want first.' };
+  if (!prompt.trim()) return { items: [], error: t('actions.describeWhatYouWantFirst') };
   return generateChorePlan(scopeFromUserContext(ctx, await createServer()), prompt, kidAges);
 }

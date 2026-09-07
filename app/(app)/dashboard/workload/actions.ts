@@ -1,6 +1,7 @@
 'use server';
 
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 
@@ -12,12 +13,13 @@ type Result = { ok: true } | { ok: false; error: string };
  * still open so a stale suggestion can't clobber completed work.
  */
 export async function moveAssignmentAction(assignmentId: string, toMemberId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
   const { data: target } = await supabase.from('family_members')
     .select('id').eq('id', toMemberId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!target) return { ok: false, error: 'That family member was not found.' };
+  if (!target) return { ok: false, error: t('actions.thatFamilyMemberWasNot') };
 
   const { error, count } = await supabase.from('chore_assignments')
     .update({ member_id: toMemberId }, { count: 'exact' })
@@ -25,7 +27,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
     .eq('family_id', ctx.active.familyId)
     .in('status', ['todo', 'in_progress']);
   if (error) return { ok: false, error: error.message };
-  if (!count) return { ok: false, error: 'That chore is no longer open — refresh and try again.' };
+  if (!count) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
@@ -44,6 +46,7 @@ export async function saveWorkloadSnapshotAction(rows: {
   memberId: string; weekStart: string; choreMinutes: number; choreCount: number;
   taskCount: number; eventCount: number; loadScore: number; sharePct: number;
 }[]): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   if (!rows.length) return { ok: true };
@@ -66,6 +69,6 @@ export async function saveWorkloadSnapshotAction(rows: {
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Could not save workload history. Refresh and try again.' };
+    return { ok: false, error: t('actions.couldNotSaveWorkloadHistory') };
   }
 }

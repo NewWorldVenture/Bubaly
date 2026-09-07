@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
 import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
@@ -26,25 +27,26 @@ const TASKS: Record<Task, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations();
   try {
     const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
     const limited = await enforceAIRateLimit(supabase, `marketing-ai:${actorId}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many marketing AI requests. Please try again shortly.' },
+      { error: t('ai.tooManyMarketingAiRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
     const contentLength = Number(req.headers.get('content-length') ?? 0);
     if (Number.isFinite(contentLength) && contentLength > 16_000) {
-      return NextResponse.json({ error: 'Request is too large.' }, { status: 413 });
+      return NextResponse.json({ error: t('ai.requestIsTooLarge') }, { status: 413 });
     }
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
-    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    if (!boundedBody.ok) return NextResponse.json({ error: t('ai.requestBodyIsTooLarge') }, { status: 400 });
     const body = (boundedBody.value ?? null) as { task?: unknown; input?: unknown } | null;
     const task = body?.task;
     if (typeof task !== 'string' || !Object.prototype.hasOwnProperty.call(TASKS, task)) {
-      return NextResponse.json({ error: 'Unknown task' }, { status: 400 });
+      return NextResponse.json({ error: t('ai.unknownTask') }, { status: 400 });
     }
     const taskKey = task as Task;
     const input = typeof body?.input === 'string' ? body.input.trim().slice(0, 4_000) || undefined : undefined;

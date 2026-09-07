@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -14,13 +15,14 @@ import {
 // last 90 days of check-ins, computes streak stats, and asks the configured AI
 // provider for encouragement + concrete nudges. Auth-gated to the active family.
 export async function POST() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
     const limited = await enforceAIRateLimit(supabase, `ai-habits:${ctx.user.id}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
-      { error: 'Too many habit-coach requests. Please try again shortly.' },
+      { error: t('habits.tooManyHabitCoachRequests') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
     const today = toISODate(new Date());
@@ -42,7 +44,7 @@ export async function POST() {
     ]);
 
     if (!habits || habits.length === 0) {
-      return NextResponse.json({ error: 'Add a habit first, then I can coach you.' }, { status: 400 });
+      return NextResponse.json({ error: t('habits.addAHabitFirstThen') }, { status: 400 });
     }
 
     const logsByHabit = new Map<string, string[]>();
@@ -89,12 +91,12 @@ export async function POST() {
     );
 
     if (!coaching) {
-      return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
+      return NextResponse.json({ error: t('habits.couldNotGenerateCoachingRight') }, { status: 502 });
     }
 
     return NextResponse.json({ coaching });
   } catch (err) {
     console.error('Habit coach error:', err);
-    return NextResponse.json({ error: 'Failed to generate coaching' }, { status: 500 });
+    return NextResponse.json({ error: t('habits.failedToGenerateCoaching') }, { status: 500 });
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectSays } from './helpers/translated';
+import { expectSays, expectTranslates } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/workload/page.tsx', 'utf8');
@@ -9,13 +9,13 @@ const moduleSrc = fs.readFileSync('components/modules/workload-module.tsx', 'utf
 describe('workload read and persistence boundaries', () => {
   it('fails visibly when any required workload query fails', () => {
     expect(page).toContain('const failedQuery = queries.find((query) => query.error);');
-    expectSays(page, 'workload.couldNotLoadWorkloadData', 'Could not load workload data from Supabase. Refresh and try again.');
+    expectSays(page, 'workload.couldNotLoadWorkloadData', "Could not load workload data from Supabase. Refresh and try again.");
     expect(page).toContain('<ErrorState message=');
   });
 
   it('does not present missing workload history as a roadmap state', () => {
     expect(actions).not.toContain('Workload history is not available yet.');
-    expect(actions).toContain('Could not save workload history. Refresh and try again.');
+    expectTranslates(actions, 'actions.couldNotSaveWorkloadHistory', "Could not save workload history. Refresh and try again.");
     expect(moduleSrc).toContain('if (!res.ok) toastError(res.error);');
   });
 });
