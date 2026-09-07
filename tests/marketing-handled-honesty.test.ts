@@ -96,6 +96,14 @@ describe('real aggregates come from the RPC and hide below the threshold', () =>
     expect(stats).toContain(".rpc('public_stats')");
   });
 
+  it('a failed stats read is logged, not silently turned into a number', () => {
+    expect(stats).toContain("console.error('[marketing-stats] public_handled_stats read failed");
+    expect(stats).toContain("console.error('[marketing-stats] public_stats read failed");
+    // And what it degrades to is zero — the one value every formatter hides.
+    expect(stats).toContain('return { handledCompleted: 0, handled30d: 0, familiesWithRuns: 0 };');
+    expect(stats).toContain('return { families: 0, members: 0, tasksCompleted: 0 };');
+  });
+
   it('handledNote is empty below HANDLED_PUBLIC_MIN', () => {
     expect(HANDLED_PUBLIC_MIN).toBe(25);
     expect(handledNote(t, 0)).toBe('');

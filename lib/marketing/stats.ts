@@ -60,7 +60,11 @@ async function readHandledStats(client: SupabaseClient<Database>): Promise<Handl
       handled30d: num(row, 'runs_completed_30d'),
       familiesWithRuns: num(row, 'families_with_runs'),
     };
-  } catch {
+  } catch (err) {
+    // Zeros are what the formatters HIDE, so a failed read shows nothing
+    // rather than a number — but it is still logged, because "the RPC is not
+    // applied yet" and "Supabase is down" look identical from the page.
+    console.error('[marketing-stats] public_handled_stats read failed (rendering no handled aggregates)', err);
     return { handledCompleted: 0, handled30d: 0, familiesWithRuns: 0 };
   }
 }
@@ -75,7 +79,8 @@ async function readAccountStats(client: SupabaseClient<Database>): Promise<Accou
       members: num(row, 'members'),
       tasksCompleted: num(row, 'tasks_completed'),
     };
-  } catch {
+  } catch (err) {
+    console.error('[marketing-stats] public_stats read failed (rendering no family counts)', err);
     return { families: 0, members: 0, tasksCompleted: 0 };
   }
 }
