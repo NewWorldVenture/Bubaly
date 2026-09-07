@@ -218,4 +218,53 @@ begin
   raise notice 'A-08 OK: anon holds no INSERT privilege on wallet_transactions';
 end $$;
 
-select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience): ALL INVARIANTS PASSED' as result;
+-- ── Invariant 7: no stray permissive WRITE policy is left to report ─────────
+--
+-- Invariant 5 proves a stray policy cannot mint. This one proves there is no
+-- stray policy, which is a different and — by this point — equally expensive
+-- problem. The production metadata audit reads pg_policy and reports what it
+-- finds; while a permissive INSERT policy sits on wallet_transactions it will
+-- keep reporting one, every reviewer has to re-derive invariant 5 from
+-- scratch, and the release stops. That happened three times before 0275.
+--
+-- 0217, 0254 and 0267 each dropped policies by hardcoded NAME, so a policy
+-- nobody had named survived all three. 0275 sweeps by shape. This asserts the
+-- result, so the sweep cannot quietly regress the next time someone adds a
+-- policy to a money table.
+do $$
+declare
+  offender record;
+  n int := 0;
+  -- Spelled out rather than pattern-matched on the name. The same two groups as
+  -- 0275, in the same order: a `like 'wallet%'` shortcut would silently put a
+  -- future table in the wrong group and check it against the wrong policy names.
+  wallet_tables  text[] := array['family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules'];
+  finance_tables text[] := array['financial_accounts','transactions','budgets','bills','savings_goals'];
+begin
+  for offender in
+    select c.relname as tbl, p.polname as pol,
+           case p.polcmd when 'a' then 'INSERT' when 'w' then 'UPDATE'
+                         when 'd' then 'DELETE' when '*' then 'ALL' end as cmd
+    from pg_policy p
+    join pg_class c on c.oid = p.polrelid
+    join pg_namespace ns on ns.oid = c.relnamespace
+    where ns.nspname = 'public'
+      and c.relname = any (wallet_tables || finance_tables)
+      and p.polpermissive
+      and p.polcmd in ('a','w','d','*')
+      and p.polname not in (
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_insert' else c.relname || '_insert' end,
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_update' else c.relname || '_update' end,
+        case when c.relname = any (wallet_tables) then c.relname || '_mng_delete' else c.relname || '_delete' end)
+  loop
+    n := n + 1;
+    raise warning 'A-08 stray permissive % policy: %.%', offender.cmd, offender.tbl, offender.pol;
+  end loop;
+
+  if n <> 0 then
+    raise exception 'A-08 FAIL: % stray permissive write policy(ies) on the money tables — 0275 has not been applied, or something re-added one', n;
+  end if;
+  raise notice 'A-08 OK: no stray permissive write policy on any money table';
+end $$;
+
+select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;
