@@ -13,6 +13,19 @@ const VOICE_KEY = 'ai-voice-name';
 
 export type VoiceStatus = 'idle' | 'recording' | 'transcribing' | 'speaking';
 
+/**
+ * Why a voice attempt failed, alongside the message. The shared MicButton needs
+ * the SHAPE of the failure, not its prose: a 503 from the transcribe route is
+ * "voice isn't configured here" and must fall back to on-device recognition,
+ * while a denied permission must not. Callers that only want the message keep
+ * working — the second argument is optional.
+ */
+export type VoiceErrorInfo = {
+  reason: 'unsupported' | 'permission' | 'capture' | 'transcribe';
+  /** HTTP status of the transcribe response, when there was one. */
+  status?: number;
+};
+
 /** True when this browser can record microphone audio. */
 export function voiceInputSupported(): boolean {
   return typeof navigator !== 'undefined'
@@ -27,7 +40,7 @@ export function voiceInputSupported(): boolean {
  * per-device in localStorage (voice output is genuinely a device-level choice —
  * you don't want your phone speaking because you toggled it on a laptop).
  */
-export function useVoice(opts: { onError?: (msg: string) => void } = {}) {
+export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) => void } = {}) {
   const onError = opts.onError;
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [mode, setModeState] = useState<VoiceMode>(DEFAULT_VOICE_MODE);
@@ -69,7 +82,7 @@ export function useVoice(opts: { onError?: (msg: string) => void } = {}) {
    *  (or null on cancel/failure) once stopRecording() is called. */
   const startRecording = useCallback(async (): Promise<string | null> => {
     if (!voiceInputSupported()) {
-      onError?.('Voice input isn’t supported on this browser.');
+      onError?.('Voice input isn’t supported on this browser.', { reason: 'unsupported' });
       return null;
     }
     if (status === 'recording') return null;
@@ -92,10 +105,10 @@ export function useVoice(opts: { onError?: (msg: string) => void } = {}) {
           fd.append('audio', blob, filenameForMime(recorder.mimeType || 'audio/webm'));
           const res = await fetch('/api/ai/voice/transcribe', { method: 'POST', body: fd });
           const data = await res.json().catch(() => ({}));
-          if (!res.ok) { onError?.(data.error ?? 'Could not transcribe that.'); resolveRef.current?.(null); }
+          if (!res.ok) { onError?.(data.error ?? 'Could not transcribe that.', { reason: 'transcribe', status: res.status }); resolveRef.current?.(null); }
           else resolveRef.current?.(data.text ?? null);
         } catch {
-          onError?.('Could not transcribe that. Please try again.');
+          onError?.('Could not transcribe that. Please try again.', { reason: 'transcribe' });
           resolveRef.current?.(null);
         } finally {
           setStatus('idle');
@@ -111,7 +124,10 @@ export function useVoice(opts: { onError?: (msg: string) => void } = {}) {
       cleanupStream();
       setStatus('idle');
       const denied = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError');
-      onError?.(denied ? 'Microphone access was denied. Enable it in your browser settings.' : 'Could not start recording.');
+      onError?.(
+        denied ? 'Microphone access was denied. Enable it in your browser settings.' : 'Could not start recording.',
+        { reason: denied ? 'permission' : 'capture' },
+      );
       return null;
     }
   }, [status, onError, cleanupStream]);

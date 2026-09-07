@@ -24,6 +24,7 @@ import { NAV_CATALOG } from '@/lib/constants/navigation';
 import { routeCommand, type CommandResult } from '@/lib/command-bar/route';
 import { submitAIRequest } from '@/lib/ai/chat-request';
 import { moduleFromPathname } from '@/lib/concierge/suggested-prompts';
+import { MicButton } from '@/components/voice/mic-button';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -118,6 +119,14 @@ export function CommandBar() {
     }
   }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t]);
 
+  // Speaking fills the bar rather than firing blind: the same ranked list a
+  // typed query produces is shown, so the person still chooses the outcome.
+  const onTranscript = useCallback((spoken: string) => {
+    setQuery(spoken);
+    setActive(0);
+    inputRef.current?.focus();
+  }, []);
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
@@ -147,6 +156,7 @@ export function CommandBar() {
             aria-label={t('commandBar.commandInput')}
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted"
           />
+          <MicButton size="sm" disabled={busy} onTranscript={onTranscript} onError={(m) => { if (m) toastError(m); }} />
           <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted sm:block">esc</kbd>
         </div>
 
