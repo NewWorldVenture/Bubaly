@@ -28,7 +28,7 @@ export async function TimeSavedBanner({ result, retryHref }: { result: TimeSaved
   const data = result.data;
   if (!data.show) return null;
   const big = data.hours >= 1
-    ? t('timeSaved.nHours', { hours: data.hours })
+    ? (data.hours === 1 ? t('timeSaved.oneHour') : t('timeSaved.nHours', { hours: data.hours }))
     : t('timeSaved.nMin', { minutes: data.minutes });
 
   return (

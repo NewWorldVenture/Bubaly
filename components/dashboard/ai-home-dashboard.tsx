@@ -662,7 +662,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${homeBrief.readinessPct}%` }} />
             </div>
             {homeBrief.timeSavedMinutes > 0 && (
-              <p className="mt-2 text-xs text-muted">{t('aiHomeDashboard.bubalysAlreadySavedYou')}{homeBrief.timeSavedMinutes} {t('aiHomeDashboard.minOfPlanningThisWeek')}</p>
+              <p className="mt-2 text-xs text-muted">{t('aiHomeDashboard.estimatedPlanningTimeNMinThisWeek', { minutes: homeBrief.timeSavedMinutes })}</p>
             )}
           </div>
 

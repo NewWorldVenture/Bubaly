@@ -7,6 +7,8 @@ import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
 import { getTranslations } from '@/lib/i18n/server';
+import { StrategyMetricTiles } from '@/components/admin/strategy-metric-tiles';
+import { loadStrategyMetrics } from '@/lib/metric/strategy-server';
 
 export const metadata: Metadata = { title: 'Reports & Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -38,6 +40,12 @@ export default async function AdminReportsPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
   const fourteenDaysAgo = new Date(Date.now() - 14 * MS_DAY).toISOString();
+
+  // X3/X5/X10/X12 — read with the SERVICE client, like the rest of this page,
+  // because they are platform-wide. Each field fails closed on its own: the
+  // tiles say "unavailable" rather than showing a zero this page cannot stand
+  // behind, so one broken table does not take the whole report down.
+  const strategyMetrics = await loadStrategyMetrics(supabase);
 
   const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await Promise.all([
     supabase.from('families').select('id', { count: 'exact', head: true }),
@@ -99,12 +107,12 @@ export default async function AdminReportsPage() {
   const maxActivity = Math.max(...activityByDay.map((a) => a.value), 1);
 
   const metrics = [
-    { icon: Home, label: 'Total Families', value: (familyCount ?? 0).toLocaleString(), tint: 'text-violet-400 bg-violet-500/15' },
-    { icon: Users, label: 'Total Users', value: (userCount ?? 0).toLocaleString(), tint: 'text-blue-400 bg-blue-500/15' },
-    { icon: CreditCard, label: 'Active Subscriptions', value: (activeSubCount ?? 0).toLocaleString(), tint: 'text-emerald-400 bg-emerald-500/15' },
-    { icon: DollarSign, label: 'Monthly Revenue', value: fmtMoney(mrrCents), tint: 'text-amber-400 bg-amber-500/15' },
-    { icon: FolderLock, label: 'Documents', value: (docs ?? []).length.toLocaleString(), tint: 'text-rose-400 bg-rose-500/15' },
-    { icon: Activity, label: 'Storage Used', value: fmtBytes(usedBytes), tint: 'text-cyan-400 bg-cyan-500/15' },
+    { icon: Home, key: 'families', label: tr('adminReports.totalFamilies'), value: (familyCount ?? 0).toLocaleString(), tint: 'text-violet-400 bg-violet-500/15' },
+    { icon: Users, key: 'users', label: tr('adminReports.totalUsers'), value: (userCount ?? 0).toLocaleString(), tint: 'text-blue-400 bg-blue-500/15' },
+    { icon: CreditCard, key: 'subscriptions', label: tr('adminReports.activeSubscriptions'), value: (activeSubCount ?? 0).toLocaleString(), tint: 'text-emerald-400 bg-emerald-500/15' },
+    { icon: DollarSign, key: 'revenue', label: tr('adminReports.monthlyRevenue'), value: fmtMoney(mrrCents), tint: 'text-amber-400 bg-amber-500/15' },
+    { icon: FolderLock, key: 'documents', label: tr('adminReports.documents'), value: (docs ?? []).length.toLocaleString(), tint: 'text-rose-400 bg-rose-500/15' },
+    { icon: Activity, key: 'storage', label: tr('adminReports.storageUsed'), value: fmtBytes(usedBytes), tint: 'text-cyan-400 bg-cyan-500/15' },
   ];
 
   return (
@@ -116,7 +124,7 @@ export default async function AdminReportsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {metrics.map((m) => (
-          <Card key={m.label} className="flex flex-col gap-3">
+          <Card key={m.key} className="flex flex-col gap-3">
             <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${m.tint}`}><m.icon className="h-5 w-5" /></div>
             <div>
               <p className="text-xl font-bold leading-none">{m.value}</p>
@@ -125,6 +133,8 @@ export default async function AdminReportsPage() {
           </Card>
         ))}
       </div>
+
+      <StrategyMetricTiles metrics={strategyMetrics} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -179,7 +189,7 @@ async function AdminReportsReadError() {
   return (
     <div className="module-page space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reports &amp; Analytics</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('reports.growthRevenueAndEngagementAcross')}</p>
       </div>
       <ErrorState message={tr('reports.couldNotLoadReportsFrom')} />
