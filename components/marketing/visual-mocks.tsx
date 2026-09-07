@@ -5,9 +5,9 @@ import { getTranslations } from '@/lib/i18n/server';
 // They LIVE in `primitives.tsx` because client components need them too, and
 // this file imports `lib/i18n/server` — which pulls `next/headers` into any
 // bundle that reaches it. See the note at the top of that file.
-import { Container, GradientText, IconOrb, PageWrap, TrustStrip } from './primitives';
+import { BandHeader, Container, GradientText, IconOrb, PageWrap, SampleBadge, TrustStrip } from './primitives';
 
-export { Container, GradientText, IconOrb, PageWrap, TrustStrip };
+export { BandHeader, Container, GradientText, IconOrb, PageWrap, SampleBadge, TrustStrip };
 import {
   Apple,
   Bot,

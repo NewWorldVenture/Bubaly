@@ -27,3 +27,29 @@ export function familiesNote(
     ? t('marketing.builtForModernFamilyLife')
     : t('marketing.registeredFamilies', { count: formatFamilies(n) });
 }
+
+/**
+ * The smallest "things Bubaly finished" aggregate the public site will print.
+ *
+ * Below this the line is HIDDEN, not rounded up and not replaced with a
+ * placeholder: hidden is honest, small is honest, invented is not. The number
+ * itself comes from `public_handled_stats()` (lib/marketing/stats.ts), which
+ * counts runs that reached a finished state across real families and excludes
+ * the shared demo account.
+ */
+export const HANDLED_PUBLIC_MIN = 25;
+
+/** Same rounding as formatFamilies: exact below 1k, rounded down with a "+" above. */
+export function formatHandled(n: number): string {
+  return formatFamilies(n);
+}
+
+/**
+ * The public "things finished" line, or '' when the real count is below
+ * HANDLED_PUBLIC_MIN. Callers render the line only when this is non-empty, so
+ * a site with no runs yet shows nothing rather than "0 things finished".
+ */
+export function handledNote(n: number): string {
+  if (!Number.isFinite(n) || n < HANDLED_PUBLIC_MIN) return '';
+  return `${formatHandled(n)} things finished by Bubaly for real families so far`;
+}

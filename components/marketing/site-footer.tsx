@@ -25,40 +25,52 @@ const SOCIAL_ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Ele
   tiktok: TiktokIcon,
 };
 
-const GROUPS = [
+// `label` is the English source of truth; `labelKey` is what renders through
+// t(). Every group title and link resolves the same way, so a footer link can
+// never show a raw catalogue key or an untranslated word.
+type FooterLink = { href: string; label: string; labelKey: string };
+type FooterGroup = { title: string; titleKey: string; links: FooterLink[] };
+
+const GROUPS: FooterGroup[] = [
   {
     title: 'Product',
+    titleKey: 'siteFooter.product',
     links: [
-      { href: '/features', label: 'Features' },
-      { href: '/how-it-works', label: 'How it works' },
-      { href: '/pricing', label: 'Pricing' },
-      { href: '/mobile', label: 'Mobile app' },
-      { href: '/ai', label: 'AI assistant' },
+      { href: '/features', label: 'What Bubaly handles', labelKey: 'siteFooter.whatBubalyHandles' },
+      { href: '/how-it-works', label: 'How it works', labelKey: 'siteFooter.howItWorks' },
+      { href: '/pricing', label: 'Pricing', labelKey: 'siteFooter.pricing' },
+      { href: '/mobile', label: 'Mobile app', labelKey: 'siteFooter.mobileApp' },
+      { href: '/features#kitchen-mode', label: 'Kitchen Mode', labelKey: 'siteFooter.kitchenMode' },
+      { href: '/ai', label: 'Handled for you', labelKey: 'siteFooter.handledForYou' },
     ],
   },
   {
     title: 'Company',
+    titleKey: 'siteFooter.company',
     links: [
-      { href: '/security', label: 'Security' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/contact', label: 'Contact' },
-      { href: '/faq', label: 'FAQ' },
+      { href: '/security', label: 'Trust Center', labelKey: 'siteFooter.trustCenter' },
+      { href: '/blog', label: 'Blog', labelKey: 'siteFooter.blog' },
+      { href: '/contact', label: 'Contact', labelKey: 'siteFooter.contact' },
+      { href: '/faq', label: 'FAQ', labelKey: 'siteFooter.faq' },
     ],
   },
   {
     title: 'Get started',
+    titleKey: 'siteFooter.getStarted',
     links: [
-      { href: '/signup', label: 'Create account' },
-      { href: '/login', label: 'Log in' },
+      { href: '/signup', label: 'Create account', labelKey: 'siteFooter.createAccount' },
+      { href: '/login', label: 'Log in', labelKey: 'siteFooter.logIn' },
+      { href: '/dashboard/migrate', label: 'Switch to Bubaly', labelKey: 'siteFooter.switchToBubaly' },
     ],
   },
   {
     title: 'Legal',
+    titleKey: 'siteFooter.legal',
     links: [
-      { href: '/privacy', label: 'Privacy Policy' },
-      { href: '/terms', label: 'Terms of Service' },
-      { href: '/acceptable-use', label: 'siteFooter.acceptableUse' },
-      { href: '/cookies', label: 'Cookie Policy' },
+      { href: '/privacy', label: 'Privacy Policy', labelKey: 'siteFooter.privacyPolicy' },
+      { href: '/terms', label: 'Terms of Service', labelKey: 'siteFooter.termsOfService' },
+      { href: '/acceptable-use', label: 'Acceptable Use', labelKey: 'siteFooter.acceptableUse' },
+      { href: '/cookies', label: 'Cookie Policy', labelKey: 'siteFooter.cookiePolicy' },
     ],
   },
 ];
@@ -80,13 +92,13 @@ export async function SiteFooter() {
           </div>
         </div>
         {GROUPS.map((g) => (
-          <div key={g.title}>
-            <h4 className="text-[11px] font-semibold text-fg">{g.title}</h4>
+          <div key={g.titleKey}>
+            <h4 className="text-[11px] font-semibold text-fg">{t(g.titleKey)}</h4>
             <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="text-[10px] text-muted transition hover:text-fg">
-                    {l.label}
+                    {t(l.labelKey)}
                   </Link>
                 </li>
               ))}

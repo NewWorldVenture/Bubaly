@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HANDLED_PUBLIC_MIN,
   formatFamilies,
   familiesNote,
+  formatHandled,
+  handledNote,
 } from '@/lib/marketing/format';
 import { SOURCE_MESSAGES } from '@/lib/i18n/messages';
 import DE_MESSAGES from '@/lib/i18n/messages/de-DE.json';
@@ -57,5 +60,39 @@ describe('marketing family-count formatters', () => {
     expect(familiesNote(german, 0)).not.toBe('Built for modern family life');
     expect(familiesNote(german, 42)).toContain('42');
     expect(familiesNote(german, 42)).not.toContain('registered families');
+  });
+});
+
+// The "things Bubaly finished" aggregate: hidden below a floor, exact below
+// 1k, rounded down above. Hidden is honest, small is honest, invented is not.
+describe('marketing handled-count formatters', () => {
+  it('sets the public floor at 25', () => {
+    expect(HANDLED_PUBLIC_MIN).toBe(25);
+  });
+
+  it.each([
+    [0, ''],
+    [24, ''],
+    [25, '25 things finished by Bubaly for real families so far'],
+    [999, '999 things finished by Bubaly for real families so far'],
+    [1000, '1,000+ things finished by Bubaly for real families so far'],
+    [12_345, '12,000+ things finished by Bubaly for real families so far'],
+  ])('handledNote(%i) → %j', (n, expected) => {
+    expect(handledNote(n)).toBe(expected);
+  });
+
+  it.each([
+    [0, '0'],
+    [24, '24'],
+    [25, '25'],
+    [999, '999'],
+    [1000, '1,000+'],
+    [12_345, '12,000+'],
+  ])('formatHandled(%i) → %s', (n, expected) => {
+    expect(formatHandled(n)).toBe(expected);
+  });
+
+  it('never renders a line for a non-number', () => {
+    expect(handledNote(Number.NaN)).toBe('');
   });
 });
