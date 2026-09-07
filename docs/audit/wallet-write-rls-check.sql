@@ -267,4 +267,70 @@ begin
   raise notice 'A-08 OK: no stray permissive write policy on any money table';
 end $$;
 
+-- ── Invariant 8: the sweep actually sweeps ──────────────────────────────────
+--
+-- Invariant 7 asserts the end state, but in a freshly replayed database there
+-- was never any drift to remove — so on its own it proves the migration set is
+-- self-consistent, not that 0275 does its job. Production is the case that
+-- matters, and CI cannot reproduce production's drift.
+--
+-- So: inject the drift, then re-run THE REAL MIGRATION FILE (via \ir, not a
+-- copy pasted in here — a copy would drift from the original and start proving
+-- the wrong thing) and assert the stray is gone and the intended policies
+-- survived. 0275 is idempotent by construction, which is what makes this safe
+-- to do against an already-migrated database.
+--
+-- Two shapes again, matching invariant 5: the one the production audit
+-- describes, and the worst case that could exist.
+do $$
+begin
+  drop policy if exists wallet_transactions_sweep_probe_a on public.wallet_transactions;
+  drop policy if exists wallet_transactions_sweep_probe_b on public.wallet_transactions;
+  create policy wallet_transactions_sweep_probe_a on public.wallet_transactions
+    for insert to authenticated with check (public.is_family_member(family_id));
+  create policy wallet_transactions_sweep_probe_b on public.wallet_transactions
+    for all to public using (true) with check (true);
+
+  if (select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
+      where c.relname = 'wallet_transactions'
+        and p.polname in ('wallet_transactions_sweep_probe_a','wallet_transactions_sweep_probe_b')) <> 2 then
+    raise exception 'A-08 FAIL: could not inject the drift the sweep is meant to remove';
+  end if;
+  raise notice 'A-08: injected 2 stray permissive write policies on wallet_transactions';
+end $$;
+
+\ir ../../supabase/migrations/0275_money_permissive_write_sweep.sql
+
+do $$
+declare strays int; intended int;
+begin
+  select count(*) into strays
+  from pg_policy p join pg_class c on c.oid = p.polrelid
+  where c.relname = 'wallet_transactions'
+    and p.polname in ('wallet_transactions_sweep_probe_a','wallet_transactions_sweep_probe_b');
+
+  -- Belt and braces: if the sweep did not remove them, this probe must not
+  -- leave a `to public using (true)` policy behind on a money table.
+  drop policy if exists wallet_transactions_sweep_probe_a on public.wallet_transactions;
+  drop policy if exists wallet_transactions_sweep_probe_b on public.wallet_transactions;
+
+  if strays <> 0 then
+    raise exception 'A-08 FAIL: 0275 left % injected stray policy(ies) on wallet_transactions', strays;
+  end if;
+
+  -- The sweep must not have taken the intended policies or the guards with it.
+  select count(*) into intended
+  from pg_policy p join pg_class c on c.oid = p.polrelid
+  where c.relname = 'wallet_transactions'
+    and p.polname in ('wallet_transactions_select',
+                      'wallet_transactions_mng_insert','wallet_transactions_mng_update','wallet_transactions_mng_delete',
+                      'wallet_transactions_manager_insert_guard','wallet_transactions_manager_update_guard',
+                      'wallet_transactions_manager_delete_guard');
+  if intended <> 7 then
+    raise exception 'A-08 FAIL: after the sweep only %/7 intended wallet_transactions policies remain', intended;
+  end if;
+
+  raise notice 'A-08 OK: 0275 removed both injected strays and kept all 7 intended policies';
+end $$;
+
 select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;
