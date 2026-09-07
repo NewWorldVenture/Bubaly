@@ -20,72 +20,74 @@
 # about.
 
 # --- proper nouns, brands, demo-data placeholder names ----------------------
-Jordan
-Emma
-Bosch
-Rx BIN
-Rx PCN
-Rx Group
-
-# --- loanwords the target languages use unchanged ---------------------------
-Blog
-Demo
-Premium
-
 # --- (fragment) unit and separator artifacts, no translatable word ----------
-h (
-h to
-of 6
-· by
-s at
-min ·
-new ·
-pts ·
+# --- loanwords the target languages use unchanged ---------------------------
 % fit
 % used
-Est. —
+% · 30d
 , and
 , get
-Chase
-Rivera
-Toyota
-band =
-× made
-· next
-· seen
-to it.
-% · 30d
-d under
 , up at
-Room 204
-Maui, HI
-Ms. Lee
-Labrador
-Month In
-TTFV (p90)
+12 Old Road
+34 Maple Street
+AI Call Guardian™
+Acme Heating
+Austin, TX
+Blog
+Bosch
+Bubaly
+Chase
+Chase Ultimate Rewards
+ChatGPT (OpenAI)
+Creative Commons BY
+Demo
 Dr. Patel
 Dr. Smith
-Jane Smith
-Austin, TX
-Month Out
-State Farm
-12 Old Road
-Acme Heating
-LG / Asurion
-TTFV (median)
-Lake Tahoe, CA
-34 Maple Street
-Powered by GIPHY
-AI Call Guardian™
-Walgreens, Oak St
-iPad, Switch, TV…
-Netflix, Spotify…
-Bubaly
-Riverside Park
-Chase Ultimate Rewards
-Sam's Club
-Emma & Liam
-Sarah's mom
-Jamie Rivera
 Dr. Smith's office
+Emma
+Emma & Liam
+Est. —
 Grandma's lasagna
+Jamie Rivera
+Jane Smith
+Jordan
+LG / Asurion
+Labrador
+Lake Tahoe, CA
+Lead
+Maui, HI
+Month In
+Month Out
+Ms. Lee
+Netflix, Spotify…
+POST /api/mkt/track
+Powered by GIPHY
+Premium
+Rivera
+Riverside Park
+Room 204
+Rx BIN
+Rx Group
+Rx PCN
+Sam's Club
+Sarah's mom
+State Farm
+TTFV (median)
+TTFV (p90)
+Toyota
+Walgreens, Oak St
+band =
+d under
+h (
+h to
+iPad, Switch, TV…
+min ·
+new ·
+of 6
+pts ·
+s at
+to it.
+· by
+· next
+· seen
+× made
