@@ -116,12 +116,27 @@ interface AllergenRule {
   triggers: string[];
   /** Longest ingredient first; `null` means there is no safe swap and the line goes. */
   swaps: { ingredient: string; replacement: string | null }[];
+  /**
+   * Names that CONTAIN the allergen word and are nonetheless safe, because the
+   * word is part of a compound that means the opposite: "oat milk" is not
+   * milk, "gluten-free pasta" is not pasta a coeliac must avoid, "flax egg" is
+   * not an egg.
+   *
+   * Without this every rule ate its own replacement — a dairy allergy swapped
+   * milk for oat milk, then read "milk" in "oat milk" and dropped the line, so
+   * a family with a dairy allergy got no milk of any kind on their list and no
+   * explanation. It also protects an item the family already spelled safely: a
+   * plan that names "gluten-free bread" is left exactly as written rather than
+   * becoming "gluten-free gluten-free bread".
+   */
+  exempt?: RegExp;
 }
 
 const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'peanut',
     triggers: ['peanut', 'peanuts', 'groundnut'],
+    exempt: /\b(?:peanut[- ]free)\b/i,
     swaps: [
       { ingredient: 'peanut butter', replacement: 'sunflower seed butter' },
       { ingredient: 'peanut oil', replacement: 'canola oil' },
@@ -132,6 +147,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'tree-nut',
     triggers: ['tree nut', 'tree nuts', 'nut', 'nuts', 'almond', 'almonds', 'cashew', 'cashews', 'walnut', 'walnuts', 'pecan', 'pecans', 'pistachio', 'hazelnut'],
+    exempt: /\b(?:nut[- ]free)\b/i,
     swaps: [
       { ingredient: 'almond milk', replacement: 'oat milk' },
       { ingredient: 'almond flour', replacement: 'oat flour' },
@@ -148,6 +164,11 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'dairy',
     triggers: ['dairy', 'milk', 'lactose', 'casein', 'cheese'],
+    // Every plant milk and every "free-from" spelling. `almond` and `cashew`
+    // are exempt HERE and still caught by the tree-nut rule, which is the
+    // correct division: almond milk is safe for a dairy allergy and unsafe for
+    // a nut one.
+    exempt: /\b(?:oat|almond|soy|soya|rice|coconut|cashew|hemp|flax|pea|plant[- ]based|vegan|non[- ]dairy|dairy[- ]free|lactose[- ]free)\b/i,
     swaps: [
       { ingredient: 'heavy cream', replacement: 'coconut cream' },
       { ingredient: 'cream cheese', replacement: 'dairy-free cream cheese' },
@@ -169,6 +190,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'egg',
     triggers: ['egg', 'eggs'],
+    exempt: /\b(?:egg[- ]free|flax|chia|aquafaba|vegan|plant[- ]based)\b/i,
     swaps: [
       { ingredient: 'mayonnaise', replacement: 'egg-free mayonnaise' },
       { ingredient: 'eggs', replacement: 'flax eggs' },
@@ -178,6 +200,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'gluten',
     triggers: ['gluten', 'wheat', 'celiac', 'coeliac'],
+    exempt: /\b(?:gluten[- ]free|wheat[- ]free|rice|corn|chickpea|lentil|almond|buckwheat|quinoa|tamari)\b/i,
     swaps: [
       { ingredient: 'all-purpose flour', replacement: 'gluten-free flour' },
       { ingredient: 'flour tortillas', replacement: 'corn tortillas' },
@@ -195,6 +218,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'soy',
     triggers: ['soy', 'soya', 'soybean'],
+    exempt: /\b(?:soy[- ]free|coconut aminos)\b/i,
     swaps: [
       { ingredient: 'soy sauce', replacement: 'coconut aminos' },
       { ingredient: 'soy milk', replacement: 'oat milk' },
@@ -220,6 +244,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'fish',
     triggers: ['fish', 'salmon', 'tuna', 'cod', 'anchovy', 'anchovies'],
+    exempt: /\b(?:fish[- ]free|vegan|plant[- ]based)\b/i,
     swaps: [
       { ingredient: 'fish sauce', replacement: 'coconut aminos' },
       { ingredient: 'anchovies', replacement: null },
@@ -231,6 +256,7 @@ const ALLERGEN_RULES: AllergenRule[] = [
   {
     id: 'sesame',
     triggers: ['sesame', 'tahini'],
+    exempt: /\b(?:sesame[- ]free)\b/i,
     swaps: [
       { ingredient: 'sesame seeds', replacement: 'poppy seeds' },
       { ingredient: 'sesame oil', replacement: 'olive oil' },
@@ -294,6 +320,7 @@ interface AllergyHit { rule: AllergenRule; ingredient: string; replacement: stri
 function findAllergyHit(name: string, rules: AllergenRule[]): AllergyHit | null {
   let best: AllergyHit | null = null;
   for (const rule of rules) {
+    if (rule.exempt?.test(name)) continue;
     for (const swap of rule.swaps) {
       if (!mentions(name, swap.ingredient)) continue;
       if (!best || swap.ingredient.length > best.ingredient.length) {
@@ -444,7 +471,7 @@ export interface MedicalProfileRow {
 }
 
 const ALLERGY_LABEL = /allerg|intoleran|celiac|coeliac|anaphyla/i;
-const DISLIKE_LABEL = /dislike|won'?t eat|will not eat|hates?|avoid|no[t]? a fan/i;
+const DISLIKE_LABEL = /dislike|won'?t eat|will not eat|does ?n'?t eat|do not eat|nobody eats|no one eats|hates?|avoid|not a fan|picky about/i;
 
 /**
  * Fold the two places a household records what it cannot eat into one pair of

@@ -335,7 +335,7 @@ export function ShoppingModule() {
                 </div>
                 <p className="mt-2 text-[11px] text-muted">
                   {retailer
-                    ? t('shoppingModule.tapAnItemAposSStore', { store: retailer.name })
+                    ? t('shoppingModule.useTheLinkOnAn', { store: retailer.name })
                     : t('shoppingModule.pickAStoreToGet')}
                   {' '}
                   {t('shoppingModule.bubalyIsNotPaidBy')}

@@ -258,7 +258,11 @@ export async function recordShoppingTripAction(input: {
     let purchaseRecorded = false;
     let purchaseError: string | undefined;
     const amount = typeof input.amount === 'number' && Number.isFinite(input.amount) ? input.amount : null;
-    if (amount !== null && amount > 0) {
+    // Only a shop that completed gets a charge. When a pantry write failed
+    // nothing was cleared, so the family will do this again — and a purchase
+    // recorded now would be recorded twice. The caller shows the failed names
+    // and keeps the amount in the form.
+    if (amount !== null && amount > 0 && trip.data.pantryFailed.length === 0) {
       const merchant = input.merchant?.trim() || null;
       const purchase = await createTransaction(scope, {
         name: merchant ? `Groceries — ${merchant}` : 'Groceries',
