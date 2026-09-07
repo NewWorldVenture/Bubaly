@@ -49,11 +49,11 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # No NODE_OPTIONS here on purpose. The `build` script invokes node with
-          # an explicit --max-old-space-size, and a command-line flag overrides
-          # NODE_OPTIONS — so the value that used to sit here never applied to
-          # this step. package.json owns the build heap, for CI and Vercel alike;
-          # setting it in two places only hid which one was winning.
+          # `next build` type-checks every route plus the generated .next/types
+          # in one worker; the 435-table types file pushes that past Node's
+          # default ~2 GB heap on the runner (OOM at "checking validity of
+          # types"). 4 GB fits the 7 GB runner with room for webpack.
+          NODE_OPTIONS: --max-old-space-size=4096
           # Dummy values so static generation doesn't crash on missing config.
           # Real data is fetched at runtime; build-time fetches fail closed
           # (e.g. getPublicStats() returns zeros), so these are safe placeholders.
