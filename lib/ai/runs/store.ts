@@ -834,6 +834,52 @@ export async function loadRunDetail(
   });
 }
 
+// ─── Tool-call ledger ───────────────────────────────────────────────────────
+
+/**
+ * One line of the tool-call ledger, as the Trust Center shows it.
+ *
+ * `inputs` and `outputs` are deliberately NOT selected. They hold the arguments
+ * a tool was called with and what it returned — an event's guest list, a
+ * document title, a budget line — and the Trust Center's job is to say WHAT
+ * Bubaly did and WHERE to read the whole run, not to re-publish the payload on
+ * a page a whole family can open. The run page (`loadRunDetail`) is the one
+ * place that shows a step's detail, behind the same RLS.
+ */
+export type ToolCallLedgerRow = Pick<
+  Tables<'ai_tool_calls'>,
+  'id' | 'tool_name' | 'state' | 'actor_kind' | 'run_id' | 'request_id' | 'duration_ms' | 'error' | 'created_at' | 'finished_at'
+>;
+
+/**
+ * The family's most recent tool calls, newest first.
+ *
+ * Uses the CALLER's client on purpose (like `loadRunDetail`): a member sees
+ * exactly what 0250's `ai_tool_calls` SELECT policy lets them see, and a row
+ * from another family cannot appear even though `family_id` is also filtered
+ * here. A read error is returned, never swallowed — an empty ledger and a
+ * broken ledger must not look the same on a page whose whole claim is "here is
+ * what Bubaly actually did".
+ */
+export async function loadRecentToolCalls(
+  scope: ServiceScope,
+  opts?: { db?: SupabaseClient<Database>; limit?: number },
+): Promise<ServiceResult<ToolCallLedgerRow[]>> {
+  const db = opts?.db ?? scope.db;
+  const limit = Math.min(Math.max(opts?.limit ?? 25, 1), 100);
+  const { data, error } = await db
+    .from('ai_tool_calls')
+    .select('id, tool_name, state, actor_kind, run_id, request_id, duration_ms, error, created_at, finished_at')
+    .eq('family_id', scope.familyId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error('[ai/runs] tool-call ledger read failed', error);
+    return fail(describeDbError(error, 'Bubaly could not read what it has done.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []) as ToolCallLedgerRow[]);
+}
+
 // ─── Actor re-check ─────────────────────────────────────────────────────────
 
 export type RunActor = {
