@@ -14,8 +14,9 @@ import { AiActionDemo } from '@/components/marketing/ai-showcase';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/ai', {
-    title: 'Bubaly AI — the assistant that does the work',
+    title: t('ai.bubalyAiTheAssistantThat'),
     description:
       'Bubaly’s AI doesn’t just answer questions — it creates the events, chores, reminders, meal plans, grocery lists, and follow-ups that keep family life running. Ask in plain language; it takes real action inside your family’s data, privately and model-agnostically.',
   });
@@ -24,50 +25,50 @@ export async function generateMetadata(): Promise<Metadata> {
 const DIFFERENTIATORS = [
   {
     icon: Zap,
-    title: 'It acts, it doesn’t just answer',
-    body: 'Most assistants hand you a suggestion and leave the work to you. Bubaly writes the actual records — the event lands on the calendar, the chore is assigned, the reminder is set — then tells you exactly what it did.',
+    title: 'ai.itActsItDoesnT',
+    body: 'ai.mostAssistantsHandYouA',
   },
   {
     icon: Lock,
-    title: 'Private to your family',
-    body: 'Every action is scoped to your household by the same row-level security that protects the rest of Bubaly. Your family’s life never trains a public model and is never visible to another family.',
+    title: 'ai.privateToYourFamily',
+    body: 'ai.everyActionIsScopedTo',
   },
   {
     icon: SlidersHorizontal,
-    title: 'Always in your control',
-    body: 'You stay the parent. Sensitive actions — money moves, anything touching the kids — route through approval, and every action is logged and reversible. Nothing happens behind your back.',
+    title: 'ai.alwaysInYourControl',
+    body: 'ai.youStayTheParentSensitive',
   },
 ];
 
 const CAPABILITIES = [
-  { icon: Calendar, title: 'Calendar & scheduling', body: 'Add events, spot conflicts, and get leave-by nudges that account for drive time.' },
-  { icon: UtensilsCrossed, title: 'Meals & groceries', body: 'Plan the week’s dinners and turn them into an aisle-sorted, pantry-aware list.' },
-  { icon: CheckSquare, title: 'Chores & allowance', body: 'Assign age-appropriate chores, split them fairly, and tie them to points or pay.' },
-  { icon: Bell, title: 'Reminders & follow-ups', body: 'Never drop the invisible stuff — filters, forms, RSVPs, birthdays, refills.' },
-  { icon: PiggyBank, title: 'Money coaching', body: 'Track goals and get plain-language answers about where the family budget stands.' },
-  { icon: FileText, title: 'Documents & paperwork', body: 'Turn a school flyer or permission slip into the events and to-dos it really means.' },
-  { icon: ShieldCheck, title: 'Family safety', body: 'Screen unknown callers, flag risky contacts, and keep an eye out for the kids.' },
-  { icon: Newspaper, title: 'Weekly briefings', body: 'One calm summary of the week ahead — what matters, what’s new, what to prep.' },
+  { icon: Calendar, title: 'ai.calendarScheduling', body: 'ai.addEventsSpotConflictsAnd' },
+  { icon: UtensilsCrossed, title: 'ai.mealsGroceries', body: 'ai.planTheWeekSDinners' },
+  { icon: CheckSquare, title: 'ai.choresAllowance', body: 'ai.assignAgeAppropriateChoresSplit' },
+  { icon: Bell, title: 'ai.remindersFollowUps', body: 'ai.neverDropTheInvisibleStuff' },
+  { icon: PiggyBank, title: 'ai.moneyCoaching', body: 'ai.trackGoalsAndGetPlain' },
+  { icon: FileText, title: 'ai.documentsPaperwork', body: 'ai.turnASchoolFlyerOr' },
+  { icon: ShieldCheck, title: 'ai.familySafety', body: 'ai.screenUnknownCallersFlagRisky' },
+  { icon: Newspaper, title: 'ai.weeklyBriefings', body: 'ai.oneCalmSummaryOfThe' },
 ];
 
 const DAY = [
   {
     icon: Sun,
-    when: 'Morning',
-    what: 'The family brief',
-    body: '“Everyone’s up: Emma has a math test, the plumber comes at 2, and dinner’s covered. Leave by 7:40 to beat the school drop-off line.”',
+    when: 'ai.morning',
+    what: 'ai.theFamilyBrief',
+    body: 'ai.everyoneSUpEmmaHas',
   },
   {
     icon: Sunset,
-    when: 'Midday',
-    what: 'Paperwork, handled',
-    body: 'You snap a photo of a field-trip form. Bubaly reads it, adds the trip to the calendar, sets a permission-slip reminder, and flags the $12 fee.',
+    when: 'ai.midday',
+    what: 'ai.paperworkHandled',
+    body: 'ai.youSnapAPhotoOf',
   },
   {
     icon: Moon,
-    when: 'Evening',
-    what: 'Tomorrow, pre-solved',
-    body: '“Grocery run needed for Thursday’s tacos, Jack’s library book is due, and the vacation fund just hit 68%. Want me to reorder the essentials?”',
+    when: 'ai.evening',
+    what: 'ai.tomorrowPreSolved',
+    body: 'ai.groceryRunNeededForThursday',
   },
 ];
 
@@ -114,7 +115,7 @@ export default async function AIPage() {
       {/* ── Ask → Act demo (the centerpiece) ─────────────────────────────── */}
       <Section id="demo" className="pt-4">
         <SectionHeading
-          eyebrow="Ask → Act"
+          eyebrow={t('ai.askAct')}
           title={t('ai.sayItInPlainLanguage')}
           description={t('ai.pickAPromptBubalyReplies')}
         />
@@ -126,7 +127,7 @@ export default async function AIPage() {
       {/* ── Differentiators ──────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="Not a chatbot — a doer"
+          eyebrow={t('ai.notAChatbotADoer')}
           title={t('ai.theDifferenceIsWhatHappens')}
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
@@ -135,8 +136,8 @@ export default async function AIPage() {
               <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand-text">
                 <d.icon className="h-6 w-6" />
               </div>
-              <h3 className="mt-5 text-lg font-semibold">{d.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted">{d.body}</p>
+              <h3 className="mt-5 text-lg font-semibold">{t(d.title)}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted">{t(d.body)}</p>
             </div>
           ))}
         </div>
@@ -145,7 +146,7 @@ export default async function AIPage() {
       {/* ── Capabilities ─────────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="One assistant, the whole household"
+          eyebrow={t('ai.oneAssistantTheWholeHousehold')}
           title={t('ai.everythingItCanTakeOff')}
           description={t('ai.bubalyReachesAcrossYourFamily')}
         />
@@ -155,8 +156,8 @@ export default async function AIPage() {
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
                 <c.icon className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-base font-semibold">{c.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted">{c.body}</p>
+              <h3 className="mt-4 text-base font-semibold">{t(c.title)}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted">{t(c.body)}</p>
             </div>
           ))}
         </div>
@@ -165,7 +166,7 @@ export default async function AIPage() {
       {/* ── A day, handled ───────────────────────────────────────────────── */}
       <Section className="pt-0">
         <SectionHeading
-          eyebrow="A Tuesday, handled"
+          eyebrow={t('ai.aTuesdayHandled')}
           title={t('ai.whatADayFeelsLike')}
           description={t('ai.itDoesnTWaitTo')}
         />
@@ -177,12 +178,12 @@ export default async function AIPage() {
                   <d.icon className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-brand-text">{d.when}</p>
-                  <p className="text-base font-semibold">{d.what}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-brand-text">{t(d.when)}</p>
+                  <p className="text-base font-semibold">{t(d.what)}</p>
                 </div>
                 <span className="ml-auto text-sm font-bold text-muted">0{i + 1}</span>
               </div>
-              <p className="mt-4 text-sm leading-6 text-muted">{d.body}</p>
+              <p className="mt-4 text-sm leading-6 text-muted">{t(d.body)}</p>
             </div>
           ))}
         </div>

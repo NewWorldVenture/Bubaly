@@ -28,6 +28,20 @@ describe('translation catalogue integrity', () => {
     expect(offenders).toEqual([]);
   });
 
+  // A catalogue value is finished copy, not a JavaScript source fragment. The
+  // lift tool reported the string exactly as it appeared between the quotes in
+  // the source, so `'another family\\'s data'` — the JS spelling of an
+  // apostrophe — reached 29 catalogue values with the backslash still in them,
+  // and every locale would have rendered "family\\'s". Nothing else would have
+  // noticed: it is valid JSON, it parses, and it reads correctly in the diff
+  // unless you are looking for it.
+  it.each(FILES)('%s holds no source-level string escapes', (file) => {
+    const offenders = Object.entries(read(file))
+      .filter(([, value]) => /\\['"\\]/.test(value))
+      .map(([key, value]) => `${key}: ${value}`);
+    expect(offenders).toEqual([]);
+  });
+
   // A translation that drops or renames a placeholder renders a literal brace
   // at a user, or silently omits the value the sentence was built around.
   it.each(FILES.filter((f) => f !== 'en-US.json'))('%s preserves placeholders', (file) => {

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClipboardList, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createForm, setFormStatus } from '../actions';
@@ -15,7 +16,7 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 export default async function FormsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [formsResult, submissionsResult] = await Promise.all([
+  const [formsResult, submissionsResult] = await settleAll([
     supabase.from('marketing_forms').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('marketing_form_submissions').select('form_id'),
   ]);

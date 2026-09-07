@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Activity, FileEdit, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
@@ -19,7 +20,7 @@ export default async function FamilyActivityPage() {
   // `audit_logs.actor_id` is an auth user id, so the names come from the member
   // rows. The page selected `actor_id` from the start and never showed it —
   // "who changed what" was missing the who.
-  const [{ data: logs }, { data: members }] = await Promise.all([
+  const [{ data: logs }, { data: members }] = await settleAll([
     supabase
       .from('audit_logs')
       .select('id, action, resource, resource_id, metadata, created_at, actor_id')

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gauge, Plus, MessagesSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -18,7 +19,7 @@ const STATUS_TONE = { draft: 'neutral', active: 'success', closed: 'warning' } a
 export default async function SurveysPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [surveysResult, responsesResult] = await Promise.all([
+  const [surveysResult, responsesResult] = await settleAll([
     supabase.from('surveys').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('survey_responses').select('survey_id, score'),
   ]);

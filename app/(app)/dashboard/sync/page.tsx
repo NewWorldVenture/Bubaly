@@ -5,6 +5,7 @@ import {
   ListChecks, StickyNote, Plug,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,7 +48,7 @@ export default async function SyncHubPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [connections, calendars, openConflicts, recentRuns] = await Promise.all([
+  const [connections, calendars, openConflicts, recentRuns] = await settleAll([
     supabase.from('sync_connections').select('id, provider, health, sync_status, last_synced_at, last_error').eq('family_id', familyId),
     supabase.from('sync_calendars').select('id, feed_enabled', { count: 'exact' }).eq('family_id', familyId),
     supabase.from('sync_conflicts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'open'),

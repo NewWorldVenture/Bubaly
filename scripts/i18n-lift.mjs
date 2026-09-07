@@ -196,6 +196,19 @@ for (const { text } of result.findings) {
       // so it is decided by what precedes the quote, not guessed: `name=`
       // immediately before it means an attribute.
       const isAttr = /[A-Za-z0-9_$]+=$/.test(masked.slice(Math.max(0, at - 40), at));
+      // A literal in TYPE position is not copy — it is part of the type. Two
+      // shipped files were rewritten to `type HiTier = 'Free' | t('key') | …`
+      // and `type DeviceName = 'iPhone' | t('key') | …`, neither of which
+      // parses. A union member is recognised by the `|` beside it, and a
+      // `type X =` declaration by its keyword; a matching object KEY (the same
+      // string followed by `:`) must stay put too, or the map it indexes stops
+      // resolving.
+      const before = masked.slice(Math.max(0, at - 120), at);
+      const after = masked.slice(at + q.length, at + q.length + 40);
+      const inUnion = /\|\s*$/.test(before) || /^\s*\|/.test(after);
+      const inTypeDecl = /\btype\s+[A-Za-z0-9_$]+(?:<[^>]*>)?\s*=[^;\n]*$/.test(before);
+      const isObjectKey = /^\s*:/.test(after);
+      if (inUnion || inTypeDecl || isObjectKey) continue;
       // A module-level data array holds the BARE KEY: `t` is not in scope there,
       // and whatever renders the row calls it.
       const to = atModuleScope(at) ? `'${key}'` : isAttr ? `{${T}('${key}')}` : `${T}('${key}')`;

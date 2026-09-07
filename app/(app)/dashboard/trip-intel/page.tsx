@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { TripIntelModule, type UpcomingEvent, type SavedTripPlan, type SavedDeparturePlan } from '@/components/modules/trip-intel-module';
@@ -15,7 +16,7 @@ export default async function TripIntelPage() {
   const now = new Date();
   const horizon = new Date(now.getTime() + 21 * 86400000).toISOString();
 
-  const [{ data: events }, { data: members }, tripRes, depRes] = await Promise.all([
+  const [{ data: events }, { data: members }, tripRes, depRes] = await settleAll([
     // Upcoming events that have a location — these are the candidates for both
     // destination research and smart-departure planning.
     supabase.from('calendar_events')

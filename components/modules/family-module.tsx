@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -119,7 +120,7 @@ export function FamilyModule() {
     const sb = createClient();
     const nowIso = new Date().toISOString();
     try {
-      const [fam, subRes, evRes, alRes, cContacts, cDocs, cNotes, cMedical, cCreds] = await Promise.all([
+      const [fam, subRes, evRes, alRes, cContacts, cDocs, cNotes, cMedical, cCreds] = await settleAll([
         sb.from('families').select('*').eq('id', familyId).maybeSingle(),
         sb.from('subscriptions').select('plan, current_period_end').eq('family_id', familyId).maybeSingle(),
         sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4),

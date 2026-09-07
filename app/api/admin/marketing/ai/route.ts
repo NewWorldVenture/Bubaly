@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Grounding context — real marketing data only.
     const customers = await getMarketingCustomers(supabase);
     const m = summarizeCustomers(customers);
-    const [{ data: segments }, { data: campaigns }] = await Promise.all([
+    const [{ data: segments }, { data: campaigns }] = await settleAll([
       supabase.from('marketing_segments').select('name, rules').is('deleted_at', null).limit(25),
       supabase.from('marketing_campaigns').select('name, channel, status').is('deleted_at', null).limit(25),
     ]);

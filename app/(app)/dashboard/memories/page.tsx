@@ -5,6 +5,7 @@ import {
   Sparkles, Image as ImageIcon, Video, BookOpen, LayoutGrid, GraduationCap, Plane, Cake,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { ErrorState } from '@/components/ui/states';
@@ -70,7 +71,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     { count: videoCount },
     { count: albumCount },
     { count: memoriesCount },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_albums').select('id, name, cover_url, kind, is_shared, photo_count, created_at, created_by')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(200),
     supabase.from('family_photos').select('id, album_id, uploaded_by, url, thumbnail_url, caption, media_type, taken_at, created_at')

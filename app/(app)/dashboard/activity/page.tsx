@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
 import { ErrorState } from '@/components/ui/states';
@@ -15,7 +16,7 @@ export default async function ActivityPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [membersResult, announcementsResult, eventsResult, choresResult, photosResult, notesResult, groceryResult] = await Promise.all([
+  const [membersResult, announcementsResult, eventsResult, choresResult, photosResult, notesResult, groceryResult] = await settleAll([
     supabase.from('family_members').select('id, user_id, display_name, color').eq('family_id', familyId),
     supabase.from('family_announcements').select('id, title, created_at, author_member_id').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
     supabase.from('calendar_events').select('id, title, created_at, assignee_id').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),

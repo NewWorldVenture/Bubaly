@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { ProfileModule, type ProfileStats } from '@/components/modules/profile-module';
 
@@ -17,7 +18,7 @@ export default async function ProfilePage() {
   const weekAhead = new Date(Date.now() + 7 * 86400_000).toISOString();
   const nowIso = new Date().toISOString();
 
-  const [{ data: member }, doneQ, upcomingQ, milestonesQ] = await Promise.all([
+  const [{ data: member }, doneQ, upcomingQ, milestonesQ] = await settleAll([
     supabase.from('family_members').select('*').eq('id', memberId).maybeSingle(),
     supabase.from('chore_assignments')
       .select('points_awarded, approved_at')

@@ -12,6 +12,7 @@
 // from that module", the same way the CFO page degrades.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { monthlyCostCents } from './subscriptions';
@@ -135,7 +136,7 @@ export async function loadMoneyTimelineInput(
   const horizonEndDay = ymd(horizonEnd);
   const today = ymd(now);
 
-  const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await Promise.all([
+  const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
     supabase.from('bills')
       .select('name, amount, due_date, is_recurring, recurrence, status, category, autopay')
       .eq('family_id', familyId).limit(1000),

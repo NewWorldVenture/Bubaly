@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
   }
   if (!visitorId) return NextResponse.json({ error: t('track.couldNotRecordVisitor') }, { status: 500 });
 
-  const [{ error: sessionError }, { error: touchpointError }] = await Promise.all([
+  const [{ error: sessionError }, { error: touchpointError }] = await settleAll([
     supabase.from('mkt_sessions').insert({ visitor_id: visitorId, source, medium, campaign, landing_path: clean(body.landingPath) }),
     supabase.from('mkt_touchpoints').insert({ visitor_id: visitorId, source, medium, campaign, kind, occurred_at: now }),
   ]);

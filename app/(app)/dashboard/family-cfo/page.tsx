@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
@@ -41,7 +42,7 @@ export default async function FamilyCfoPage() {
   const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + '01';
 
-  const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await Promise.all([
+  const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await settleAll([
     supabase.from('financial_accounts').select('*').eq('family_id', familyId),
     supabase.from('bills').select('*').eq('family_id', familyId).neq('status', 'paid')
       .gte('due_date', today).lte('due_date', in30).order('due_date'),

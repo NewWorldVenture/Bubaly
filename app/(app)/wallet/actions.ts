@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
@@ -123,7 +124,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   const supabase = await createServer();
 
   // confirm the child wallet belongs to this family + load its split rule + buckets
-  const [{ data: cw, error: walletError }, { data: rule, error: ruleError }, { data: buckets, error: bucketsError }] = await Promise.all([
+  const [{ data: cw, error: walletError }, { data: rule, error: ruleError }, { data: buckets, error: bucketsError }] = await settleAll([
     supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('wallet_rules').select('split').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId),
@@ -688,7 +689,7 @@ export async function requestSpendAction(input: {
   const supabase = await createServer();
 
   // The child wallet must belong to this family; load its approval threshold.
-  const [{ data: cw, error: walletError }, { data: rule, error: ruleError }] = await Promise.all([
+  const [{ data: cw, error: walletError }, { data: rule, error: ruleError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
     supabase.from('wallet_rules').select('require_approval_over_cents').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).maybeSingle(),
   ]);

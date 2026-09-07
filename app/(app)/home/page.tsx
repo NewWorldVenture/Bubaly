@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
@@ -166,7 +167,7 @@ export default async function HomePage() {
     { count: choresDone },
     { count: tasksOverdue },
     { count: overdueReminders },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_members').select('id, display_name, color, role, birthday, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(12),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
@@ -249,10 +250,17 @@ export default async function HomePage() {
   // is a claim.
   const dayEndIso = todayEnd.toISOString();
   const manager = isManager(me.role);
+  // A ServiceResult, not a Postgrest response — awaited beside the batch
+  // rather than inside it, with its own fallback so a throw costs the
+  // approvals list instead of every read next to it.
+  const aiApprovalsRes = await listPending(scopeFromUserContext(ctx, supabase)).catch((cause) => {
+    console.warn('[home] pending AI approvals read threw', cause);
+    return { ok: false as const, error: String(cause) };
+  });
   const [
-    activeRunsRes, completedRes, recsRes, aiApprovalsRes,
+    activeRunsRes, completedRes, recsRes,
     moneyApprovalsRes, choreSignoffRes, todosDueRes, choresDueRes, remindersDueRes,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
     // "Completed by Bubaly" (M6): finished runs, the specialist agents' done
@@ -262,7 +270,6 @@ export default async function HomePage() {
     loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
-    listPending(scopeFromUserContext(ctx, supabase)),
     manager
       ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
           .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(20)

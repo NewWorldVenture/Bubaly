@@ -112,9 +112,9 @@ export async function PlatformBadges() {
   // in every language. "Designed for" is the only translatable word here.
   const platforms = [
     { icon: Apple, label: 'iOS' },
-    { icon: Bot, label: 'Android' },
+    { icon: Bot, label: t('visualMocks.android') },
     { icon: Monitor, label: 'Web' },
-    { icon: Tablet, label: 'Tablet' },
+    { icon: Tablet, label: t('visualMocks.tablet') },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -132,11 +132,11 @@ export async function PlatformBadges() {
 export async function HeroPhoneMockup({ className }: { className?: string }) {
   const t = await getTranslations();
   const schedule = [
-    { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', avatar: 3, color: 'bg-rose-400' },
-    { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', avatar: 0, color: 'bg-blue-400' },
-    { time: '3:00 PM', title: 'Jackson Soccer Practice', person: 'Jackson', avatar: 1, color: 'bg-emerald-400' },
-    { time: '5:00 PM', title: 'Grocery Pickup', person: 'H-E-B', avatar: 2, color: 'bg-orange-400' },
-    { time: '7:00 PM', title: 'Family Dinner', person: 'The Johnsons', avatar: 4, color: 'bg-violet-400' },
+    { time: '8:00 AM', title: t('visualMocks.dentistAppointment'), person: t('visualMocks.emma'), avatar: 3, color: 'bg-rose-400' },
+    { time: '9:30 AM', title: t('visualMocks.dadFlightToChicago'), person: t('visualMocks.mike'), avatar: 0, color: 'bg-blue-400' },
+    { time: '3:00 PM', title: t('visualMocks.jacksonSoccerPractice'), person: t('visualMocks.jackson'), avatar: 1, color: 'bg-emerald-400' },
+    { time: '5:00 PM', title: t('visualMocks.groceryPickup'), person: 'H-E-B', avatar: 2, color: 'bg-orange-400' },
+    { time: '7:00 PM', title: t('visualMocks.familyDinner'), person: t('visualMocks.theJohnsons'), avatar: 4, color: 'bg-violet-400' },
   ];
 
   return (
@@ -184,10 +184,10 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
             {/* Stats row */}
             <div className="mt-3 grid grid-cols-4 gap-1.5">
               {[
-                { icon: CalendarDays, value: '5', label: 'Events Today', color: 'text-violet-400' },
-                { icon: CheckSquare2, value: '3', label: 'Tasks Due', color: 'text-emerald-400' },
-                { icon: TriangleAlert, value: '2', label: 'Conflicts', color: 'text-rose-400' },
-                { icon: CloudSun, value: '72°', label: 'Partly Cloudy', color: 'text-blue-400' },
+                { icon: CalendarDays, value: '5', label: t('visualMocks.eventsToday'), color: 'text-violet-400' },
+                { icon: CheckSquare2, value: '3', label: t('visualMocks.tasksDue'), color: 'text-emerald-400' },
+                { icon: TriangleAlert, value: '2', label: t('visualMocks.conflicts'), color: 'text-rose-400' },
+                { icon: CloudSun, value: '72°', label: t('visualMocks.partlyCloudy'), color: 'text-blue-400' },
               ].map(({ icon: Icon, value, label, color }) => (
                 <div key={label} className="rounded-lg border border-white/[0.07] bg-white/[0.035] px-1 py-2 text-center">
                   <Icon className={cn('mx-auto mb-1 h-3.5 w-3.5', color)} />
@@ -240,7 +240,7 @@ export async function ProductMockup() {
     ['8:00 AM', 'School Drop-off'],
     ['10:00 AM', 'Math Meeting'],
     ['4:30 PM', 'Soccer Practice'],
-    ['7:00 PM', 'Family Dinner'],
+    ['7:00 PM', t('visualMocks.familyDinner')],
   ];
   const chores = ['Tidy Living Room', 'Take Out Trash', 'Feed the Dog'];
   const meals = ['Honey Garlic Chicken', 'Taco Tuesday', 'Salmon & Veggies'];
@@ -326,7 +326,7 @@ export async function ProductMockup() {
 
 export async function PhoneMockup({ className }: { className?: string }) {
   const t = await getTranslations();
-  const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', 'Family Dinner'];
+  const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', t('visualMocks.familyDinner')];
   return (
     <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
       <div className="rounded-[1.45rem] bg-[#09111d] p-4">
@@ -479,9 +479,9 @@ export async function DeviceShowcase() {
 
       <div className="mt-10 grid gap-5 pt-2 sm:grid-cols-3">
         {[
-          { icon: Shield, text: 'Encrypted in transit and at rest' },
-          { icon: Shield, text: 'Family-scoped access controls' },
-          { icon: Heart, text: 'Your data, your family' },
+          { icon: Shield, text: t('visualMocks.encryptedInTransitAndAt') },
+          { icon: Shield, text: t('visualMocks.familyScopedAccessControls') },
+          { icon: Heart, text: t('visualMocks.yourDataYourFamily') },
         ].map(({ icon: Icon, text }) => (
           <div key={text} className="flex items-center justify-center gap-2 text-sm text-[rgb(var(--canvas-fg)/0.65)]">
             <Icon className="h-5 w-5 text-emerald-400" />
@@ -512,9 +512,9 @@ async function ScheduleScreen() {
       </div>
       <div className="mt-1.5 flex-1 space-y-1">
         {[
-          { time: '8:00', title: 'Dentist Appt', color: 'bg-rose-400' },
-          { time: '3:30', title: 'Soccer', color: 'bg-emerald-400' },
-          { time: '6:00', title: 'Family Dinner', color: 'bg-violet-400' },
+          { time: '8:00', title: t('visualMocks.dentistAppt'), color: 'bg-rose-400' },
+          { time: '3:30', title: t('visualMocks.soccer'), color: 'bg-emerald-400' },
+          { time: '6:00', title: t('visualMocks.familyDinner'), color: 'bg-violet-400' },
         ].map(({ time, title, color }) => (
           <div key={title} className="flex items-center gap-1 rounded-sm bg-white/[0.05] p-1">
             <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', color)} />
@@ -543,10 +543,10 @@ async function TasksScreen() {
       <p className="mt-1.5 text-[5px] font-semibold text-white/70">Today&apos;s Tasks</p>
       <div className="mt-1 flex-1 space-y-1">
         {[
-          { text: 'Pack lunches', done: true },
-          { text: 'Walk the dog', done: true },
-          { text: 'Grocery pickup', done: false },
-          { text: 'Start laundry', done: false },
+          { text: t('visualMocks.packLunches'), done: true },
+          { text: t('visualMocks.walkTheDog'), done: true },
+          { text: t('visualMocks.groceryPickup2'), done: false },
+          { text: t('visualMocks.startLaundry'), done: false },
         ].map(({ text, done }) => (
           <div key={text} className="flex items-center gap-1 rounded-sm bg-white/[0.05] p-1">
             {done ? (
@@ -577,10 +577,10 @@ async function DashboardScreen() {
       </div>
       <div className="mt-1.5 grid grid-cols-4 gap-1">
         {[
-          { value: '5', label: 'Events', color: 'text-violet-400' },
+          { value: '5', label: t('visualMocks.events'), color: 'text-violet-400' },
           { value: '3', label: t('visualMocks.tasks'), color: 'text-emerald-400' },
-          { value: '72°', label: 'Weather', color: 'text-blue-400' },
-          { value: '2', label: 'Alerts', color: 'text-rose-400' },
+          { value: '72°', label: t('visualMocks.weather'), color: 'text-blue-400' },
+          { value: '2', label: t('visualMocks.alerts'), color: 'text-rose-400' },
         ].map(({ value, label, color }) => (
           <div key={label} className="rounded-md bg-white/[0.06] px-0.5 py-1 text-center">
             <p className={cn('text-[7px] font-bold', color)}>{value}</p>
@@ -593,8 +593,8 @@ async function DashboardScreen() {
           <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.schedule')}</p>
           {[
             { title: t('visualMocks.dentist800'), color: 'bg-rose-400' },
-            { title: 'Soccer 3:30', color: 'bg-emerald-400' },
-            { title: 'Dinner 6:00', color: 'bg-violet-400' },
+            { title: t('visualMocks.soccer330'), color: 'bg-emerald-400' },
+            { title: t('visualMocks.dinner600'), color: 'bg-violet-400' },
           ].map(({ title, color }) => (
             <div key={title} className="flex items-center gap-1 rounded-sm bg-white/[0.04] px-1 py-0.5">
               <span className={cn('h-1 w-1 shrink-0 rounded-full', color)} />
@@ -605,9 +605,9 @@ async function DashboardScreen() {
         <div className="space-y-0.5">
           <p className="text-[5px] font-semibold text-white/60">{t('visualMocks.tasks')}</p>
           {[
-            { text: 'Pack lunches', done: true },
-            { text: 'Walk dog', done: true },
-            { text: 'Groceries', done: false },
+            { text: t('visualMocks.packLunches'), done: true },
+            { text: t('visualMocks.walkDog'), done: true },
+            { text: t('visualMocks.groceries'), done: false },
           ].map(({ text, done }) => (
             <div key={text} className="flex items-center gap-1 rounded-sm bg-white/[0.04] px-1 py-0.5">
               <span className={cn('h-1 w-1 shrink-0 rounded-full', done ? 'bg-emerald-400' : 'bg-white/20')} />
@@ -637,9 +637,9 @@ async function WebAppScreen() {
           </div>
           <div className="mt-0.5 grid grid-cols-3 gap-0.5 px-0.5">
             {[
-              { v: '5', l: 'Events', c: 'text-violet-400' },
+              { v: '5', l: t('visualMocks.events'), c: 'text-violet-400' },
               { v: '3', l: t('visualMocks.tasks'), c: 'text-emerald-400' },
-              { v: '72°', l: 'Weather', c: 'text-blue-400' },
+              { v: '72°', l: t('visualMocks.weather'), c: 'text-blue-400' },
             ].map(({ v, l, c }) => (
               <div key={l} className="rounded-sm bg-white/[0.06] py-0.5 text-center">
                 <p className={cn('text-[5px] font-bold', c)}>{v}</p>
@@ -648,7 +648,7 @@ async function WebAppScreen() {
             ))}
           </div>
           <div className="mt-0.5 space-y-[2px] px-0.5">
-            {[t('visualMocks.dentist800'), 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
+            {[t('visualMocks.dentist800'), t('visualMocks.soccer330'), t('visualMocks.dinner600')].map((item, i) => (
               <div key={item} className="flex items-center gap-0.5 rounded-sm bg-white/[0.04] px-0.5 py-[2px]">
                 <span className={cn('h-1 w-1 shrink-0 rounded-full', i === 0 ? 'bg-rose-400' : i === 1 ? 'bg-emerald-400' : 'bg-violet-400')} />
                 <span className="text-[3.5px] text-white/70">{item}</span>
@@ -663,9 +663,9 @@ async function WebAppScreen() {
 
 async function DeviceArtwork({ device }: { device: DeviceName }) {
   const t = await getTranslations();
-  if (device === 'iPhone' || device === 'Android') {
+  if (device === 'iPhone' || device === t('visualMocks.android')) {
     return (
-      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === t('visualMocks.android') && 'rounded-[13px]')}>
         {device === 'iPhone' ? <ScheduleScreen /> : <TasksScreen />}
         <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
       </div>
@@ -864,13 +864,13 @@ export const FEATURE_RAIL = [
 ] as const;
 
 export const FEATURE_TOPICS = [
-  { icon: CalendarDays, title: 'Organize Schedules', tone: 'violet' },
-  { icon: CheckSquare2, title: 'Manage Tasks', tone: 'green' },
-  { icon: UtensilsCrossed, title: 'Plan Meals', tone: 'orange' },
-  { icon: GraduationCap, title: 'Stay on Top of School', tone: 'blue' },
-  { icon: Heart, title: 'Health & Wellness', tone: 'pink' },
-  { icon: Home, title: 'Home Management', tone: 'blue' },
-  { icon: Sparkles, title: 'AI Family Assistant', tone: 'violet' },
+  { icon: CalendarDays, title: 'visualMocks.organizeSchedules', tone: 'violet' },
+  { icon: CheckSquare2, title: 'visualMocks.manageTasks', tone: 'green' },
+  { icon: UtensilsCrossed, title: 'visualMocks.planMeals', tone: 'orange' },
+  { icon: GraduationCap, title: 'visualMocks.stayOnTopOfSchool', tone: 'blue' },
+  { icon: Heart, title: 'visualMocks.healthWellness', tone: 'pink' },
+  { icon: Home, title: 'visualMocks.homeManagement', tone: 'blue' },
+  { icon: Sparkles, title: 'visualMocks.aiFamilyAssistant', tone: 'violet' },
 ] as const;
 
 export const WORK_STEPS = [

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { RefreshCw } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ export default async function SyncHistoryPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const [runsRes, auditRes] = await Promise.all([
+  const [runsRes, auditRes] = await settleAll([
     supabase.from('sync_job_runs')
       .select('id, provider, status, items_imported, items_exported, items_skipped, conflicts_found, started_at, finished_at, error')
       .eq('family_id', ctx.active.familyId).order('started_at', { ascending: false }).limit(50),

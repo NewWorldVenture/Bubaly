@@ -4,6 +4,7 @@
 // ratings or reviews — so we never risk a structured-data spam penalty.
 
 import { Fragment } from 'react';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getCachedSocialLinks } from '@/lib/server/social-links';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -35,6 +36,7 @@ export async function SiteStructuredData() {
   // this organisation", and asserting that about a profile nobody has confirmed
   // exists is a claim, not a placeholder. So this stays with what an admin
   // actually saved, and is empty until they do.
+  const t = await getTranslations();
   const social = await getCachedSocialLinks();
   const t = await getTranslations();
 
@@ -62,9 +64,9 @@ export async function SiteStructuredData() {
     '@type': 'SoftwareApplication',
     name: 'Bubaly',
     applicationCategory: 'LifestyleApplication',
-    operatingSystem: 'Web, iOS, Android',
+    operatingSystem: t('structuredData.webIosAndroid'),
     description:
-      'An AI-native family operating system: shared calendar, chores, meal planning, documents, reminders, and an assistant that takes real action — all private and family-scoped.',
+      t('structuredData.anAiNativeFamilyOperating'),
     url: SITE_URL,
     offers: {
       '@type': 'Offer',
@@ -100,7 +102,7 @@ export function FaqStructuredData({ items }: { items: { q: string; a: string }[]
 }
 
 /** Page-level schema for public marketing routes and their admin-managed FAQs. */
-export function MarketingPageStructuredData({
+export async function MarketingPageStructuredData({
   path,
   name,
   description,
@@ -111,6 +113,7 @@ export function MarketingPageStructuredData({
   description: string;
   questions?: { q: string; a: string }[];
 }) {
+  const { locale } = await getLocaleContext();
   const pageUrl = `${SITE_URL}${path === '/' ? '' : path}`;
   return (
     <Fragment>
@@ -121,7 +124,7 @@ export function MarketingPageStructuredData({
         description,
         url: pageUrl,
         isPartOf: { '@type': 'WebSite', name: 'Bubaly', url: SITE_URL },
-        inLanguage: 'en-US',
+        inLanguage: locale.code,
       }} />
       {questions.length > 0 ? <FaqStructuredData items={questions} /> : null}
     </Fragment>
@@ -146,7 +149,8 @@ type BlogPostSchemaInput = {
  * readable summary — headline, author, dates, section, image, keywords. All
  * values come from the DB, so JsonLd escapes `<` as defense in depth.
  */
-export function BlogPostStructuredData(post: BlogPostSchemaInput) {
+export async function BlogPostStructuredData(post: BlogPostSchemaInput) {
+  const { locale } = await getLocaleContext();
   const url = `${SITE_URL}/blog/${post.slug}`;
   const article = {
     '@context': 'https://schema.org',
@@ -168,7 +172,7 @@ export function BlogPostStructuredData(post: BlogPostSchemaInput) {
     },
     url,
     isAccessibleForFree: true,
-    inLanguage: 'en-US',
+    inLanguage: locale.code,
   };
   const breadcrumbs = {
     '@context': 'https://schema.org',
@@ -188,12 +192,13 @@ export function BlogPostStructuredData(post: BlogPostSchemaInput) {
 }
 
 /** Blog (collection) schema for the /blog index — lists recent posts for crawlers. */
-export function BlogListStructuredData({ posts }: { posts: { slug: string; title: string; excerpt: string; date: string }[] }) {
+export async function BlogListStructuredData({ posts }: { posts: { slug: string; title: string; excerpt: string; date: string }[] }) {
+  const t = await getTranslations();
   const data = {
     '@context': 'https://schema.org',
     '@type': 'Blog',
-    name: 'The Bubaly Blog',
-    description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+    name: t('structuredData.theBubalyBlog'),
+    description: t('structuredData.practicalAdviceRealStoriesAnd'),
     url: `${SITE_URL}/blog`,
     publisher: { '@type': 'Organization', name: 'Bubaly', url: SITE_URL },
     blogPost: posts.slice(0, 25).map((p) => ({

@@ -4,6 +4,7 @@
 // server actions / route handlers BEFORE any privileged write; RLS is the backstop.
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import {
   ROLE_PERMISSIONS, defaultSocialRoleForMember, isSocialRole,
   type SocialRole, type SocialPermission,
@@ -27,7 +28,7 @@ export async function getSocialAccess(familyId: string): Promise<SocialAccess | 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
-  const [{ data: explicit }, { data: member }] = await Promise.all([
+  const [{ data: explicit }, { data: member }] = await settleAll([
     supabase
       .from('social_access_permissions')
       .select('social_role, status')

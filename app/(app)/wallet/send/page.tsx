@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -27,7 +28,7 @@ export default async function SendMoneyPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
-  const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await Promise.all([
+  const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
     supabase.from('wallet_transactions')

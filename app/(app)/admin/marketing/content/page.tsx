@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FileText, BookOpen, Send } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -24,7 +25,7 @@ type BlogMeta = { slug?: string; category?: string; author?: string; excerpt?: s
 export default async function ContentPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [itemsResult, postsResult] = await Promise.all([
+  const [itemsResult, postsResult] = await settleAll([
     supabase.from('marketing_content_items').select('*').is('deleted_at', null).order('publish_at', { ascending: true, nullsFirst: false }),
     supabase.from('blog_posts').select('slug, title, category, published, published_at').order('published_at', { ascending: false }).limit(20),
   ]);

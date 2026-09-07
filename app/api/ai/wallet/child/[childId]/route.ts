@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -61,7 +62,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       }
     }
 
-    const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await Promise.all([
+    const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).limit(2000),

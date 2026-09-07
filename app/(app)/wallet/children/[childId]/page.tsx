@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, normalizeSplit, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -26,7 +27,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   }
   if (!cw) notFound();
 
-  const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await Promise.all([
+  const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('family_members').select('display_name, color').eq('id', cw.member_id).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId).eq('child_wallet_id', cw.id),
     supabase.from('wallet_transactions')

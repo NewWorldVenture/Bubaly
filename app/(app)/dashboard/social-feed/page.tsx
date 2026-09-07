@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { SocialFeedModule, type FeedSource, type FeedItem } from '@/components/modules/social-feed-module';
 
@@ -11,7 +12,7 @@ export default async function SocialFeedPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: sources }, { data: items }] = await Promise.all([
+  const [{ data: sources }, { data: items }] = await settleAll([
     supabase.from('social_reader_sources')
       .select('id, platform, display_name, handle, account_count, category, is_active')
       .eq('family_id', familyId).eq('is_active', true).order('sort_order').order('created_at'),

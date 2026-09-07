@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 import { setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -139,7 +140,7 @@ export function MealsModule() {
     if (voteErr) { console.error('[meals] vote read failed', { message: voteErr.message }); setVoteData(null); return; }
     const v = votes?.[0];
     if (!v) { setVoteData(null); return; }
-    const [{ data: options, error: optErr }, { data: ballots, error: balErr }] = await Promise.all([
+    const [{ data: options, error: optErr }, { data: ballots, error: balErr }] = await settleAll([
       sb.from('meal_vote_options').select('*').eq('vote_id', v.id),
       sb.from('meal_vote_ballots').select('option_id, member_id, choice').eq('vote_id', v.id),
     ]);

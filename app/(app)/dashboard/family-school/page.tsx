@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { GraduationCap, BookOpen, CalendarClock, Award, NotebookPen } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
@@ -20,7 +21,7 @@ export default async function FamilySchoolPage() {
   const now = new Date().toISOString();
   const in14 = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  const [membersRes, classesRes, gradesRes, eventsRes] = await Promise.all([
+  const [membersRes, classesRes, gradesRes, eventsRes] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('school_classes').select('*').eq('family_id', familyId).order('day_of_week'),
     supabase.from('grades').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(8),

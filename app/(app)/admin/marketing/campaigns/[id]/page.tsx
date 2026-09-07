@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -29,9 +30,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   let audience = 0;
   let segmentName: string | null = null;
   if (c.segment_id) {
+    // getMarketingCustomersWithError returns { customers, error }, not a
+    // Postgrest response, so it is resolved beside the settled read rather than
+    // inside it — settleAll's { data, error } fallback does not carry
+    // `customers` and the audience count would silently read as empty.
     const [segmentResult, customersResult] = await Promise.all([
-      supabase.from('marketing_segments').select('name, rules').eq('id', c.segment_id).maybeSingle(),
-      getMarketingCustomersWithError(supabase),
+      settle(supabase.from('marketing_segments').select('name, rules').eq('id', c.segment_id).maybeSingle()),
+      getMarketingCustomersWithError(supabase).catch((cause) => ({
+        customers: [], error: cause instanceof Error ? cause.message : String(cause),
+      })),
     ]);
     const readError = segmentResult.error ?? customersResult.error;
     if (readError) {

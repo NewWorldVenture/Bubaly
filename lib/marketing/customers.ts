@@ -1,4 +1,5 @@
 import 'server-only';
+import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
@@ -35,7 +36,7 @@ function monthsBetween(from: string, to: number): number {
  * tables, so it always reflects live data and links back to the source family.
  */
 export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
-  const [familiesResult, subsResult, membersResult, profilesResult] = await Promise.all([
+  const [familiesResult, subsResult, membersResult, profilesResult] = await settleAll([
     supabase.from('families').select('id, name, created_at, updated_at').order('created_at', { ascending: false }).limit(2000),
     supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
     supabase.from('family_members').select('family_id, user_id, role, is_active'),

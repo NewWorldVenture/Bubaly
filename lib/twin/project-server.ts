@@ -5,6 +5,7 @@
 // service client (the cron passes the service client + null creator).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { projectTwin, projectionSummary, type TwinSnapshot } from './project';
 
@@ -13,7 +14,7 @@ type DB = SupabaseClient<Database>;
 export type TwinProjectionResult = { ok: boolean; error?: string; entities: number; edges: number };
 
 export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null): Promise<TwinProjectionResult> {
-  const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await Promise.all([
+  const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await settleAll([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     sb.from('pets').select('id, name, species').eq('family_id', familyId).eq('is_active', true),
     sb.from('vehicles').select('id, nickname, make, model, primary_driver').eq('family_id', familyId).is('deleted_at', null),

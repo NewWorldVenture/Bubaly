@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
@@ -27,7 +28,7 @@ export default async function WalletInvestPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
-  const [{ data: assets, error: assetsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: holdings, error: holdingsError }, { data: buckets, error: bucketsError }, { data: orders, error: ordersError }] = await Promise.all([
+  const [{ data: assets, error: assetsError }, { data: childWallets, error: childWalletsError }, { data: members, error: membersError }, { data: holdings, error: holdingsError }, { data: buckets, error: bucketsError }, { data: orders, error: ordersError }] = await settleAll([
     supabase.from('invest_assets').select('id, symbol, name, kind, emoji, description, price_cents, risk_level').eq('is_active', true).order('sort_order'),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),

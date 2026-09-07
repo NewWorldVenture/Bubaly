@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { getUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -43,7 +44,7 @@ export async function GET() {
     }
 
     const window = subscriptionCandidateWindow();
-    const [expenses, tracked] = await Promise.all([
+    const [expenses, tracked] = await settleAll([
       db.from('transactions').select('id, family_id, name, amount, type, date, category, account_id, member_id', { count: 'exact' })
         .eq('family_id', familyId).eq('type', 'expense').gte('date', window.from).lte('date', window.to)
         .order('date', { ascending: false }).order('id').limit(CANDIDATE_SOURCE_LIMIT + 1),

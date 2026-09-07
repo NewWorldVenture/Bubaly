@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted } from '@/lib/referrals/server';
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
@@ -35,7 +36,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
   // brand-new paid conversion vs. a routine renewal).
-  const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await Promise.all([
+  const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await settleAll([
     supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).maybeSingle(),
   ]);

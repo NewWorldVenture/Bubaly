@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Users2, Newspaper, Send, AlertTriangle, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { PLATFORMS, isProviderConfigured } from '@/lib/social/capabilities';
 import { AdminSocialSubnav } from '@/components/social/admin-subnav';
 import { PlatformDot } from '@/components/social/platform';
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminSocialPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [accounts, posts, published, failedResults, generations, errors] = await Promise.all([
+  const [accounts, posts, published, failedResults, generations, errors] = await settleAll([
     supabase.from('social_accounts').select('id', { count: 'exact', head: true }),
     supabase.from('social_posts').select('id', { count: 'exact', head: true }),
     supabase.from('social_publish_results').select('id', { count: 'exact', head: true }).eq('status', 'published'),

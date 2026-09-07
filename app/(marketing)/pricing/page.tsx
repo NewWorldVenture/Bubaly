@@ -12,7 +12,7 @@ import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-sectio
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return resolveMarketingMetadata('/pricing', {
-    title: 'Pricing',
+    title: t('pricing.pricing'),
     description: t('pricing.simplePricingForHappierFamilies'),
   });
 }
@@ -32,5 +32,5 @@ export default async function PricingPage() {
       .map((f) => ({ label: f.label, tier: (resolved[f.key] ?? f.defaultTier) as Exclude<FeatureTier, 'off'> })),
   })).filter((s) => s.items.length > 0);
 
-  return <><PricingContent familiesCount={families} featureMatrix={matrix} /><MarketingAeoSection path="/pricing" name="Bubaly Pricing" description={t('pricing.simplePricingForHappierFamilies')} /></>;
+  return <><PricingContent familiesCount={families} featureMatrix={matrix} /><MarketingAeoSection path="/pricing" name={t('pricing.bubalyPricing')} description={t('pricing.simplePricingForHappierFamilies')} /></>;
 }

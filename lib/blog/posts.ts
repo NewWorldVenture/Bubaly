@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 
 export type BlogCategory =
@@ -243,7 +244,7 @@ export async function getRelatedPosts(slug: string, category: BlogCategory, limi
 export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost | null; next: BlogPost | null }> {
   try {
     const client = anonClient();
-    const [{ data: older }, { data: newer }] = await Promise.all([
+    const [{ data: older }, { data: newer }] = await settleAll([
       client
         .from('blog_posts')
         .select(CARD_COLUMNS)

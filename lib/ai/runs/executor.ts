@@ -36,6 +36,7 @@ import { backoffDelayMs } from '@/lib/ai/retry';
 import { executeTool } from '@/lib/ai/tools/execute';
 import type { ToolOutcome } from '@/lib/ai/tools/types';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { notify } from '@/lib/services/notifications';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
@@ -62,7 +63,7 @@ type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
 async function runMatchesRequest(db: SupabaseClient<Database>, run: RunSnapshot): Promise<ServiceResult<null>> {
   if (!run.plan_id) return ok(null);
   if (!run.request_id) return fail('This run names a plan but no request, so Bubaly will not act on it.', { code: SERVICE_CODES.denied });
-  const [{ data: plan, error: planError }, { data: request, error: requestError }] = await Promise.all([
+  const [{ data: plan, error: planError }, { data: request, error: requestError }] = await settleAll([
     db.from('ai_plans').select('id, request_id, family_id').eq('id', run.plan_id).eq('family_id', run.family_id).maybeSingle(),
     db.from('ai_requests').select('id, requested_by_member_id, family_id').eq('id', run.request_id).eq('family_id', run.family_id).maybeSingle(),
   ]);

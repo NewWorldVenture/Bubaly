@@ -14,132 +14,133 @@ import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/security', {
-    title: 'Security — Enterprise-Grade Protection for Your Family',
+    title: t('security.securityEnterpriseGradeProtectionFor'),
     description:
       'Bank-level encryption, SOC 2 compliance, GDPR/CCPA/HIPAA adherence, and full data sovereignty. Your family\'s privacy is our top priority.',
   });
 }
 
 const PILLARS = [
-  { icon: Shield, title: 'Privacy by Design', desc: 'Every feature is architected to minimize data exposure and maximize your control.' },
-  { icon: Lock, title: 'Bank-Level Security', desc: 'AES-256 encryption, TLS 1.3, and the same standards used by leading financial institutions.' },
+  { icon: Shield, title: 'security.privacyByDesign', desc: 'security.everyFeatureIsArchitectedTo' },
+  { icon: Lock, title: 'security.bankLevelSecurity', desc: 'security.aes256EncryptionTls1' },
   { icon: Users, title: "You're in Control", desc: 'Granular permissions, data export, and instant deletion — always at your fingertips.' },
-  { icon: Eye, title: 'Transparent & Accountable', desc: 'Clear policies, public audits, and a dedicated security team you can reach anytime.' },
+  { icon: Eye, title: 'security.transparentAccountable', desc: 'security.clearPoliciesPublicAuditsAnd' },
 ];
 
 const ARCHITECTURE_LAYERS = [
   {
-    icon: Globe2, title: 'Edge Protection', color: 'text-blue-400',
-    desc: 'DDoS mitigation, WAF rules, and rate limiting at the edge via Cloudflare. Malicious traffic is blocked before it reaches our infrastructure.',
-    details: ['DDoS protection', 'Web Application Firewall', 'Bot detection', 'Rate limiting'],
+    icon: Globe2, title: 'security.edgeProtection', color: 'text-blue-400',
+    desc: 'security.ddosMitigationWafRulesAnd',
+    details: ['security.ddosProtection', 'security.webApplicationFirewall', 'security.botDetection', 'security.rateLimiting'],
   },
   {
-    icon: Lock, title: 'Transport Security', color: 'text-emerald-400',
-    desc: 'All data in transit is encrypted with TLS 1.3. HSTS headers enforce HTTPS. Certificate pinning prevents man-in-the-middle attacks.',
-    details: ['TLS 1.3 encryption', 'HSTS preloading', 'Certificate transparency', 'Perfect forward secrecy'],
+    icon: Lock, title: 'security.transportSecurity', color: 'text-emerald-400',
+    desc: 'security.allDataInTransitIs',
+    details: ['security.tls13Encryption', 'security.hstsPreloading', 'security.certificateTransparency', 'security.perfectForwardSecrecy'],
   },
   {
-    icon: ScanFace, title: 'Authentication', color: 'text-violet-400',
-    desc: 'Multi-factor authentication, biometric login, secure session tokens with automatic rotation, and brute-force protection.',
-    details: ['Multi-factor auth (TOTP/SMS)', 'Biometric login', 'Session token rotation', 'Brute-force lockout'],
+    icon: ScanFace, title: 'security.authentication', color: 'text-violet-400',
+    desc: 'security.multiFactorAuthenticationBiometricLogin',
+    details: ['Multi-factor auth (TOTP/SMS)', 'security.biometricLogin', 'security.sessionTokenRotation', 'security.bruteForceLockout'],
   },
   {
-    icon: Fingerprint, title: 'Authorization', color: 'text-amber-400',
-    desc: 'Row-level security policies ensure family members only access data they are permitted to see. Every API call is authorized individually.',
-    details: ['Row-level security (RLS)', 'Role-based access control', 'Per-request authorization', 'Principle of least privilege'],
+    icon: Fingerprint, title: 'security.authorization', color: 'text-amber-400',
+    desc: 'security.rowLevelSecurityPoliciesEnsure',
+    details: ['Row-level security (RLS)', 'security.roleBasedAccessControl', 'security.perRequestAuthorization', 'security.principleOfLeastPrivilege'],
   },
   {
-    icon: Database, title: 'Data Encryption', color: 'text-rose-400',
-    desc: 'AES-256 encryption at rest for all data. Encryption keys are managed in a hardware security module (HSM) and rotated automatically.',
-    details: ['AES-256 at rest', 'HSM key management', 'Automatic key rotation', 'Column-level encryption for PII'],
+    icon: Database, title: 'security.dataEncryption', color: 'text-rose-400',
+    desc: 'security.aes256EncryptionAtRest',
+    details: ['security.aes256AtRest', 'security.hsmKeyManagement', 'security.automaticKeyRotation', 'security.columnLevelEncryptionForPii'],
   },
   {
-    icon: HardDrive, title: 'Backup & Recovery', color: 'text-cyan-400',
-    desc: 'Point-in-time recovery with continuous WAL archiving. Encrypted backups stored in geographically separate regions with 30-day retention.',
-    details: ['Continuous WAL archiving', 'Point-in-time recovery', 'Geo-redundant backup storage', '30-day backup retention'],
+    icon: HardDrive, title: 'security.backupRecovery', color: 'text-cyan-400',
+    desc: 'security.pointInTimeRecoveryWith',
+    details: ['security.continuousWalArchiving', 'security.pointInTimeRecovery', 'security.geoRedundantBackupStorage', '30-day backup retention'],
   },
 ];
 
 const COMPLIANCE_BADGES = [
   {
-    badge: 'SOC 2', label: 'SOC 2 Type II', sub: 'Audited annually',
-    desc: 'Independent auditors verify our security controls, availability, and confidentiality practices annually.',
+    badge: 'SOC 2', label: 'security.soc2TypeIi', sub: 'security.auditedAnnually',
+    desc: 'security.independentAuditorsVerifyOurSecurity',
   },
   {
-    badge: 'GDPR', label: 'GDPR', sub: 'EU compliant',
-    desc: 'Full compliance with EU General Data Protection Regulation including data portability and right to erasure.',
+    badge: 'GDPR', label: 'security.gdpr', sub: 'security.euCompliant',
+    desc: 'security.fullComplianceWithEuGeneral',
   },
   {
-    badge: 'HIPAA', label: 'HIPAA', sub: 'Healthcare ready',
-    desc: 'We implement administrative, physical, and technical safeguards required for protected health information.',
+    badge: 'HIPAA', label: 'security.hipaa', sub: 'security.healthcareReady',
+    desc: 'security.weImplementAdministrativePhysicalAnd',
   },
   {
-    badge: 'CCPA', label: 'CCPA', sub: 'California compliant',
-    desc: 'California residents have full rights to know, delete, and opt-out of data sale (we never sell data).',
+    badge: 'CCPA', label: 'security.ccpa', sub: 'security.californiaCompliant',
+    desc: 'security.californiaResidentsHaveFullRights',
   },
 ];
 
 const CONTROLS = [
   {
-    icon: Users, title: 'Granular Access Controls',
-    desc: 'Invite family members and assign specific permissions. Parents manage what children can see and do. Grandparents get a simplified read-only view.',
+    icon: Users, title: 'security.granularAccessControls',
+    desc: 'security.inviteFamilyMembersAndAssign',
   },
   {
-    icon: Download, title: 'Full Data Portability',
+    icon: Download, title: 'security.fullDataPortability',
     desc: 'Export all your family\'s data anytime in standard formats (JSON, CSV). Your data belongs to you — always.',
   },
   {
-    icon: Trash2, title: 'Instant Deletion',
+    icon: Trash2, title: 'security.instantDeletion',
     desc: 'Permanently delete individual records, a family member\'s data, or your entire account. Deletion is irreversible and includes backups within 30 days.',
   },
   {
-    icon: EyeOff, title: 'Zero Ads. Zero Tracking.',
+    icon: EyeOff, title: 'security.zeroAdsZeroTracking',
     desc: 'We don\'t show ads, sell data, or track your family across the web. No third-party analytics scripts run on your dashboard.',
   },
   {
-    icon: MonitorSmartphone, title: 'Session Management',
-    desc: 'View all active sessions, see device details, and revoke access to any device instantly from your security settings.',
+    icon: MonitorSmartphone, title: 'security.sessionManagement',
+    desc: 'security.viewAllActiveSessionsSee',
   },
   {
-    icon: FileText, title: 'Audit Logs',
+    icon: FileText, title: 'security.auditLogs',
     desc: 'Every significant action is logged with timestamps. Review who accessed what, when, and from where in your family\'s activity log.',
   },
 ];
 
 const INCIDENT_TIMELINE = [
-  { phase: 'Detection', time: '< 5 min', desc: 'Automated monitoring detects anomalies within minutes via 24/7 alerting systems.', icon: Zap },
-  { phase: 'Assessment', time: '< 30 min', desc: 'On-call security engineer assesses severity, scope, and begins containment.', icon: AlertTriangle },
-  { phase: 'Notification', time: '< 24 hrs', desc: 'Affected users are notified within 24 hours with clear details and recommended actions.', icon: Mail },
-  { phase: 'Resolution', time: 'Ongoing', desc: 'Root cause analysis, remediation, and a public post-mortem for transparency.', icon: CheckCircle2 },
+  { phase: 'security.detection', time: 'security.5Min', desc: 'security.automatedMonitoringDetectsAnomaliesWithin', icon: Zap },
+  { phase: 'security.assessment', time: 'security.30Min', desc: 'security.onCallSecurityEngineerAssesses', icon: AlertTriangle },
+  { phase: 'security.notification', time: 'security.24Hrs', desc: 'security.affectedUsersAreNotifiedWithin', icon: Mail },
+  { phase: 'security.resolution', time: 'security.ongoing', desc: 'security.rootCauseAnalysisRemediationAnd', icon: CheckCircle2 },
 ];
 
 const DATA_RESIDENCY = [
-  { region: 'United States', location: 'US-East (Virginia)', provider: 'AWS', flag: '🇺🇸' },
-  { region: 'European Union', location: 'EU-West (Frankfurt)', provider: 'AWS', flag: '🇪🇺' },
-  { region: 'Asia Pacific', location: 'AP-Southeast (Sydney)', provider: 'AWS', flag: '🇦🇺' },
+  { region: 'security.unitedStates', location: 'US-East (Virginia)', provider: 'AWS', flag: '🇺🇸' },
+  { region: 'security.europeanUnion', location: 'EU-West (Frankfurt)', provider: 'AWS', flag: '🇪🇺' },
+  { region: 'security.asiaPacific', location: 'AP-Southeast (Sydney)', provider: 'AWS', flag: '🇦🇺' },
 ];
 
 const SECURITY_FAQ = [
-  { q: 'How is my family\'s data encrypted?', a: 'All data is encrypted in transit using TLS 1.3 and at rest using AES-256 encryption. Encryption keys are stored in hardware security modules (HSMs) and rotated automatically. Sensitive fields like medical records and financial data receive additional column-level encryption.' },
-  { q: 'Does Bubaly sell or share my data with third parties?', a: 'Absolutely not. We never sell, rent, or share your family\'s data with any third party for advertising or marketing purposes. The only data sharing that occurs is what you explicitly initiate — like sharing a calendar event or photo with a family member.' },
-  { q: 'What happens if I delete my account?', a: 'When you delete your account, all your data is immediately removed from our production systems. Backup copies are purged within 30 days. This process is irreversible. You can also delete individual records or a specific family member\'s data without deleting your entire account.' },
-  { q: 'Is my data processed by AI? How is it protected?', a: 'Our AI features process your data only when you explicitly use them (like the AI Assistant or Smart Briefing). AI processing happens in isolated, ephemeral containers. We never use your family\'s data to train AI models. All AI interactions are logged in your audit trail for transparency.' },
+  { q: 'How is my family\'s data encrypted?', a: 'security.allDataIsEncryptedIn' },
+  { q: 'security.doesBubalySellOrShare', a: 'Absolutely not. We never sell, rent, or share your family\'s data with any third party for advertising or marketing purposes. The only data sharing that occurs is what you explicitly initiate — like sharing a calendar event or photo with a family member.' },
+  { q: 'security.whatHappensIfIDelete', a: 'When you delete your account, all your data is immediately removed from our production systems. Backup copies are purged within 30 days. This process is irreversible. You can also delete individual records or a specific family member\'s data without deleting your entire account.' },
+  { q: 'security.isMyDataProcessedBy', a: 'Our AI features process your data only when you explicitly use them (like the AI Assistant or Smart Briefing). AI processing happens in isolated, ephemeral containers. We never use your family\'s data to train AI models. All AI interactions are logged in your audit trail for transparency.' },
   { q: 'How does Bubaly handle children\'s data?', a: 'We comply with COPPA (Children\'s Online Privacy Protection Act) and equivalent international regulations. Children\'s accounts are managed by parent accounts with restricted permissions. We collect the minimum data necessary and provide parents full visibility and control over their children\'s data.' },
-  { q: 'What multi-factor authentication options are available?', a: 'We support TOTP-based authenticator apps (Google Authenticator, Authy, 1Password), SMS verification, and biometric authentication (Face ID, Touch ID, fingerprint) on supported devices. We recommend using an authenticator app for the strongest protection.' },
-  { q: 'How do you handle security vulnerabilities?', a: 'We maintain a responsible disclosure program and welcome security reports at security@bubaly.com. We acknowledge reports within 24 hours, triage within 48 hours, and keep reporters updated on resolution. We also run regular penetration tests and participate in bug bounty programs.' },
-  { q: 'Where is my data stored geographically?', a: 'Your data is stored in the region closest to you — US-East (Virginia), EU-West (Frankfurt), or AP-Southeast (Sydney). All regions are hosted on AWS infrastructure with SOC 2 and ISO 27001 certifications. You can see your data region in your account settings.' },
-  { q: 'What is your uptime guarantee?', a: 'We maintain a 99.99% uptime SLA backed by multi-region redundancy, automatic failover, and continuous health monitoring. Our status page at status.bubaly.com provides real-time and historical availability data.' },
-  { q: 'How can I report a security concern?', a: 'Email security@bubaly.com with details of your concern. For responsible disclosure of vulnerabilities, include steps to reproduce and we\'ll acknowledge receipt within 24 hours. For urgent account security issues, use the "Lock Account" button in your settings for immediate protection.' },
+  { q: 'security.whatMultiFactorAuthenticationOptions', a: 'We support TOTP-based authenticator apps (Google Authenticator, Authy, 1Password), SMS verification, and biometric authentication (Face ID, Touch ID, fingerprint) on supported devices. We recommend using an authenticator app for the strongest protection.' },
+  { q: 'security.howDoYouHandleSecurity', a: 'security.weMaintainAResponsibleDisclosure' },
+  { q: 'security.whereIsMyDataStored', a: 'Your data is stored in the region closest to you — US-East (Virginia), EU-West (Frankfurt), or AP-Southeast (Sydney). All regions are hosted on AWS infrastructure with SOC 2 and ISO 27001 certifications. You can see your data region in your account settings.' },
+  { q: 'security.whatIsYourUptimeGuarantee', a: 'security.weMaintainA9999' },
+  { q: 'security.howCanIReportA', a: 'Email security@bubaly.com with details of your concern. For responsible disclosure of vulnerabilities, include steps to reproduce and we\'ll acknowledge receipt within 24 hours. For urgent account security issues, use the "Lock Account" button in your settings for immediate protection.' },
 ];
 
 const COMMITMENTS = [
-  { text: 'We never sell your data', detail: 'Your family\'s information is never monetized — period.' },
-  { text: 'We only collect what we need', detail: 'Minimal data collection with purpose limitation for every field.' },
-  { text: 'We protect your data 24/7', detail: 'Automated monitoring, alerting, and on-call security engineers around the clock.' },
-  { text: 'We give you full control', detail: 'Export, delete, or modify your data anytime from your dashboard.' },
-  { text: 'We\'re transparent about incidents', detail: 'Public post-mortems and proactive notification for any security events.' },
-  { text: 'We invest in continuous improvement', detail: 'Regular penetration tests, security audits, and infrastructure upgrades.' },
+  { text: 'security.weNeverSellYourData', detail: 'security.yourFamilySInformationIsNever' },
+  { text: 'security.weOnlyCollectWhatWe', detail: 'security.minimalDataCollectionWithPurpose' },
+  { text: 'security.weProtectYourData24', detail: 'security.automatedMonitoringAlertingAndOn' },
+  { text: 'security.weGiveYouFullControl', detail: 'security.exportDeleteOrModifyYour' },
+  { text: 'security.wereTransparentAboutIncidents', detail: 'security.publicPostMortemsAndProactive' },
+  { text: 'security.weInvestInContinuousImprovement', detail: 'security.regularPenetrationTestsSecurityAudits' },
 ];
 
 export default async function SecurityPage() {
@@ -532,7 +533,7 @@ export default async function SecurityPage() {
           </div>
         </Container>
       </div>
-      <MarketingAeoSection path="/security" name="Bubaly Security" description={t('security.howBubalyProtectsFamilyData')} />
+      <MarketingAeoSection path="/security" name={t('security.bubalySecurity')} description={t('security.howBubalyProtectsFamilyData')} />
     </PageWrap>
   );
 }

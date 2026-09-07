@@ -7,12 +7,12 @@ import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-sectio
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return resolveMarketingMetadata('/features', {
-    title: 'Features',
+    title: t('features.features'),
     description: t('features.everythingYourFamilyNeedsIn'),
   });
 }
 
 export default async function FeaturesPage() {
   const t = await getTranslations();
-  return <><FeaturesReferencePage /><MarketingAeoSection path="/features" name="Bubaly Features" description={t('features.everythingYourFamilyNeedsIn')} /></>;
+  return <><FeaturesReferencePage /><MarketingAeoSection path="/features" name={t('features.bubalyFeatures')} description={t('features.everythingYourFamilyNeedsIn')} /></>;
 }

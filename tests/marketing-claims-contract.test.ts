@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 // while absent, so the guard picks them up the moment they land.
 // app/(marketing)/security/page.tsx joins this list with the Trust Center
 // stage, which is what removes the claims that page still carries today.
-const SOURCE_FILES = [
+const FILES = [
   'components/marketing/visual-mocks.tsx',
   'components/marketing/reference-showcases.tsx',
   'components/marketing/hero-outcomes.tsx',
@@ -27,17 +27,31 @@ const SOURCE_FILES = [
   'app/(marketing)/page.tsx',
 ];
 
-const present = SOURCE_FILES.filter((file) => existsSync(resolve(process.cwd(), file)));
-const sources = present.map((file) => readFileSync(resolve(process.cwd(), file), 'utf8')).join('\n');
+const catalogue = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'lib/i18n/messages/en-US.json'), 'utf8'),
+) as Record<string, string>;
 
-// The public copy itself lives in the catalogue; the marketing keys are
-// checked with the same patterns so a claim cannot hide behind t().
-const en = JSON.parse(readFileSync(resolve(process.cwd(), 'lib/i18n/messages/en-US.json'), 'utf8')) as Record<string, string>;
-const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'root.meta', 'structuredData.'];
-const marketingCopy = Object.entries(en)
-  .filter(([key]) => MARKETING_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
-  .map(([key, value]) => `${key}: ${value}`)
+const present = FILES.filter((file) => existsSync(resolve(process.cwd(), file)));
+const files = present.map((file) => readFileSync(resolve(process.cwd(), file), 'utf8')).join('\n');
+
+/**
+ * The copy these files ship — which now lives in the catalogue, not in the
+ * source. Following the keys matters in BOTH directions: the positive check
+ * would simply fail, but every "does not ship this claim" assertion would have
+ * gone quietly vacuous, still passing while "Bank-level security" sat in a
+ * catalogue value one indirection away.
+ *
+ * Scoped to the keys these files actually reference rather than the whole
+ * catalogue, so the guard keeps meaning "what the public marketing pages say"
+ * — the admin competitive-intelligence screens legitimately name Forbes and
+ * TechCrunch, and sweeping them in would fail this on unrelated copy.
+ */
+const shipped = [...files.matchAll(/'([a-zA-Z][\w]*\.[\w]+)'/g)]
+  .map((m) => catalogue[m[1]])
+  .filter((value): value is string => typeof value === 'string')
   .join('\n');
+
+const sources = `${files}\n${shipped}`;
 
 const FORBIDDEN = [
   /Trusted by thousands/i,
@@ -75,7 +89,7 @@ describe('public marketing claims', () => {
   });
 
   it.each(FORBIDDEN)('does not ship unsupported claim %s in the marketing catalogue', (claim) => {
-    expect(marketingCopy).not.toMatch(claim);
+    expect(shipped).not.toMatch(claim);
   });
 
   it('uses concrete security language', () => {

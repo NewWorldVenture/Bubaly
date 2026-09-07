@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServiceClient } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/admin-shell';
 
@@ -12,7 +13,7 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   if (!superAdmin) redirect('/dashboard');
 
   const supabase = createServiceClient();
-  const [profileRes, invitesRes, notificationsRes] = await Promise.all([
+  const [profileRes, invitesRes, notificationsRes] = await settleAll([
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
     supabase.from('invites').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('admin_notifications')

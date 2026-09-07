@@ -2,6 +2,7 @@
 // model can call maps to a real, RLS-scoped Supabase write so the assistant can
 // actually DO things (schedule events, add chores, build lists) — not just talk.
 import 'server-only';
+import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolSpec } from '@/lib/ai/provider';
@@ -405,7 +406,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
-        const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await Promise.all([
+        const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await settleAll([
           supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50),
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),

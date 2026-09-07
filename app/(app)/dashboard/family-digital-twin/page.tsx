@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Brain, Repeat, BookOpen, Trophy, Target, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
@@ -22,7 +23,7 @@ export default async function FamilyDigitalTwinPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [membersRes, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await Promise.all([
+  const [membersRes, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await settleAll([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('family_digital_twin_profiles').select('*').eq('family_id', familyId),
     supabase.from('family_routines').select('member_id, title').eq('family_id', familyId).eq('status', 'active'),

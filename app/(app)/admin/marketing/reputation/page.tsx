@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Quote, BookOpenCheck, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -24,7 +25,7 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 export default async function ReputationPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [testimonialsResult, caseStudiesResult] = await Promise.all([
+  const [testimonialsResult, caseStudiesResult] = await settleAll([
     supabase.from('testimonials').select('*').order('sort_order').order('created_at', { ascending: false }).limit(200),
     supabase.from('case_studies').select('*').order('created_at', { ascending: false }).limit(200),
   ]);
