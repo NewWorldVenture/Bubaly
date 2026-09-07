@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, UtensilsCrossed, ShoppingCart, CheckSquare, Bell, PiggyBank,
   FileText, ShieldCheck, Newspaper, Zap, Lock, SlidersHorizontal, ArrowRight,
-  Sun, Sunset, Moon, Cpu,
+  Sun, Sunset, Moon,
 } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
@@ -14,10 +14,10 @@ import { AiActionDemo } from '@/components/marketing/ai-showcase';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
 
 export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
   return resolveMarketingMetadata('/ai', {
     title: 'Bubaly AI — the assistant that does the work',
-    description:
-      'Bubaly’s AI doesn’t just answer questions — it creates the events, chores, reminders, meal plans, grocery lists, and follow-ups that keep family life running. Ask in plain language; it takes real action inside your family’s data, privately and model-agnostically.',
+    description: t('ai.descriptionOutcomes'),
   });
 }
 
@@ -106,7 +106,6 @@ export default async function AIPage() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-brand-text" /> Family-scoped &amp; private</span>
             <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-brand-text" />{' '}{t('ai.takesRealAction')}</span>
-            <span className="inline-flex items-center gap-1.5"><Cpu className="h-3.5 w-3.5 text-brand-text" /> Model-agnostic</span>
           </div>
         </Section>
       </div>
@@ -139,6 +138,26 @@ export default async function AIPage() {
               <p className="mt-2 text-sm leading-6 text-muted">{d.body}</p>
             </div>
           ))}
+        </div>
+
+        {/* How Bubaly decides what to do alone — the Trust Center holds the
+            full statement, rendered from the same engine that enforces it. */}
+        <div className="glass-card mt-6 flex flex-col gap-5 p-7 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand-text">
+              <ShieldCheck className="h-6 w-6" aria-hidden />
+            </span>
+            <div>
+              <h3 className="text-lg font-semibold">{t('ai.howBubalyDecides')}</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{t('ai.howBubalyDecidesBody')}</p>
+            </div>
+          </div>
+          <Link
+            href="/security#ai-trust"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-border bg-surface/50 px-5 py-2.5 text-sm font-semibold transition hover:border-brand/40 hover:bg-surface/80"
+          >
+            {t('decisionsBand.readTrustCenter')}{' '}<ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
         </div>
       </Section>
 

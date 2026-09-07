@@ -6,6 +6,7 @@ import {
   Check, CornerDownRight, type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SampleBadge } from '@/components/marketing/primitives';
 
 // The centerpiece of the /ai page: a live-feeling "Ask → Act" demo. Each prompt,
 // when active, shows the family member's message, Bubaly's reply, and — the whole
@@ -101,7 +102,12 @@ export function AiActionDemo() {
         onMouseEnter={() => setPaused(true)}
         onFocusCapture={() => setPaused(true)}
       >
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{tr('aiShowcase.tryAsking')}</p>
+        {/* Badged: the prompts and the records they produce are a scripted
+            sample, not a live run. Same badge as the homepage ledger. */}
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{tr('aiShowcase.tryAsking')}</p>
+          <SampleBadge>{tr('handledProof.sampleBadge')}</SampleBadge>
+        </div>
         {DEMOS.map((d, i) => {
           const on = i === active;
           return (

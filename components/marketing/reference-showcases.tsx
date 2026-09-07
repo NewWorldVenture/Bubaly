@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
 import {
+  ArrowLeftRight,
   ArrowRight,
   Bell,
   CalendarDays,
@@ -25,6 +26,7 @@ import {
   Smartphone,
   Sparkles,
   Star,
+  Tablet,
   UtensilsCrossed,
   Users,
   UsersRound,
@@ -34,6 +36,8 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getPublicStats } from '@/lib/marketing/stats';
 import { familiesNote } from '@/lib/marketing/format';
+import { DEFAULT_TILES, type TileSize, type TileWidget } from '@/lib/display/tiles';
+import { COMPETITORS } from '@/lib/migrate/competitors';
 
 const tones = {
   violet: 'border-violet-500/20 bg-violet-500/10 text-violet-400',
@@ -128,6 +132,7 @@ function FeatureCard({
   description,
   children,
   row = 1,
+  className,
 }: {
   id?: string;
   icon: LucideIcon;
@@ -135,10 +140,14 @@ function FeatureCard({
   title: string;
   description: string;
   children: React.ReactNode;
-  row?: 1 | 2;
+  row?: 1 | 2 | 3;
+  className?: string;
 }) {
+  // Each row of the grid has its own fixed height so the mocks line up; the
+  // third row (Kitchen Mode, Switch to Bubaly) is the shortest.
+  const ROW_HEIGHT = { 1: 'h-[374px]', 2: 'h-[350px]', 3: 'h-[330px]' } as const;
   return (
-    <article id={id} className={cn('dark flex scroll-mt-24 flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
+    <article id={id} className={cn('dark flex scroll-mt-24 flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', ROW_HEIGHT[row], className)}>
       <div className="flex items-center gap-2.5">
         <SquareIcon icon={icon} tone={tone} />
         <h3 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h3>
@@ -173,11 +182,11 @@ export async function FeaturesReferencePage() {
         <section className="text-center">
           <Eyebrow>{t('referenceShowcases.eyebrow')}</Eyebrow>
           <h1 className="mt-3 text-balance text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
-            {t('referenceShowcases.featuresTitleLead')}{' '}
-            <GradientText>{t('referenceShowcases.featuresTitleAccent')}</GradientText>
+            {t('featuresPage.titleLead')}{' '}
+            <GradientText>{t('featuresPage.titleAccent')}</GradientText>
           </h1>
           <p className="mx-auto mt-3.5 max-w-[590px] text-balance text-[15px] leading-6 text-white/72">
-            {t('referenceShowcases.featuresSubtitle')}
+            {t('featuresPage.subtitle')}
           </p>
         </section>
 
@@ -190,9 +199,11 @@ export async function FeaturesReferencePage() {
           ))}
         </section>
 
+        {/* Outcome first: the six cards the homepage rail deep-links to lead,
+            and everything else on the grid is there as supporting proof. */}
         <section className="mt-4 border-t border-white/[0.07] pt-[14px] text-center">
-          <h2 className="text-[27px] font-bold tracking-[-0.025em]">{t('referenceShowcases.powerfulFeatures')}</h2>
-          <p className="mt-1.5 text-[13px] text-white/65">{t('referenceShowcases.discoverHowBubaly')}</p>
+          <h2 className="text-[27px] font-bold tracking-[-0.025em]">{t('featuresPage.byOutcome')}</h2>
+          <p className="mt-1.5 text-[13px] text-white/65">{t('featuresPage.supportingProof')}</p>
         </section>
 
         <section className="mt-[18px] grid gap-[14px] px-0 sm:grid-cols-2 lg:grid-cols-4 lg:px-[14px]">
@@ -269,6 +280,28 @@ export async function FeaturesReferencePage() {
             row={2}
           >
             <AssistantChat />
+          </FeatureCard>
+          <FeatureCard
+            id="kitchen-mode"
+            icon={Tablet}
+            tone="orange"
+            title={t('featureCards.kitchenMode')}
+            description={t('featureCards.kitchenModeBody')}
+            row={3}
+            className="lg:col-span-2"
+          >
+            <KitchenTiles />
+          </FeatureCard>
+          <FeatureCard
+            id="switching"
+            icon={ArrowLeftRight}
+            tone="blue"
+            title={t('featureCards.switching')}
+            description={t('featureCards.switchingBody')}
+            row={3}
+            className="lg:col-span-2"
+          >
+            <SwitchingList />
           </FeatureCard>
         </section>
 
@@ -367,6 +400,82 @@ async function HomeList() {
   const t = await getTranslations();
   const items = [['HVAC Filter Change', 'May 5'], ['Garage Door Service', 'May 20'], ['Water Heater Flush', 'June 2']];
   return <ListPanel title={t('referenceShowcases.upcoming')} footer="View All">{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
+}
+
+// The default Kitchen Mode layout, drawn from lib/display/tiles.ts so the card
+// cannot show a widget /display does not ship. Labels are the same catalogue
+// keys the homepage band uses.
+const TILE_LABEL_KEY: Partial<Record<TileWidget, string>> = {
+  featured: 'kitchenMode.tileFeatured',
+  schedule: 'kitchenMode.tileSchedule',
+  timers: 'kitchenMode.tileTimers',
+  weather: 'kitchenMode.tileWeather',
+  meals: 'kitchenMode.tileMeals',
+  chores: 'kitchenMode.tileChores',
+  grocery: 'kitchenMode.tileGrocery',
+  calendar: 'kitchenMode.tileCalendar',
+  members: 'kitchenMode.tileMembers',
+};
+
+const TILE_SPAN: Record<TileSize, string> = {
+  hero: 'col-span-2 row-span-2',
+  md: 'col-span-1 row-span-2',
+  lg: 'col-span-2 row-span-2',
+  sm: 'col-span-1 row-span-1',
+  wide: 'col-span-3 row-span-2',
+};
+
+async function KitchenTiles() {
+  const t = await getTranslations();
+  return (
+    <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
+      <p className="mb-2.5 text-[10px] font-semibold">{t('kitchenMode.exampleCaption')}</p>
+      <div className="grid flex-1 grid-cols-4 grid-rows-5 gap-1" aria-hidden>
+        {DEFAULT_TILES.map((tile) => (
+          <div
+            key={tile.id}
+            className={cn(
+              'flex items-end rounded-md border border-white/[0.08] px-1.5 py-1 text-[7px] leading-[9px] text-white/75',
+              tile.widget === 'featured' ? 'bg-gradient-to-br from-violet-500/40 to-blue-500/25' : 'bg-white/[0.045]',
+              TILE_SPAN[tile.size],
+            )}
+          >
+            {TILE_LABEL_KEY[tile.widget] ? t(TILE_LABEL_KEY[tile.widget] as string) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// The apps a family can import from, read from lib/migrate/competitors.ts —
+// the same list the migrate wizard offers, so the card cannot name an import
+// the product does not do.
+async function SwitchingList() {
+  const t = await getTranslations();
+  const steps = ['switching.step1', 'switching.step2', 'switching.step3'];
+  return (
+    <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
+      <p className="mb-2.5 text-[10px] font-semibold">{t('switching.importTitle')}</p>
+      <ul className="flex flex-wrap gap-1.5">
+        {COMPETITORS.map((c) => (
+          <li key={c.key} className="inline-flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-[9px]">
+            <Check className="h-3 w-3 text-emerald-400" aria-hidden />
+            {c.name}
+          </li>
+        ))}
+      </ul>
+      <ol className="mt-auto space-y-1.5 border-t border-white/[0.07] pt-2.5 text-[9px] leading-[12px] text-white/75">
+        {steps.map((key, i) => (
+          <li key={key} className="flex items-center gap-2">
+            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-violet-600/60 text-[8px] font-bold text-white">{i + 1}</span>
+            {t(key)}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-[8px] leading-[11px] text-white/50">{t('switching.privacyLine')}</p>
+    </div>
+  );
 }
 
 function ListPanel({ title, footer, children }: { title: string; footer: string; children: React.ReactNode }) {

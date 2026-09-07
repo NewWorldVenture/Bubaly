@@ -74,10 +74,18 @@ export default async function FAQPage() {
   const aeo = await readPublishedAeoQuestionsCached(60);
   const knowledge: FAQ[] = aeo.questions.map((q) => ({ q: q.question, a: q.answer }));
 
+  // Catalogue-backed answers join their section here, at render time, because
+  // FAQ_SECTIONS is module-level and cannot call t(). Section ids are unchanged.
+  const core: FaqSection[] = FAQ_SECTIONS.map((section) =>
+    section.id === 'mobile-notifications'
+      ? { ...section, items: [...section.items, { q: t('faq.kitchenModeQ'), a: t('faq.kitchenModeA') }] }
+      : section,
+  );
+
   // The live Knowledge Center becomes its own tab when answers are published.
   const sections: FaqSection[] = knowledge.length > 0
-    ? [...FAQ_SECTIONS, { id: 'knowledge-center', label: 'Knowledge Center', items: knowledge }]
-    : FAQ_SECTIONS;
+    ? [...core, { id: 'knowledge-center', label: 'Knowledge Center', items: knowledge }]
+    : core;
 
   // Everything (core + Knowledge Center) participates in the FAQPage schema.
   const schemaItems = sections.flatMap((section) => section.items).slice(0, 100);
