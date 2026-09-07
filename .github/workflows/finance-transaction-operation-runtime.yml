@@ -1,0 +1,95 @@
+name: Finance transaction operation SQL runtime
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/finance-transaction-operation-runtime.yml'
+      - 'supabase/migrations/0274_finance_transaction_operation_receipts.sql'
+      - 'tests/fixtures/0274-finance-transaction-operation-*'
+      - 'lib/services/finances/**'
+      - 'lib/ai/tools/finances.ts'
+      - 'lib/ai/tools/execute.ts'
+      - 'lib/services/types.ts'
+      - 'lib/database.types.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finance-operation-sql-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  finance-operation-sql:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out the exact same-repository PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Start isolated synthetic PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="bubaly-finance-operation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'FINANCE_OPERATION_CONTAINER=%s\n' "$container" >> "$GITHUB_ENV"
+          docker run --detach --name "$container" --network none --log-driver none \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            --env POSTGRES_DB=bubaly_finance_operation_ci \
+            postgres:17 -c listen_addresses='' > /dev/null
+          for attempt in $(seq 1 60); do
+            if docker exec "$container" pg_isready --quiet \
+              --host=/var/run/postgresql --username=postgres --dbname=bubaly_finance_operation_ci; then
+              exit 0
+            fi
+            sleep 1
+          done
+          printf '%s\n' 'Dedicated synthetic PostgreSQL did not become ready.' >&2
+          exit 1
+
+      - name: Apply minimal physical bootstrap and actual migration 0274
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg() {
+            docker exec -i "$FINANCE_OPERATION_CONTAINER" psql -X --quiet \
+              --output=/dev/null --file=- --no-password --host=/var/run/postgresql \
+              --username=postgres --dbname=bubaly_finance_operation_ci \
+              --set=ON_ERROR_STOP=1 --set=VERBOSITY=terse --set=SHOW_CONTEXT=never
+          }
+          pg < tests/fixtures/0274-finance-transaction-operation-bootstrap.sql
+          pg < supabase/migrations/0274_finance_transaction_operation_receipts.sql
+
+      - name: Exercise atomic writes, receipt-only probes, binding and historical replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$FINANCE_OPERATION_CONTAINER" psql -X --quiet \
+            --output=/dev/null --file=- --no-password --host=/var/run/postgresql \
+            --username=postgres --dbname=bubaly_finance_operation_ci \
+            --set=ON_ERROR_STOP=1 --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0274-finance-transaction-operation-runtime.sql
+
+      - name: Exercise real independent-session concurrency and reclaimed retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$FINANCE_OPERATION_CONTAINER" psql -X --quiet \
+            --output=/dev/null --file=- --no-password --host=/var/run/postgresql \
+            --username=postgres --dbname=bubaly_finance_operation_ci \
+            --set=ON_ERROR_STOP=1 --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0274-finance-transaction-operation-concurrency.sql
+
+      - name: Remove only this run's synthetic container
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="bubaly-finance-operation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "${FINANCE_OPERATION_CONTAINER:-}" = "$expected" ]; then
+            docker rm --force "$expected" > /dev/null 2>&1 || true
+          fi

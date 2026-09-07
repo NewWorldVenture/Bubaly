@@ -55,6 +55,8 @@ export type ServiceScope = {
    * row. See `lib/services/idempotency.ts` for how services honour it.
    */
   idempotencyKey?: string | null;
+  /** Private executor-issued reserved-operation identity and existing ledger client, not caller input. */
+  toolOperation?: { id: string; db: SupabaseClient<Database> };
 };
 
 export type ServiceResult<T> =

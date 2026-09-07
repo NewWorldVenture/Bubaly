@@ -25,15 +25,20 @@
 // `scope.tz`; passing an ISO instant would shift the last hours of every day
 // into the wrong month for any family west of UTC.
 import 'server-only';
-import type { BudgetPeriod, Tables, TransactionType } from '@/lib/database.types';
+import type { BudgetPeriod, Json, Tables, TransactionType } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import {
+  createTransactionIntent, FINANCE_TRANSACTION_TOOL_NAME, readTransactionOperationReply,
+  transactionIntentFromToolInputs, type TransactionOperationMetadata,
+} from './transaction-operation';
 
 export type TransactionRow = Tables<'transactions'>;
+export type RecordedTransactionRow = TransactionRow & { operation?: TransactionOperationMetadata };
 export type BudgetRow = Tables<'budgets'>;
 export type SavingsGoalRow = Tables<'savings_goals'>;
 
@@ -777,7 +782,7 @@ export type CreateTransactionInput = {
 export async function createTransaction(
   scope: ServiceScope,
   input: CreateTransactionInput,
-): Promise<ServiceResult<TransactionRow>> {
+): Promise<ServiceResult<RecordedTransactionRow>> {
   const allowed = assertFinanceWriter(scope, 'record a purchase on the household books');
   if (!allowed.ok) return allowed;
 
@@ -795,6 +800,83 @@ export async function createTransaction(
   const source = input.source?.trim() || (scope.actorKind === 'ai' ? 'ai' : 'manual');
   if (!TRANSACTION_SOURCES.includes(source)) {
     return fail(`A transaction's source must be one of: ${TRANSACTION_SOURCES.join(', ')}.`, { code: SERVICE_CODES.invalidInput });
+  }
+
+  const transaction = {
+    family_id: scope.familyId,
+    name,
+    amount,
+    type: input.type ?? 'expense',
+    merchant: input.merchant?.trim() || null,
+    category: input.category?.trim() || null,
+    date,
+    notes: input.notes?.trim() || null,
+    account_id: input.accountId ?? null,
+    member_id: input.memberId ?? null,
+    receipt_document_id: input.receiptDocumentId ?? null,
+    source,
+    created_by: scope.userId,
+  };
+  const operation = scope.toolOperation;
+  let operationArgs: {
+    p_tool_call_id: string;
+    p_family_id: string;
+    p_actor_user_id: string | null;
+    p_actor_member_id: string | null;
+    p_actor_kind: ServiceScope['actorKind'];
+    p_expected_inputs: Json;
+    p_intent: Json;
+  } | null = null;
+
+  if (operation) {
+    if (!operation.id || !operation.db) {
+      return fail('This purchase operation has no valid execution context.', { code: SERVICE_CODES.denied });
+    }
+    const { data: call, error: callError } = await operation.db
+      .from('ai_tool_calls')
+      .select('id, family_id, tool_name, requested_by, requested_by_member_id, actor_kind, inputs')
+      .eq('id', operation.id)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (callError) {
+      console.error('[service:finances] operation lookup failed', callError);
+      return fail(describeDbError(callError, 'Could not check this purchase operation.'), { code: SERVICE_CODES.db });
+    }
+    if (!call || call.id !== operation.id || call.family_id !== scope.familyId || call.tool_name !== FINANCE_TRANSACTION_TOOL_NAME
+      || call.requested_by !== (scope.userId ?? null) || call.requested_by_member_id !== (scope.memberId ?? null)
+      || call.actor_kind !== scope.actorKind) {
+      return fail('This purchase operation does not match the family, tool, or actor.', { code: SERVICE_CODES.denied });
+    }
+    const intent = createTransactionIntent(input, scope.actorKind);
+    const authorizedIntent = transactionIntentFromToolInputs(call.inputs, scope.actorKind);
+    if (!authorizedIntent || JSON.stringify(intent) !== JSON.stringify(authorizedIntent)) {
+      return fail('This purchase operation does not match its authorized inputs.', { code: SERVICE_CODES.denied });
+    }
+    operationArgs = {
+      p_tool_call_id: operation.id,
+      p_family_id: scope.familyId,
+      p_actor_user_id: scope.userId ?? null,
+      p_actor_member_id: scope.memberId ?? null,
+      p_actor_kind: scope.actorKind,
+      p_expected_inputs: call.inputs,
+      p_intent: intent as unknown as Json,
+    };
+    // A receipt-only probe lets historical replays survive deleted references.
+    // A miss still passes through the caller client's original FK guards below.
+    const { data: prior, error: probeError } = await operation.db.rpc('finance_record_transaction_operation', {
+      ...operationArgs, p_transaction: null,
+    });
+    if (probeError) {
+      console.error('[service:finances] operation receipt probe failed', probeError);
+      return fail(describeDbError(probeError, 'Could not check whether this purchase operation already completed.'), { code: SERVICE_CODES.db });
+    }
+    if (prior !== null) {
+      const receipt = readTransactionOperationReply(prior, scope.familyId);
+      if (!receipt || !receipt.replayed) {
+        return fail('The purchase operation returned an unreadable receipt. Check its status before retrying.', { code: SERVICE_CODES.db });
+      }
+      return ok({ ...receipt.transaction, operation: { replayed: true, recordState: receipt.recordState } });
+    }
   }
 
   // Every one of these three is a foreign key WITHOUT a family predicate
@@ -822,37 +904,46 @@ export async function createTransaction(
     if (!data) return fail(`That ${noun} does not belong to this family.`, { code: SERVICE_CODES.notFound });
   }
 
-  const { data, error } = await scope.db
-    .from('transactions')
-    .insert({
-      family_id: scope.familyId,
-      name,
-      amount,
-      type: input.type ?? 'expense',
-      merchant: input.merchant?.trim() || null,
-      category: input.category?.trim() || null,
-      date,
-      notes: input.notes?.trim() || null,
-      account_id: input.accountId ?? null,
-      member_id: input.memberId ?? null,
-      receipt_document_id: input.receiptDocumentId ?? null,
-      source,
-      created_by: scope.userId,
-    })
-    .select('*')
-    .single();
-  if (error || !data) {
-    console.error('[service:finances] transaction insert failed', error);
-    return fail(describeDbError(error, 'Could not record that transaction.'), { code: SERVICE_CODES.db });
+  let data: TransactionRow;
+  let operationMetadata: TransactionOperationMetadata | undefined;
+  if (operation && operationArgs) {
+    const { data: result, error } = await operation.db.rpc('finance_record_transaction_operation', {
+      ...operationArgs, p_transaction: transaction as unknown as Json,
+    });
+    if (error) {
+      console.error('[service:finances] transaction operation failed', error);
+      return fail(describeDbError(error, 'Could not confirm whether that purchase was recorded.'), { code: SERVICE_CODES.db });
+    }
+    const receipt = readTransactionOperationReply(result, scope.familyId);
+    if (!receipt) {
+      return fail('The purchase operation returned an unreadable result. Check its status before retrying.', { code: SERVICE_CODES.db });
+    }
+    data = receipt.transaction;
+    operationMetadata = { replayed: receipt.replayed, recordState: receipt.recordState };
+  } else {
+    const { data: inserted, error } = await scope.db
+      .from('transactions')
+      .insert(transaction)
+      .select('*')
+      .single();
+    if (error || !inserted) {
+      console.error('[service:finances] transaction insert failed', error);
+      return fail(describeDbError(error, 'Could not record that transaction.'), { code: SERVICE_CODES.db });
+    }
+    data = inserted;
   }
 
-  await recordActivitySafely(scope, {
-    agent: 'finances',
-    action: 'create',
-    title: `Recorded ${formatDollars(toCents(data.amount))}${data.merchant ? ` at ${data.merchant}` : ''}`,
-    href: '/dashboard/finances',
-  });
-  return ok(data);
+  // Both halves are needed: this branch's replay guard (a retried operation
+  // must not write a second activity row) and main's explicit `action`.
+  if (!operationMetadata?.replayed) {
+    await recordActivitySafely(scope, {
+      agent: 'finances',
+      action: 'create',
+      title: `Recorded ${formatDollars(toCents(data.amount))}${data.merchant ? ` at ${data.merchant}` : ''}`,
+      href: '/dashboard/finances',
+    });
+  }
+  return ok(operationMetadata ? { ...data, operation: operationMetadata } : data);
 }
 
 export type CreateSavingsGoalInput = {

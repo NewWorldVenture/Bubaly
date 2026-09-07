@@ -634,7 +634,10 @@ export async function executeTool(
 
   // ── 5. Execute ───────────────────────────────────────────────────────────
   const startedAt = Date.now();
-  const result = await runService(callScope, tool, input);
+  const result = await runService({
+    ...callScope,
+    toolOperation: { id: reservation.id, db: ledger },
+  }, tool, input);
   const durationMs = Date.now() - startedAt;
 
   if (!result.ok) {

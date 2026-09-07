@@ -188,6 +188,11 @@ type T<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relati
 export interface Database {
   public: {
     Tables: {
+      finance_transaction_operation_receipts: T<
+        { family_id: string; operation_key: string; original_tool_call_id: string; actor_user_id: string | null; actor_member_id: string | null; actor_kind: AiActorKind; intent_version: 1; intent: Json; transaction_id: string; transaction_snapshot: Json; created_at: string },
+        never,
+        never
+      >;
       child_logins: T<
         { id: string; family_id: string; member_id: string; user_id: string; username: string; created_by: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; member_id: string; user_id: string; username: string; created_by?: string | null },
@@ -2652,6 +2657,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      finance_record_transaction_operation: {
+        Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
+        Returns: Json;
+      };
       vacation_import_confirmation: {
         Args: { p_family_id: string; p_vacation_id: string; p_member_id: string; p_source: Json; p_fields: Json; p_expected?: Json | null; p_request_id?: string | null };
         Returns: Json;
