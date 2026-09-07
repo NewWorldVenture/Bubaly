@@ -39,6 +39,7 @@ import { movingTools } from './moving';
 import { documentTools } from './documents';
 import { schoolTools } from './school';
 import { sportsTools } from './sports';
+import { searchTools } from './search';
 import type { ToolDefinition } from './types';
 
 const REGISTRY = new Map<string, ToolDefinition>();
@@ -68,7 +69,7 @@ function register(tool: ToolDefinition): void {
   for (const alias of tool.aliases ?? []) index(alias, tool.name);
 }
 
-for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...travelImportTools, ...homeTools, ...providerTools, ...inventoryTools, ...movingTools, ...documentTools, ...schoolTools, ...sportsTools, ...routineTools, ...noteTools]) {
+for (const tool of [...calendarTools, ...taskTools, ...groceryTools, ...mealTools, ...reminderTools, ...familyTools, ...notificationTools, ...memoryTools, ...messageTools, ...financeTools, ...tripTools, ...travelImportTools, ...homeTools, ...providerTools, ...inventoryTools, ...movingTools, ...documentTools, ...schoolTools, ...sportsTools, ...routineTools, ...noteTools, ...searchTools]) {
   register(tool);
 }
 
