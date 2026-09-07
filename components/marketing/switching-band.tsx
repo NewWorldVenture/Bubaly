@@ -13,7 +13,6 @@ import { Import, RefreshCw, ScanLine, ShieldCheck, type LucideIcon } from 'lucid
 import { getTranslations } from '@/lib/i18n/server';
 import { BandHeader, Container } from '@/components/marketing/visual-mocks';
 import { COMPETITORS } from '@/lib/migrate/competitors';
-import { cn } from '@/lib/utils/cn';
 
 const COLUMNS: { icon: LucideIcon; titleKey: string; bodyKey: string; competitors?: boolean }[] = [
   { icon: Import, titleKey: 'switching.importTitle', bodyKey: 'switching.importBody', competitors: true },
@@ -66,7 +65,7 @@ export async function SwitchingBand({ compact = false }: { compact?: boolean }) 
   return (
     <Container className="max-w-[1440px] px-5 pb-4 pt-14 sm:px-8 sm:pt-16 lg:px-10">
       <BandHeader eyebrow={t('switching.eyebrow')} title={t('switching.title')} body={t('switching.body')} />
-      <div className={cn('mt-8')}>{columns}</div>
+      <div className="mt-8">{columns}</div>
 
       <ol className="mt-6 grid gap-3 sm:grid-cols-3">
         {STEPS.map((key, index) => (

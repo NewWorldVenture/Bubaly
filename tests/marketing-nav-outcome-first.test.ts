@@ -36,15 +36,17 @@ describe('the footer carries the routes the nav dropped', () => {
     expect(footer).toContain(`href: '${href}'`);
   });
 
-  it('resolves every group title and link through a catalogue key that holds its label', () => {
-    for (const m of footer.matchAll(/label: '([^']+)', labelKey: '([^']+)'/g)) {
-      expect(en[m[2]], m[2]).toBe(m[1]);
-    }
-    for (const m of footer.matchAll(/title: '([^']+)',\s*titleKey: '([^']+)'/g)) {
-      expect(en[m[2]], m[2]).toBe(m[1]);
-    }
+  it('resolves every group title and link through a catalogue key that holds real text', () => {
+    // The footer's entries are keys only — no English `label` beside them —
+    // because a key parked in a field called `label` once rendered verbatim to
+    // every visitor. So the check is that each key RESOLVES, and that both the
+    // titles and the links go through t().
+    const keys = [...footer.matchAll(/(?:label|title)Key: '([^']+)'/g)].map((m) => m[1]);
+    expect(keys.length).toBeGreaterThanOrEqual(20);
+    for (const key of keys) expect(en[key], key).toBeTruthy();
     expect(footer).toContain('{t(l.labelKey)}');
     expect(footer).toContain('{t(g.titleKey)}');
+    expect(footer).not.toMatch(/\blabel: '/);
   });
 });
 
