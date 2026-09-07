@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { expectSays } from './helpers/translated';
+import { expectSays, expectTranslates } from './helpers/translated';
 import fs from 'node:fs';
+import { classifyIntentFast } from '@/lib/ai/context/intents';
+import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 
 const page = fs.readFileSync('app/(app)/dashboard/family-cfo/page.tsx', 'utf8');
 
@@ -28,5 +30,64 @@ describe('family-cfo page read boundary', () => {
     const deriveIdx = page.indexOf('const accounts = accountsRes.data;');
     expect(guardIdx).toBeGreaterThan(-1);
     expect(deriveIdx).toBeGreaterThan(guardIdx);
+  });
+});
+
+// M11 Family CFO: the page carries the 12-week forecast (plan-linked
+// commitments + coverage), the "Can we afford it?" form, and links out to the
+// money timeline and the digital twin's spend simulator. The forecast is the
+// same money as the tiles above it, so it fails closed the same way.
+describe('family-cfo forecast surface', () => {
+  const actions = fs.readFileSync('app/(app)/dashboard/family-cfo/actions.ts', 'utf8');
+  const moneyTimelinePage = fs.readFileSync('app/(app)/dashboard/money-timeline/page.tsx', 'utf8');
+
+  it('fails closed when the forecast loader throws, after the finance guard and before deriving data', () => {
+    expect(page).toContain('forecastInput = await loadMoneyTimelineInput(supabase, familyId);');
+    expect(page).toContain("console.error('[dashboard/family-cfo] forecast read failed', err);");
+    const financeGuard = page.indexOf('if (financeError) {');
+    const forecastGuard = page.indexOf("console.error('[dashboard/family-cfo] forecast read failed', err);");
+    const deriveIdx = page.indexOf('const accounts = accountsRes.data;');
+    expect(financeGuard).toBeLessThan(forecastGuard);
+    expect(forecastGuard).toBeLessThan(deriveIdx);
+    // The catch renders the same retryable error state, never an empty forecast.
+    const catchBlock = page.slice(forecastGuard, deriveIdx);
+    expect(catchBlock).toContain("return <ErrorState message={tr('familyCfo.couldNotLoadYourFamily')} />;");
+  });
+
+  it('links to the money timeline and the digital twin spend simulator', () => {
+    expect(page).toContain('href="/dashboard/money-timeline"');
+    expect(page).toContain('href="/dashboard/family-digital-twin"');
+    expectSays(page, 'familyCfo.openTheMoneyTimeline', 'Open the money timeline');
+    expectSays(page, 'familyCfo.simulateASpendInThe', 'Simulate a spend in the digital twin');
+  });
+
+  it('renders the affordability form and files "Explain this month" through the concierge request path', () => {
+    expect(page).toContain('<AffordabilityScenario buffer={buffer} />');
+    expect(page).toContain('<HandleItButton');
+    expect(page).toContain('request={EXPLAIN_MONTH_REQUEST}');
+    expectSays(page, 'familyCfo.explainThisMonth', 'Explain this month');
+  });
+
+  it('shows autopay bills as covered in the forecast copy', () => {
+    expect(page).toContain('{b.autopay && (');
+    expectSays(page, 'familyCfo.coveredAutopay', 'Covered · autopay');
+    expectSays(page, 'familyCfo.nBillsAreCoveredAutopay', '{covered} bills are covered (autopay or already paid). {open} still need a hand — {amount} in total.');
+  });
+
+  it('never answers affordability from a failed read: the action reports the failure instead of a verdict', () => {
+    expect(actions).toContain("console.error('[dashboard/family-cfo] affordability read failed', err);");
+    expectTranslates(actions, 'familyCfoActions.couldNotReadYourForecast', 'Could not read your forecast from Supabase. Refresh and try again.');
+    expect(actions).not.toContain('verdict:');
+  });
+
+  it('the money-timeline page fails closed on the same loader', () => {
+    expect(moneyTimelinePage).toContain("console.error('[dashboard/money-timeline] forecast read failed', err);");
+    expectSays(moneyTimelinePage, 'moneyTimeline.couldNotLoadYourMoney', 'Could not load your money timeline from Supabase. Refresh and try again.');
+  });
+});
+
+describe('EXPLAIN_MONTH_REQUEST', () => {
+  it('is recognised as the spending_review workflow by the deterministic classifier', () => {
+    expect(classifyIntentFast(EXPLAIN_MONTH_REQUEST)?.intent).toBe('spending_review');
   });
 });

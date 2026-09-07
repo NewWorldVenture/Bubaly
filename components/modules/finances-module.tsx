@@ -217,6 +217,17 @@ export function FinancesModule() {
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-brand-text" />
         </Link>
+        {/* Family CFO — the forecast with plan-linked commitments, coverage and "Can we afford it?". */}
+        <Link
+          href="/dashboard/family-cfo"
+          className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-surface/30 px-4 py-3 text-sm transition hover:border-brand/40"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">{tr('finances.familyCfo')}</span>
+            <span className="ml-2 text-xs text-muted">{tr('finances.forecastCoverageAndCanWe')}</span>
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-brand-text" />
+        </Link>
 
         {/* Overview stat tiles */}
         <div className="rounded-2xl border border-border bg-surface/30 p-4">
