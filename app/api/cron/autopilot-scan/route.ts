@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     let scanned = 0;
     let autoExecuted = 0;
     let notified = 0;
+    let policyCandidates = 0;
     let failures = 0;
     for (const fam of families ?? []) {
       try {
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
         scanned += r.scanned;
         autoExecuted += r.autoExecuted;
         notified += r.notified;
+        policyCandidates += r.policyCandidates;
       } catch (err) {
         failures++;
         console.error(`Autopilot cron failed for family ${fam.id}:`, err);
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     const ok = failures === 0;
     return NextResponse.json(
-      { ok, families: (families ?? []).length, scanned, autoExecuted, notified, failures },
+      { ok, families: (families ?? []).length, scanned, autoExecuted, notified, policyCandidates, failures },
       { status: ok ? 200 : 502 },
     );
   } catch (err) {

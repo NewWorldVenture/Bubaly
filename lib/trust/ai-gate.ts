@@ -17,7 +17,7 @@ import type { Database, Json } from '@/lib/database.types';
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { getTool } from '@/lib/ai/tools/registry';
 import { readAISettings } from '@/lib/services/ai-settings';
-import { riskToDecision, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { riskToDecision, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
 import { evaluateTrust, openApprovalRequest } from '@/lib/trust/server';
 
 type DB = SupabaseClient<Database>;
@@ -74,6 +74,13 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
   }
 
   const capability = req.capability ?? 'automate';
+
+  // The registry knows this tool's declared risk under its legacy name (these
+  // surfaces spell tools the old way, and every one is a registry alias), so
+  // the family's per-tool overrides and their autonomy dial reach them too.
+  const registryTool = getTool(req.toolName);
+  const risk = registryTool ? effectiveRisk(settings, registryTool) : 'medium';
+
   const evaluateRequest = {
     actor: { kind: 'ai_agent' as const, id: req.actorId, role: req.actorRole },
     domain: req.domain,
@@ -81,16 +88,18 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     agent: req.agent,
     title: req.title,
     payload: req.payload,
-    context: { confidence: req.confidence ?? 0.85 },
+    context: {
+      confidence: req.confidence ?? 0.85,
+      // The tool's name rides along as a tag so a policy scoped by
+      // `conditions.tags` to ONE tool — the narrow policies Autopilot learns
+      // from repeated approvals — matches exactly that tool and nothing else
+      // in the domain. Both spellings, because the policy names the canonical
+      // one and this surface may still use the legacy alias.
+      tags: toolTags(req.toolName, registryTool?.name ?? null),
+    },
   };
   const { decision: engineDecision, approvalId: engineApprovalId, alreadyPending: engineAlreadyPending }
     = await evaluateTrust(supabase, familyId, evaluateRequest);
-
-  // The registry knows this tool's declared risk under its legacy name (these
-  // surfaces spell tools the old way, and every one is a registry alias), so
-  // the family's per-tool overrides and their autonomy dial reach them too.
-  const registryTool = getTool(req.toolName);
-  const risk = registryTool ? effectiveRisk(settings, registryTool) : 'medium';
 
   // Same rule as the executor's gate: the tier speaks over the generic role
   // matrix, and over a policy that names no domain — where it may only tighten.

@@ -12,6 +12,9 @@ import type { Json } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { decide } from '@/lib/services/approvals';
+import {
+  acceptedPolicyName, policyCoversTool, policyProposalFromPayload, POLICY_SUGGESTION_KIND,
+} from '@/lib/autopilot/policy-candidates';
 
 type Result = { ok: boolean; error?: string };
 
@@ -119,6 +122,86 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
   const { error: e } = await supabase.from('trust_policies').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
   if (e) return actionFailure(e, t('actions.couldNotDeleteThatPolicy'));
   revalidatePath('/dashboard/trust');
+  return { ok: true };
+}
+
+// ─── Learned policies (Household Autopilot, M7) ──────────────────────────────
+/**
+ * Above the concierge dial (10) and the form's default (100): a per-tool yes
+ * the family gave on the strength of its own approval history is a more
+ * specific decision than a general "ask first", and the engine picks the
+ * highest priority among matching policies.
+ */
+const ACCEPTED_POLICY_PRIORITY = 200;
+
+/**
+ * Accept an Autopilot `policy` suggestion: write ONE narrow `trust_policies`
+ * row — AI × the suggestion's domain × capability, effect allow, scoped by
+ * `conditions.tags` to the single tool the family kept approving — and mark
+ * the suggestion executed.
+ *
+ * Manager-only, through the same `savePolicyAction` the Trust form uses, so
+ * the domain, capability and effect are validated exactly once and in one
+ * place. A retry after the suggestion could not be marked done finds the
+ * policy it already wrote rather than writing a second.
+ */
+export async function acceptPolicySuggestionAction(input: { suggestionId: string }): Promise<Result> {
+  const t = await getTranslations();
+  const { ctx, error } = await managerCtx();
+  if (!ctx) return { ok: false, error };
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+
+  const { data: suggestion, error: readError } = await supabase.from('autopilot_suggestions')
+    .select('id, kind, status, payload')
+    .eq('id', input.suggestionId).eq('family_id', familyId).maybeSingle();
+  if (readError) return actionFailure(readError, t('actions.couldNotReadThatSuggestion'));
+  if (!suggestion || suggestion.kind !== POLICY_SUGGESTION_KIND) return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
+  if (suggestion.status !== 'open') return { ok: false, error: t('actions.thatSuggestionIsNoLongerOpen') };
+
+  const proposal = policyProposalFromPayload(suggestion.payload);
+  // Narrow by construction: a proposal that names no single domain, capability
+  // or tool is not one this path will widen into a blanket.
+  if (!proposal || proposal.domain === 'all' || proposal.capability === 'all' || !isDomain(proposal.domain) || !isCapability(proposal.capability)) {
+    return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
+  }
+
+  const { data: held, error: heldError } = await supabase.from('trust_policies')
+    .select('id, domain, capability, effect, enabled, conditions')
+    .eq('family_id', familyId).eq('subject_kind', 'ai').eq('enabled', true).limit(200);
+  if (heldError) return actionFailure(heldError, t('actions.couldNotCreateThatPolicy'));
+  const alreadyHeld = (held ?? []).some((p) => policyCoversTool(p, proposal.domain, proposal.capability, proposal.tool));
+
+  if (!alreadyHeld) {
+    const saved = await savePolicyAction({
+      name: acceptedPolicyName(proposal),
+      description: proposal.evidence
+        ? `Accepted from an Autopilot suggestion — ${proposal.evidence}.`
+        : 'Accepted from an Autopilot suggestion.',
+      domain: proposal.domain,
+      capability: proposal.capability,
+      subjectKind: 'ai',
+      effect: 'allow',
+      conditions: {
+        tags: [proposal.tool],
+        source: 'autopilot',
+        suggestionId: suggestion.id,
+        approvals: proposal.approvals,
+        acceptedAt: new Date().toISOString(),
+      },
+      priority: ACCEPTED_POLICY_PRIORITY,
+      enabled: true,
+    });
+    if (!saved.ok) return saved;
+  }
+
+  const { error: resolveError } = await supabase.from('autopilot_suggestions')
+    .update({ status: 'executed', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
+    .eq('id', suggestion.id).eq('family_id', familyId);
+  if (resolveError) return actionFailure(resolveError, t('actions.thePolicyWasSavedButTheSuggestion'));
+
+  revalidatePath('/dashboard/trust');
+  revalidatePath('/dashboard/autopilot');
   return { ok: true };
 }
 
