@@ -260,6 +260,28 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       const items = await eq(sb, 'wishlist_items', familyId).eq('is_purchased', false).limit(60);
       return { wishlist_items: items.data ?? [] };
     }
+    // "Before you buy" — everything the household already OWNS, plus what it
+    // remembers preferring. No budgets or transactions: the money check is the
+    // deterministic panel's job (it goes through the finance service's role
+    // boundary), so this prompt never carries the family's finances.
+    case 'purchase_advisor': {
+      const [inventory, locations, assets, wardrobe, wishes, facts] = await Promise.all([
+        eq(sb, 'inventory_items', familyId).limit(200),
+        eq(sb, 'home_locations', familyId).limit(120),
+        eq(sb, 'home_assets', familyId).limit(80),
+        eq(sb, 'wardrobe_items', familyId).limit(160),
+        eq(sb, 'wishlist_items', familyId).limit(60),
+        eq(sb, 'family_facts', familyId).limit(120),
+      ]);
+      return {
+        inventory_items: inventory.data ?? [],
+        home_locations: locations.data ?? [],
+        home_assets: assets.data ?? [],
+        wardrobe_items: wardrobe.data ?? [],
+        wishlist_items: wishes.data ?? [],
+        family_facts: facts.data ?? [],
+      };
+    }
     case 'home': {
       const [assets, tasks] = await Promise.all([
         eq(sb, 'home_assets', familyId).limit(40),

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { BeforeYouBuy } from '@/components/wishlists/before-you-buy';
 import { cn } from '@/lib/utils/cn';
 import {
   claimState, canToggleClaim, sortWishes, WISH_PRIORITY_LABELS,
@@ -187,6 +188,10 @@ export function WishlistsModule() {
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {w.price != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{w.price}</span>}
                   {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('wishlists.view')}</a>}
+                </div>
+                {/* M17: check this against what the household already owns, remembers and budgeted. */}
+                <div className="mt-2">
+                  <BeforeYouBuy text={w.title} priceDollars={w.price} url={w.url} />
                 </div>
 
                 {/* Gift coordination (hidden from owner) */}

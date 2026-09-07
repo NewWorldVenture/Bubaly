@@ -5,6 +5,9 @@
 // system + user prompt. Keeping this pure (no Supabase, no fetch) makes every prompt
 // unit-testable: given data, assert the prompt carries the right facts.
 
+import { adviseOnPurchase, describeAdvice, type FactRow, type HomeAssetRow, type InventoryRow, type WardrobeRow, type WishRow } from '@/lib/purchases/advisor';
+import type { LocationLike } from '@/lib/inventory/finder';
+
 export type InsightKind =
   | 'chores'
   | 'calendar'
@@ -17,6 +20,7 @@ export type InsightKind =
   | 'todos'
   | 'trips'
   | 'wishlists'
+  | 'purchase_advisor'
   | 'home'
   | 'notifications'
   | 'messages'
@@ -344,6 +348,60 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const items = cap(r(d, 'wishlist_items'), 40);
       const lines = items.shown.map((i) => `- ${who(i.member_id)} wants: ${i.title}${i.price != null ? ` (${dollars(Number(i.price))})` : ''}, priority ${i.priority}${i.is_purchased ? ' [purchased]' : ''}`).join('\n') || 'none';
       return `Family: ${d.familyName}.\n\nWishlist items:\n${lines}\n\nGive: (1) 3–5 complementary gift ideas with rough price ranges, (2) best-value picks already on the list, (3) a budget-friendly pairing per person.${q(d)}`;
+    },
+  },
+
+  /**
+   * M17 "Before you buy", the OPTIONAL half. The verdict the family sees is
+   * computed deterministically by `lib/purchases/advisor.ts` from their own
+   * rows and is rendered with no model involved; this only adds market context
+   * on top, and is handed the same deterministic result so it cannot contradict
+   * what the panel already says.
+   *
+   * NO PAID RECOMMENDATIONS. Bubaly takes no affiliate revenue, sells no
+   * placement and carries no retailer feed, so the model is told in its own
+   * system prompt that it must not name a preferred seller or push a purchase.
+   * The honest answer here is frequently "you already own one" — the prompt
+   * says so explicitly, because a shopping assistant that never says "don't"
+   * is an advertisement.
+   */
+  purchase_advisor: {
+    label: 'Market ideas',
+    title: 'Before you buy',
+    blurb: 'What to check before spending, grounded in what you already own.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You advise a family on ONE purchase they are considering. You are given a deterministic report ' +
+      'computed from their own records: what they already own that matches, related equipment whose brand ' +
+      'or model affects compatibility, and preferences they have saved. Treat that report as the truth and ' +
+      'never contradict it — if it says they already own one, lead with that. ' +
+      'You are NOT a shopping channel: do not recommend a specific retailer, marketplace or seller, do not ' +
+      'invent prices, deals, stock or reviews, and never imply Bubaly is paid for a suggestion (it is not — ' +
+      'there are no affiliate links or sponsored placements anywhere in this product). ' +
+      'Say plainly when the better answer is to buy nothing, repair, borrow or use what they have. ' +
+      'Give: (1) whether this purchase is needed given what they own, (2) what to check for compatibility ' +
+      'or fit, (3) the questions worth answering before spending. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const item = typeof d.params?.item === 'string' ? d.params.item.trim() : '';
+      const priceCents = typeof d.params?.priceCents === 'number' ? d.params.priceCents : null;
+      // Recomputed here from the rows the route fetched, NOT taken from the
+      // client: the grounding has to come from the household's data, not from
+      // whatever the browser posted.
+      const advice = adviseOnPurchase({
+        candidate: { text: item },
+        inventory: r(d, 'inventory_items') as unknown as InventoryRow[],
+        locations: r(d, 'home_locations') as unknown as LocationLike[],
+        homeAssets: r(d, 'home_assets') as unknown as HomeAssetRow[],
+        wardrobe: r(d, 'wardrobe_items') as unknown as WardrobeRow[],
+        wishes: r(d, 'wishlist_items') as unknown as WishRow[],
+        facts: r(d, 'family_facts') as unknown as FactRow[],
+      });
+      const price = priceCents !== null && priceCents > 0
+        ? `\nAsking price: ${money(priceCents)} (the family sees their own budget check in the app; do not guess at it).`
+        : '';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nThey are considering: ${item || 'an unnamed item'}.${price}\n\n`
+        + `What their own records say:\n${describeAdvice(item || 'this item', advice)}${q(d)}`;
     },
   },
 
