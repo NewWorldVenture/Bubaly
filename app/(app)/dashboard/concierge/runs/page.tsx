@@ -29,7 +29,8 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { listRuns } from '@/lib/ai/runs/store';
 import { loadRunEvidence } from '@/lib/ai/runs/evidence';
 import {
-  parseRunHistoryCursor, parseRunHistoryFilter, runHistoryItems, RUN_HISTORY_FILTERS, RUN_HISTORY_FILTER_STATES, RUN_HISTORY_PAGE_SIZE,
+  orderRunHistoryRows, parseRunHistoryCursor, parseRunHistoryFilter, runHistoryItems, runHistoryQueries,
+  RUN_HISTORY_FILTERS, RUN_HISTORY_PAGE_SIZE,
   type RunHistoryFilter, type RunHistoryItem, type RunHistoryRunRow,
 } from '@/lib/ai/runs/history';
 import { sourcesLine } from '@/lib/ai/tool-domains';
@@ -102,15 +103,23 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
     return <Unavailable message={access.error} retryHref={selfHref} />;
   }
 
-  // One row past the page tells us whether an "Older" link is honest.
-  const listed = await listRuns(scopeFromUserContext(ctx, supabase), {
-    states: RUN_HISTORY_FILTER_STATES[filter],
-    before,
-    limit: RUN_HISTORY_PAGE_SIZE + 1,
-  });
-  if (!listed.ok) return <Unavailable message={listed.error} retryHref={selfHref} />;
-  const hasOlder = listed.data.length > RUN_HISTORY_PAGE_SIZE;
-  const rows = listed.data.slice(0, RUN_HISTORY_PAGE_SIZE) as RunHistoryRunRow[];
+  // A chip filters on the value the badge shows — `displayRunState`, which
+  // reads the legacy `status` for any row still carrying 0250's `state`
+  // default. That is two vocabularies and so up to two reads, over disjoint
+  // rows; each asks for one row past the page, and merging their pages keeps
+  // the true newest-first order, so the "Older" link stays honest.
+  const listed = await Promise.all(
+    runHistoryQueries(filter).map((query) => listRuns(scopeFromUserContext(ctx, supabase), {
+      ...query,
+      before,
+      limit: RUN_HISTORY_PAGE_SIZE + 1,
+    })),
+  );
+  const listFailure = listed.find((page) => !page.ok);
+  if (listFailure && !listFailure.ok) return <Unavailable message={listFailure.error} retryHref={selfHref} />;
+  const merged = orderRunHistoryRows(listed.flatMap((page) => (page.ok ? page.data : [])) as RunHistoryRunRow[]);
+  const hasOlder = merged.length > RUN_HISTORY_PAGE_SIZE;
+  const rows = merged.slice(0, RUN_HISTORY_PAGE_SIZE);
 
   const evidence = await loadRunEvidence(supabase, familyId, rows);
   if (!evidence.ok) return <Unavailable message={evidence.error} retryHref={selfHref} />;

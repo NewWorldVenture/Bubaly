@@ -14,10 +14,11 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { listRuns } from '@/lib/ai/runs/store';
 import { loadRunEvidence } from '@/lib/ai/runs/evidence';
 import { loadCompletedByBubaly } from '@/lib/home/completed';
-import { RUN_STATES } from '@/lib/ai/runs/states';
+import { LEGACY_RUN_STATUS_TO_STATE, RUN_STATES } from '@/lib/ai/runs/states';
 import {
-  parseRunHistoryCursor, parseRunHistoryFilter, runHistoryItems, RUN_HISTORY_FILTERS, RUN_HISTORY_FILTER_STATES,
-  type RunHistoryRunRow,
+  orderRunHistoryRows, parseRunHistoryCursor, parseRunHistoryFilter, runHistoryItems, runHistoryQueries,
+  RUN_HISTORY_FILTERS, RUN_HISTORY_FILTER_LEGACY_STATUSES, RUN_HISTORY_FILTER_STATES,
+  type RunHistoryFilter, type RunHistoryRunRow,
 } from '@/lib/ai/runs/history';
 import { scopeForSystem } from '@/lib/services/scope';
 
@@ -39,7 +40,7 @@ function run(id: string, over: Record<string, unknown> = {}): Record<string, unk
 /** A client whose every read answers `error` — or throws — the way a lost connection does. */
 function failingDb(error: unknown, opts: { throws?: boolean } = {}): DB {
   const builder: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'in', 'lt', 'gte', 'order', 'limit', 'maybeSingle']) builder[m] = () => builder;
+  for (const m of ['select', 'eq', 'in', 'not', 'lt', 'gte', 'order', 'limit', 'maybeSingle']) builder[m] = () => builder;
   builder.then = (resolve: (v: unknown) => void) => resolve({ data: null, error, count: null });
   return {
     from: () => {
@@ -63,6 +64,30 @@ describe('run history filters', () => {
       expect(owners, state).toHaveLength(1);
     }
     expect(RUN_HISTORY_FILTER_STATES.all).toBeNull();
+  });
+
+  it('put every legacy status in exactly one chip too, so a pre-0250 row cannot fall between them', () => {
+    const groups = RUN_HISTORY_FILTERS.filter((f) => f !== 'all');
+    for (const status of Object.keys(LEGACY_RUN_STATUS_TO_STATE)) {
+      const owners = groups.filter((f) => (RUN_HISTORY_FILTER_LEGACY_STATUSES[f] ?? []).includes(status));
+      expect(owners, status).toHaveLength(1);
+    }
+    expect(RUN_HISTORY_FILTER_LEGACY_STATUSES.done).toEqual(['executed']);
+    expect(RUN_HISTORY_FILTER_LEGACY_STATUSES.problems).toEqual(['skipped', 'dismissed', 'failed']);
+    expect(RUN_HISTORY_FILTER_LEGACY_STATUSES.all).toBeNull();
+  });
+
+  it('reads each chip over both vocabularies, over rows the other read cannot also return', () => {
+    expect(runHistoryQueries('all')).toEqual([{ states: null }]);
+    expect(runHistoryQueries('done')).toEqual([
+      { states: ['completed', 'partially_completed'] },
+      { states: ['queued'], statuses: ['executed'] },
+    ]);
+    // 'active' is where an unrecognised status reads, so its legacy half is
+    // described by what it leaves out rather than by what it lists.
+    const active = runHistoryQueries('active');
+    expect(active[0].states).not.toContain('queued');
+    expect(active[1]).toEqual({ states: ['queued'], excludeStatuses: ['pending', 'executed', 'skipped', 'dismissed', 'failed'] });
   });
 
   it('parse an unknown filter as "all" and a bad cursor as nothing, never handing garbage to the query', () => {
@@ -162,6 +187,84 @@ describe('listRuns', () => {
     const thrown = await listRuns(scopeForSystem(failingDb(null, { throws: true }), { id: FAM }));
     expect(thrown.ok).toBe(false);
     expect(!thrown.ok && thrown.retryable).toBe(true);
+    err.mockRestore();
+  });
+});
+
+// ─── The chips over pre-0250 rows ────────────────────────────────────────────
+//
+// 0250 added `state` with the default 'queued' and no backfill, so a run that
+// finished in 2025 still reads 'queued' in that column and 'executed' in the
+// legacy `status` one. The badge shows `displayRunState`, which prefers the
+// legacy status for exactly those rows — so the chips have to query the same
+// way, or "Done" drops finished runs and "In progress" files them under a
+// green Done badge.
+
+describe('the chips over the legacy vocabulary', () => {
+  function seeded() {
+    const db = createInMemorySupabase();
+    db.seed('family_automation_runs', [
+      run('legacy-done', { created_at: '2026-09-01T10:00:00Z', state: 'queued', status: 'executed' }),
+      run('legacy-failed', { created_at: '2026-09-02T10:00:00Z', state: 'queued', status: 'failed' }),
+      run('legacy-cancelled', { created_at: '2026-09-02T11:00:00Z', state: 'queued', status: 'dismissed' }),
+      run('legacy-waiting', { created_at: '2026-09-03T10:00:00Z', state: 'queued', status: 'pending' }),
+      run('legacy-active', { created_at: '2026-09-04T10:00:00Z', state: 'queued', status: 'approved' }),
+      run('legacy-unknown', { created_at: '2026-09-04T11:00:00Z', state: 'queued', status: 'whatever' }),
+      run('modern-queued', { created_at: '2026-09-05T10:00:00Z', state: 'queued', status: 'approved' }),
+      run('modern-done', { created_at: '2026-09-06T10:00:00Z', state: 'completed', status: 'executed' }),
+      run('other-family', { family_id: OTHER, created_at: '2026-09-07T10:00:00Z', state: 'queued', status: 'executed' }),
+    ]);
+    return db as unknown as DB;
+  }
+
+  /** What one chip lists: every read it makes, merged into the order the page renders. */
+  async function chip(db: DB, filter: RunHistoryFilter): Promise<string[]> {
+    const scope = scopeForSystem(db, { id: FAM });
+    const pages = await Promise.all(runHistoryQueries(filter).map((q) => listRuns(scope, { ...q, limit: 50 })));
+    expect(pages.every((p) => p.ok), filter).toBe(true);
+    return orderRunHistoryRows(pages.flatMap((p) => (p.ok ? p.data : [])) as RunHistoryRunRow[]).map((r) => r.id);
+  }
+
+  it('files a run finished before 0250 under Done, and never under In progress', async () => {
+    const db = seeded();
+    expect(await chip(db, 'done')).toEqual(['modern-done', 'legacy-done']);
+    expect(await chip(db, 'active')).not.toContain('legacy-done');
+  });
+
+  it('sorts the rest of the legacy vocabulary by the same reading the badge uses', async () => {
+    const db = seeded();
+    expect(await chip(db, 'problems')).toEqual(['legacy-cancelled', 'legacy-failed']);
+    expect(await chip(db, 'waiting')).toEqual(['legacy-waiting']);
+    // Still on the default state with nothing else to say: genuinely in progress.
+    expect(await chip(db, 'active')).toEqual(['modern-queued', 'legacy-unknown', 'legacy-active']);
+    // Every row of this family shows up under some chip, and none twice.
+    const chips = [...await chip(db, 'active'), ...await chip(db, 'waiting'), ...await chip(db, 'done'), ...await chip(db, 'problems')];
+    expect([...chips].sort()).toEqual([...await chip(db, 'all')].sort());
+    expect(chips).not.toContain('other-family');
+  });
+
+  it('badges each row as the chip that listed it, so a chip and its badges cannot disagree', async () => {
+    const db = seeded();
+    const scope = scopeForSystem(db, { id: FAM });
+    const listed = await listRuns(scope, { limit: 50 });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const state = (id: string) => runHistoryItems(listed.data as unknown as RunHistoryRunRow[]).find((i) => i.id === id)?.state;
+    expect(state('legacy-done')).toBe('completed');
+    expect(state('legacy-failed')).toBe('failed');
+    expect(state('legacy-cancelled')).toBe('cancelled');
+    expect(state('legacy-waiting')).toBe('awaiting_approval');
+    expect(state('legacy-unknown')).toBe('queued');
+  });
+
+  it('fails closed on the legacy read too', async () => {
+    const err = quietErrors();
+    const scope = scopeForSystem(failingDb({ message: 'terminating connection' }), { id: FAM });
+    for (const query of runHistoryQueries('active')) {
+      const res = await listRuns(scope, { ...query, limit: 50 });
+      expect(res.ok).toBe(false);
+      expect(!res.ok && res.retryable).toBe(true);
+    }
     err.mockRestore();
   });
 });
@@ -300,10 +403,12 @@ describe('run history surfaces', () => {
   it('the runs index reads through the caller client, family-scoped, and fails closed on either read', () => {
     expect(runsPage).toContain("import { listRuns } from '@/lib/ai/runs/store';");
     expect(runsPage).toContain('listRuns(scopeFromUserContext(ctx, supabase)');
-    expect(runsPage).toContain('if (!listed.ok) return <Unavailable message={listed.error}');
+    expect(runsPage).toContain('if (listFailure && !listFailure.ok) return <Unavailable message={listFailure.error}');
     expect(runsPage).toContain('loadRunEvidence(supabase, familyId, rows)');
     expect(runsPage).toContain('if (!evidence.ok) return <Unavailable message={evidence.error}');
-    expect(runsPage).toContain('states: RUN_HISTORY_FILTER_STATES[filter]');
+    // The chip queries both vocabularies, so it can never disagree with the badge.
+    expect(runsPage).toContain('runHistoryQueries(filter).map((query) => listRuns(');
+    expect(runsPage).not.toContain('RUN_HISTORY_FILTER_STATES[filter]');
     expect(runsPage).not.toContain('createServiceClient');
     // No inert Undo: reversal needs a migration, so nothing here pretends to offer it.
     expect(runsPage).not.toMatch(/undo/i);

@@ -14,7 +14,7 @@
 // rather than with an inert button.
 import { runPagePath } from '@/lib/ai/chat-request';
 import { EMPTY_EVIDENCE, progressSummary, runReason, runSources, type CompletedEvidence, type CompletedSource } from '@/lib/home/today';
-import { displayRunState, type RunState } from './states';
+import { displayRunState, LEGACY_RUN_STATUS_TO_STATE, type RunState } from './states';
 
 export const RUN_HISTORY_FILTERS = ['all', 'active', 'waiting', 'done', 'problems'] as const;
 export type RunHistoryFilter = (typeof RUN_HISTORY_FILTERS)[number];
@@ -33,6 +33,72 @@ export const RUN_HISTORY_FILTER_STATES: Readonly<Record<RunHistoryFilter, readon
 };
 
 export const RUN_HISTORY_PAGE_SIZE = 30;
+
+/**
+ * 0250 added `state` with the default 'queued' and no backfill, so every row
+ * written before it still carries that default beside a meaningful legacy
+ * `status` — which is exactly why the badge reads a row through
+ * `displayRunState` rather than off the column. The chips have to filter on
+ * that same derived value or a run finished in 2025 lands under "In progress"
+ * wearing a green "Done" badge.
+ */
+const LEGACY_RUN_STATE: RunState = 'queued';
+
+/** The legacy `status` values that read as one of a chip's states, by inverting LEGACY_RUN_STATUS_TO_STATE. */
+function legacyStatusesReadingAs(states: readonly RunState[]): string[] {
+  return Object.entries(LEGACY_RUN_STATUS_TO_STATE).filter(([, state]) => states.includes(state)).map(([status]) => status);
+}
+
+/**
+ * Which pre-0250 `status` values each chip owns. `active` owns the rest by
+ * default, because `displayStatus` reads an unrecognised status as 'queued' —
+ * so it is described by what it excludes, and the four sets still partition
+ * the vocabulary (the test pins that too).
+ */
+export const RUN_HISTORY_FILTER_LEGACY_STATUSES: Readonly<Record<RunHistoryFilter, readonly string[] | null>> = {
+  all: null,
+  active: legacyStatusesReadingAs(RUN_HISTORY_FILTER_STATES.active ?? []),
+  waiting: legacyStatusesReadingAs(RUN_HISTORY_FILTER_STATES.waiting ?? []),
+  done: legacyStatusesReadingAs(RUN_HISTORY_FILTER_STATES.done ?? []),
+  problems: legacyStatusesReadingAs(RUN_HISTORY_FILTER_STATES.problems ?? []),
+};
+
+/** One `listRuns` call: a state predicate, plus the legacy-`status` predicate that goes with it. */
+export type RunHistoryQuery = {
+  states: readonly RunState[] | null;
+  statuses?: readonly string[];
+  excludeStatuses?: readonly string[];
+};
+
+/**
+ * The reads behind one chip: one over the §10 vocabulary and, where the chip
+ * also owns pre-0250 rows, one over the legacy vocabulary. Disjoint by
+ * construction (the second is only rows still on the `state` default), so the
+ * caller can concatenate the pages and order them as one list.
+ */
+export function runHistoryQueries(filter: RunHistoryFilter): RunHistoryQuery[] {
+  const states = RUN_HISTORY_FILTER_STATES[filter];
+  if (!states) return [{ states: null }];
+
+  const queries: RunHistoryQuery[] = [];
+  const modern = states.filter((s) => s !== LEGACY_RUN_STATE);
+  if (modern.length) queries.push({ states: modern });
+
+  if (states.includes(LEGACY_RUN_STATE)) {
+    // This chip is where an unrecognised status lands, so it takes every row
+    // still on the default state except the ones another chip has a word for.
+    queries.push({ states: [LEGACY_RUN_STATE], excludeStatuses: legacyStatusesReadingElsewhere(states) });
+  } else {
+    const statuses = legacyStatusesReadingAs(states);
+    if (statuses.length) queries.push({ states: [LEGACY_RUN_STATE], statuses });
+  }
+  return queries;
+}
+
+/** Every legacy status that reads as a state OUTSIDE this chip. */
+function legacyStatusesReadingElsewhere(states: readonly RunState[]): string[] {
+  return Object.entries(LEGACY_RUN_STATUS_TO_STATE).filter(([, state]) => !states.includes(state)).map(([status]) => status);
+}
 
 export function parseRunHistoryFilter(raw: unknown): RunHistoryFilter {
   return typeof raw === 'string' && (RUN_HISTORY_FILTERS as readonly string[]).includes(raw) ? (raw as RunHistoryFilter) : 'all';
@@ -82,15 +148,21 @@ export type RunHistoryItem = {
 
 /**
  * Newest first, by the moment the run was asked for — a history is read
- * backwards from now. Ties break on id so two renders of the same rows agree.
+ * backwards from now. Ties break on id so two renders of the same rows agree,
+ * and so the pages of a chip that reads two vocabularies interleave into one
+ * order before the page is cut to size.
  */
+export function orderRunHistoryRows<T extends { id: string; created_at: string }>(runs: readonly T[]): T[] {
+  return [...runs].sort((a, b) => {
+    const t = Date.parse(b.created_at) - Date.parse(a.created_at);
+    if (t !== 0 && Number.isFinite(t)) return t;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** The rows a person reads, newest first — see `orderRunHistoryRows` for the order. */
 export function runHistoryItems(runs: readonly RunHistoryRunRow[], evidence: CompletedEvidence = EMPTY_EVIDENCE): RunHistoryItem[] {
-  return [...runs]
-    .sort((a, b) => {
-      const t = Date.parse(b.created_at) - Date.parse(a.created_at);
-      if (t !== 0 && Number.isFinite(t)) return t;
-      return a.id.localeCompare(b.id);
-    })
+  return orderRunHistoryRows(runs)
     .map((r) => {
       const state = displayRunState(r);
       return {

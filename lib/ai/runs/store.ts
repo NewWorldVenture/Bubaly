@@ -745,6 +745,14 @@ export type RunDetail = {
 export type ListRunsOptions = {
   /** Only these §10 states; omit or null for every state. */
   states?: readonly RunState[] | null;
+  /**
+   * Only these legacy `status` values (0022's vocabulary). Pre-0250 rows carry
+   * the `state` default beside a meaningful `status`, so a caller that filters
+   * on what `displayRunState` shows has to reach that column too.
+   */
+  statuses?: readonly string[] | null;
+  /** The mirror of `statuses`: legacy `status` values to leave out. */
+  excludeStatuses?: readonly string[] | null;
   /** Paging cursor: rows created strictly before this ISO instant. */
   before?: string | null;
   limit?: number;
@@ -771,6 +779,10 @@ export async function listRuns(
   try {
     let query = db.from('family_automation_runs').select('*').eq('family_id', scope.familyId);
     if (options.states && options.states.length) query = query.in('state', [...options.states]);
+    if (options.statuses && options.statuses.length) query = query.in('status', [...options.statuses]);
+    if (options.excludeStatuses && options.excludeStatuses.length) {
+      query = query.not('status', 'in', `(${options.excludeStatuses.join(',')})`);
+    }
     if (options.before) query = query.lt('created_at', options.before);
     const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
     if (error) {
