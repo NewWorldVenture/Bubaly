@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage } from '@/lib/contact-center/server';
+import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily, autoReplyText } from '@/lib/contact-center/routing';
 
@@ -65,10 +65,16 @@ export async function POST(req: NextRequest) {
 
   const result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
 
-  await recordInboundMessage(admin, {
+  const filed = await recordInboundMessage(admin, {
     familyId, channel: 'sms', from: from ?? undefined, to, body,
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
+
+  // M20: actionable texts reach the planner instead of stopping at the log.
+  await routeInboundToPlanner(admin, {
+    familyId, channel: 'sms', messageId: filed.messageId, body,
+    intent: result.intent, providerRef: sid ?? null,
+  }).catch((error) => { console.error('[contact-center] sms planner routing threw', error); });
 
   // Escalate genuine urgencies to the family's human fallback.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {

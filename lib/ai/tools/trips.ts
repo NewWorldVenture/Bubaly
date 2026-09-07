@@ -11,7 +11,8 @@ import 'server-only';
 import { z } from 'zod';
 import { scopeNow } from '@/lib/services/scope';
 import {
-  buildPlan, commitmentConflicts, computeReadiness, documentsRisk, findOrCreateVacation, generatePackingList, getTrip, syncToCalendar,
+  buildPlan, commitmentConflicts, computeReadiness, createPetCareTasks, documentsRisk, findOrCreateVacation, generatePackingList, getTrip,
+  petPrep, planTripDisruption, syncToCalendar,
 } from '@/lib/services/trips';
 import { ok } from '@/lib/services/types';
 import { resolveAssigneeId } from './family';
@@ -290,6 +291,125 @@ export const tripTools: ToolDefinition[] = [
         ...c.bills.map((b) => ({ source: 'bill' as const, id: b.id, title: `${b.name} (bill due)`, starts_at: `${b.due_date}T00:00:00Z`, when: b.due_date, member_id: null })),
       ].sort((a, b) => Date.parse(a.starts_at ?? '') - Date.parse(b.starts_at ?? ''));
       return ok({ window: c.window, total: c.total, items });
+    },
+  }),
+
+  defineTool({
+    name: 'trips.petPrep',
+    aliases: ['trip_pet_prep', 'pet_care_for_trip'],
+    description: 'The care each family pet needs while everyone is away: one sitter or boarding task per animal, with its name, care notes and vet.',
+    domain: 'travel',
+    capability: 'view',
+    risk: 'low',
+    readOnly: true,
+    input: z.object({ vacation_id: z.string() }),
+    output: z.object({
+      trip_id: z.string(),
+      trip_title: z.string(),
+      tasks: z.array(z.object({
+        pet_id: z.string(), pet_name: z.string(), species: z.string(), title: z.string(), notes: z.string(), due_date: z.string().nullable(),
+      })),
+    }),
+    summarize: (_input, output) => (output.tasks.length === 0
+      ? 'No pets are on file, so nothing needs a sitter'
+      : `${plural(output.tasks.length, 'pet')} need care during ${output.trip_title}: ${output.tasks.map((t) => t.pet_name).join(', ')}`),
+    execute: async (scope, input) => {
+      const res = await petPrep(scope, input.vacation_id);
+      if (!res.ok) return res;
+      return ok({
+        trip_id: res.data.tripId,
+        trip_title: res.data.tripTitle,
+        tasks: res.data.tasks.map((t) => ({
+          pet_id: t.petId, pet_name: t.petName, species: t.species, title: t.title, notes: t.notes, due_date: t.dueDate,
+        })),
+      });
+    },
+  }),
+
+  defineTool({
+    name: 'trips.createPetCareTasks',
+    aliases: ['create_pet_care_tasks', 'arrange_pet_care'],
+    description: 'Add one sitter or boarding task per family pet for a trip, each carrying the care notes for that animal. Adds nothing when the tasks already exist.',
+    domain: 'travel',
+    capability: 'create',
+    risk: 'low',
+    readOnly: false,
+    activityFrom: 'service',
+    input: z.object({
+      vacation_id: z.string(),
+      assignee: z.string().nullish().describe('Who arranges the care'),
+      assignee_id: z.string().nullish(),
+    }),
+    output: z.object({
+      pets: z.number().int(),
+      created: z.array(z.object({ pet_id: z.string(), pet_name: z.string(), todo_id: z.string(), title: z.string() })),
+    }),
+    idempotencyFrom: (input) => `trips.createPetCareTasks:${input.vacation_id}`,
+    summarize: (_input, output) => (output.created.length === 0
+      ? 'No pets are on file, so no care tasks were needed'
+      : `Added a care task for ${output.created.map((c) => c.pet_name).join(', ')}`),
+    consequences: (input) => [`Adds one to-do per family pet for trip ${input.vacation_id ?? ''}. Nothing is booked with a sitter or a kennel.`],
+    execute: async (scope, input) => {
+      const assignee = await resolveAssigneeId(scope, { assignee: input.assignee, assignee_id: input.assignee_id });
+      if (!assignee.ok) return assignee;
+      const res = await createPetCareTasks(scope, input.vacation_id, assignee.data ? { assigneeId: assignee.data } : {});
+      if (!res.ok) return res;
+      return ok({
+        pets: res.data.pets,
+        created: res.data.created.map((c) => ({ pet_id: c.petId, pet_name: c.petName, todo_id: c.todoId, title: c.title })),
+      });
+    },
+  }),
+
+  defineTool({
+    name: 'trips.replanDisruption',
+    aliases: ['replan_trip_disruption', 'flight_delayed'],
+    description: 'Work out how a delayed or cancelled flight or hotel re-flows the itinerary: what moves, and what a person still has to rebook. Plans only — it changes nothing and rebooks nothing.',
+    domain: 'travel',
+    capability: 'view',
+    risk: 'low',
+    readOnly: true,
+    input: z.object({
+      vacation_id: z.string(),
+      kind: z.enum(['flight', 'lodging']),
+      booking_id: z.string().describe('The flight or lodging row this is about'),
+      delay_minutes: z.number().int().nullish(),
+      cancelled: z.boolean().nullish(),
+    }),
+    output: z.object({
+      trip_id: z.string(),
+      booking: z.object({ kind: z.string(), id: z.string(), label: z.string(), day: z.string() }),
+      no_change: z.boolean(),
+      summary: z.string(),
+      shifted_items: z.array(z.object({
+        id: z.string(), title: z.string(), from_start: z.string().nullable(), to_day: z.string(), to_start: z.string().nullable(), rolled_overnight: z.boolean(),
+      })),
+      to_rebook: z.array(z.object({ kind: z.string(), id: z.string(), title: z.string(), reason: z.string(), when: z.string().nullable() })),
+      new_conflicts: z.array(z.object({ kind: z.string(), title: z.string(), detail: z.string() })),
+    }),
+    // The vocabulary here is load-bearing: nothing was rebooked, and the
+    // summary must never imply otherwise.
+    summarize: (_input, output) => output.summary,
+    execute: async (scope, input) => {
+      const res = await planTripDisruption(scope, input.vacation_id, {
+        kind: input.kind,
+        bookingId: input.booking_id,
+        delayMinutes: input.delay_minutes ?? 0,
+        cancelled: input.cancelled ?? false,
+      });
+      if (!res.ok) return res;
+      const { plan, booking } = res.data;
+      return ok({
+        trip_id: res.data.tripId,
+        booking: { kind: booking.kind, id: booking.id, label: booking.label, day: booking.day },
+        no_change: plan.noop,
+        summary: plan.summary,
+        shifted_items: plan.shiftedItems.map((s) => ({
+          id: s.id, title: s.title, from_start: s.fromStart, to_day: s.toDay, to_start: s.toStart, rolled_overnight: s.rolledOvernight,
+        })),
+        to_rebook: plan.toRebook.map((r) => ({ kind: r.kind, id: r.id, title: r.title, reason: r.reason, when: r.when })),
+        new_conflicts: plan.conflicts.map((c) => ({ kind: c.kind, title: c.title, detail: c.detail })),
+      });
     },
   }),
 ];

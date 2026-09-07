@@ -177,3 +177,67 @@ export function reasoningSummary(report: ReasoningReport): Record<string, unknow
     answers: report.answers.map((a) => ({ id: a.id, status: a.status, headline: a.headline, count: a.items.length })),
   };
 }
+
+// ─── X5 · decision compression ───────────────────────────────────────────────
+//
+// The engine's whole purpose is to turn many raw signals into few human
+// decisions. That claim was never measured. Decision compression is the ratio:
+// how many things the household could have been asked about, against how many
+// it was actually asked about.
+//
+// A high ratio is the product working. A ratio near 1 means Bubaly is a very
+// expensive inbox — every signal became a question — and that is worth seeing
+// on a dashboard rather than discovering from churn.
+
+export type DecisionCompressionInput = {
+  /** Signals the family never had to look at: detections, suggestions, recommendations. */
+  rawSignals: number;
+  /** Decisions a person actually made — approvals decided, in the same window. */
+  humanDecisions: number;
+};
+
+export type CompressionLevel = 'high' | 'moderate' | 'low';
+
+export type DecisionCompression = {
+  rawSignals: number;
+  humanDecisions: number;
+  /** Signals per human decision. Never divides by zero — see below. */
+  ratio: number;
+  level: CompressionLevel;
+  /** English label, for logs and tests. The UI renders `labelKey`. */
+  label: string;
+  labelKey: string;
+};
+
+/**
+ * X5 — signals in, decisions out.
+ *
+ * `null` when there were no signals at all: a household with nothing to reason
+ * over has not demonstrated compression, and reporting "∞:1" or "0:1" for it
+ * would be a number about the week rather than about the product.
+ *
+ * Zero human decisions with signals present is real and good — everything was
+ * handled without asking — so the denominator floors at 1 rather than the
+ * function refusing to answer. The reported ratio is then "N signals, no
+ * questions", which is exactly what happened.
+ */
+export function decisionCompression(input: DecisionCompressionInput): DecisionCompression | null {
+  const rawSignals = Math.max(0, Math.trunc(input.rawSignals));
+  const humanDecisions = Math.max(0, Math.trunc(input.humanDecisions));
+  if (rawSignals <= 0) return null;
+
+  const ratio = Math.round((rawSignals / Math.max(1, humanDecisions)) * 10) / 10;
+  const level: CompressionLevel = ratio >= 10 ? 'high' : ratio >= 3 ? 'moderate' : 'low';
+  const LABEL: Record<CompressionLevel, string> = {
+    high: 'Bubaly is absorbing most of the load',
+    moderate: 'Bubaly is absorbing some of the load',
+    low: 'Nearly every signal still reaches the family',
+  };
+  const LABEL_KEY: Record<CompressionLevel, string> = {
+    high: 'metrics.bubalyIsAbsorbingMostOfTheLoad',
+    moderate: 'metrics.bubalyIsAbsorbingSomeOfTheLoad',
+    low: 'metrics.nearlyEverySignalStillReachesTheFamily',
+  };
+
+  return { rawSignals, humanDecisions, ratio, level, label: LABEL[level], labelKey: LABEL_KEY[level] };
+}

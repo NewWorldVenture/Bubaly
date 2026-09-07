@@ -10,7 +10,50 @@
 
 export type PaperworkKind =
   | 'permission_slip' | 'school_notice' | 'medical_form' | 'sports'
-  | 'bill_or_payment' | 'event_flyer' | 'other';
+  | 'bill_or_payment' | 'event_flyer' | 'receipt' | 'reservation' | 'other';
+
+/**
+ * The values `paperwork_items.kind` actually admits — the CHECK constraint in
+ * `supabase/migrations/0169_paperwork_items.sql` predates 'receipt' and
+ * 'reservation' and cannot be widened without a migration.
+ */
+export const STORED_PAPERWORK_KINDS = [
+  'permission_slip', 'school_notice', 'medical_form', 'sports',
+  'bill_or_payment', 'event_flyer', 'other',
+] as const;
+
+export type StoredPaperworkKind = (typeof STORED_PAPERWORK_KINDS)[number];
+
+/**
+ * Triage recognises finer kinds than the column stores. Rather than write a
+ * value the CHECK would reject (a 23514 that loses the whole row), a receipt is
+ * stored as the payment kind and a reservation as the event kind, and the finer
+ * kind is preserved in `paperwork_items.meta` — an existing jsonb column — so
+ * nothing is lost and the column can be widened later without re-triaging.
+ */
+const STORED_KIND_FALLBACK: Record<PaperworkKind, StoredPaperworkKind> = {
+  permission_slip: 'permission_slip',
+  school_notice: 'school_notice',
+  medical_form: 'medical_form',
+  sports: 'sports',
+  bill_or_payment: 'bill_or_payment',
+  event_flyer: 'event_flyer',
+  receipt: 'bill_or_payment',
+  reservation: 'event_flyer',
+  other: 'other',
+};
+
+export function storedPaperworkKind(kind: PaperworkKind): StoredPaperworkKind {
+  return STORED_KIND_FALLBACK[kind] ?? 'other';
+}
+
+/**
+ * What to insert into `paperwork_items` for a triaged kind: the admitted column
+ * value, plus the meta that remembers what triage actually saw.
+ */
+export function paperworkKindFields(kind: PaperworkKind): { kind: StoredPaperworkKind; meta: { triage_kind: PaperworkKind } } {
+  return { kind: storedPaperworkKind(kind), meta: { triage_kind: kind } };
+}
 
 export type PaperworkActionKind = 'sign' | 'pay' | 'rsvp' | 'schedule' | 'provide' | 'review';
 
@@ -38,6 +81,12 @@ const KIND_SIGNALS: [PaperworkKind, RegExp][] = [
   ['permission_slip', /permission slip|field trip|consent form|parent.guardian (signature|consent)|sign and return/i],
   ['medical_form',    /immunization|vaccin|physical exam|medical (form|record|history)|allerg|medication authorization|health form/i],
   ['sports',          /practice schedule|tryout|jersey|uniform|team (fee|schedule)|league|tournament|game day|coach/i],
+  // Receipt before bill: "thank you for your order" is money already spent, and
+  // filing it as a bill would put a payment on the family's to-do list twice.
+  ['receipt',         /receipt|thank you for your (order|purchase|payment)|order confirmation|payment (received|confirmed|successful)|paid in full|transaction id|total charged|charged to your (card|account)|refund issued/i],
+  // Reservation before flyer: a confirmed booking is a commitment with a time,
+  // not an invitation to consider.
+  ['reservation',     /reservation|booking (confirmation|reference|number)|confirmation (number|code)|table for \d|your (table|room|seat) is|check.?in (date|time)|itinerary|boarding pass|reserved for/i],
   ['bill_or_payment', /invoice|amount due|balance due|payment (due|of)|pay online|late fee|tuition|\$\s?\d+(\.\d{2})?\s*(due|owed)/i],
   ['event_flyer',     /join us|you'?re invited|save the date|rsvp|open house|book fair|fundraiser|carnival|concert|performance/i],
   ['school_notice',   /school|classroom|teacher|principal|pta|homework|report card|parent.teacher|early dismissal|picture day/i],
@@ -154,6 +203,8 @@ const KIND_LABEL: Record<PaperworkKind, string> = {
   sports: 'Sports',
   bill_or_payment: 'Bill / payment',
   event_flyer: 'Event flyer',
+  receipt: 'Receipt',
+  reservation: 'Reservation',
   other: 'Paperwork',
 };
 

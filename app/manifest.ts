@@ -24,6 +24,17 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: '/icons/maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
       { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
+    // Share target: anything the OS share sheet can hand an app — an email, a
+    // screenshot's text, a link to a school page — lands in /capture, which is
+    // already the family's one-line "put this somewhere" surface. GET (not
+    // POST) so the shared fields arrive as query params a server component can
+    // read directly; a POST target would need a route handler and a redirect,
+    // and would drop the payload if the app was cold-started by the share.
+    share_target: {
+      action: '/capture',
+      method: 'GET',
+      params: { title: 'title', text: 'text', url: 'url' },
+    },
     shortcuts: [
       { name: 'Daily Briefing', short_name: 'Briefing', url: '/dashboard/briefing' },
       { name: 'Calendar', short_name: 'Calendar', url: '/dashboard/calendar' },

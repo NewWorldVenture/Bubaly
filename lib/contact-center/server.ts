@@ -1,10 +1,13 @@
 import 'server-only';
 import type { createServiceClient } from '@/lib/supabase/server';
-import type { Tables } from '@/lib/database.types';
+import type { Json, Tables } from '@/lib/database.types';
 import {
   isTwilioConfigured, searchAvailableNumber, provisionNumber,
 } from '@/lib/guardian/twilio';
-import { classifyIntent, summarizeInbound, shouldNotifyFamily, type InboundChannel } from './routing';
+import { submitRequest } from '@/lib/ai/runs/intake';
+import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
+import { systemScopeForFamily } from '@/lib/services/scope';
+import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 
 type Admin = ReturnType<typeof createServiceClient>;
 export type ContactChannel = Tables<'family_contact_channels'>;
@@ -122,12 +125,12 @@ export async function provisionFamilyNumber(
 export async function recordInboundMessage(admin: Admin, input: {
   familyId: string; channel: InboundChannel; from?: string; to?: string;
   subject?: string; body: string; providerRef?: string; aiSummary?: string; aiIntent?: string;
-}): Promise<{ intent: string; escalated: boolean }> {
+}): Promise<{ intent: string; escalated: boolean; messageId: string | null }> {
   const intent = input.aiIntent ?? classifyIntent(input.body);
   const summary = input.aiSummary ?? summarizeInbound(input.body);
   const escalate = shouldNotifyFamily((intent as ReturnType<typeof classifyIntent>));
 
-  const { error } = await admin.from('family_inbox_messages').upsert({
+  const { data, error } = await admin.from('family_inbox_messages').upsert({
     family_id: input.familyId,
     channel: input.channel,
     direction: 'inbound',
@@ -138,15 +141,158 @@ export async function recordInboundMessage(admin: Admin, input: {
     ai_summary: summary,
     ai_intent: intent,
     provider_ref: input.providerRef ?? null,
-  }, { onConflict: 'channel,provider_ref', ignoreDuplicates: true });
+  }, { onConflict: 'channel,provider_ref', ignoreDuplicates: true })
+    .select('id');
   if (error) {
     console.error('[contact-center] inbound message persistence failed', error);
     throw new Error('Inbound message persistence failed');
   }
 
+  // `ignoreDuplicates` returns nothing for a re-delivered webhook, so the id is
+  // read back by the provider ref the unique index is on. A row we cannot
+  // identify is still filed — the caller simply gets `null` and skips the
+  // follow-up write rather than stamping the wrong message.
+  let messageId: string | null = data?.[0]?.id ?? null;
+  if (!messageId && input.providerRef) {
+    const found = await admin
+      .from('family_inbox_messages')
+      .select('id')
+      .eq('channel', input.channel)
+      .eq('provider_ref', input.providerRef)
+      .maybeSingle();
+    if (found.error) console.error('[contact-center] inbound message id read failed', found.error);
+    messageId = found.data?.id ?? null;
+  }
+
   // The caller (webhook) decides how to escalate (SMS the human fallback, etc.)
   // using the returned flag — this lib stays storage-only.
-  return { intent, escalated: escalate };
+  return { intent, escalated: escalate, messageId };
+}
+
+/** Paperwork triage kinds worth filing: a form, a bill, a receipt, a reservation. */
+const FILEABLE_PAPERWORK: ReadonlySet<PaperworkKind> = new Set<PaperworkKind>([
+  'permission_slip', 'school_notice', 'medical_form', 'sports',
+  'bill_or_payment', 'event_flyer', 'receipt', 'reservation',
+]);
+
+export type InboundRouteOutcome = {
+  /** True only when an `ai_requests` row exists for this message. */
+  routed: boolean;
+  requestId: string | null;
+  runId: string | null;
+  paperworkItemId: string | null;
+  reason: 'filed' | 'not_actionable' | 'no_text' | 'no_scope' | 'intake_failed';
+};
+
+/**
+ * M20's missing half: after an inbound message is filed, hand the actionable
+ * ones to the planner so they become work instead of a line in a log.
+ *
+ * It goes through `submitRequest` — the same intake the Ask bar uses — under a
+ * SYSTEM scope for the family, so trust gating, the approval spine and the run
+ * ledger are exactly the ones already in place. Nothing is auto-executed here
+ * that a person would not have to approve when they asked for it themselves.
+ *
+ * The provider ref becomes the request's `client_request_id`, so a webhook that
+ * fires twice re-finds the request it already made rather than planning again.
+ *
+ * `ai_handled` is written only after the request is persisted; there is no
+ * `request_id` column to stamp (see the migration ask), so the link between the
+ * row and its run is not claimed anywhere it cannot be proved.
+ *
+ * Never throws: the webhook's job is to acknowledge the provider, and a planner
+ * that is unavailable must not turn a delivered message into a retry storm.
+ */
+export async function routeInboundToPlanner(admin: Admin, input: {
+  familyId: string;
+  channel: InboundChannel;
+  messageId: string | null;
+  subject?: string | null;
+  body: string;
+  intent: string;
+  providerRef?: string | null;
+  /** Injectable for tests; production uses the real intake. */
+  submit?: typeof submitRequest;
+  now?: Date;
+}): Promise<InboundRouteOutcome> {
+  const empty: InboundRouteOutcome = { routed: false, requestId: null, runId: null, paperworkItemId: null, reason: 'not_actionable' };
+  if (!shouldPlanInbound(input.intent)) return empty;
+
+  const text = [(input.subject ?? '').trim(), (input.body ?? '').trim()].filter(Boolean).join('\n\n').slice(0, 4_000);
+  if (!text) return { ...empty, reason: 'no_text' };
+
+  const scope = await systemScopeForFamily(admin, input.familyId);
+  if (!scope) return { ...empty, reason: 'no_scope' };
+
+  // Paperwork first: an emailed bill or reservation is a record the family
+  // needs whether or not the planner does anything with the message.
+  const paperworkItemId = input.channel === 'email'
+    ? await fileInboundPaperwork(admin, input.familyId, text, input.now)
+    : null;
+
+  const submit = input.submit ?? submitRequest;
+  const clientRequestId = input.providerRef ? `inbound:${input.channel}:${input.providerRef}` : null;
+  const filed = await submit(scope, { text, clientRequestId }, { now: input.now });
+  if (!filed.ok) {
+    console.error('[contact-center] inbound routing to the planner failed', filed.error);
+    return { ...empty, paperworkItemId, reason: 'intake_failed' };
+  }
+
+  if (input.messageId) {
+    const { error } = await admin
+      .from('family_inbox_messages')
+      .update({ ai_handled: true })
+      .eq('id', input.messageId)
+      .eq('family_id', input.familyId);
+    // The request exists either way; a failed stamp is a display gap, not a
+    // lost message, so it is logged rather than thrown.
+    if (error) console.error('[contact-center] handled stamp failed', error);
+  }
+
+  return {
+    routed: true,
+    requestId: filed.data.requestId,
+    runId: filed.data.runId,
+    paperworkItemId,
+    reason: 'filed',
+  };
+}
+
+/**
+ * Run the deterministic paperwork triage over an inbound email and file it when
+ * it recognises something. Only columns 0169 actually defines are written, and
+ * a kind the CHECK does not admit ('receipt', 'reservation') is stored as its
+ * closest admitted value with the finer kind kept in `meta`.
+ */
+export async function fileInboundPaperwork(
+  admin: Admin, familyId: string, text: string, now?: Date,
+): Promise<string | null> {
+  const triage = triagePaperwork(text, now ?? new Date());
+  if (!FILEABLE_PAPERWORK.has(triage.kind)) return null;
+  const fields = paperworkKindFields(triage.kind);
+  const { data, error } = await admin
+    .from('paperwork_items')
+    .insert({
+      family_id: familyId,
+      kind: fields.kind,
+      title: triage.title,
+      summary: triage.summary,
+      raw_text: text.slice(0, 20_000),
+      due_on: triage.due_on,
+      amount: triage.amount,
+      urgency: triage.urgency,
+      // `actions` is a jsonb column; the triage result is a plain array of flat
+      // records, which is valid JSON but not structurally `Json` to TypeScript.
+      actions: triage.actions as unknown as Json,
+      meta: { ...fields.meta, source: 'inbound_email' },
+    })
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.error('[contact-center] inbound paperwork insert failed', error);
+    return null;
+  }
+  return data?.id ?? null;
 }
 
 /** Record an outbound message the concierge sent (auto-reply), for the timeline. */

@@ -47,13 +47,21 @@ function routeCapture(text: string): { destination: string; url: string } {
   return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
 }
 
-export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: string[] | null }) {
+export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
+  initialShortcuts?: string[] | null;
+  /**
+   * Prefilled from the PWA share target's query params (see
+   * `lib/capture/share.ts`). Server-composed so a share that cold-starts the
+   * app shows the shared text on the first paint.
+   */
+  initialText?: string;
+}) {
   const t = useTranslations();
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const { familyId, userId, selfMember } = useApp();
   const [mode, setMode] = useState<CaptureMode>('type');
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [routing, setRouting] = useState(false);
   const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
   const [created, setCreated] = useState<(CaptureSaveResult & { destination: string }) | null>(null);

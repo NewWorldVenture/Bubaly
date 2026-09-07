@@ -4,7 +4,7 @@
 // confirmed; medical and account details are never written by the AI; and
 // "clear AI memory" removes only what Bubaly learned, never what a person
 // typed.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import {
@@ -296,6 +296,107 @@ describe('listMemories', () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data).toEqual({ facts: reviewFacts, pending: reviewSuggestions });
+  });
+});
+
+// M22: the "what Bubaly believes" panel needs the routines Bubaly holds and the
+// traits the autopilot learned alongside the facts. They are OPT-IN — the
+// context slice reads memory on every AI request and must not pay for three
+// more queries it never looks at — so the shape above is unchanged without the
+// flag, which the tests either side of this block pin.
+describe('listMemories — routine and trait summaries', () => {
+  const ROUTINE = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    id: 'routine-1', name: 'School mornings', source: 'detected', is_active: true, weekday_mask: 31,
+    created_at: NOW.toISOString(), ...overrides,
+  });
+  const PROFILE = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    id: 'profile-1', member_id: 'member-2', updated_at: NOW.toISOString(),
+    metadata: { autopilot_traits: { memberId: 'member-2', choreCompletionRate: 0.4, reliabilityScore: 40, sampleSize: 12 } },
+    ...overrides,
+  });
+  const MEMBER = { id: 'member-2', display_name: 'Maya' };
+
+  const respondWith = (call: Call): Reply => {
+    if (call.table === 'family_facts') return { data: [FACT()], error: null };
+    if (call.table === 'family_playbook_suggestions') return { data: [SUGGESTION()], error: null };
+    if (call.table === 'routine_templates') return { data: [ROUTINE(), ROUTINE({ id: 'routine-2', name: 'Sunday reset', source: 'manual', is_active: false, weekday_mask: 64 })], error: null };
+    if (call.table === 'family_digital_twin_profiles') return { data: [PROFILE(), PROFILE({ id: 'profile-2', member_id: 'member-3', metadata: { focus: 'homework' } })], error: null };
+    if (call.table === 'family_members') return { data: [MEMBER], error: null };
+    return { data: null, error: null };
+  };
+
+  it('leaves the shape alone unless the caller asks for the profile', async () => {
+    const { db, calls } = makeDb(respondWith);
+    const res = await listMemories(scopeWith(db));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(Object.keys(res.data).sort()).toEqual(['facts', 'pending']);
+    expect(calls.map((c) => c.table)).not.toContain('routine_templates');
+    expect(calls.map((c) => c.table)).not.toContain('family_digital_twin_profiles');
+  });
+
+  it('summarises the routines Bubaly holds and names each one’s real source', async () => {
+    const { db, calls } = makeDb(respondWith);
+    const res = await listMemories(scopeWith(db), { includeProfile: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.routines).toEqual([
+      { id: 'routine-1', name: 'School mornings', source: 'detected', isActive: true, weekdayMask: 31, createdAt: NOW.toISOString() },
+      { id: 'routine-2', name: 'Sunday reset', source: 'manual', isActive: false, weekdayMask: 64, createdAt: NOW.toISOString() },
+    ]);
+    expect(calls.find((c) => c.table === 'routine_templates')?.filters).toEqual({ family_id: 'fam-1' });
+  });
+
+  it('summarises only the profiles the autopilot actually wrote a trait onto, with the member’s name', async () => {
+    const { db } = makeDb(respondWith);
+    const res = await listMemories(scopeWith(db), { includeProfile: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // profile-2 holds only what a person entered — it is not a thing Bubaly
+    // worked out, so this panel does not claim it as one.
+    expect(res.data.traits).toEqual([{
+      profileId: 'profile-1', memberId: 'member-2', memberName: 'Maya', updatedAt: NOW.toISOString(),
+      reliabilityScore: 40, choreCompletionRate: 0.4, sampleSize: 12,
+    }]);
+  });
+
+  it.each(['child', 'teen'] as const)('shows a %s the routines but never a trait about a sibling', async (role) => {
+    const { db, calls } = makeDb(respondWith);
+    const res = await listMemories(scopeWith(db, { role }), { includeProfile: true });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.routines).toHaveLength(2);
+    expect(res.data.traits).toEqual([]);
+    expect(calls.map((c) => c.table)).not.toContain('family_digital_twin_profiles');
+  });
+
+  it('narrows the profile read to one member when one is asked for', async () => {
+    const { db, calls } = makeDb(respondWith);
+    await listMemories(scopeWith(db), { memberId: 'member-2', includeProfile: true });
+    expect(calls.find((c) => c.table === 'family_digital_twin_profiles')?.filters)
+      .toEqual({ family_id: 'fam-1', member_id: 'member-2' });
+  });
+
+  it('fails closed when the routine read errors — it does not answer "Bubaly holds nothing"', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { db } = makeDb((call) => (call.table === 'routine_templates'
+      ? { data: null, error: { code: '08006', message: 'connection failure' } }
+      : respondWith(call)));
+    const res = await listMemories(scopeWith(db), { includeProfile: true });
+    expect(res).toMatchObject({ ok: false, code: 'db' });
+    expect(spy).toHaveBeenCalledWith('[service:memory] routine read failed', expect.anything());
+    spy.mockRestore();
+  });
+
+  it('fails closed when the trait read errors', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { db } = makeDb((call) => (call.table === 'family_digital_twin_profiles'
+      ? { data: null, error: { code: '42501', message: 'permission denied' } }
+      : respondWith(call)));
+    const res = await listMemories(scopeWith(db), { includeProfile: true });
+    expect(res).toMatchObject({ ok: false, code: 'db' });
+    expect(spy).toHaveBeenCalledWith('[service:memory] trait read failed', expect.anything());
+    spy.mockRestore();
   });
 });
 

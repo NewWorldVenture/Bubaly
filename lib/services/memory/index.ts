@@ -420,10 +420,75 @@ export async function recallFacts(scope: ServiceScope, input: RecallInput = {}):
   return ok(matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
 }
 
-export type Memories = { facts: FamilyFact[]; pending: MemorySuggestion[] };
+/**
+ * A routine Bubaly holds for the household — one `routine_templates` row,
+ * summarised. `source` is the row's own column: 'ai' when a scan detected the
+ * pattern, anything else when a person built it by hand. The panel says which,
+ * because "Bubaly noticed this" and "you typed this" are different claims and
+ * only the row can settle which one is true.
+ */
+export type MemoryRoutine = {
+  id: string;
+  name: string;
+  source: string;
+  isActive: boolean;
+  /** The 0123-style weekday bitmask as stored; 0 means "no fixed days". */
+  weekdayMask: number;
+  createdAt: string;
+};
+
+/**
+ * What the autopilot worked out about one member, read back out of
+ * `family_digital_twin_profiles.metadata.autopilot_traits` (written by
+ * `lib/autopilot/scan.ts`). Nulls mean the scan has never written a trait for
+ * that member — not that the member scored zero.
+ */
+export type MemoryTrait = {
+  profileId: string;
+  memberId: string;
+  memberName: string | null;
+  reliabilityScore: number | null;
+  choreCompletionRate: number | null;
+  sampleSize: number | null;
+  updatedAt: string;
+};
+
+export type Memories = {
+  facts: FamilyFact[];
+  pending: MemorySuggestion[];
+  /** Present only when `includeProfile` was asked for. */
+  routines?: MemoryRoutine[];
+  /** Present only when `includeProfile` was asked for, and only for managers. */
+  traits?: MemoryTrait[];
+};
+
+export type ListMemoriesInput = {
+  memberId?: string | null;
+  /**
+   * Also summarise the routines Bubaly holds and the traits it learned.
+   *
+   * OPT-IN, because it costs three more queries and the two callers that read
+   * memory on the hot path — the context slice on every AI request, and the
+   * knowledge page — want neither. The "what Bubaly believes" panel is the one
+   * surface that does.
+   */
+  includeProfile?: boolean;
+};
+
+/** A `metadata.autopilot_traits` blob, read defensively: it is JSON a scan wrote, not a typed column. */
+function readTraitBlob(metadata: unknown): { reliabilityScore: number | null; choreCompletionRate: number | null; sampleSize: number | null } {
+  const bag = (metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).autopilot_traits : null);
+  const blob = (bag && typeof bag === 'object' ? bag as Record<string, unknown> : null);
+  const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  return {
+    reliabilityScore: num(blob?.reliabilityScore),
+    choreCompletionRate: num(blob?.choreCompletionRate),
+    sampleSize: num(blob?.sampleSize),
+  };
+}
 
 /** Everything, for the review screen: confirmed facts plus what is waiting for a yes. */
-export async function listMemories(scope: ServiceScope, input: { memberId?: string | null } = {}): Promise<ServiceResult<Memories>> {
+export async function listMemories(scope: ServiceScope, input: ListMemoriesInput = {}): Promise<ServiceResult<Memories>> {
   let facts = scope.db.from('family_facts').select('*').eq('family_id', scope.familyId)
     .order('is_pinned', { ascending: false }).order('updated_at', { ascending: false }).limit(500);
   let pending = scope.db.from('family_playbook_suggestions').select('*').eq('family_id', scope.familyId)
@@ -438,10 +503,157 @@ export async function listMemories(scope: ServiceScope, input: { memberId?: stri
     console.error('[service:memory] list failed', error);
     return fail(describeDbError(error, 'Could not load family memory.'), { code: SERVICE_CODES.db });
   }
-  return ok({
+  const base: Memories = {
     facts: filterVisibleMemories(scope, factsRes.data ?? []),
     pending: filterVisibleMemories(scope, pendingRes.data ?? []),
-  });
+  };
+  if (!input.includeProfile) return ok(base);
+
+  const profile = await listMemoryProfile(scope, input.memberId ?? null);
+  if (!profile.ok) return profile;
+  return ok({ ...base, ...profile.data });
+}
+
+/**
+ * The routine/trait half of `listMemories`. Split out so the read boundary can
+ * be proven on its own, and so a failure here fails the whole list rather than
+ * quietly returning an empty "Bubaly has learned nothing" — the two are
+ * different facts and the panel must not conflate them.
+ */
+async function listMemoryProfile(
+  scope: ServiceScope,
+  memberId: string | null,
+): Promise<ServiceResult<{ routines: MemoryRoutine[]; traits: MemoryTrait[] }>> {
+  // A reliability score about a sibling is not a child's business — the same
+  // fence `filterVisibleMemories` puts around a medical fact. Managers see the
+  // traits; everyone sees the routines, which are already on the calendar.
+  const canSeeTraits = scope.role === 'system' || isManager(scope.role);
+
+  const routinesRes = await scope.db.from('routine_templates')
+    .select('id, name, source, is_active, weekday_mask, created_at')
+    .eq('family_id', scope.familyId)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (routinesRes.error) {
+    console.error('[service:memory] routine read failed', routinesRes.error);
+    return fail(describeDbError(routinesRes.error, 'Could not load the routines Bubaly holds.'), { code: SERVICE_CODES.db });
+  }
+  const routines: MemoryRoutine[] = (routinesRes.data ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    source: r.source,
+    isActive: r.is_active,
+    weekdayMask: r.weekday_mask,
+    createdAt: r.created_at,
+  }));
+  if (!canSeeTraits) return ok({ routines, traits: [] });
+
+  let profilesQuery = scope.db.from('family_digital_twin_profiles')
+    .select('id, member_id, metadata, updated_at')
+    .eq('family_id', scope.familyId)
+    .limit(100);
+  if (memberId) profilesQuery = profilesQuery.eq('member_id', memberId);
+
+  const [profilesRes, membersRes] = await Promise.all([
+    profilesQuery,
+    scope.db.from('family_members').select('id, display_name').eq('family_id', scope.familyId).limit(100),
+  ]);
+  const traitError = profilesRes.error ?? membersRes.error;
+  if (traitError) {
+    console.error('[service:memory] trait read failed', traitError);
+    return fail(describeDbError(traitError, 'Could not load what Bubaly learned about the family.'), { code: SERVICE_CODES.db });
+  }
+
+  const names = new Map((membersRes.data ?? []).map((m) => [m.id, m.display_name] as const));
+  const traits: MemoryTrait[] = (profilesRes.data ?? [])
+    .map((p) => ({
+      profileId: p.id,
+      memberId: p.member_id,
+      memberName: names.get(p.member_id) ?? null,
+      updatedAt: p.updated_at,
+      ...readTraitBlob(p.metadata),
+    }))
+    // A profile row a person filled in by hand carries no learned trait; this
+    // panel is about what BUBALY worked out, so an empty one is not listed.
+    .filter((t) => t.reliabilityScore !== null || t.choreCompletionRate !== null || t.sampleSize !== null);
+
+  return ok({ routines, traits });
+}
+
+/** The `metadata` key `lib/autopilot/scan.ts` writes its learned traits under. */
+const TRAIT_METADATA_KEY = 'autopilot_traits';
+
+/**
+ * Take back one routine Bubaly holds.
+ *
+ * Family-scoped and manager-only. Deleting the template does NOT touch the
+ * calendar events a past application already created — the routines panel says
+ * the same thing where it deletes — because those are real rows a family may
+ * still be living by.
+ */
+export async function forgetRoutine(scope: ServiceScope, routineId: string): Promise<ServiceResult<{ id: string; name: string }>> {
+  if (!routineId?.trim()) return fail('Which routine?', { code: SERVICE_CODES.invalidInput });
+  if (!canManage(scope)) return fail('Only a parent or adult can forget a routine.', { code: SERVICE_CODES.denied });
+
+  const { data, error } = await scope.db
+    .from('routine_templates')
+    .delete()
+    .eq('family_id', scope.familyId)
+    .eq('id', routineId)
+    .select('id, name')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:memory] routine delete failed', error);
+    return fail(describeDbError(error, 'Could not forget that routine.'), { code: SERVICE_CODES.db });
+  }
+  if (!data) return fail('That routine could not be found.', { code: SERVICE_CODES.notFound });
+
+  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Forgot the ${data.name} routine`, href: '/dashboard/settings#ai' });
+  return ok({ id: data.id, name: data.name });
+}
+
+/**
+ * Reset what the autopilot learned about ONE member.
+ *
+ * Clears only `metadata.autopilot_traits` on that member's own family-scoped
+ * profile row: the rest of the profile — the preferences, responsibilities and
+ * notes a person entered — is theirs, and a "reset what Bubaly worked out"
+ * button that deleted it would be taking something it never offered to take.
+ * Both `family_id` and `member_id` are on the filter, so one member's reset can
+ * never reach another family's row or another member's.
+ */
+export async function resetMemberTraits(scope: ServiceScope, memberId: string): Promise<ServiceResult<{ cleared: boolean }>> {
+  if (!memberId?.trim()) return fail('Which family member?', { code: SERVICE_CODES.invalidInput });
+  if (!canManage(scope)) return fail("Only a parent or adult can reset what Bubaly learned about someone.", { code: SERVICE_CODES.denied });
+
+  const { data: profile, error: readError } = await scope.db
+    .from('family_digital_twin_profiles')
+    .select('id, metadata')
+    .eq('family_id', scope.familyId)
+    .eq('member_id', memberId)
+    .maybeSingle();
+  if (readError) {
+    console.error('[service:memory] twin profile read failed', readError);
+    return fail(describeDbError(readError, 'Could not read what Bubaly learned.'), { code: SERVICE_CODES.db });
+  }
+  if (!profile) return fail('Bubaly has not learned anything about that person yet.', { code: SERVICE_CODES.notFound });
+
+  const metadata = (profile.metadata && typeof profile.metadata === 'object' ? { ...(profile.metadata as Record<string, unknown>) } : {});
+  if (!(TRAIT_METADATA_KEY in metadata)) return ok({ cleared: false });
+  delete metadata[TRAIT_METADATA_KEY];
+
+  const { error } = await scope.db
+    .from('family_digital_twin_profiles')
+    .update({ metadata: metadata as never, updated_by: scope.userId })
+    .eq('family_id', scope.familyId)
+    .eq('member_id', memberId);
+  if (error) {
+    console.error('[service:memory] twin trait reset failed', error);
+    return fail(describeDbError(error, 'Could not reset that.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: 'Reset what Bubaly learned about a family member', href: '/dashboard/settings#ai', memberId });
+  return ok({ cleared: true });
 }
 
 /**
