@@ -45,6 +45,19 @@ describe('static marketing AEO coverage', () => {
     }
   });
 
+  it('keeps /security on its own path after the Trust Center rewrite', () => {
+    // The rewrite renamed the page, not the route: the sitemap, the end-to-end
+    // public route list and every inbound link still point at /security, and
+    // the AEO section it feeds is described by the honest key, not the retired
+    // boast the page used to carry.
+    const page = read('app/(marketing)/security/page.tsx');
+    expect(page).toContain('path="/security"');
+    expect(page).toContain("description={t('security.honestDescription')}");
+    expect(page).not.toContain("t('security.enterpriseGradeSecurity')");
+    expect(read('app/sitemap.ts')).toContain("path: '/security'");
+    expect(read('tests/e2e/public-routes.ts')).toContain("'/security'");
+  });
+
   it('does not loosen intentionally noindex utility routes', () => {
     expect(read('app/(marketing)/f/[id]/page.tsx')).toContain('index: false');
     expect(read('app/(auth)/login/page.tsx')).toContain('index: false');

@@ -66,3 +66,51 @@ describe('FAQ page uses sectioned tabs', () => {
     expect(page).toContain('<FaqStructuredData items={schemaItems} />');
   });
 });
+
+// The display story: "a shared family screen on the tablet you already own".
+// The FAQ answer, the /mobile section and the footer all point at the same
+// anchor, so the anchor has to exist and the answer has to be catalogue copy.
+describe('the Kitchen Mode entry', () => {
+  const page = readFileSync('app/(marketing)/faq/page.tsx', 'utf8');
+  const features = readFileSync('components/marketing/reference-showcases.tsx', 'utf8');
+  const mobile = readFileSync('app/(marketing)/mobile/page.tsx', 'utf8');
+  const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
+
+  it('joins the mobile-notifications section from the catalogue, not as a literal', () => {
+    expect(page).toContain("section.id === 'mobile-notifications'");
+    expect(page).toContain("t('faq.kitchenModeQ')");
+    expect(page).toContain("t('faq.kitchenModeA')");
+    expect(en['faq.kitchenModeQ']).toBeTruthy();
+    expect(en['faq.kitchenModeA']).toBeTruthy();
+  });
+
+  it('leaves the other sections untouched', () => {
+    // The map returns `section` unchanged for every other id, so the tab set
+    // and its order are the same as before.
+    expect(page).toContain('const core: FaqSection[] = FAQ_SECTIONS.map((section) =>');
+    expect(page).toContain(': section,');
+  });
+
+  it.each(['kitchen-mode', 'switching'])('/features#%s is a real anchor', (id) => {
+    expect(features).toContain(`id="${id}"`);
+    // FeatureCard renders the id on an <article> that clears the sticky header.
+    expect(features).toContain('scroll-mt-24');
+  });
+
+  it('sends /mobile and the answer to that anchor rather than a dead link', () => {
+    expect(mobile).toContain('href="/features#kitchen-mode"');
+  });
+
+  it('never promises hardware Bubaly does not ship, and never prices a rival', () => {
+    const copy = Object.entries(en)
+      .filter(([key]) => key.startsWith('kitchenMode.') || key.startsWith('faq.kitchenMode') || key.startsWith('mobile.kitchenMode') || key === 'featureCards.kitchenMode' || key === 'featureCards.kitchenModeBody')
+      .map(([, value]) => value)
+      .join('\n');
+    expect(copy).toBeTruthy();
+    for (const claim of [/certified hardware/i, /PIN lock/i, /voice control/i, /burn-?in/i, /\$\d/]) {
+      expect(copy, String(claim)).not.toMatch(claim);
+    }
+    // What it may say instead: the hardware is already in the house.
+    expect(copy).toMatch(/no new hardware|no extra hardware/i);
+  });
+});
