@@ -1,17 +1,40 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterAll } from 'vitest';
 
 // A credential pasted into a hosting dashboard picks up a trailing newline or a
 // wrapping pair of quotes routinely, and Supabase then rejects it with
 // "Unregistered API key" / "Invalid Compact JWS" — errors that name nothing the
 // operator can act on. These assert the value actually handed to the client.
 
-const createAdmin = vi.fn(() => ({ from: () => ({}) }));
+// Typed parameters so `mock.calls[0][0]` is the url and `[0][1]` the key —
+// an untyped vi.fn() infers an empty tuple and tsc rejects both indexes.
+const createAdmin = vi.fn((_url: string, _key: string, _options?: unknown) => ({ from: () => ({}) }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: createAdmin }));
 vi.mock('@supabase/ssr', () => ({ createServerClient: vi.fn(() => ({})) }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: () => {} }) }));
 
 const KEY = 'sb_secret_' + 'x'.repeat(32);
 const URL = 'https://example.supabase.co';
+
+// These tests must WRITE process.env to exercise the code under test, and the
+// suite does not isolate every file into its own process — so anything left
+// behind is read by whatever runs next in this worker. Restoring is not
+// tidiness: leaking a fake URL here broke tests/privacy-export.test.ts in CI,
+// in a file this change never touched.
+const ENV_KEYS = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
+const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+
+function restoreEnv() {
+  for (const key of ENV_KEYS) {
+    const original = ORIGINAL_ENV[key];
+    if (original === undefined) delete process.env[key];
+    else process.env[key] = original;
+  }
+}
+
+afterAll(() => {
+  restoreEnv();
+  vi.resetModules();
+});
 
 async function build(key: string, url = URL) {
   vi.resetModules();

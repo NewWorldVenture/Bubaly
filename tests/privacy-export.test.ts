@@ -24,7 +24,18 @@ import { EXPORT_SECTIONS, buildFamilyExport, exportFilename, sectionsForRole, se
 import { GET } from '@/app/api/privacy/export/route';
 
 const FAMILY = 'fam-1';
-const today = new Date().toISOString().slice(0, 10);
+const FAMILY_TZ = 'America/New_York';
+
+// Seed in the FAMILY's zone, because that is the zone the export queries in:
+// the finances section reads `to: dayKey(scope, 0)`, and `dayKey` resolves
+// through `dayKeyInTz(now, scope.tz)`. Seeding with a UTC day made this test
+// fail for the four hours a day when UTC has rolled over and New York has not
+// — a row dated "today" in UTC is tomorrow in the family's zone, and falls
+// outside a range that ends today. Calendar never noticed, because its window
+// is ±365 days; finances is the one section capped at the current day.
+const today = new Intl.DateTimeFormat('en-CA', {
+  timeZone: FAMILY_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date());
 
 type Aal = { currentLevel: string; nextLevel: string };
 
@@ -36,7 +47,7 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }) {
   // The guard reads the level from the session; the fake has no session.
   Object.assign(db.auth, { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: aal, error: null }) } });
 
-  db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: 'America/New_York' }]);
+  db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: FAMILY_TZ }]);
   db.seed('family_members', [
     { id: 'mem-parent', family_id: FAMILY, user_id: 'user-parent', display_name: 'Jordan', role: 'parent', is_active: true, birthday: null, color: 'teal', avatar_url: null },
     { id: 'mem-teen', family_id: FAMILY, user_id: 'user-teen', display_name: 'Sam', role: 'teen', is_active: true, birthday: '2011-04-02', color: 'amber', avatar_url: null },
@@ -58,7 +69,7 @@ function scopeFor(db: InMemorySupabase, role: 'parent' | 'teen'): ServiceScope {
     memberId: role === 'parent' ? 'mem-parent' : 'mem-teen',
     role,
     actorKind: 'member',
-    tz: 'America/New_York',
+    tz: FAMILY_TZ,
   };
 }
 
@@ -67,7 +78,7 @@ function ctxFor(role: 'parent' | 'teen', userId = role === 'parent' ? 'user-pare
   return {
     user: { id: userId, email: `${role}@example.com` },
     memberships: [],
-    active: { familyId: FAMILY, role, member: { id: memberId }, family: { id: FAMILY, name: 'The Riveras', timezone: 'America/New_York' } },
+    active: { familyId: FAMILY, role, member: { id: memberId }, family: { id: FAMILY, name: 'The Riveras', timezone: FAMILY_TZ } },
   } as unknown as UserContext;
 }
 
@@ -123,7 +134,7 @@ describe('buildFamilyExport', () => {
     if (!built.ok) return;
     const data = built.data;
     expect(data.format).toBe('bubaly-family-export');
-    expect(data.family).toEqual({ id: FAMILY, name: 'The Riveras', timezone: 'America/New_York' });
+    expect(data.family).toEqual({ id: FAMILY, name: 'The Riveras', timezone: FAMILY_TZ });
     expect(data.exportedBy).toEqual({ userId: 'user-parent', memberId: 'mem-parent', role: 'parent' });
     expect(data.withheld).toEqual([]);
     expect(data.sections.map((s) => s.key)).toEqual(EXPORT_SECTIONS.map((s) => s.key));
