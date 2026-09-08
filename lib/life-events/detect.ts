@@ -39,7 +39,12 @@ export type LifeEventSignals = {
   homeProjects?: { title: string; status: string }[];
   /** Things the family told Bubaly to remember — used only for the care signal. */
   facts?: { label: string; value: string }[];
-  /** Template keys the family already has a live plan for; never proposed again. */
+  /**
+   * Template keys the family has a LIVE (`status = 'active'`) plan for; never
+   * proposed again. Completed and archived plans must not be listed here —
+   * school_start, camp and holidays come round every year, and a finished plan
+   * in this set would suppress the next one for ever.
+   */
   activePlanKeys?: string[];
 };
 

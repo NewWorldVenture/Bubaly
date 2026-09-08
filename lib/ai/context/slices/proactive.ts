@@ -96,7 +96,10 @@ export const proactiveSlice: SliceDefinition = {
       settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', `${todayKey}T00:00:00Z`).lte('starts_at', `${termHorizon}T23:59:59Z`).limit(50)),
       settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', `${petSince}T00:00:00Z`).limit(20)),
       settle(scope.db.from('home_projects').select('title, status').eq('family_id', scope.familyId).in('status', ['idea', 'planning', 'quoting']).limit(20)),
-      settle(scope.db.from('life_event_plans').select('template_key').eq('family_id', scope.familyId).neq('status', 'archived').limit(50)),
+      // ACTIVE only — a completed plan is history, not a live plan, and
+      // feeding it to `activePlanKeys` would permanently suppress the annual
+      // transitions (holidays, school_start, camp) the detector exists for.
+      settle(scope.db.from('life_event_plans').select('template_key').eq('family_id', scope.familyId).eq('status', 'active').limit(50)),
     ]);
     const readError = liveSignals.error ?? autopilot.error ?? recommendations.error ?? terms.error ?? pets.error ?? projects.error ?? plans.error;
     if (readError) {
