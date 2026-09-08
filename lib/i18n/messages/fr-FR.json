@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Impossible de charger les données de vie et de jalons. Actualisez et réessayez.",
   "lifeEventsModule.couldNotStartThatPlaybook": "Impossible de démarrer ce guide.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "Bubaly n'a pas pu vérifier ce qui arrive. Veuillez réessayer.",
+  "lifeEventsModule.moveAlreadyOnFile": "Un déménagement est déjà enregistré pour le {date} — la liste se trouve dans le Planificateur de déménagement, où vous pouvez modifier la date.",
   "lifeEventsModule.moveOnFile": "Votre déménagement est enregistré — la liste datée se trouve dans le Planificateur de déménagement.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Playbook lancé — votre checklist est prête",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "Les préférences, routines et traditions enregistrées ici apparaissent partout dans l’app — ajoutez la première chose que votre famille fait toujours.",

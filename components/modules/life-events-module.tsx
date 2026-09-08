@@ -52,6 +52,9 @@ const ITEM_ICON: Record<string, typeof ListChecks> = {
 // The learned surface focuses on the durable, felt facts (preferences/traditions).
 const LEARNED_CATEGORIES = ['preference', 'about', 'important'] as const;
 const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+/** The long form, for a date a family is being told rather than scanning — a
+ *  move is often a year out, and "March 14" alone does not say which year. */
+const fmtFullDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '');
 
 export function LifeEventsModule({
   suggestions = [],
@@ -108,11 +111,21 @@ export function LifeEventsModule({
     if (!res.ok) { toastError(res.error ?? tr('lifeEventsModule.couldNotStartThatPlaybook')); return; }
     // Say what was actually written, from the server's own count — never a
     // generic "done" for work that may have been partly skipped.
-    success(res.created
-      ? tr('lifeEventsModule.startedWithStepsTodosReminders', {
+    //
+    // One case cannot say that, though: a family already mid-move gets that
+    // move back rather than a second one, and it comes back UNTOUCHED — the
+    // date picked in the Start dialog was not applied to it, because shifting a
+    // move's date shifts every relative task with it. So when the handoff was
+    // found rather than created, name the date the move actually carries, and
+    // do not imply this launch set it.
+    const found = res.created?.handoff && !res.created.handoff.created ? res.created.handoff : null;
+    success(
+      found ? tr('lifeEventsModule.moveAlreadyOnFile', { date: fmtFullDate(found.dateOnFile) })
+      : res.created ? tr('lifeEventsModule.startedWithStepsTodosReminders', {
         steps: res.created.items, todos: res.created.todos, reminders: res.created.reminders,
       })
-      : tr('lifeEventsModule.playbookStartedYourChecklistIs'));
+      : tr('lifeEventsModule.playbookStartedYourChecklistIs'),
+    );
     setStartTemplate(null);
     setSuggestedDate(null);
   }
@@ -274,7 +287,7 @@ export function LifeEventsModule({
                       <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4.5 w-4.5" /></span>
                       <div>
                         <p className="font-semibold">{p.title}{p.status === 'completed' && <span className="ml-2 text-xs text-emerald-400">complete</span>}</p>
-                        <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} · {done}/{pItems.length} done</p>
+                        <p className="text-xs text-muted">{p.event_date ? `Target ${fmtFullDate(p.event_date)}` : 'No date set'} · {done}/{pItems.length} done</p>
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 text-xs">

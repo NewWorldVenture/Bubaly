@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Error al cargar los datos de vida y hitos. Actualiza y vuelve a intentarlo.",
   "lifeEventsModule.couldNotStartThatPlaybook": "No se pudo iniciar esa guía.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "Bubaly no pudo comprobar lo que se acerca. Inténtalo de nuevo.",
+  "lifeEventsModule.moveAlreadyOnFile": "Ya hay una mudanza registrada para el {date}: la lista está en el Planificador de mudanza, donde puedes cambiar la fecha.",
   "lifeEventsModule.moveOnFile": "Tu mudanza está registrada: la lista de tareas con fechas está en el Planificador de mudanza.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Guía iniciada: tu lista de comprobación está lista",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "Las preferencias, rutinas y tradiciones que guardes aquí aparecen por toda la app: añade lo primero que tu familia hace siempre.",

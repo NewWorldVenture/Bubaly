@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Kon de gegevens over leven en mijlpalen niet laden. Ververs en probeer het opnieuw.",
   "lifeEventsModule.couldNotStartThatPlaybook": "Kon dat draaiboek niet starten.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "Bubaly kon niet controleren wat eraan komt. Probeer het opnieuw.",
+  "lifeEventsModule.moveAlreadyOnFile": "Er staat al een verhuizing genoteerd voor {date} – de checklist vind je in de Verhuisplanner, waar je de datum kunt wijzigen.",
   "lifeEventsModule.moveOnFile": "Je verhuizing staat genoteerd – de checklist met data vind je in de Verhuisplanner.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Draaiboek gestart — je checklist staat klaar",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "De voorkeuren, routines en tradities die je hier bewaart, komen overal in de app terug — voeg het eerste toe wat je gezin altijd doet.",

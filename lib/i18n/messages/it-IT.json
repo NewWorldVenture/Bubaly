@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Impossibile caricare i dati su vita e traguardi. Aggiorna e riprova.",
   "lifeEventsModule.couldNotStartThatPlaybook": "Non è stato possibile avviare questa guida.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "Bubaly non è riuscito a controllare cosa sta arrivando. Riprova.",
+  "lifeEventsModule.moveAlreadyOnFile": "C’è già un trasloco registrato per il {date}: la checklist è nel Pianificatore trasloco, dove puoi cambiare la data.",
   "lifeEventsModule.moveOnFile": "Il tuo trasloco è registrato: la checklist con le date è nel Pianificatore trasloco.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Playbook avviato: la tua checklist è pronta",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "Preferenze, routine e tradizioni che salvi qui compaiono in tutta l’app: aggiungi la prima cosa che la tua famiglia fa sempre.",

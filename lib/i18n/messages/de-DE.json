@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Fehler beim Laden: die Daten zu Leben und Meilensteinen. Bitte aktualisieren und erneut versuchen.",
   "lifeEventsModule.couldNotStartThatPlaybook": "Dieser Leitfaden konnte nicht gestartet werden.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "Bubaly konnte nicht prüfen, was ansteht. Bitte versuchen Sie es erneut.",
+  "lifeEventsModule.moveAlreadyOnFile": "Ein Umzug ist bereits für {date} erfasst – die Checkliste finden Sie im Umzugsplaner, dort können Sie das Datum ändern.",
   "lifeEventsModule.moveOnFile": "Ihr Umzug ist erfasst – die terminierte Checkliste finden Sie im Umzugsplaner.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Playbook gestartet – Ihre Checkliste ist bereit",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "Vorlieben, Routinen und Traditionen, die Sie hier speichern, tauchen überall in der App auf – tragen Sie das Erste ein, was Ihre Familie immer macht.",

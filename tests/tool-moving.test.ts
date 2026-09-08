@@ -108,6 +108,20 @@ describe('the tools through the service', () => {
     expect(detail.ok && (detail.data as { tasks: unknown[] }).tasks).toHaveLength(out.added + 1);
   });
 
+  // What the tool says about boxes has to be what `move_boxes` holds: the
+  // sentence goes into the ledger and out to the family verbatim.
+  it('reports the box counts it read, not an assumed empty shelf', async () => {
+    const db = makeDb();
+    db.seed('moves', [{ id: MOVE, family_id: FAMILY, title: 'Move', move_date: '2026-09-01', status: 'settling' }]);
+    const box = (over: Record<string, unknown>) => ({ id: randomUUID(), family_id: FAMILY, move_id: MOVE, label: 'Box', to_room: null, is_fragile: false, is_essential: false, contents: [], ...over });
+    db.seed('move_boxes', [box({ box_number: 1, status: 'unpacked' }), box({ box_number: 2, status: 'delivered' })]);
+    const get = getTool('moving.getMove')!;
+    const res = await get.execute(scopeWith(db), { move_id: null });
+    expect(res).toMatchObject({ ok: true, data: { boxes: { total: 2, packed: 2, unpacked: 1 }, summary: '4 days in · 1/2 boxes unpacked' } });
+    expect(res.ok && get.output.safeParse(res.data).success).toBe(true);
+    expect(get.summarize({}, res.ok ? res.data : {})).toBe('Move: 4 days in · 1/2 boxes unpacked');
+  });
+
   it('refuses to change the date for an actor with nobody behind it', async () => {
     const db = makeDb();
     db.seed('moves', [{ id: MOVE, family_id: FAMILY, title: 'Move', move_date: '2026-10-03' }]);

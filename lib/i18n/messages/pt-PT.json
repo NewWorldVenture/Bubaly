@@ -6568,6 +6568,7 @@
   "lifeEventsModule.couldNotLoadLifeAnd": "Não foi possível carregar os dados de vida e marcos. Atualize e tente novamente.",
   "lifeEventsModule.couldNotStartThatPlaybook": "Não foi possível iniciar esse guia.",
   "lifeEventsModule.couldNotWorkOutWhatIsComingUp": "O Bubaly não conseguiu verificar o que está a chegar. Tente novamente.",
+  "lifeEventsModule.moveAlreadyOnFile": "Já existe uma mudança registada para {date} — a lista está no Planeador de mudança, onde pode alterar a data.",
   "lifeEventsModule.moveOnFile": "A sua mudança está registada — a lista de tarefas com datas está no Planeador de mudança.",
   "lifeEventsModule.playbookStartedYourChecklistIs": "Manual iniciado — a sua lista de verificação está pronta",
   "lifeEventsModule.preferencesRoutinesAndTraditionsYou": "As preferências, rotinas e tradições que guardar aqui aparecem em toda a aplicação — acrescente a primeira coisa que a sua família faz sempre.",
