@@ -23,6 +23,8 @@ type Mode = 'ok' | 'resolved-error' | 'reject' | 'credential';
 let mode: Mode = 'ok';
 /** Table names to fail. Empty with mode !== 'ok' means fail everything. */
 let failing: string[] = [];
+/** What describeConfiguredServiceKey() reports; null = no diagnosis available. */
+let keyDiagnosis: string | null = null;
 
 const shouldFail = (table: string) =>
   mode !== 'ok' && (failing.length === 0 || failing.includes(table));
@@ -65,6 +67,10 @@ function builder(table: string): Record<string, unknown> {
 
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({ from: (table: string) => builder(table) }),
+  // The page reads the configured key's SHAPE to say which replacement is
+  // needed. Driven per-case; the diagnosis logic itself is covered in
+  // tests/service-key-diagnosis.test.ts.
+  describeConfiguredServiceKey: () => keyDiagnosis,
 }));
 
 vi.mock('@/lib/server/health', () => ({
@@ -87,7 +93,7 @@ async function render(): Promise<string> {
 }
 
 describe('/admin renders when its reads fail', () => {
-  beforeEach(() => { mode = 'ok'; failing = []; });
+  beforeEach(() => { mode = 'ok'; failing = []; keyDiagnosis = null; });
 
   it('renders the dashboard when every read succeeds', async () => {
     const html = await render();
@@ -151,7 +157,7 @@ describe('/admin renders when its reads fail', () => {
 // while the SERVICE-ROLE key was rejected, and every read on /admin failed with
 // the same opaque string.
 describe('/admin when Supabase rejects the service-role key', () => {
-  beforeEach(() => { mode = 'credential'; failing = []; });
+  beforeEach(() => { mode = 'credential'; failing = []; keyDiagnosis = null; });
 
   it('gives every failed read a non-blank reason', async () => {
     const html = await render();
@@ -193,6 +199,40 @@ describe('/admin when Supabase rejects the service-role key', () => {
     mode = 'resolved-error';
     const html = await render();
     expect(html).toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+    expect(html).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+  });
+});
+
+// Knowing the key is rejected is not the same as knowing which key to paste.
+// A project that moved to the new API-key scheme keeps serving families on its
+// publishable key while every legacy service key stops being registered, so the
+// banner names what is configured before saying what to replace it with.
+describe('/admin names which key is configured', () => {
+  beforeEach(() => { mode = 'credential'; failing = []; });
+
+  it('renders the diagnosis above the generic instruction', async () => {
+    keyDiagnosis = 'The configured key is a legacy JWT (eyJ…), but this project has moved to the new API-key scheme.';
+    const html = await render();
+    expect(html).toContain('legacy JWT');
+    expect(html).toContain('new API-key scheme');
+    // Still followed by the actionable variable and location.
+    expect(html).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(html).toContain('Vercel');
+  });
+
+  it('falls back to the generic instruction when no diagnosis is available', async () => {
+    keyDiagnosis = null;
+    const html = await render();
+    expect(html).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(html).not.toContain('legacy JWT');
+  });
+
+  it('never renders a diagnosis when the failure is not a credential fault', async () => {
+    mode = 'resolved-error';
+    keyDiagnosis = 'The configured key is a legacy JWT (eyJ…).';
+    const html = await render();
+    expect(html).toContain(SOURCE_MESSAGES['admin.someDataCouldNotBeLoaded']);
+    expect(html).not.toContain('legacy JWT');
     expect(html).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
   });
 });

@@ -140,6 +140,12 @@ export const SERVICE_ROLE_KEY_HINT =
  * adds one line and changes nothing else; `describeReadError` has by then folded
  * every error shape into the text being matched.
  */
-export function credentialHint(failures: readonly string[]): string | undefined {
-  return failures.some(isCredentialError) ? SERVICE_ROLE_KEY_HINT : undefined;
+export function credentialHint(
+  failures: readonly string[],
+  // What is actually configured, from describeConfiguredServiceKey(). Optional
+  // so a caller with no access to the server env still gets the generic hint.
+  configured?: string | null,
+): string | undefined {
+  if (!failures.some(isCredentialError)) return undefined;
+  return configured ? `${configured} ${SERVICE_ROLE_KEY_HINT}` : SERVICE_ROLE_KEY_HINT;
 }
