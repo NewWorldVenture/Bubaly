@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive } from 'lucide-react';
+import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive, MonitorSmartphone, ShieldCheck, type LucideIcon } from 'lucide-react';
 // From `primitives`, not `visual-mocks`: this is a client component, and
 // `visual-mocks` imports `lib/i18n/server` → `next/headers`, which cannot be
 // bundled for the browser.
@@ -13,8 +13,18 @@ import {
   PageWrap,
   TrustStrip,
 } from '@/components/marketing/primitives';
+import { PricingValueBlock, type PricingValueSample } from '@/components/marketing/pricing-value-block';
 import { cn } from '@/lib/utils/cn';
 import { familiesNote } from '@/lib/marketing/format';
+import { HERO_OUTCOMES } from '@/lib/marketing/hero-outcomes';
+import {
+  formatPerDay,
+  perDayCents,
+  valueTier,
+  type BillingPeriod,
+  type HandledStatsLike,
+  type ValueOutcome,
+} from '@/lib/marketing/value';
 import {
   BASIC_MONTHLY_CENTS,
   BASIC_ANNUAL_CENTS,
@@ -23,7 +33,18 @@ import {
 } from '@/lib/constants/plans';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-type Period = 'monthly' | 'yearly';
+type Period = BillingPeriod;
+
+/** A published case study, already filtered and shaped by the server page. */
+export type PricingCaseStudy = {
+  id: string;
+  title: string;
+  customerName: string | null;
+  summary: string | null;
+  resultMetric: string | null;
+  /** Only an admin can set case_studies.verified_at; the badge renders on nothing else. */
+  verified: boolean;
+};
 
 const fmt = (cents: number) =>
   cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
@@ -59,40 +80,44 @@ const PLUS_FEATURES = [
 ];
 
 // ── Above-the-fold differentiators ──────────────────────────────────────────
-// The highest-value Bubaly features, made easy to understand and find (vs. the
-// market). Each is a real, shipped surface — this strip just raises visibility.
-type HiTier = 'Free' | 'Family Basic' | 'Family+';
+// The outcomes families stop carrying, made easy to understand and find. Each
+// is a real, shipped surface — this strip just raises visibility.
+type HiTier = 'Family Basic' | 'Family+';
 // HiTier doubles as a lookup key and as the badge's visible label, so the
 // members stay identifiers and the display text lives here.
 const HI_TIER_LABEL: Record<HiTier, string> = {
-  'Free': 'pricingContent.free',
   'Family Basic': 'pricingContent.familyBasic',
   'Family+': 'pricingContent.familyPlus',
 };
 
 const HI_BADGE: Record<HiTier, string> = {
-  'Free': 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
   'Family Basic': 'bg-blue-500/15 text-blue-300 ring-blue-400/30',
   'Family+': 'bg-violet-500/15 text-violet-300 ring-violet-400/30',
 };
 
-const SWITCH_HIGHLIGHTS: { emoji: string; title: string; desc: string; tier: HiTier }[] = [
-  { emoji: '🛒', title: 'pricingContent.shoppingLists', tier: 'Free',
-    desc: 'pricingContent.sharedShoppingAndGroceryLists' },
-  { emoji: '📥', title: 'pricingContent.aiFamilyInboxFrontDesk', tier: 'Family+',
-    desc: 'pricingContent.onePlaceForCallsEmails' },
-  { emoji: '📸', title: 'pricingContent.smartImports', tier: 'Family Basic',
-    desc: 'pricingContent.snapASchoolFlyerPdf' },
-  { emoji: '🖥️', title: 'pricingContent.kitchenMode', tier: 'Family Basic',
-    desc: 'pricingContent.turnAnyTabletOrSmart' },
-  { emoji: '👛', title: 'pricingContent.familyWalletAllowance', tier: 'Free',
-    desc: 'pricingContent.allowancesChoresToRewardsAnd' },
-  { emoji: '🩺', title: 'pricingContent.healthMedsRecords', tier: 'Family Basic',
-    desc: 'pricingContent.medicationsAppointmentsAndASecure' },
-  { emoji: '🛟', title: 'pricingContent.emergencyHub', tier: 'Family+',
-    desc: 'pricingContent.criticalInfoDocumentsAndContacts' },
-  { emoji: '🚗', title: 'pricingContent.transportationRides', tier: 'Family+',
-    desc: 'pricingContent.whoSPickingUpWhom' },
+// The six outcomes the homepage leads with (lib/marketing/hero-outcomes.ts),
+// in the same order, each carrying the tier that delivers it — plus Kitchen
+// Mode as the seventh tile. Nothing here is authored twice: the titles and
+// bodies are the heroOutcomes.* keys the homepage rail renders, so a copy fix
+// lands on both pages at once. Every tile string is a key.
+type Highlight = { key: string; icon: LucideIcon; titleKey: string; descKey: string; tier: HiTier };
+const OUTCOME_TIERS: { titleKey: string; tier: HiTier }[] = [
+  { titleKey: 'heroOutcomes.runToday', tier: 'Family Basic' },
+  { titleKey: 'heroOutcomes.chores', tier: 'Family Basic' },
+  { titleKey: 'heroOutcomes.feedFamily', tier: 'Family Basic' },
+  { titleKey: 'heroOutcomes.school', tier: 'Family+' },
+  { titleKey: 'heroOutcomes.health', tier: 'Family Basic' },
+  { titleKey: 'heroOutcomes.home', tier: 'Family+' },
+];
+const SWITCH_HIGHLIGHTS: Highlight[] = [
+  ...HERO_OUTCOMES.map((outcome) => ({
+    key: outcome.titleKey,
+    icon: outcome.icon,
+    titleKey: outcome.titleKey,
+    descKey: outcome.bodyKey,
+    tier: OUTCOME_TIERS.find((entry) => entry.titleKey === outcome.titleKey)?.tier ?? 'Family Basic',
+  })),
+  { key: 'kitchenMode', icon: MonitorSmartphone, titleKey: 'pricingContent.kitchenMode', descKey: 'pricingContent.turnAnyTabletOrSmart', tier: 'Family Basic' },
 ];
 
 function WhySwitch() {
@@ -104,16 +129,16 @@ function WhySwitch() {
         {tr('pricingPricingContent.theHighestValueThingsBubalyDoes')}
       </p>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {SWITCH_HIGHLIGHTS.map((h) => (
-          <div key={h.title} className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        {SWITCH_HIGHLIGHTS.map(({ key, icon: Icon, titleKey, descKey, tier }) => (
+          <div key={key} className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-2xl" aria-hidden>{h.emoji}</span>
-              <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1', HI_BADGE[h.tier])}>
-                {tr(HI_TIER_LABEL[h.tier])}
+              <Icon className="h-6 w-6 text-violet-300" aria-hidden />
+              <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1', HI_BADGE[tier])}>
+                {tr(HI_TIER_LABEL[tier])}
               </span>
             </div>
-            <p className="mt-3 text-sm font-bold">{tr(h.title)}</p>
-            <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(h.desc)}</p>
+            <p className="mt-3 text-sm font-bold">{tr(titleKey)}</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(descKey)}</p>
           </div>
         ))}
       </div>
@@ -159,13 +184,19 @@ function HowTrialWorks() {
 
 // ── Plan card ──────────────────────────────────────────────────────────────
 function PlanCard({
-  name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
+  name, goal, icon, price, priceSub, perDay, footnote, outcomes, cta, ctaHref, featured, featureSections, prelude, badge,
 }: {
   name: string;
   goal: string;
   icon: React.ReactNode;
   price: string;
   priceSub: string;
+  /** "≈ 28¢ a day" — rendered UNDER the monthly price, never instead of it; paid tiers only. */
+  perDay?: string;
+  /** A one-line reassurance under the price block (Family+: cancel or downgrade anytime). */
+  footnote?: string;
+  /** The outcome-first column: what stops landing on the family on this tier. */
+  outcomes: ValueOutcome[];
   cta: string;
   ctaHref: string;
   featured?: boolean;
@@ -196,7 +227,16 @@ function PlanCard({
         <span className="text-4xl font-black">{price}</span>
         {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">/mo</span>}
       </div>
+      {/* Under the monthly price, never instead of it — and only on the paid
+          tiers, where a per-day figure means something. */}
+      {perDay && <p className="mt-1 text-sm font-semibold text-white/80">{perDay}</p>}
       <p className="mt-1 min-h-[18px] text-xs text-white/50">{priceSub}</p>
+      {footnote && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-white/60">
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden />
+          {footnote}
+        </p>
+      )}
 
       <Link
         href={ctaHref}
@@ -209,6 +249,20 @@ function PlanCard({
       >
         {cta}
       </Link>
+
+      {outcomes.length > 0 && (
+        <div className="mt-6 border-t border-white/10 pt-6">
+          <p className="text-xs font-semibold uppercase tracking-wider text-white/50">{tr('planOutcomes.heading')}</p>
+          <ul className="mt-2 space-y-2">
+            {outcomes.map((outcome) => (
+              <li key={outcome.labelKey} className="flex items-start gap-2 text-sm font-medium text-white/90">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
+                <span>{tr(outcome.labelKey)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
         {prelude && <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">{prelude}</p>}
@@ -241,29 +295,72 @@ const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
 ];
 const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
 
-// Competitor-positioning callouts (how each tier stacks up vs the market).
-const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
+// Tier positioning: what each plan is for, in one line, from the same
+// registry the value block reads (lib/marketing/value.ts). Family Basic keeps
+// the factual replacement line — the competitors are NAMED, never priced —
+// and Family+ is sold on fewer decisions landing on the family rather than on
+// a category claim.
+const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; positioningKey: string }[] = [
   { key: 'free', label: 'pricingContent.fiveDayFreeTrial', dot: 'bg-emerald-400',
-    line: 'pricingContent.getFullFamilyBasicFree' },
+    positioningKey: valueTier('trial').positioningKey },
   { key: 'basic', label: 'pricingContent.familyBasic', dot: 'bg-blue-400',
-    line: 'pricingContent.aDirectReplacementForCozi' },
+    positioningKey: valueTier('basic').positioningKey },
   { key: 'plus', label: 'pricingContent.familyPlus', dot: 'bg-violet-400',
-    line: 'pricingContent.categoryCreatorYourFamilyS' },
+    positioningKey: valueTier('plus').positioningKey },
 ];
 
 function PositioningCallouts() {
   const tr = useTranslations();
   return (
     <div className="mt-7 grid gap-3 sm:grid-cols-3">
-      {TIER_POSITIONING.map((t) => (
-        <div key={t.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      {TIER_POSITIONING.map((tier) => (
+        <div key={tier.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="flex items-center gap-1.5 text-sm font-bold">
-            <span className={cn('h-2 w-2 rounded-full', t.dot)} /> {tr(t.label)}
+            <span className={cn('h-2 w-2 rounded-full', tier.dot)} /> {tr(tier.label)}
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-white/65">{tr(t.line)}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-white/65">{tr(tier.positioningKey)}</p>
         </div>
       ))}
     </div>
+  );
+}
+
+// ── Case studies ───────────────────────────────────────────────────────────
+// At most two admin-published family stories, beside the value block. Nothing
+// renders when an admin has published none — no placeholder, no invented
+// family — and the "Verified outcome" badge follows case_studies.verified_at
+// exactly as the homepage band does.
+function CaseStudyCards({ caseStudies }: { caseStudies: PricingCaseStudy[] }) {
+  const tr = useTranslations();
+  const studies = caseStudies.slice(0, 2);
+  if (studies.length === 0) return null;
+  return (
+    <section className="mt-6" aria-label={tr('socialProof.caseStudiesTitle')}>
+      <h2 className="text-center text-lg font-semibold">{tr('socialProof.caseStudiesTitle')}</h2>
+      <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+        {studies.map((study) => (
+          <li key={study.id} className="showcase-card flex flex-col p-5">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-base font-semibold">{study.title}</h3>
+              {study.verified && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-white/85">
+                  <ShieldCheck className="h-3 w-3 text-emerald-400" aria-hidden />
+                  {tr('socialProof.verifiedBadge')}
+                </span>
+              )}
+            </div>
+            {study.customerName && <p className="mt-1 text-xs text-white/55">{study.customerName}</p>}
+            {study.summary && <p className="mt-3 flex-1 text-sm leading-6 text-white/75">{study.summary}</p>}
+            {study.resultMetric && (
+              <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">{tr('socialProof.resultLabel')} · {tr('socialProof.customerWords')}</p>
+                <p className="mt-1 text-sm font-medium text-white/90">{study.resultMetric}</p>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -322,7 +419,25 @@ function FeatureMatrixSection({ section, items }: { section: string; items: { la
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { familiesCount?: number; featureMatrix?: FeatureMatrix }) {
+export function PricingContent({
+  familiesCount = 0,
+  featureMatrix = [],
+  handledStats = { handledCompleted: 0, handled30d: 0 },
+  sampleNumbers = { today: 0, clashes: 0, handled: 0, minutes: 0 },
+  caseStudies = [],
+  switching = null,
+}: {
+  familiesCount?: number;
+  featureMatrix?: FeatureMatrix;
+  /** Cross-family completed-run counts from public_handled_stats(); below the floor the REAL card is omitted. */
+  handledStats?: HandledStatsLike;
+  /** The fictional family's brief numbers, computed on the server by lib/marketing/handled-sample.ts. */
+  sampleNumbers?: PricingValueSample;
+  /** Admin-published case studies, already shaped by the server page. */
+  caseStudies?: PricingCaseStudy[];
+  /** The compact switching band, rendered by the server page and handed in (this file cannot import lib/i18n/server). */
+  switching?: ReactNode;
+}) {
   const tr = useTranslations();
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
@@ -362,6 +477,16 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';
   const plusPrice     = yearly ? fmt(Math.round(PLUS_ANNUAL_CENTS / 12))  : fmt(PLUS_MONTHLY_CENTS);
   const plusPriceSub  = yearly ? `billed ${fmt(PLUS_ANNUAL_CENTS)}/yr · save ${plusSavings}%`  : 'billed monthly';
+  // Per-day framing (lib/marketing/value.ts): ceil-derived from the same plan
+  // constants the price above it uses, so the line can never claim a cheaper
+  // day than the family actually pays. Paid tiers only — the trial has no price.
+  const basicPerDay = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? BASIC_ANNUAL_CENTS : BASIC_MONTHLY_CENTS, period)) });
+  const plusPerDay  = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? PLUS_ANNUAL_CENTS : PLUS_MONTHLY_CENTS, period)) });
+  // Outcome-first tier copy — label, goal line and what stops landing on the
+  // family — from the registry both /pricing and the in-app upgrade modal read.
+  const trialCopy = valueTier('trial');
+  const basicCopy = valueTier('basic');
+  const plusCopy  = valueTier('plus');
 
   return (
     <PageWrap>
@@ -405,14 +530,21 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           </div>
         </section>
 
+        {/* What you're paying for — the tier matrix and the three-source
+            panel, directly above the plan cards so the value is read before
+            the price. Case studies (at most two, admin-published) sit with it. */}
+        <PricingValueBlock handled={handledStats} sample={sampleNumbers} />
+        <CaseStudyCards caseStudies={caseStudies} />
+
         {/* Plan cards — responsive 1 / 2 / 3 columns */}
         <section className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           <PlanCard
-            name="5-Day Free Trial"
-            goal={tr('pricingContent.fullFamilyBasicAccessFree')}
+            name={tr(trialCopy.labelKey)}
+            goal={tr(trialCopy.goalKey)}
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price={tr('pricingContent.free')}
             priceSub={tr('pricingContent.familyBasicFor5Days')}
+            outcomes={trialCopy.outcomes}
             cta={tr('pricingContent.startYourFreeTrial')}
             ctaHref="/signup"
             prelude={tr('pricingContent.yourFreeTrialIncludesFamily')}
@@ -420,11 +552,13 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           />
 
           <PlanCard
-            name={tr('pricingContent.familyBasic')}
-            goal={tr('pricingContent.theBestFamilyOrganizerOn')}
+            name={tr(basicCopy.labelKey)}
+            goal={tr(basicCopy.goalKey)}
             icon={<Crown className="h-7 w-7 text-yellow-400" />}
             price={basicPrice}
             priceSub={basicPriceSub}
+            perDay={basicPerDay}
+            outcomes={basicCopy.outcomes}
             cta={tr('pricingContent.startFamilyBasic')}
             ctaHref={`/signup?plan=basic&billing=${period}`}
             featured
@@ -434,11 +568,14 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           />
 
           <PlanCard
-            name="Family+"
-            goal={tr('pricingContent.theFamilyChiefOfStaff')}
+            name={tr(plusCopy.labelKey)}
+            goal={tr(plusCopy.goalKey)}
             icon={<Sparkles className="h-7 w-7 text-violet-400" />}
             price={plusPrice}
             priceSub={plusPriceSub}
+            perDay={plusPerDay}
+            footnote={tr('pricingValue.cancelAnytime')}
+            outcomes={plusCopy.outcomes}
             cta={tr('pricingContent.startFamily')}
             ctaHref={`/signup?plan=plus&billing=${period}`}
             prelude={tr('pricingContent.everythingInFamilyBasicPlus')}
@@ -449,20 +586,20 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         {/* How the 5-day free trial works — the model, in plain language. */}
         <HowTrialWorks />
 
-        {/* Differentiators — the highest-value features, placed below the plan
+        {/* Differentiators — the highest-value outcomes, placed below the plan
             cards so pricing details lead the page. */}
         <WhySwitch />
 
-        {/* Smart Imports callout */}
-        <section className="showcase-panel mt-8 p-5 sm:p-7">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
-            <div className="shrink-0 text-3xl">📸</div>
-            <div>
-              <h2 className="font-bold">{tr('pricingPricingContent.smartImportsTheFeatureMostCompetitors')}</h2>
-              <p className="mt-1 text-sm text-white/65">{tr('pricingContent.snapASchoolFlyerUpload')}</p>
-            </div>
-          </div>
-        </section>
+        {/* Switching is the easy part — the compact band, rendered by the
+            server page (it reads lib/i18n/server, which this client module
+            must not) and handed in as a prop. */}
+        {switching && (
+          <section className="showcase-panel mt-8 p-5 sm:p-7">
+            <h2 className="text-center text-2xl font-black">{tr('switching.title')}</h2>
+            <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">{tr('switching.body')}</p>
+            <div className="mt-6">{switching}</div>
+          </section>
+        )}
 
         <FeatureMatrixTable matrix={featureMatrix} />
 

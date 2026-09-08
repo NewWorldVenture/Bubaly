@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import {
   PLANS, BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
+import { formatPerDay, perDayCents, valueTierForLevel } from '@/lib/marketing/value';
 import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -42,6 +43,7 @@ const TIERS = {
     monthlyPlan: 'basic_monthly' as StripePlan,
     annualPlan: 'basic_annual' as StripePlan,
     monthlyCents: BASIC_MONTHLY_CENTS,
+    annualCents: BASIC_ANNUAL_CENTS,
     annualPerMoCents: Math.round(BASIC_ANNUAL_CENTS / 12),
   },
   2: {
@@ -49,6 +51,7 @@ const TIERS = {
     monthlyPlan: 'plus_monthly' as StripePlan,
     annualPlan: 'plus_annual' as StripePlan,
     monthlyCents: PLUS_MONTHLY_CENTS,
+    annualCents: PLUS_ANNUAL_CENTS,
     annualPerMoCents: Math.round(PLUS_ANNUAL_CENTS / 12),
   },
 } as const;
@@ -57,6 +60,12 @@ const TIERS = {
  * Shown when a member taps a locked feature. Promotes the *correct* tier for
  * that feature — Family Basic for level-1 features, Family+ for level-2 — with
  * one-tap Stripe checkout. Only family admins can purchase; others see a nudge.
+ *
+ * The pitch is outcome-first: what stops landing on the family leads, and the
+ * feature checklist follows as "also included". Both the outcomes and the
+ * per-day figures come from lib/marketing/value.ts — the same registry and the
+ * same ceil-rounded arithmetic /pricing renders — so the two surfaces cannot
+ * drift and neither can understate the price.
  */
 export function UpgradeModal({
   open,
@@ -77,6 +86,9 @@ export function UpgradeModal({
 
   const tier = TIERS[requiredLevel === 2 ? 2 : 1];
   const { plan } = tier;
+  const copy = valueTierForLevel(requiredLevel === 2 ? 2 : 1);
+  const monthlyPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.monthlyCents, 'monthly')) });
+  const annualPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.annualCents, 'yearly')) });
 
   async function checkout(stripePlan: StripePlan) {
     setPending(stripePlan);
@@ -93,8 +105,8 @@ export function UpgradeModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={featureLabel ? `Unlock ${featureLabel}` : `Upgrade to ${plan.name}`}
-      description={`Available on ${plan.name} and above.`}
+      title={featureLabel ? t('upgradeModal.unlockFeature', { feature: featureLabel }) : t('upgradeModal.upgradeToPlan', { plan: plan.name })}
+      description={t('upgradeModal.availableOnPlan', { plan: plan.name })}
     >
       <div className="space-y-5">
         <div className="flex items-start gap-3 rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-4">
@@ -103,18 +115,33 @@ export function UpgradeModal({
           </div>
           <div>
             <p className="font-semibold">{plan.name}</p>
-            <p className="text-sm text-muted">{plan.tagline}</p>
+            <p className="text-sm text-muted">{t(copy.goalKey)}</p>
           </div>
         </div>
 
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {plan.features.map((f) => (
-            <li key={f} className="flex items-center gap-2 text-sm">
-              <Check className="h-4 w-4 shrink-0 text-emerald-400" />
-              <span className="text-fg/90">{f}</span>
-            </li>
-          ))}
-        </ul>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t('planOutcomes.heading')}</p>
+          <ul className="mt-2 space-y-2">
+            {copy.outcomes.map((outcome) => (
+              <li key={outcome.labelKey} className="flex items-start gap-2 text-sm font-medium">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" aria-hidden />
+                <span className="text-fg/90">{t(outcome.labelKey)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t('upgradeModal.alsoIncluded')}</p>
+          <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+            {plan.features.map((f) => (
+              <li key={f} className="flex items-center gap-2 text-xs text-muted">
+                <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden />
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {isAdmin ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -125,8 +152,9 @@ export function UpgradeModal({
             >
               <p className="text-sm font-semibold">{t('upgradeModal.monthly')}</p>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.monthlyCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-0.5 text-xs text-muted">{monthlyPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
-                {pending === tier.monthlyPlan ? 'Redirecting…' : 'Choose monthly →'}
+                {pending === tier.monthlyPlan ? t('upgradeModal.redirecting') : t('upgradeModal.chooseMonthly')}
               </span>
             </button>
             <button
@@ -139,8 +167,9 @@ export function UpgradeModal({
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('upgradeModal.save17')}</span>
               </div>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-0.5 text-xs text-muted">{annualPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
-                {pending === tier.annualPlan ? 'Redirecting…' : 'Choose annual →'}
+                {pending === tier.annualPlan ? t('upgradeModal.redirecting') : t('upgradeModal.chooseAnnual')}
               </span>
             </button>
           </div>
