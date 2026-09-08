@@ -75,6 +75,12 @@ const FORBIDDEN = [
   /99\.99%/,
   /\$\d+ (screen|display|frame)/,
   /zero setup/i,
+  // Pricing may name competitors, but never quote their prices, and never
+  // price the family's time against a nanny or an assistant.
+  /(Cozi|FamilyWall|OurHome|FamCal|Skylight)[^\n]{0,60}\$\d/,
+  /\$\d[^\n]{0,60}(Cozi|FamilyWall|OurHome|FamCal|Skylight)/,
+  /(nanny|babysitter|housekeeper|personal assistant)[^\n]{0,40}(\$|per hour|an hour)/i,
+  /(\$|per hour|an hour)[^\n]{0,40}(nanny|babysitter|housekeeper)/i,
 ];
 
 describe('public marketing claims', () => {
@@ -95,5 +101,51 @@ describe('public marketing claims', () => {
   it('uses concrete security language', () => {
     expect(sources).toContain('Family-scoped access controls');
     expect(sources).toContain('Encrypted in transit and at rest');
+  });
+
+  // The /pricing value block is where three kinds of number sit closest
+  // together, so it is where blending them would be easiest. These pin the
+  // separation at source level; lib/marketing/value.ts holds the arithmetic
+  // and tests/marketing-value.test.ts proves the rounding.
+  describe('the pricing value block keeps its three sources apart', () => {
+    const block = readFileSync(resolve(process.cwd(), 'components/marketing/pricing-value-block.tsx'), 'utf8');
+    const pricing = readFileSync(resolve(process.cwd(), 'app/(marketing)/pricing/pricing-content.tsx'), 'utf8');
+
+    it('omits the real card rather than printing a zero', () => {
+      expect(block).toContain('realHandledCounts(handled)');
+      expect(block).toContain('{real && (');
+      // No fallback copy: when `real` is null the card is simply absent —
+      // there is no ternary rendering a zero, a dash or a "coming soon".
+      expect(block).not.toMatch(/real \?[^\n]*\bt\(/);
+      expect(block).not.toMatch(/\?\?\s*['"]0['"]/);
+    });
+
+    it('badges the illustrative card and labels its estimate as one', () => {
+      expect(block).toContain("t('handledProof.sampleBadge')");
+      expect(block).toContain("t('pricingValue.estimateNote')");
+      expect(en['pricingValue.estimateNote']).toMatch(/^Estimated\./);
+      expect(en['pricingValue.estimateNote']).toMatch(/not a stopwatch/i);
+    });
+
+    it('says the family time-saved number is the family\'s own, not an average', () => {
+      expect(en['pricingValue.yourNumbersBody']).toMatch(/estimates? the time handed back/i);
+      expect(en['pricingValue.yourNumbersBody']).toMatch(/your (family|data)/i);
+    });
+
+    it('never claims Bubaly finished work that no row backs', () => {
+      // The real card's only sentences are the two aggregate-count keys, both
+      // read from public_handled_stats().
+      expect(block).toContain("t('handledProof.aggregateNote', { count: real.total })");
+      expect(block).toContain("t('handledProof.aggregate30d', { count: real.last30d })");
+      expect(en['pricingValue.realFootnote']).toMatch(/finished state/i);
+    });
+
+    it('leaves no inert control on the page', () => {
+      // Every button on /pricing changes the billing period; every other CTA
+      // is a real link.
+      const buttons = pricing.match(/<button\b/g) ?? [];
+      const setPeriod = pricing.match(/setPeriod\('/g) ?? [];
+      expect(buttons.length).toBe(setPeriod.length);
+    });
   });
 });
