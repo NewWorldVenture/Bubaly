@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 // Every public-site source that carries copy or sample data. Files that a
 // later stage of the public-site plan creates are listed already and skipped
 // while absent, so the guard picks them up the moment they land.
-// app/(marketing)/security/page.tsx joins this list with the Trust Center
-// stage, which is what removes the claims that page still carries today.
+// app/(marketing)/security/page.tsx joined with the Trust Center stage, which
+// is what removed the claims that page used to carry.
 const FILES = [
   'components/marketing/visual-mocks.tsx',
   'components/marketing/reference-showcases.tsx',
@@ -25,6 +25,9 @@ const FILES = [
   'lib/marketing/trust-copy.ts',
   'lib/marketing/trust-ledger.ts',
   'app/(marketing)/page.tsx',
+  'app/(marketing)/security/page.tsx',
+  'app/(marketing)/ai/page.tsx',
+  'app/(marketing)/mobile/page.tsx',
 ];
 
 const catalogue = JSON.parse(
@@ -49,6 +52,20 @@ const files = present.map((file) => readFileSync(resolve(process.cwd(), file), '
 const shipped = [...files.matchAll(/'([a-zA-Z][\w]*\.[\w]+)'/g)]
   .map((m) => catalogue[m[1]])
   .filter((value): value is string => typeof value === 'string')
+  .join('\n');
+
+/**
+ * The second corpus reads the catalogue by PREFIX rather than by reference:
+ * every value under a public-site namespace, whether or not a listed file
+ * renders it today. The key-following corpus above cannot see a claim parked
+ * in a marketing key that nothing references yet — and the next page to
+ * reference it would ship it. Scoped to the public-site namespaces for the
+ * same reason `shipped` is scoped to the files.
+ */
+const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.'];
+const marketingCopy = Object.entries(catalogue)
+  .filter(([key]) => MARKETING_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
+  .map(([key, value]) => `${key}: ${value}`)
   .join('\n');
 
 const sources = `${files}\n${shipped}`;
@@ -79,7 +96,14 @@ const FORBIDDEN = [
 
 describe('public marketing claims', () => {
   it('covers the sources this stage ships', () => {
-    for (const file of ['components/marketing/hero-outcomes.tsx', 'components/marketing/handled-ledger.tsx', 'lib/marketing/handled-sample.ts']) {
+    for (const file of [
+      'components/marketing/hero-outcomes.tsx',
+      'components/marketing/handled-ledger.tsx',
+      'lib/marketing/handled-sample.ts',
+      'components/marketing/trust-ledger.tsx',
+      'lib/marketing/trust-ledger.ts',
+      'app/(marketing)/security/page.tsx',
+    ]) {
       expect(present).toContain(file);
     }
   });
@@ -88,8 +112,12 @@ describe('public marketing claims', () => {
     expect(sources).not.toMatch(claim);
   });
 
-  it.each(FORBIDDEN)('does not ship unsupported claim %s in the marketing catalogue', (claim) => {
+  it.each(FORBIDDEN)('does not ship unsupported claim %s in the copy those sources render', (claim) => {
     expect(shipped).not.toMatch(claim);
+  });
+
+  it.each(FORBIDDEN)('does not ship unsupported claim %s under a public-site catalogue prefix', (claim) => {
+    expect(marketingCopy).not.toMatch(claim);
   });
 
   it('uses concrete security language', () => {

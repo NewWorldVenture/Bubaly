@@ -62,6 +62,8 @@ const FAQ_SECTIONS: FaqSection[] = [
     items: [
       { q: 'faq.isThereAMobileApp', a: 'faq.bubalyIsAnInstallableProgressive' },
       { q: 'faq.howDoNotificationsWork', a: 'faq.bubalySendsTimelyPushAnd' },
+      // Kitchen Mode: the same software on a tablet the family already owns.
+      { q: 'faq.kitchenModeQ', a: 'faq.kitchenModeA' },
     ],
   },
 ];
