@@ -16,11 +16,9 @@ export default async function ExperiencePage() {
 
   return (
     <>
-      {timeSaved.show && (
-        <div className="mx-auto mb-4 max-w-5xl px-4 pt-6">
-          <TimeSavedBanner data={timeSaved} />
-        </div>
-      )}
+      <div className="mx-auto mb-4 max-w-5xl px-4 pt-6 empty:hidden">
+        <TimeSavedBanner result={timeSaved} retryHref="/dashboard/experience" />
+      </div>
       <ExperienceScorecardModule />
     </>
   );

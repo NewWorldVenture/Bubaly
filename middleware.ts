@@ -13,6 +13,9 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/join', '/offline',
   // Legal pages — public for everyone, including signed-out visitors.
   '/terms', '/privacy', '/cookies', '/acceptable-use',
+  // Public household benchmarks (k-anonymized aggregates); the page itself
+  // answers 404 while the admin publication flag is off.
+  '/resources/benchmarks',
   // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
   '/s',
   // Public reviews wall + submission page — no login required.

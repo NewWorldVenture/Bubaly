@@ -89,19 +89,24 @@ export const COMPETITORS: Competitor[] = [
 
 export const competitorByKey = (key: string) => COMPETITORS.find((c) => c.key === key);
 
-export type ImportTarget = 'events' | 'tasks' | 'grocery' | 'notes';
+export type ImportTarget = 'events' | 'tasks' | 'grocery' | 'notes' | 'contacts';
 
-export const TARGET_LABELS: Record<ImportTarget, string> = {
-  events: 'Calendar events',
-  tasks: 'Tasks & chores',
-  grocery: 'Grocery items',
-  notes: 'Notes',
+/** English label + the catalogue key the UI renders it through. */
+export const TARGET_LABELS: Record<ImportTarget, { label: string; labelKey: string }> = {
+  events: { label: 'Calendar events', labelKey: 'migrateWizard.targetEvents' },
+  tasks: { label: 'Tasks & chores', labelKey: 'migrateWizard.targetTasks' },
+  grocery: { label: 'Grocery items', labelKey: 'migrateWizard.targetGrocery' },
+  notes: { label: 'Notes', labelKey: 'migrateWizard.targetNotes' },
+  contacts: { label: 'Contacts', labelKey: 'migrateWizard.targetContacts' },
 };
 
-// Likely CSV header names per target, for auto-mapping.
+// Likely CSV header names per target, for auto-mapping. Contacts have their own
+// multi-column mapping (`csvToContacts`) — this entry is the fallback name
+// column only, so the target list stays complete.
 export const CSV_NAME_COLUMNS: Record<ImportTarget, string[]> = {
   events: ['subject', 'title', 'name', 'event'],
   tasks: ['task', 'title', 'name', 'chore', 'to-do', 'todo', 'item'],
   grocery: ['item', 'name', 'product', 'grocery'],
   notes: ['note', 'title', 'name', 'text'],
+  contacts: ['name', 'full name', 'display name', 'contact name'],
 };

@@ -23,6 +23,9 @@
 // the RPC stays in place but nothing calls it.
 import 'server-only';
 import type { PantryLocation, Tables } from '@/lib/database.types';
+import {
+  applySubstitutions, collectDietaryConstraints, type Substitution,
+} from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
@@ -348,6 +351,14 @@ export type MealPlanGroceryResult = {
   inPantry: string[];
   /** Planned dishes the ingredients came from. */
   meals: { id: string; name: string; date: string }[];
+  /**
+   * Swaps the household's own rows forced: an allergy on a medical profile, a
+   * food a `family_facts` preference says nobody eats, or a near-identical
+   * thing already in the cupboard. Each carries its reason, and each is a
+   * change that was actually written to the list — never a suggestion dressed
+   * up as one.
+   */
+  substitutions: Substitution[];
 };
 
 /**
@@ -436,7 +447,32 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
     .map((p) => (p.meal_id ? mealById.get(p.meal_id) : null))
     .filter((m): m is NonNullable<typeof m> => Boolean(m))
     .map((m) => ({ id: m.id, name: m.name, ingredients: parseIngredients(m.ingredients) }));
-  const { needed, inPantry } = planGroceryNeeds(dishes, pantryRes.data ?? []);
+  const { needed: rawNeeded, inPantry } = planGroceryNeeds(dishes, pantryRes.data ?? []);
+
+  // What the household cannot or will not eat -------------------------------
+  // FAIL CLOSED. A read that errors here is not "no allergies"; putting peanut
+  // butter on the list because `medical_profiles` was unreachable is exactly
+  // the failure this rule exists to prevent.
+  const [profilesRes, factsRes] = await Promise.all([
+    scope.db.from('medical_profiles').select('allergies').eq('family_id', scope.familyId),
+    scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
+      .in('category', ['medical', 'preference', 'important']),
+  ]);
+  const constraintError = profilesRes.error ?? factsRes.error;
+  if (constraintError) {
+    console.error('[service:groceries] dietary constraint read failed', constraintError);
+    return fail(
+      describeDbError(constraintError, 'Could not check the family’s allergies, so nothing was added to the list.'),
+      { code: SERVICE_CODES.db },
+    );
+  }
+  const { allergies, dislikes } = collectDietaryConstraints({
+    profiles: profilesRes.data ?? [],
+    facts: factsRes.data ?? [],
+  });
+  const { items: needed, substitutions } = applySubstitutions(rawNeeded, {
+    allergies, dislikes, pantry: pantryRes.data ?? [],
+  });
 
   const meals = (plans ?? [])
     .filter((p) => p.meal_id && mealById.has(p.meal_id))
@@ -445,12 +481,12 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   if (needed.length === 0) {
     const list = await ensureDefaultList(scope);
     if (!list.ok) return list;
-    return ok({ listId: input.listId ?? list.data.id, added: [], skipped: [], inPantry, meals });
+    return ok({ listId: input.listId ?? list.data.id, added: [], skipped: [], inPantry, meals, substitutions });
   }
 
   const res = await addItems(scope, { items: needed, listId: input.listId ?? null });
   if (!res.ok) return res;
-  return ok({ listId: res.data.listId, added: res.data.added, skipped: res.data.skipped, inPantry, meals });
+  return ok({ listId: res.data.listId, added: res.data.added, skipped: res.data.skipped, inPantry, meals, substitutions });
 }
 
 // ── Pantry ──────────────────────────────────────────────────────────────────
@@ -735,4 +771,133 @@ export async function removePantryItem(scope: ServiceScope, itemId: string): Pro
     title: `Took ${data.name} out of the pantry`, href: '/dashboard/pantry', resourceId: data.id,
   });
   return ok({ id: data.id });
+}
+
+// ── The end of a shop ───────────────────────────────────────────────────────
+
+/**
+ * How much of something a grocery line represents, for the pantry.
+ *
+ * `grocery_items.quantity` is free text, and `planGroceryNeeds` deliberately
+ * writes "2 lb + 1 cup" when two dishes want the same thing in different
+ * units — a summed figure there would be fiction. The pantry needs a NUMBER,
+ * so this reads the leading amount and its unit and nothing else: "2 lb + 1
+ * cup" becomes two pounds, not three of something. A line with no number at
+ * all is one of the thing, which is what "Milk" on a list means.
+ *
+ * Exported so the rounding is a tested property rather than an assumption
+ * buried in a loop.
+ */
+export function parsePurchasedQuantity(text: string | null | undefined): { delta: number; unit: string | null } {
+  const raw = (text ?? '').trim();
+  if (!raw) return { delta: 1, unit: null };
+  // "1 1/2 lb", "2.5kg", "3 x 400g" — take the first number and the word after it.
+  const match = raw.match(/^\s*(\d+(?:[.,]\d+)?)(?:\s*\/\s*(\d+(?:[.,]\d+)?))?\s*([a-zA-Z%]+)?/);
+  if (!match) return { delta: 1, unit: null };
+  const numerator = Number(match[1].replace(',', '.'));
+  const denominator = match[2] ? Number(match[2].replace(',', '.')) : null;
+  let delta = Number.isFinite(numerator) ? numerator : 1;
+  if (denominator && Number.isFinite(denominator) && denominator !== 0) delta = numerator / denominator;
+  if (!Number.isFinite(delta) || delta <= 0) delta = 1;
+  // numeric(10,2): more precision than the column holds would be rounded away
+  // by Postgres anyway, and rounding here keeps the read-modify-write honest.
+  delta = Math.round(delta * 100) / 100;
+  const unit = match[3]?.trim() || null;
+  return { delta, unit };
+}
+
+// TODO(migration, owner approval required): an ESTIMATED total against a
+// grocery budget is the one piece of M10 this pass cannot build, because no
+// price column exists on either table. It needs, in one migration:
+//
+//   ALTER TABLE public.grocery_lists ADD COLUMN budget_cents integer;
+//   ALTER TABLE public.grocery_items ADD COLUMN estimated_price_cents integer;
+//
+// Both nullable, RLS unchanged (the existing family-scoped policies cover new
+// columns). Until they exist the shop reports what a person typed and nothing
+// else: an estimate derived from a made-up price would be a number on a
+// family's books that nobody gave us, which is the failure mode this whole
+// item is about.
+
+export type ShoppingTripResult = {
+  listId: string;
+  /** Items whose quantity landed in the pantry, by name. */
+  pantryUpdated: string[];
+  /**
+   * Items the pantry write refused. Named rather than counted: "three items
+   * did not save" is not something a person can act on.
+   */
+  pantryFailed: { name: string; error: string }[];
+  /** Bought lines removed from the list. Zero when a pantry write failed. */
+  cleared: number;
+};
+
+/**
+ * "We bought these" — the step that closed nothing before this.
+ *
+ * The list could be ticked off and cleared, and the pantry never heard about
+ * it: a family that bought milk on Saturday still had a pantry that said the
+ * milk ran out on Thursday, so the next plan bought milk again. This walks the
+ * CHECKED lines, adds each one's quantity to the pantry (creating the row when
+ * the family has never had the thing before), and only then clears them.
+ *
+ * ORDER MATTERS AND IS DELIBERATE. Clearing happens last and only when every
+ * pantry write succeeded, so a failure leaves the list exactly as the family
+ * left it and a retry does the same thing again rather than something new.
+ * The money half is NOT here: a purchase is the finances service's write, the
+ * caller records it, and it is recorded only when a person typed an amount —
+ * a bought list is not a receipt and this service will not invent one.
+ */
+export async function recordShoppingTrip(
+  scope: ServiceScope,
+  input: { listId: string },
+): Promise<ServiceResult<ShoppingTripResult>> {
+  const listId = input.listId?.trim();
+  if (!listId) return fail('Which shopping list?', { code: SERVICE_CODES.invalidInput });
+
+  const { data: bought, error: readError } = await scope.db
+    .from('grocery_items')
+    .select('id, name, quantity')
+    .eq('family_id', scope.familyId)
+    .eq('list_id', listId)
+    .eq('is_checked', true)
+    .order('created_at', { ascending: true });
+  if (readError) {
+    console.error('[service:groceries] bought items read failed', readError);
+    return fail(describeDbError(readError, 'Could not read what you bought.'), { code: SERVICE_CODES.db });
+  }
+  const items = bought ?? [];
+  if (items.length === 0) {
+    return fail('Tick off what you bought first — nothing on this list is checked.', { code: SERVICE_CODES.notFound });
+  }
+
+  const pantryUpdated: string[] = [];
+  const pantryFailed: { name: string; error: string }[] = [];
+  for (const item of items) {
+    const { delta, unit } = parsePurchasedQuantity(item.quantity);
+    const result = await pantryAdjust(scope, { name: item.name, delta, unit, createIfMissing: true });
+    if (result.ok) pantryUpdated.push(item.name);
+    else pantryFailed.push({ name: item.name, error: result.error });
+  }
+
+  let cleared = 0;
+  if (pantryFailed.length === 0) {
+    const removed = await clearChecked(scope, listId);
+    if (!removed.ok) return removed;
+    cleared = removed.data.removed;
+  }
+
+  if (pantryUpdated.length) {
+    await recordActivitySafely(scope, {
+      agent: 'groceries',
+      action: 'update',
+      title: pantryUpdated.length === 1
+        ? `Put ${pantryUpdated[0]} away in the pantry`
+        : `Put ${pantryUpdated.length} bought items away in the pantry`,
+      detail: pantryUpdated.join(', ').slice(0, 500),
+      href: '/dashboard/pantry',
+    });
+  }
+
+  return ok({ listId, pantryUpdated, pantryFailed, cleared });
 }

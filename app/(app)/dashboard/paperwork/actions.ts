@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
+import {
+  triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
+} from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -13,6 +15,46 @@ import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/unt
 import { describeActionError } from '@/lib/supabase/errors';
 
 const PATH = '/dashboard/paperwork';
+
+/**
+ * The row a captured piece of paperwork becomes.
+ *
+ * It exists as its own exported function — async, which is all a `'use server'`
+ * module may export — because of the one mistake tsc cannot catch here: the
+ * generated Insert type for `kind` is a plain `string`, while 0169's CHECK
+ * admits seven values and triage now recognises nine. Writing 'receipt' or
+ * 'reservation' straight from `triagePaperwork` is a 23514 at runtime that
+ * loses the pasted paperwork entirely, so the mapping goes through
+ * `paperworkKindFields` (admitted value on the column, finer kind kept in
+ * `meta`) and a test pins the payload without needing a database.
+ */
+export async function paperworkInsertRow(input: {
+  familyId: string;
+  userId: string;
+  text: string;
+  sender?: string | null;
+  now?: Date;
+}) {
+  const t = triagePaperwork(input.text, input.now ?? new Date());
+  const fields = paperworkKindFields(t.kind);
+  return {
+    family_id: input.familyId,
+    kind: fields.kind,
+    title: t.title,
+    summary: t.summary,
+    raw_text: input.text.slice(0, 20_000),
+    sender: input.sender ?? null,
+    due_on: t.due_on,
+    amount: t.amount,
+    urgency: t.urgency,
+    status: 'needs_action',
+    actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
+    // What triage actually saw, so a receipt filed as a payment is still
+    // recoverable as a receipt when the column is widened.
+    meta: { ...fields.meta },
+    created_by: input.userId,
+  };
+}
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<void> {
@@ -23,22 +65,11 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const t = triagePaperwork(text);
 
-  const { error } = await supabase.from('paperwork_items').insert({
-    family_id: ctx.active.familyId,
-    kind: t.kind,
-    title: t.title,
-    summary: t.summary,
-    raw_text: text.slice(0, 20_000),
-    sender,
-    due_on: t.due_on,
-    amount: t.amount,
-    urgency: t.urgency,
-    status: 'needs_action',
-    actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
-    created_by: ctx.user.id,
+  const row = await paperworkInsertRow({
+    familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,
   });
+  const { error } = await supabase.from('paperwork_items').insert(row);
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')));
   revalidatePath(PATH);
 }

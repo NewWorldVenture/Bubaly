@@ -4,6 +4,7 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { isRetryableAuthError } from '@/lib/auth/session';
+import { landingPathForRole } from '@/lib/auth/landing';
 
 const VID_COOKIE = 'bubaly_vid';
 const VID_MAX_AGE = 400 * 24 * 60 * 60;
@@ -67,15 +68,26 @@ export async function GET(request: Request) {
       let destination = isAdmin && next === '/home' ? '/admin' : next;
       if (next === '/home' && user && !isAdmin) {
         const { data: membership, error: membershipError } = await supabase
-          .from('family_members').select('family_id')
-          .eq('user_id', user.id).eq('is_active', true).limit(1);
+          .from('family_members').select('family_id, role')
+          .eq('user_id', user.id).eq('is_active', true);
         // A failed read is not "this account has no family". It must not send
         // the user to onboarding (which would provision a second family), and
         // it must not send them to /login either — they are signed in. Leave
         // the destination alone; `requireUserContext` resolves or provisions
         // the family when they land.
-        if (membershipError) console.error('[auth-callback] membership lookup failed', membershipError);
-        else if (membership.length === 0) destination = '/onboarding';
+        if (membershipError) {
+          console.error('[auth-callback] membership lookup failed', membershipError);
+        } else if (membership.length === 0) {
+          destination = '/onboarding';
+        // M28: someone who is a GUEST everywhere they belong (the role an
+        // extended-family invite uses) lands on the Grandparent Portal instead
+        // of the full concierge Home. Only when every membership is a guest one
+        // — a grandparent who is also an adult in their own household still
+        // gets /home. A landing default only: the sidebar is unchanged and
+        // /home stays reachable.
+        } else if (membership.every((m) => m.role === 'guest')) {
+          destination = landingPathForRole('guest');
+        }
       }
 
       const res = NextResponse.redirect(new URL(destination, url.origin));

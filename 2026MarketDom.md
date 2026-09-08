@@ -1,0 +1,458 @@
+# Bubaly — 2026 Market Domination Strategy
+
+**One file, self-contained, for any agent picking up this work.** Claude, Codex,
+or a person: you should be able to read this and start on a section without
+having seen the conversation any of it came from.
+
+- **Status as of:** 2026-09-07 23:45 UTC. main at `d88978f`; PR #421 merged; PR #424
+  (`claude/roadmap-implementation-ld8bon` at `452a297`) carries fourteen further
+  sections and is the integration head to branch from until it merges.
+- **The per-item evidence** — reachability, persistence, tests, mock risk, gap,
+  build plan, file-and-line proof for each of the 60 items — is
+  `docs/MARKET_DOMINATION_AUDIT.md`. That file is the authority on *what the
+  code actually does today*. This file is the strategy and the coordination.
+- **The twenty ready-to-claim work sections**, each sized to one reviewable PR
+  with its spec, files, tests and acceptance criteria, are
+  `docs/STRATEGY_WORK_QUEUE.md`.
+
+---
+
+## 1. The thesis
+
+Every competitor sells a **shared calendar with features bolted on**. Cozi,
+FamilyWall, Skylight, Hearth and Ohai all ask the family to do the coordinating
+and give them a nicer surface to do it on.
+
+Bubaly's bet is different: **the household's operating system runs the work, and
+the family approves it.** Not a chatbot in front of a calendar — a chief of staff
+that reads across every domain the household actually has (school, sports,
+money, home, health, travel, moving, inventory, paperwork), proposes a plan,
+shows its evidence, and acts only inside the fences a parent set.
+
+That produces the two claims the whole strategy rests on:
+
+1. **Breadth is the moat, not the liability.** A single-domain competitor cannot
+   see that the dentist appointment collides with the away game, that the car is
+   double-booked, and that the deposit is due the same morning. Cross-domain
+   inference needs the whole graph, and the graph is what a family builds by
+   *using* the product.
+2. **Trust is the product.** An agent that acts on a family's real life is only
+   adoptable if every action is previewable, evidenced, reversible and audited.
+   Trust is not a compliance page; it is the feature that makes autonomy sellable.
+
+### Competitive position
+
+| Competitor | What they are | Where Bubaly wins |
+|---|---|---|
+| **Cozi** | Shared calendar + lists, ad-supported | No cross-domain reasoning; no agent that acts; ads vs. a paid trust relationship |
+| **FamilyWall** | Calendar, lists, budget, location | Feature-parallel, not integrated — nothing reads across the domains |
+| **Skylight** | Hardware display first | The display is a *view*; Bubaly runs Kitchen/Wall Mode on any tablet they already own |
+| **Hearth** | Display + routines for kids | Narrow age band, narrow domain |
+| **Ohai** | AI assistant for families | Closest competitor. Bubaly's edge is the persisted graph, the evidence ledger and the permission model — an assistant that can *prove* what it did |
+
+### The moats, in the order they compound
+
+1. **The household graph** — entities, obligations, assets, preferences and their
+   provenance. Deepens with use; cannot be bought or imported wholesale.
+2. **The evidence ledger** — every run, plan, step, tool call and approval,
+   persisted. This is what lets Bubaly claim anything at all, and what makes the
+   trust surfaces honest rather than decorative.
+3. **The permission model** — narrow, explainable, per-tool policies a family
+   grants and revokes. Autonomy without this is unsellable.
+4. **Switching cost** — zero-setup import, ambient ingestion, entity resolution.
+   The graph a family accumulates is the thing they will not re-create elsewhere.
+5. **Network effects** — care circles, referrals, privacy-safe benchmarks.
+
+---
+
+## 2. Rules that are not negotiable
+
+These come from the strategy's own "what I would NOT do" list and from defects
+this repository has already shipped once. **A PR that breaks one of these is
+rejected regardless of how good the feature is.**
+
+1. **Never claim Bubaly did something unless a row says so.** No "called the
+   plumber", "sent the form", "booked it" without a persisted provider outcome.
+   A test pins the vocabulary on surfaces that have been wrong before.
+2. **No opaque actions.** Every action gets a preview, its evidence, and an audit
+   entry. If it cannot be previewed, it does not run unattended.
+3. **A failed read is not an empty result.** "Nothing needs you today" and "the
+   database did not answer" are different facts. Fail closed and say
+   *unavailable* — never render a zero the surface cannot stand behind. Use
+   `countOrNull` (`lib/metric/count.ts`); never a private `safeCount` returning 0.
+4. **Do not add modules because a competitor has one.** Breadth is earned by
+   cross-domain value, not by a feature checklist.
+5. **Never market "AI" as the primary benefit.** The benefit is the outcome — the
+   morning that ran itself. AI is how, not what.
+6. **No paid bias.** Recommendations rank on the family's interest. Marketplace
+   money must never reorder a ranking.
+7. **Do not add a migration.** See §6 — the 21 DDL asks are the owner's to
+   approve and apply. Agents must not add files under `supabase/migrations`, and
+   must not apply anything to production.
+8. **Do not touch the global left navigation.** `components/app/app-shell.tsx`
+   (SidebarBody), `components/app/free-tier-sidebar.tsx`,
+   `components/app/nav-shared.tsx`, and the nav exports in
+   `lib/constants/navigation.ts` (`CURATED_*`, `PRIMARY_NAV`, `APP_NAV_GROUPS`,
+   `SIDEBAR_FOOTER_NAV`, `NAV_CATALOG_*`, `DEFAULT_SIDEBAR_NAV_KEYS`) are
+   off-limits unless the repository owner asks. Per-user presets,
+   home/command-center and `MARKETING_NAV` are fine.
+9. **Every user-visible string is a catalogue key in seven languages.**
+   en-US, de-DE, es-ES, fr-FR, it-IT, nl-NL, pt-PT. German/French/Portuguese
+   formal (Sie / vous / formal); Spanish/Italian/Dutch informal (tú / tu / je).
+10. **Never skip, disable or quarantine a test to get green.**
+
+---
+
+## 3. How to claim a section and work alongside other bots
+
+**Claiming is atomic and needs no coordination: the branch name is the claim.**
+
+```bash
+git fetch origin
+git checkout -b claude/strategy-S-07 origin/main
+git push -u origin claude/strategy-S-07     # rejected = already taken, pick another
+```
+
+The push either succeeds (you own S-07) or fails (someone else does). No lock
+file, no registry to update, no race.
+
+Then open your PR against `main`. Keep it to one section — a section is sized so
+one PR can carry it and a reviewer can hold it in their head.
+
+### Before you start
+
+1. Read your section's entry in `docs/STRATEGY_WORK_QUEUE.md` — it names the
+   spec, the files the section owns, the tests to add, and what a reviewer will
+   check.
+2. Read the matching item in `docs/MARKET_DOMINATION_AUDIT.md` — it tells you
+   what already exists, so you extend rather than rebuild.
+3. Check §6 below: if your section's item is on the migration list, build the
+   part that needs no DDL and stop at the boundary. Say so in your PR.
+
+### Shared files several sections must each touch
+
+Add your line; do not reformat, reorder or "tidy" the file. These are the
+predictable collision points, and a union merge is almost always the right
+resolution:
+
+| File | Rule |
+|---|---|
+| `lib/i18n/messages/*.json` (7 files) | Additive only. Keys sorted. Never delete another section's key. On conflict, union both sides. |
+| `lib/ai/tools/registry.ts` | Append your tool group to the spread list. Union on conflict. |
+| `lib/ai/planner/templates/` | One file per template + one line in the index. |
+| `lib/constants/navigation.ts` | `MARKETING_NAV` only. The app sidebar exports are off-limits (rule 8). |
+| `tests/service-layer-forks.test.ts` | If you add a service for a table a component still writes, declare it in `KNOWN_FORKS` with a reason. |
+
+### The `settleAll` hazard — read this before batching reads
+
+`settleAll` (`lib/supabase/settle.ts`) wraps each promise so a **rejection**
+becomes `{ data: null, count: null, error }` — the PostgREST shape. That means:
+
+- A **`ServiceResult`** (`{ok:true,data} | {ok:false,error}`) **cannot ride
+  inside `settleAll`** — it has `ok`, not `data`. Await it *beside* the batch
+  with its own `.catch()`.
+- So can't a plain value: `countOrNull` returns `number | null`,
+  `loadStrategyMetrics` returns a `StrategyMetrics`. Same rule.
+- A promise started **before** a batch and awaited **after** it needs its own
+  `.catch()` at creation. If a `.from()` throws while the array literal is still
+  being evaluated, the earlier promise is orphaned and its rejection goes
+  unhandled. This has bitten this repo twice; both times a test caught it only
+  after an unrelated reorder removed the throw that was masking it.
+
+### Definition of done
+
+- `npx tsc --noEmit` clean, `npm run lint` clean.
+- Your tests pass, and the suites your files touch still pass.
+- `node scripts/i18n-gate.mjs` clean; keys present in all seven catalogues.
+- No file under `supabase/migrations`. No shared-sidebar file.
+- Your PR says what you did **not** do and why (a migration boundary, a claim you
+  could not honestly make, a test you could not write yet).
+
+---
+
+## 4. The 60 items
+
+Status is **from the audit**, i.e. before PR #421 landed. §5 says what has moved
+since. `exists` = reachable, persisted and tested; `partial` = some of it is
+real; `missing` = not built; `mock` = a surface exists but does not prove what it
+claims.
+
+| # | Item | Audit status |
+|---|---|---|
+| M1 | Chief of Staff Outcome Engine | exists |
+| M2 | Universal Household Inbox | partial |
+| M3 | Family Intelligence Graph | partial |
+| M4 | Family Daily Brief | partial |
+| M5 | Needs Your Decision | partial |
+| M6 | Bubaly Handled | partial |
+| M7 | Household Autopilot — detect repeated successful workflows, offer narrow explainable policies | partial |
+| M8 | Schedule Intelligence | partial |
+| M9 | School + Sports Front Desk — schedules, forms, fees, gear, transport, changes | partial |
+| M10 | Meal → Pantry → Grocery Loop — calendar-aware, budget, substitutions, purchase handoff | partial |
+| M11 | Family CFO — coverage-aware forecast, spending explanation, affordability scenarios | partial |
+| M12 | Home Digital Twin — assets, warranties, manuals, maintenance, inventory, projects | partial |
+| M13 | Where Is It? — visual inventory with confirmed location and natural-language search | exists |
+| M14 | AI Moving OS — move date orchestrates packing, utilities, address changes, school, pets | exists |
+| M15 | Family Travel Agent — reservations, packing, home/pet prep, disruption replanning | partial |
+| M16 | Extended Family Care — permissioned care circles | partial |
+| M17 | Household Purchase Advisor — check what is already owned before recommending | missing |
+| M18 | Kitchen / Wall Mode — tablet/browser command center | exists |
+| M19 | Voice Everywhere — hands-free Ask Bubaly across phone, tablet, shared display | partial |
+| M20 | Family Phone + Email Front Desk | partial |
+| M21 | Actionable Notifications — every notification actionable, quiet ones compressed | partial |
+| M22 | Household Memory Controls — inspect, correct and delete what Bubaly believes | exists |
+| M23 | Permission Model as a Feature | partial |
+| M24 | AI Trust Center — evidence, confidence, approvals, policies, sensitive-access history | partial |
+| M25 | Outcome Templates — Tournament Day, School Morning, Vacation, Moving, Holiday, Emergency | partial |
+| M26 | Marketplace / Service Layer — providers, AI-scoped requests, compare, manage | partial |
+| M27 | Bubaly API / Partner Platform — authenticated inbound API with keys and scopes | missing |
+| M28 | Family Network Effects | partial |
+| M29 | Zero-Setup Import | partial |
+| M30 | 30-Minute Wow Onboarding | partial |
+| M31 | Time-Saved Ledger | partial (covered by X1) |
+| M32 | Savings Ledger — groceries, subscriptions, warranties, avoided duplicate purchases | missing |
+| M33 | Best-in-Class Household Search — across documents, items, trips, bills, decisions, with evidence | partial |
+| M34 | Life-Event Intelligence — school year, camp, move, new pet, aging parent, renovation | partial |
+| M35 | Developer-Grade Reliability | exists |
+| M36 | Security as Product Surface — MFA, privacy center, RLS, signed files, sensitive-access audit | partial |
+| M37 | Hardware Partnerships — certified display program + in-app device setup | missing |
+| M38 | Privacy-Safe Household Benchmarks | partial |
+| M39 | Family Referral Flywheel | partial |
+| M40 | Outcome-Based Premium Packaging | partial |
+
+### Public-site weaknesses
+
+| # | Weakness | Audit status |
+|---|---|---|
+| W1 | Breadth: market 5–7 hero outcomes, keep breadth as supporting proof | partial |
+| W2 | AI proof: real demos, activity history, Bubaly Handled evidence on the public site | partial |
+| W3 | Family+ pricing justified with quantified time saved, savings found, work handled | partial |
+| W4 | Trust: customer-facing AI Trust/Privacy Center and independent security evidence | **mock** |
+| W5 | Navigation: outcome-first navigation and contextual discovery | partial |
+| W6 | Hardware: shared display mode exceptional on tablets they already own, and marketed as such | partial |
+| W7 | Social proof: verified outcomes, case studies, referral loops, time-saved metrics | partial |
+| W8 | Switching cost: zero-setup imports, ambient ingestion, entity resolution | partial |
+
+### North-star metrics
+
+Every one of these must be **error-aware**: `null` when the read failed, never a
+zero. See rule 3.
+
+| # | Metric | Audit status |
+|---|---|---|
+| X1 | Household admin minutes eliminated / week | partial |
+| X2 | % of household obligations auto-captured | missing |
+| X3 | % of AI plans completed without rework | partial |
+| X4 | Actions handled automatically / household / week | partial |
+| X5 | Decision compression ratio | missing |
+| X6 | Proactive signal precision | partial |
+| X7 | Household graph completeness | partial |
+| X8 | Multi-member weekly active households | missing |
+| X9 | 90-day household retention | missing |
+| X10 | Family+ conversion after demonstrated value | partial |
+| X11 | Verified time/savings value vs subscription price | missing |
+| X12 | Referral/invite coefficient | partial |
+
+---
+
+## 5. The roadmap, and where it stands
+
+### Phase 1 — Unify
+One brain across the domains: chief of staff, household inbox, daily brief,
+decisions, the Handled ledger, the family graph, schedule intelligence.
+
+**Landed in #421:** M1 (the replan path was implemented and never called — now
+wired, capped per run, ledgered as a new plan version), M4 (the brief leads with
+decisions, read from real rows, viewer-role aware so a non-manager's bills and
+medication reads are never made at all), M5 (`/dashboard/needs-you`, uncapped,
+plus fact suggestions, inbox messages and paperwork), M6/M35 (the ledger says
+which tool acted and why, plus a family run history), M8 (prep, leave-by from a
+real drive-time estimate, driver and shared-vehicle conflicts, dinner timing,
+care gaps), M21 (every notification actionable; the quiet half folds into the
+brief's "Also today" so it is said once).
+
+**Landed in #424:** M2/M20 (one household inbox; inbound mail reaches the
+planner; a redelivered email files nothing twice; a bill the router declines is
+still filed as paperwork; the badge says "Filed with Bubaly", not "Handled"),
+M3 (the graph projects events, assets, obligations and preferences — and a
+truncated read no longer authorises a prune).
+
+**Still open:** the `request_id` link the inbox cannot claim without the
+migration in §6.
+
+### Phase 2 — Automate
+Autopilot, the meals→grocery loop, school and sports front desk, household
+search, the trust center.
+
+**Landed in #421:** M7 (a policy is suggested only where the same domain,
+capability and tool was approved 3+ times with no rejections and no failed calls;
+accepting writes exactly one tag-scoped policy; no suggestion executes anything),
+M24 (Trust Center Activity tab — persisted tool calls with run links, the
+autonomy dials beside the policies, and per request the *names* of what was read
+and what was withheld, never contents), M26 (the call queue stops claiming a
+call; `compareQuotes` ranks real `project_quotes` with reasons).
+
+**Landed in #424:** M10 (calendar-aware meals, allergy-aware substitutions,
+retailer hand-off, Bought → pantry), M33 (household search across eleven
+sources with evidence; the command bar reserves room for record hits).
+
+**Still open:** M9 (school + sports front desk).
+
+### Phase 3 — Deepen
+Family CFO, home twin, inventory, travel, moving, care.
+
+**Landed in #421:** M11 (plan-aware forecast, affordability scenario), M13/M14
+(both became assistant tools, with a `plan_move` template and a
+confirm-it's-here signal).
+
+**Landed in #424:** M15 (pet-aware trip prep and a disruption re-flow), M16/M23
+(a grandparent sees every family they belong to; sharing presets), M17 (before
+you buy, grounded in what the household owns), M19 (one mic on every Ask
+surface), M22 (one view of what Bubaly believes, with a reset), M25/M34
+(launchable outcome templates; life-event detection; the Moving Home handoff
+lays out its tasks and never deletes a move it only found), M29/M30 (contacts
+import with a review step; onboarding answers remembered).
+
+**Still open:** M12 (home twin history), the dd9-13 inventory/moving CRUD
+conversion (its review returned `approved=false`; being re-reviewed).
+
+### Phase 4 — Expand
+Front-desk identity, marketplace, partner API, network effects, hardware.
+
+**Landed in #421:** M36 (TOTP through Supabase Auth with honest error states, an
+AAL2 step-up on money/document/trust routes for users who have a factor, and a
+Privacy Center that streams a role-scoped export).
+
+**Landed in #424:** M38 (privacy-safe benchmarks, bands translated, the public
+page gated on publication), M39 (the referral flywheel: signup capture,
+Stripe-confirmed reward, prompts), X3/X5/X10/X12 (error-aware metric tiles).
+
+**Still open:** M27, M32, M37 — each needs a migration in §6.
+
+### Public site
+**Landed in #421 (stage 1):** an outcome-first homepage — the Bubaly-Handled
+proof band, the six-outcome rail, and the first-brief, decisions, Kitchen Mode,
+switching and social-proof bands, with `MARKETING_NAV` and the footer
+reorganised around outcomes. Every illustrative element is badged; aggregate
+lines hide rather than render a zero; the social-proof band returns null when
+nothing is published.
+
+**Still open:** W3 and W4 are BUILT but held back: their branches carry 90 and
+217 English literals on the gated `marketing-pages` surface, and merging either
+turns `i18n-gate` red. They are being re-applied with every string keyed (see
+§7). W4 remains the highest-value single fix on the public site — it is the one
+claiming what it cannot prove. W6, W7 remain.
+
+### What the adversarial review caught in #421
+
+Worth reading before you write a similar surface — each of these would have
+shipped:
+
+- Run history derived "Started by a routine" from `request_id === null`, which is
+  **inverted on both sides**: a plan a person accepts is written with no request,
+  and a cron routine creates one and carries its id. It reads `run_type` now.
+- The homepage proof band linked to a live demo #414 had removed — a dead CTA on
+  the one band whose subject is honest evidence.
+- A recommendation whose `cta_href` was off-app took the **whole** Daily Brief
+  down, because that column is free text any member can write.
+- Merging `settleAll` exposed an orphaned promise in `lib/briefing/decisions.ts`
+  (see the hazard note in §3).
+
+---
+
+## 6. The 21 migration asks — owner approval required
+
+**No agent may add any of these.** They are listed so the work that depends on
+them is visible, and so you can build up to the boundary and stop. If your
+section needs one, implement everything that does not, and say in your PR
+exactly which DDL is missing and what is therefore not claimed.
+
+1. **M2 + M20 + M9** (one migration): `family_inbox_messages` add `request_id`
+   uuid → `ai_requests`, `handled_at`, `paperwork_item_id`, `member_id`,
+   `linked_type`, `linked_id`, `sub_intent`; extend the channel CHECK with
+   `share`, `scan`, `paste`, `form`. RLS unchanged.
+2. **M3**: `graph_entities`/`graph_edges` add `source` (default `projection`),
+   `confidence`, `observed_at`; extend the kind CHECK with `asset`, `obligation`,
+   `preference`, `provider`; add `calendar_events`, `bills`, `paperwork_items`,
+   `family_facts` to the 0134 `mark_model_dirty` trigger list.
+3. **M6**: `ai_plan_steps` add `undone_at`, `undone_by`; `ai_run_events` add
+   `undone`; `ai_tool_calls.created_refs` jsonb for multi-row writes only.
+4. **M35**: `CREATE OR REPLACE claim_ai_runs` so a dead-lettered run marks its
+   orphaned `ai_tool_calls` rows `unknown`. No schema or RLS change.
+5. **M10**: `grocery_lists.budget_cents`, `grocery_items.estimated_price_cents`.
+   Calendar-awareness, substitutions and handoff can ship without it.
+6. **M21**: `notifications.priority` (`now`/`digest`) + index.
+7. **M24**: new `ai_context_access_log`. The Activity tab shipped without it.
+8. **M36**: new `account_deletion_requests`; plus enabling MFA/TOTP in the
+   Supabase project settings (no schema).
+9. **M12**: `home_assets.replaced_by_asset_id`, `retired_on`; optionally
+   `inventory_items.asset_id`.
+10. **M15** (confirmed required — 0070 has no status column):
+    `vacation_flights`/`vacation_lodging` add `disruption_status`, `delay_minutes`.
+11. **M16**: `care_circles`, `care_circle_members`, `care_handoffs` +
+    `is_circle_member()` + scoped SELECT policies.
+12. **M32**: new `savings_ledger` + RLS + index; add to the 0275 money sweep.
+13. **M18(c)** optional: `display_devices` + redeem RPC. The Ask/handled tiles
+    and `/display/setup` need no migration.
+14. **M26**: `service_providers`, `service_requests`, `service_quotes`.
+15. **M27**: `partner_api_keys`, `partner_events` with
+    `unique(family_id, idempotency_key)`.
+16. **M23**: RLS on `documents`/`notes`/`journal_entries` honouring `member_id` +
+    `has_active_delegation()`.
+17. **M33**: `search_household()` (SECURITY INVOKER, pinned `search_path`)
+    UNIONing pg_trgm similarity across eleven sources + GIN trigram indexes.
+18. **W2 + W7 + W3** (one migration): `CREATE OR REPLACE public.public_stats()`
+    adding `ai_handled_30d` and `avg_first_brief_minutes`.
+19. **X1 + X2 + X4 + X6 + X9 + X11** (one migration): new `family_metric_weeks`,
+    unique `(family_id, week_start)`, family-scoped SELECT, service-role writes
+    from the weekly-digest cron.
+20. **X8 + X9**: `family_members.last_active_at` + index; throttled service-role
+    updates from `requireUserContext`.
+21. **X2** optional follow-up: `created_via` on `calendar_events`, `todo_items`,
+    `bills`, `family_reminders` so a manual capture is stamped explicitly.
+
+---
+
+## 7. Where the remaining work physically is
+
+**Fourteen sections have landed on PR #424** and need no further work from
+anyone: M2/M20, M3, M10, M15, M16/M23, M17, M19, M22, M25/M34, M29/M30, M33,
+M38, M39, and the X3/X5/X10/X12 metric tiles. Do not re-land them; the audit
+in `docs/MARKET_DOMINATION_AUDIT.md` predates them and still says `partial`.
+
+**Three are in progress and claimed — do not start them:**
+
+| Section | Where | State |
+|---|---|---|
+| S-19 · W4 Trust Center | branch `worktree-wf_9fc0af7c-543-3` | built; 217 literals being lifted into the seven catalogues |
+| S-20 · W3 pricing value | branch `worktree-wf_9fc0af7c-543-4` | built; 90 literals being lifted into the seven catalogues |
+| dd9-13 · M13/M14 CRUD | branch `worktree-wf_67303136-dd9-13` | review returned `approved=false`; being re-reviewed against its fix commits |
+
+Those three live only in one working container. If you can reach them, merge
+before you rebuild; if you cannot, they are claimed anyway — pick a different
+section.
+
+**Genuinely unclaimed** — build these from the queue's spec: M9, M12, W6, W7,
+and everything in §6 that waits on a migration.
+
+**A lesson the integrator paid for, so you do not have to:** when a review
+returns fixes, they are usually on a *different* branch than the one first
+merged — the harness placed reviewing agents in fresh worktrees. Before
+merging any section, check that the branch you are holding is the one carrying
+the review's fix commits, not the one the review was written against.
+
+---
+
+## 8. Definition of "done" for the strategy
+
+Not "all 60 items say exists". The bar is:
+
+- **Every claim the product makes is backed by a row.** No surface says Bubaly
+  did something the database cannot confirm.
+- **Every metric is error-aware.** No zero standing in for a failed read.
+- **Every autonomous action is inside a policy a family granted**, previewable
+  and audited.
+- **The public site markets outcomes**, and every illustrative element is badged
+  as illustrative.
+- **W4 stops being `mock`.** The Trust Center is the one surface where a gap
+  between claim and proof is not a missing feature but a broken promise.

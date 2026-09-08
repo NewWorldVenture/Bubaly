@@ -6,6 +6,8 @@ import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { loadCompareLine } from '@/lib/network/compare-line-server';
+import { renderCompareLine } from '@/lib/network/compare-line';
 
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
@@ -92,6 +94,9 @@ export async function GET(req: NextRequest) {
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
+        // One "families like yours" line, only for families opted into benchmarks
+        // and only from the k-anonymized rows the nightly aggregation persisted.
+        compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),
       }),
     });
     if (ok) sent++;

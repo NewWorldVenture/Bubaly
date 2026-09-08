@@ -17,6 +17,7 @@ import { sendSms } from '@/lib/guardian/twilio';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
   resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage,
+  routeInboundToPlanner,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
@@ -91,11 +92,27 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'email', from: from ?? undefined, text: body || subject || '', familyLabel });
-  await recordInboundMessage(admin, {
+  const filed = await recordInboundMessage(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
     body: body || subject || '(no content)', providerRef: messageId ?? undefined,
     aiSummary: result.summary, aiIntent: result.intent,
   });
+
+  // M20: an appointment, a delivery or a personal note becomes work in the
+  // planner (trust-gated, approval spine unchanged), and an emailed bill or
+  // reservation becomes a paperwork row. Never fatal — the provider gets its
+  // acknowledgement regardless.
+  //
+  // ONLY ON A NEW DELIVERY. Providers re-fire webhooks; routing a message the
+  // inbox already holds would file the same bill a second time and double the
+  // household queue's "needs you" count.
+  if (filed.inserted) {
+    await routeInboundToPlanner(admin, {
+      familyId, channel: 'email', messageId: filed.messageId,
+      subject: subject ?? null, body: body || subject || '',
+      intent: result.intent, providerRef: filed.providerRef,
+    }).catch((error) => { console.error('[contact-center] email planner routing threw', error); });
+  }
 
   // Urgent → ping the human fallback by SMS.
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {

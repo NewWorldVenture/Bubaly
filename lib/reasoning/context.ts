@@ -42,8 +42,43 @@ export interface FamilyContext {
   orphanCount: number;
   /** "table:id" → graph entity, so a surface can join a DB row to its node. */
   refIndex: Map<string, GraphEntity>;
-  /** Cheap observability: counts for logging / empty-state decisions. */
-  stats: { entities: number; edges: number; byKind: Record<string, number> };
+  /**
+   * Cheap observability: counts for logging / empty-state decisions. `bySubkind`
+   * buckets the M3 projection's finer types (asset, warranty, project,
+   * obligation, preference, event…) that `kind` alone cannot separate, because
+   * `graph_entities.kind` is CHECKed to the 0129 vocabulary.
+   */
+  stats: { entities: number; edges: number; byKind: Record<string, number>; bySubkind: Record<string, number> };
+}
+
+/**
+ * Where a graph node came from. `graph_entities` has no source/observed_at
+ * columns, so the projector and the manual write path both stamp this into
+ * `attributes.provenance`. A node without one predates the stamp — say
+ * `unknown` rather than inventing a source.
+ */
+export type GraphProvenance = { source: string; observedAt: string | null; refTable: string | null };
+
+export function entityProvenance(entity: GraphEntity): GraphProvenance {
+  const raw = (entity.attributes as { provenance?: unknown } | undefined)?.provenance;
+  if (!raw || typeof raw !== 'object') return { source: 'unknown', observedAt: null, refTable: entity.refTable ?? null };
+  const p = raw as { source?: unknown; observed_at?: unknown; ref_table?: unknown };
+  return {
+    source: typeof p.source === 'string' && p.source ? p.source : 'unknown',
+    observedAt: typeof p.observed_at === 'string' ? p.observed_at : null,
+    refTable: typeof p.ref_table === 'string' ? p.ref_table : (entity.refTable ?? null),
+  };
+}
+
+/** The projector's finer type for a node (`asset`, `obligation`, `preference`…). */
+export function entitySubkind(entity: GraphEntity): string | null {
+  const v = (entity.attributes as { subkind?: unknown } | undefined)?.subkind;
+  return typeof v === 'string' && v ? v : null;
+}
+
+/** Every node the projector tagged with a given subkind. */
+export function entitiesOfSubkind(ctx: FamilyContext, subkind: string): GraphEntity[] {
+  return ctx.graph.entities.filter((e) => entitySubkind(e) === subkind);
 }
 
 /** Stable key for the row→node join (`family_members:<uuid>` etc.). */
@@ -98,9 +133,12 @@ export function assembleFamilyContext(input: {
 
   const refIndex = new Map<string, GraphEntity>();
   const byKind: Record<string, number> = {};
+  const bySubkind: Record<string, number> = {};
   for (const e of graph.entities) {
     if (e.refTable && e.refId) refIndex.set(refKey(e.refTable, e.refId), e);
     byKind[e.kind] = (byKind[e.kind] ?? 0) + 1;
+    const subkind = entitySubkind(e);
+    if (subkind) bySubkind[subkind] = (bySubkind[subkind] ?? 0) + 1;
   }
 
   return {
@@ -112,7 +150,7 @@ export function assembleFamilyContext(input: {
     hubs: hubs(graphIndex, 5),
     orphanCount: orphans(graphIndex).length,
     refIndex,
-    stats: { entities: graph.entities.length, edges: graph.edges.length, byKind },
+    stats: { entities: graph.entities.length, edges: graph.edges.length, byKind, bySubkind },
   };
 }
 

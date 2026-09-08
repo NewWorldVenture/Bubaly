@@ -23,9 +23,13 @@ import 'server-only';
 import { z } from 'zod';
 import { structured } from '@/lib/ai/structured';
 import type { AIProvider } from '@/lib/ai/provider';
-import type { Tables, VacBudgetCategory, VacDayPart, VacItemKind, VacationKind, VacationStatus } from '@/lib/database.types';
+import type { Tables, Updatable, VacBudgetCategory, VacDayPart, VacItemKind, VacationKind, VacationStatus } from '@/lib/database.types';
 import { summarizeBudget, type BudgetSummary } from '@/lib/vacations/budget';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
+import {
+  replanDisruption,
+  type DisruptionKind, type DisruptionPlan, type ItineraryLike, type ReservationLike,
+} from '@/lib/vacations/disruption';
 import { dateRange, tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
@@ -38,6 +42,7 @@ import { withIdempotency } from '../idempotency';
 import { listEventsBetween, listHomeworkDue, type HomeworkRow, type SchoolEventRow } from '../school';
 import { dayKeyInTz, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
 import { listPracticesBetween, type SportsEventRow } from '../sports';
+import { createTodo } from '../tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type VacationRow = Tables<'vacations'>;
@@ -812,4 +817,339 @@ export async function commitmentConflicts(scope: ServiceScope, vacationId: strin
     bills: billRows,
     total: calendarRows.length + school.data.length + sports.data.length + homework.data.length + billRows.length,
   });
+}
+
+// ── pets: who feeds them while the family is away ─────────────────────────────
+//
+// The prepare-vacation workflow used to write ONE line — "pets covered" — into
+// the home checklist, which is not a plan: two dogs and a diabetic cat are
+// three different arrangements with three different people. These two
+// functions read `pets` (0083) and turn each ACTIVE animal into its own task
+// carrying the name and the care notes a sitter actually needs.
+
+export type PetPrepTask = {
+  petId: string;
+  petName: string;
+  species: string;
+  title: string;
+  notes: string;
+  dueDate: string | null;
+};
+
+export type PetPrep = {
+  tripId: string;
+  tripTitle: string;
+  startDate: string | null;
+  tasks: PetPrepTask[];
+};
+
+/** The day before departure, when the sitter has to be arranged by. */
+function dayBefore(day: string | null): string | null {
+  if (!day || !DAY_KEY.test(day)) return null;
+  return new Date(Date.parse(`${day}T00:00:00Z`) - DAY_MS).toISOString().slice(0, 10);
+}
+
+function petCareNotes(
+  pet: { name: string; species: string; notes: string | null; vet_name: string | null; vet_phone: string | null },
+  tripTitle: string,
+): string {
+  const parts = [`Care for ${pet.name} (${pet.species.replace(/_/g, ' ')}) while we are away for ${tripTitle}.`];
+  if (pet.notes?.trim()) parts.push(`Notes: ${pet.notes.trim()}`);
+  const vet = [pet.vet_name?.trim(), pet.vet_phone?.trim()].filter(Boolean).join(' · ');
+  if (vet) parts.push(`Vet: ${vet}`);
+  return parts.join('\n');
+}
+
+/** One sitter/boarding task per active pet, named and annotated. Read-only. */
+export async function petPrep(scope: ServiceScope, vacationId: string): Promise<ServiceResult<PetPrep>> {
+  if (!vacationId?.trim()) return fail('Which trip?', { code: SERVICE_CODES.invalidInput });
+  const { data: trip, error: tripError } = await scope.db
+    .from('vacations')
+    .select('id, title, start_date')
+    .eq('id', vacationId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (tripError) {
+    console.error('[service:trips] trip read failed', tripError);
+    return fail(describeDbError(tripError, 'Could not load that trip.'), { code: SERVICE_CODES.db });
+  }
+  if (!trip) return fail('That trip could not be found.', { code: SERVICE_CODES.notFound });
+
+  const { data: pets, error: petsError } = await scope.db
+    .from('pets')
+    .select('id, name, species, notes, vet_name, vet_phone')
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+    .limit(50);
+  if (petsError) {
+    // A trip prep that silently reports "no pets" because the read failed is
+    // how an animal gets left alone for a week. Fail closed.
+    console.error('[service:trips] pets read failed', petsError);
+    return fail(describeDbError(petsError, 'Could not check the family pets.'), { code: SERVICE_CODES.db });
+  }
+
+  const due = dayBefore(trip.start_date);
+  return ok({
+    tripId: trip.id,
+    tripTitle: trip.title,
+    startDate: trip.start_date,
+    tasks: (pets ?? []).map((pet) => ({
+      petId: pet.id,
+      petName: pet.name,
+      species: pet.species,
+      title: `Arrange care for ${pet.name} during ${trip.title}`,
+      notes: petCareNotes(pet, trip.title),
+      dueDate: due,
+    })),
+  });
+}
+
+export type PetCareTaskResult = { petId: string; petName: string; todoId: string; title: string };
+
+/** Write the per-pet prep tasks as to-dos. Idempotent per pet, so a retried run adds nothing twice. */
+export async function createPetCareTasks(
+  scope: ServiceScope,
+  vacationId: string,
+  input: { assigneeId?: string | null } = {},
+): Promise<ServiceResult<{ created: PetCareTaskResult[]; pets: number }>> {
+  const prep = await petPrep(scope, vacationId);
+  if (!prep.ok) return prep;
+  if (prep.data.tasks.length === 0) return ok({ created: [], pets: 0 });
+
+  const created: PetCareTaskResult[] = [];
+  for (const task of prep.data.tasks) {
+    // `scope.idempotencyKey` wins outright in `scopeKey`, so one key for the
+    // whole call would collapse four pets into a single task.
+    const petScope: ServiceScope = scope.idempotencyKey
+      ? { ...scope, idempotencyKey: `${scope.idempotencyKey}:pet:${task.petId}` }
+      : scope;
+    const todo = await createTodo(petScope, {
+      title: task.title,
+      notes: task.notes,
+      dueDate: task.dueDate,
+      priority: 'high',
+      ...(input.assigneeId === undefined ? {} : { assigneeId: input.assigneeId }),
+      tags: ['trip', 'pets'],
+    });
+    if (!todo.ok) return todo;
+    created.push({ petId: task.petId, petName: task.petName, todoId: todo.data.id, title: task.title });
+  }
+  return ok({ created, pets: prep.data.tasks.length });
+}
+
+// ── disruption: a delayed flight, a lost hotel ────────────────────────────────
+//
+// 0070 gives neither `vacation_flights` nor `vacation_lodging` a status
+// column, so the DISRUPTION ITSELF is not persisted as a status — what is
+// persisted is its consequence: the shifted itinerary rows, and one `note`
+// itinerary item holding the summary.
+//
+// TODO(migration M15, owner approval required): `vacation_flights` and
+// `vacation_lodging` need `disruption_status text CHECK (on_time|delayed|
+// cancelled)` and `delay_minutes int` before the booking row itself can
+// remember that it was disrupted.
+
+export type DisruptionRequest = {
+  kind: DisruptionKind;
+  /** The `vacation_flights` / `vacation_lodging` row id. */
+  bookingId: string;
+  delayMinutes?: number | null;
+  cancelled?: boolean | null;
+};
+
+export type TripDisruption = {
+  tripId: string;
+  tripTitle: string;
+  booking: { kind: DisruptionKind; id: string; label: string; day: string };
+  plan: DisruptionPlan;
+};
+
+/** `HH:MM` for an instant, in the family's zone. */
+function clockInTz(iso: string, tz: string): string | null {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(at);
+  } catch {
+    return at.toISOString().slice(11, 16);
+  }
+}
+
+type Anchor = { ok: true; label: string; day: string; time: string | null } | { ok: false; error: string };
+
+function anchorFor(snapshot: TripSnapshot, request: DisruptionRequest, tz: string): Anchor {
+  if (request.kind === 'flight') {
+    const flight = snapshot.flights.find((f) => f.id === request.bookingId);
+    if (!flight) return { ok: false, error: 'That flight is not on this trip.' };
+    const stamp = flight.arrive_at ?? flight.depart_at;
+    if (!stamp) return { ok: false, error: 'That flight has no times on file, so nothing can be re-flowed around it.' };
+    const label = [flight.airline, flight.flight_number].filter(Boolean).join(' ').trim() || 'Flight';
+    return { ok: true, label, day: dayKeyInTz(new Date(stamp), tz), time: clockInTz(stamp, tz) };
+  }
+  const stay = snapshot.lodging.find((l) => l.id === request.bookingId);
+  if (!stay) return { ok: false, error: 'That lodging is not on this trip.' };
+  if (!stay.check_in) return { ok: false, error: 'That stay has no check-in date on file, so nothing can be re-flowed around it.' };
+  return { ok: true, label: stay.name, day: stay.check_in, time: null };
+}
+
+function itineraryFor(snapshot: TripSnapshot): ItineraryLike[] {
+  const dayDates = new Map(snapshot.days.map((d) => [d.id, d.day_date]));
+  return snapshot.items.map((item) => ({
+    id: item.id,
+    day_id: item.day_id,
+    day_date: item.day_id ? dayDates.get(item.day_id) ?? null : null,
+    kind: item.kind,
+    day_part: item.day_part,
+    title: item.title,
+    start_time: item.start_time,
+    end_time: item.end_time,
+    booked: item.booked,
+  }));
+}
+
+function reservationsFor(snapshot: TripSnapshot, tz: string): ReservationLike[] {
+  return snapshot.reservations.map((r) => ({
+    id: r.id,
+    name: r.name,
+    day: r.reserved_at ? dayKeyInTz(new Date(r.reserved_at), tz) : null,
+    time: r.reserved_at ? clockInTz(r.reserved_at, tz) : null,
+  }));
+}
+
+/** Work out the re-flow WITHOUT writing anything — what the AI tool and the form preview both call. */
+export async function planTripDisruption(
+  scope: ServiceScope,
+  vacationId: string,
+  request: DisruptionRequest,
+): Promise<ServiceResult<TripDisruption>> {
+  const snapshot = await getTrip(scope, vacationId);
+  if (!snapshot.ok) return snapshot;
+  const tz = snapshot.data.trip.timezone || scope.tz;
+  const anchor = anchorFor(snapshot.data, request, tz);
+  if (!anchor.ok) return fail(anchor.error, { code: SERVICE_CODES.invalidInput });
+
+  const plan = replanDisruption(
+    {
+      kind: request.kind,
+      id: request.bookingId,
+      label: anchor.label,
+      anchorDay: anchor.day,
+      anchorTime: anchor.time,
+      delayMinutes: request.delayMinutes ?? 0,
+      cancelled: request.cancelled ?? false,
+    },
+    itineraryFor(snapshot.data),
+    reservationsFor(snapshot.data, tz),
+    { hasYoungChildren: snapshot.data.hasChildren },
+  );
+
+  return ok({
+    tripId: snapshot.data.trip.id,
+    tripTitle: snapshot.data.trip.title,
+    booking: { kind: request.kind, id: request.bookingId, label: anchor.label, day: anchor.day },
+    plan,
+  });
+}
+
+export type ReportedDisruption = TripDisruption & {
+  applied: { shifted: number; noteItemId: string | null };
+};
+
+/** The day row for a date, creating it when a shift rolled onto a day the trip had none for. */
+async function dayIdFor(
+  scope: ServiceScope,
+  vacationId: string,
+  day: string,
+  known: Map<string, string>,
+): Promise<ServiceResult<string | null>> {
+  const existing = known.get(day);
+  if (existing) return ok(existing);
+  const { data, error } = await scope.db
+    .from('vacation_itinerary_days')
+    .insert({ family_id: scope.familyId, vacation_id: vacationId, day_date: day, created_by: scope.userId })
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    console.error('[service:trips] itinerary day create failed', error);
+    return fail(describeDbError(error, 'Could not make room on the itinerary for the new day.'), { code: SERVICE_CODES.db });
+  }
+  if (data?.id) known.set(day, data.id);
+  return ok(data?.id ?? null);
+}
+
+/**
+ * Apply the re-flow: move the family's own itinerary rows and record what
+ * happened as a `note` item. Nothing here contacts an airline, a hotel or a
+ * restaurant, so nothing here may be described as rebooked — `plan.toRebook`
+ * is the list a PERSON still has to work through.
+ */
+export async function reportTripDisruption(
+  scope: ServiceScope,
+  vacationId: string,
+  request: DisruptionRequest,
+): Promise<ServiceResult<ReportedDisruption>> {
+  const planned = await planTripDisruption(scope, vacationId, request);
+  if (!planned.ok) return planned;
+  const { plan, booking } = planned.data;
+  if (plan.noop) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: null } });
+
+  const snapshot = await getTrip(scope, vacationId);
+  if (!snapshot.ok) return snapshot;
+  const dayIds = new Map(snapshot.data.days.map((d) => [d.day_date, d.id]));
+
+  let shifted = 0;
+  for (const move of plan.shiftedItems) {
+    const target = await dayIdFor(scope, vacationId, move.toDay, dayIds);
+    if (!target.ok) return target;
+    const patch: Updatable<'vacation_itinerary_items'> = {
+      start_time: move.toStart,
+      end_time: move.toEnd,
+    };
+    if (target.data) patch.day_id = target.data;
+    const { error } = await scope.db
+      .from('vacation_itinerary_items')
+      .update(patch)
+      .eq('id', move.id)
+      .eq('family_id', scope.familyId)
+      .eq('vacation_id', vacationId);
+    if (error) {
+      console.error('[service:trips] itinerary shift failed', error);
+      return fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db });
+    }
+    shifted += 1;
+  }
+
+  // The record of the disruption itself. `vacation_itinerary_items` already
+  // has a `note` kind and a `notes` column, so this needs no new schema.
+  const anchorDayId = await dayIdFor(scope, vacationId, booking.day, dayIds);
+  if (!anchorDayId.ok) return anchorDayId;
+  const { data: note, error: noteError } = await scope.db
+    .from('vacation_itinerary_items')
+    .insert({
+      family_id: scope.familyId,
+      vacation_id: vacationId,
+      day_id: anchorDayId.data,
+      kind: 'note',
+      day_part: 'all_day',
+      title: `Disruption: ${booking.label}`,
+      notes: plan.summary,
+      sort_order: 999,
+      created_by: scope.userId,
+    })
+    .select('id')
+    .maybeSingle();
+  if (noteError) {
+    console.error('[service:trips] disruption note create failed', noteError);
+    return fail(describeDbError(noteError, 'Could not record the disruption on the itinerary.'), { code: SERVICE_CODES.db });
+  }
+
+  await recordActivitySafely(scope, {
+    agent: 'travel',
+    action: 'update',
+    title: `Re-flowed the itinerary after ${booking.label} was disrupted`,
+    href: `/dashboard/vacations/${vacationId}/itinerary`,
+  });
+
+  return ok({ ...planned.data, applied: { shifted, noteItemId: note?.id ?? null } });
 }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -17,12 +16,17 @@ const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
 // forwards it to OpenAI's transcription endpoint, and returns the text. The key
 // never leaves the server. Honest 503 when OpenAI isn't configured — no faked
 // transcript is ever returned.
+//
+// Auth is `authenticateAI` — the SAME resolver /api/ai uses — so the cookie
+// session (web) and `Authorization: Bearer <supabase jwt>` (the Expo app) reach
+// the same place, and an anonymous caller gets a 401 in JSON rather than a
+// redirect the phone cannot follow.
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
-    // Auth: only signed-in family members may transcribe.
-    const ctx = await requireUserContext();
-    const supabase = await createServer();
+    const authed = await authenticateAI(req);
+    if (authed instanceof NextResponse) return authed;
+    const { supabase, ctx } = authed;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('transcribe.tooManyVoiceRequestsPlease') },

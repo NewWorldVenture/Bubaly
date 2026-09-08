@@ -2,7 +2,8 @@
 
 import { cookies, headers } from 'next/headers';
 import { getTranslations } from '@/lib/i18n/server';
-import { isSuperAdmin } from '@/lib/supabase/auth';
+import { getUserContext, isSuperAdmin } from '@/lib/supabase/auth';
+import { DEFAULT_LANDING_PATH, landingPathForRole } from '@/lib/auth/landing';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { isValidPin } from '@/lib/onboarding/pin';
@@ -15,10 +16,23 @@ import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 /** Where a just-signed-in user should land: the admin console for super
- *  admins, otherwise the family Home dashboard (/home). Resolved server-side so
- *  the env/code super-admin allowlist (not just the DB) is honored. */
+ *  admins, the Grandparent Portal for a guest (M28 — the role extended-family
+ *  invites use), otherwise the family Home dashboard (/home). Resolved
+ *  server-side so the env/code super-admin allowlist (not just the DB) is
+ *  honored, and so the role comes from the membership rather than the browser.
+ *
+ *  Never throws: a context read that fails must not block a sign-in, and /home
+ *  is the answer for every role but one. */
 export async function resolveLandingPathAction(): Promise<string> {
-  return (await isSuperAdmin()) ? '/admin' : '/home';
+  if (await isSuperAdmin()) return '/admin';
+  try {
+    const ctx = await getUserContext();
+    if (!ctx || 'needsFamily' in ctx) return DEFAULT_LANDING_PATH;
+    return landingPathForRole(ctx.active.role);
+  } catch (error) {
+    console.error('[auth] landing role lookup failed', error);
+    return DEFAULT_LANDING_PATH;
+  }
 }
 
 const VID_COOKIE = 'bubaly_vid';

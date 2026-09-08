@@ -5,11 +5,14 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { loadFamilyContext, contextSummary } from '@/lib/reasoning/context';
 import { GraphModule } from '@/components/modules/graph-module';
+import { GraphCompletenessCard } from '@/components/twin/graph-completeness-card';
+import { loadGraphCompleteness } from '@/lib/twin/completeness-server';
 
 export const metadata: Metadata = { title: 'Knowledge Graph | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function GraphPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   // R1: the unified reasoning context (graph + live snapshot + operating index).
@@ -23,9 +26,17 @@ export default async function GraphPage() {
     console.error('[dashboard-graph] reasoning context read failed', error);
   }
 
+  // X7 — how complete the household model is. Null when the read failed; the
+  // card then says so rather than scoring the family on rows we could not read.
+  const completeness = await loadGraphCompleteness(supabase, ctx.active.familyId);
+
   return (
     <>
       {reasoningError && <GraphContextError />}
+      <GraphCompletenessCard
+        completeness={completeness.ok ? completeness.data : null}
+        retryHref="/dashboard/graph"
+      />
       {reasoning && reasoning.stats.entities > 0 && (
         <div className="mx-auto mb-4 max-w-5xl px-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/[0.07] to-surface/40 px-4 py-3">
@@ -35,7 +46,7 @@ export default async function GraphPage() {
             <p className="text-sm font-medium">{contextSummary(reasoning)}</p>
             {reasoning.orphanCount > 0 && (
               <span className="ml-auto rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-500">
-                {reasoning.orphanCount} unlinked
+                {t('graph.nUnlinked', { count: reasoning.orphanCount })}
               </span>
             )}
           </div>

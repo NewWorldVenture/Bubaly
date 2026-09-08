@@ -13,7 +13,7 @@ import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboard
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { fmtTime, firstName, fmtMoney } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
@@ -38,9 +38,16 @@ import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
+import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
+import { getReferralConfigResult } from '@/lib/referrals/server';
+import { REFERRAL_HOME_CARD_DISMISSED_KEY } from '@/lib/referrals/core';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
+import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
+import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
+import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
+import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Home' };
@@ -352,6 +359,40 @@ export default async function HomePage() {
   // indexed read of the lifecycle row skips everything for completed accounts;
   // the full completeness resolve runs only for the needs-setup / reset cohort.
   // Degrades to "no nudge" pre-migration.
+  // M30 — "Do one thing now". Only for someone who has not reached first value
+  // yet. The milestone is read PER PERSON, not per family, which is both what
+  // `activation_events` RLS allows (a row is readable only by the user who
+  // recorded it) and the right reading: a second parent joining a settled
+  // household is still on their own first session. The snapshot is already in
+  // hand except the open-grocery count, read only for that cohort. A failed
+  // read hides the card and logs — the card is an offer, so withholding it says
+  // nothing false, while showing it on a guess would claim they are new.
+  let firstThing: FirstThing | null = null;
+  const { data: activated, error: activationError } = await supabase
+    .from('activation_events').select('id')
+    .eq('family_id', familyId).eq('user_id', ctx.user.id)
+    .eq('milestone', FIRST_VALUE_MILESTONE).limit(1);
+  if (activationError) console.error('[home] activation milestone read failed', activationError);
+  else if ((activated ?? []).length === 0) {
+    const { count: openGrocery, error: groceryError } = await supabase
+      .from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('is_checked', false);
+    if (groceryError) console.error('[home] open grocery count read failed', groceryError);
+    const birthdaysSoon = memberList.filter((m) => {
+      if (!m.birthday) return false;
+      const next = nextBirthdayDate(m.birthday, now);
+      if (!next) return false;
+      const days = daysUntil(next, now);
+      return days >= 0 && days <= 14;
+    }).length;
+    firstThing = pickFirstThing({
+      eventsToday: (todayEvents ?? []).length,
+      overdueTasks: tasksOverdue ?? 0,
+      openGrocery: openGrocery ?? 0,
+      birthdaysSoon,
+    });
+  }
+
   let setupNudge: { score: number; headline: string } | null = null;
   if (isManager(me.role)) {
     try {
@@ -362,6 +403,36 @@ export default async function HomePage() {
         if (!result.isComplete) setupNudge = { score: result.score, headline: result.headline };
       }
     } catch { /* onboarding_progress not migrated yet → no nudge */ }
+  }
+
+  // M39 — the referral prompt. Shown to managers once the family has invited
+  // at least one member (counted server-side from `invites`), until this user
+  // dismisses it (persisted on their own preferences row). Every read captures
+  // its error: a failed read logs and shows NO card — a promo must never be
+  // rendered on a guess, and its absence is not a claim about anything.
+  let referralCard: { give: string; get: string } | null = null;
+  if (manager) {
+    try {
+      const [invitesRes, prefsRes, referralConfig] = await Promise.all([
+        supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        supabase.from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle(),
+        getReferralConfigResult(createServiceClient()),
+      ]);
+      if (invitesRes.error || prefsRes.error || referralConfig.error) {
+        console.error('[home] referral card read failed', invitesRes.error ?? prefsRes.error ?? referralConfig.error);
+      } else {
+        const prefs = (prefsRes.data?.notification_prefs as Record<string, unknown> | null) ?? {};
+        const dismissed = typeof prefs[REFERRAL_HOME_CARD_DISMISSED_KEY] === 'string';
+        const { config } = referralConfig;
+        if ((invitesRes.count ?? 0) >= 1 && !dismissed && config.enabled) {
+          referralCard = { give: fmtMoney(config.referredRewardCents), get: fmtMoney(config.referrerRewardCents) };
+        }
+      }
+    } catch (err) {
+      // A promo may never take Home down with it (e.g. no service-role key in
+      // a preview env): log, show no card, and leave the rest of Home intact.
+      console.error('[home] referral card read failed', err);
+    }
   }
 
   return (
@@ -388,6 +459,9 @@ export default async function HomePage() {
         </div>
       </div>
 
+      {/* M30 — one real next step for a family that has not reached first value. */}
+      {firstThing && <DoOneThingCard thing={firstThing} />}
+
       {/* Finish-setup nudge → /dashboard/setup (needs-setup / reset cohort). */}
       {setupNudge && (
         <Link
@@ -407,6 +481,9 @@ export default async function HomePage() {
           </span>
         </Link>
       )}
+
+      {/* M39 — refer a family, once the household itself is invited. */}
+      {referralCard && <ReferralHomeCard give={referralCard.give} get={referralCard.get} />}
 
       {/* R6 — intent-based entry, made primary: one NL bar routes to the reasoning
           engine ("plan Emma's party"), a page, or the assistant. */}
@@ -507,7 +584,7 @@ export default async function HomePage() {
       <CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" />
 
       {/* R11 — the category metric: "N hours saved this week" */}
-      <TimeSavedBanner data={timeSaved} />
+      <TimeSavedBanner result={timeSaved} retryHref="/home" />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}

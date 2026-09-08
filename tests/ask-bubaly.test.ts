@@ -14,6 +14,14 @@ import {
   MAX_AI_REQUEST_TEXT_CHARS, answerAIRequest, parseAIRequestIntake, runPagePath, submitAIRequest,
 } from '@/lib/ai/chat-request';
 import { MAX_SUGGESTIONS, SUGGESTED_PROMPTS, moduleFromPathname, suggestedPromptsFor } from '@/lib/concierge/suggested-prompts';
+// The command bar now reaches the household-search server action, and importing
+// that for real drags in lib/supabase/auth.ts and React's request `cache()`,
+// which this environment does not have. Only the pure result mapper is under
+// test here, so the action is stubbed the way approval-card.test.ts stubs its
+// own — `vi.mock` is hoisted above the import below.
+vi.mock('@/app/(app)/dashboard/search/actions', () => ({
+  searchRecordsAction: async () => ({ ok: true, records: [], partial: [], withheld: [] }),
+}));
 import { toCommandBarResults } from '@/components/app/command-bar';
 import { FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
 

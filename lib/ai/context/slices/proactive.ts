@@ -12,6 +12,7 @@
 import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { gatherSignalsResult, type FamilySignals } from '@/lib/family/signals';
+import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -45,9 +46,16 @@ export type ProactiveSliceData = {
   signals: { kind: string; title: string; detail: string | null; score: number }[];
   autopilot: { id: string; title: string; detail: string | null; urgency: number; actionLabel: string | null }[];
   recommendations: { id: string; title: string; body: string | null; priority: string; category: string }[];
+  /** M34: transitions the household's own rows say are coming, with the evidence. */
+  lifeEvents: LifeEventSuggestion[];
   /** Items dropped for a non-manager because they touched money or documents. */
   withheld: number;
 };
+
+/** School events whose title reads like the start of a term or a school year — the same rule the page uses. */
+const TERM_START_RE = /\b(term|semester|school year|first day|back[- ]to[- ]school|start of school|orientation)\b/i;
+/** How many transitions reach the prompt; more than this is not proactive, it is noise. */
+const MAX_LIFE_EVENTS = 3;
 
 async function loadSignals(familyId: string): Promise<FamilySignals | null> {
   try {
@@ -69,18 +77,40 @@ export const proactiveSlice: SliceDefinition = {
   name: 'proactive',
   title: 'What Bubaly has noticed',
   async load(scope, env) {
-    const [signals, report, liveSignals, autopilot, recommendations] = await Promise.all([
+    // M34: the life-event signals ride along here because "what Bubaly has
+    // noticed" is exactly where a coming transition belongs — and because the
+    // planner needs it in the same slice a proactive intent already loads.
+    const todayKey = env.now.toISOString().slice(0, 10);
+    const termHorizon = new Date(env.now.getTime() + SCHOOL_START_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const petSince = new Date(env.now.getTime() - 8 * 86_400_000).toISOString().slice(0, 10);
+
+    const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId),
       loadReasoningReport(scope.db, scope.familyId, env.now),
       settle(scope.db.from('family_signals').select('kind, title, detail, score').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
       settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
-  ]);
-    const readError = liveSignals.error ?? autopilot.error ?? recommendations.error;
+      // The four life-event reads take settle() like the three above them: this
+      // slice loads inside a context build, and a rejected read here would throw
+      // out of the whole build rather than degrade one slice.
+      settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', `${todayKey}T00:00:00Z`).lte('starts_at', `${termHorizon}T23:59:59Z`).limit(50)),
+      settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', `${petSince}T00:00:00Z`).limit(20)),
+      settle(scope.db.from('home_projects').select('title, status').eq('family_id', scope.familyId).in('status', ['idea', 'planning', 'quoting']).limit(20)),
+      settle(scope.db.from('life_event_plans').select('template_key').eq('family_id', scope.familyId).neq('status', 'archived').limit(50)),
+    ]);
+    const readError = liveSignals.error ?? autopilot.error ?? recommendations.error ?? terms.error ?? pets.error ?? projects.error ?? plans.error;
     if (readError) {
       console.error('[ai-context:proactive] suggestion read failed', readError);
       return fail(describeDbError(readError, "Could not load Bubaly's suggestions."), { code: SERVICE_CODES.db });
     }
+
+    const lifeEvents = detectLifeEvents({
+      todayKey,
+      termStarts: (terms.data ?? []).filter((e) => TERM_START_RE.test(e.title ?? '')).map((e) => ({ label: e.title, startKey: String(e.starts_at).slice(0, 10) })),
+      pets: (pets.data ?? []).map((p) => ({ name: p.name, createdKey: String(p.created_at).slice(0, 10) })),
+      homeProjects: (projects.data ?? []).map((p) => ({ title: p.title, status: p.status })),
+      activePlanKeys: (plans.data ?? []).map((p) => p.template_key),
+    }).slice(0, MAX_LIFE_EVENTS);
 
     const canManage = env.viewer.canManage;
     let withheld = 0;
@@ -108,6 +138,7 @@ export const proactiveSlice: SliceDefinition = {
       signals: (liveSignals.data ?? []).filter((s) => keep(s.kind, s.title, s.detail)).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score })),
       autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
+      lifeEvents,
       withheld,
     };
 
@@ -143,11 +174,14 @@ export const proactiveSlice: SliceDefinition = {
     for (const r of data.recommendations) {
       lines.push(`- Pending recommendation (${sanitizeUntrusted(r.category, 20)}): ${fenceUntrusted('recommendation', r.body ? `${r.title} — ${r.body}` : r.title)}`);
     }
+    for (const s of data.lifeEvents) {
+      lines.push(`- Coming transition (${sanitizeUntrusted(s.templateKey, 30)}${s.eventDate ? `, ${s.eventDate}` : ''}): ${fenceUntrusted('signal', `${s.title} — ${s.reason}`)}`);
+    }
     if (data.report.readErrors.length) {
       lines.push(`- Some checks could not run (${data.report.readErrors.join(', ')}); do not assume those areas are clear.`);
     }
 
     const attention = data.report.answers.filter((a) => a.status === 'attention').length;
-    return ok({ data, count: attention + data.signals.length + data.autopilot.length + data.recommendations.length, lines });
+    return ok({ data, count: attention + data.signals.length + data.autopilot.length + data.recommendations.length + data.lifeEvents.length, lines });
   },
 };

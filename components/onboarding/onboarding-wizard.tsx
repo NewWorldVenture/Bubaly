@@ -36,6 +36,8 @@ import {
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { pickFirstThing } from '@/lib/outcomes/launcher';
+import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -334,7 +336,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
           <p className="text-base font-semibold">{brief.headline}</p>
           {brief.timeSavedMinutes > 0 && (
             <p className="mt-1 text-sm text-muted">
-              {tr('onboardingWizard.bubalyJustSavedYouAbout')} <span className="font-semibold text-fg">{brief.timeSavedMinutes} minutes</span> {tr('onboardingWizard.ofPlanning')}
+              {tr('onboardingWizard.estimatedPlanningTimeOfNMinutes', { minutes: brief.timeSavedMinutes })}
             </p>
           )}
         </div>
@@ -660,7 +662,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
             <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {brief.headline}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {brief.timeSavedMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand-text"><Clock className="h-3 w-3" /> ~{brief.timeSavedMinutes} {tr('onboardingWizard.minSaved')}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand-text"><Clock className="h-3 w-3" /> {tr('onboardingWizard.nMinPlanningEstimated', { minutes: brief.timeSavedMinutes })}</span>
               )}
               {brief.todayCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand-text" /> {brief.todayCount} today</span>
@@ -700,7 +702,13 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
         ))}
       </div>
 
-      <Button className="mt-7 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
+      {/* M30 — one real next step instead of "go explore". Seeded from the brief
+          that was just computed, so it points at the day they can already see. */}
+      <div className="mt-6">
+        <DoOneThingCard thing={pickFirstThing({ eventsToday: brief?.todayCount ?? 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 })} />
+      </div>
+
+      <Button className="mt-3 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
 
       {kids.length > 0 && (
         <Link

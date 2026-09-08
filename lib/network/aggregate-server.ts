@@ -11,7 +11,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { contributionFeatures, type ContributionInput } from './contribution';
+import {
+  contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
+} from './contribution';
 import {
   aggregateContributions, cohortKey, laplaceNoise, filterMetricsByScopes,
   AGG_DEFAULTS, type Contribution,
@@ -22,20 +24,34 @@ type DB = SupabaseClient<Database>;
 
 export type AggregateResult = { ok: boolean; error?: string; contributors: number; aggregates: number };
 
-function dinnerBandToMetric(band: string): string { return band; } // already banded
+/** Roles whose members count as children for chores-per-child and bedtime. */
+export const CHILD_ROLES = new Set(['child', 'teen']);
+/** Chore assignments still in play — what "open chores" means everywhere here. */
+export const OPEN_CHORE_STATUSES = ['todo', 'in_progress', 'submitted'] as const;
+/** Trailing window the weekly-spend band is smoothed over (four weeks → one). */
+export const SPEND_WINDOW_DAYS = 28;
 
-const featuresToContribution = (familyId: string, input: ContributionInput, now: Date): Contribution => {
+/**
+ * A family's banded features → the metric row it contributes. Only bands leave
+ * the household: a metric whose band is null (no children, no tracked spend) is
+ * simply absent, so it cannot skew a cohort with a fake "0".
+ */
+export const featuresToContribution = (familyId: string, input: ContributionInput, now: Date): Contribution => {
   const features = contributionFeatures(input, now);
-  return {
-    familyId,
-    features,
-    metrics: { dinner_habit: dinnerBandToMetric(features.dinnerBand), activities: features.activityBand },
+  const metrics: Record<string, string> = {
+    dinner_habit: features.dinnerBand,
+    activities: features.activityBand,
   };
+  if (features.remindersBand !== null) metrics.reminders_per_week = features.remindersBand;
+  if (features.choresPerChildBand !== null) metrics.chores_per_child = features.choresPerChildBand;
+  if (features.bedtimeBand !== null) metrics.bedtime_band = features.bedtimeBand;
+  if (features.weeklySpendBand !== null) metrics.weekly_spend_band = features.weeklySpendBand;
+  return { familyId, features, metrics };
 };
 
 /**
- * Build every opted-in family's coarse contribution in FOUR queries total (one
- * per source table, `.in(family_ids)`) rather than four-per-family — so the
+ * Build every opted-in family's coarse contribution in EIGHT queries total (one
+ * per source table, `.in(family_ids)`) rather than eight-per-family — so the
  * nightly cron scales past the ≥100-family launch gate without N+1 round-trips.
  * Returns a map keyed by family_id; a family with no rows still gets a valid
  * (empty-household) contribution. Returns null only on a hard read error.
@@ -44,18 +60,34 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   if (familyIds.length === 0) return new Map();
   const todayKey = now.toISOString().slice(0, 10);
   const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
-  const [members, dinners, teams, classes] = await settleAll([
-    sb.from('family_members').select('family_id, birthday').in('family_id', familyIds).eq('is_active', true),
+  const spendStartKey = new Date(now.getTime() - SPEND_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const weekEndIso = new Date(now.getTime() + 7 * 86_400_000).toISOString();
+  const [members, dinners, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
+    sb.from('family_members').select('id, family_id, birthday, role').in('family_id', familyIds).eq('is_active', true),
     sb.from('meal_plans').select('family_id, plan_date').in('family_id', familyIds).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
     sb.from('teams').select('family_id').in('family_id', familyIds).eq('is_active', true),
     sb.from('school_classes').select('family_id').in('family_id', familyIds),
+    sb.from('chore_assignments').select('family_id, member_id').in('family_id', familyIds).in('status', [...OPEN_CHORE_STATUSES]),
+    sb.from('bedtime_routines').select('family_id, member_id, target_bedtime').in('family_id', familyIds).eq('is_active', true),
+    sb.from('transactions').select('family_id, amount').in('family_id', familyIds).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey),
+    sb.from('reminders').select('family_id').in('family_id', familyIds).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
   ]);
-  if (members.error || dinners.error || teams.error || classes.error) return null;
+  const readError = [members, dinners, teams, classes, chores, bedtimes, spend, reminders].map((r) => r.error).find(Boolean);
+  if (readError) {
+    console.error('[network] family contribution source read failed', readError);
+    return null;
+  }
 
   const birthdaysByFam = new Map<string, (string | null)[]>();
+  const childMemberIds = new Set<string>();
+  const childCountByFam = new Map<string, number>();
   for (const m of members.data ?? []) {
     const arr = birthdaysByFam.get(m.family_id) ?? [];
     arr.push(m.birthday); birthdaysByFam.set(m.family_id, arr);
+    if (CHILD_ROLES.has(m.role)) {
+      childMemberIds.add(m.id);
+      childCountByFam.set(m.family_id, (childCountByFam.get(m.family_id) ?? 0) + 1);
+    }
   }
   const dinnerDatesByFam = new Map<string, Set<string>>();
   for (const d of dinners.data ?? []) {
@@ -69,6 +101,23 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   };
   const teamsByFam = countBy(teams.data);
   const classesByFam = countBy(classes.data);
+  const remindersByFam = countBy(reminders.data);
+  // Only chores and bedtimes that belong to a CHILD member count — an adult's
+  // own to-do or wind-down routine is not a "chores per child" or "kids' bedtime" signal.
+  const openChoresByFam = countBy((chores.data ?? []).filter((c) => childMemberIds.has(c.member_id)));
+  const bedtimesByFam = new Map<string, number[]>();
+  for (const b of bedtimes.data ?? []) {
+    if (!childMemberIds.has(b.member_id)) continue;
+    const minutes = bedtimeToMinutes(b.target_bedtime);
+    if (minutes === null) continue;
+    const arr = bedtimesByFam.get(b.family_id) ?? [];
+    arr.push(minutes); bedtimesByFam.set(b.family_id, arr);
+  }
+  const expensesByFam = new Map<string, number[]>();
+  for (const t of spend.data ?? []) {
+    const arr = expensesByFam.get(t.family_id) ?? [];
+    arr.push(Number(t.amount)); expensesByFam.set(t.family_id, arr);
+  }
 
   const out = new Map<string, Contribution>();
   for (const familyId of familyIds) {
@@ -78,6 +127,11 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
       householdSize: birthdays.length,
       plannedDinnersPerWeek: dinnerDatesByFam.get(familyId)?.size ?? 0,
       activeActivities: (teamsByFam.get(familyId) ?? 0) + (classesByFam.get(familyId) ?? 0),
+      childCount: childCountByFam.get(familyId) ?? 0,
+      openChoreAssignments: openChoresByFam.get(familyId) ?? 0,
+      childBedtimeMinutes: bedtimesByFam.get(familyId) ?? [],
+      typicalWeeklySpend: typicalWeeklySpend(expensesByFam.get(familyId) ?? [], SPEND_WINDOW_DAYS),
+      remindersPerWeek: remindersByFam.get(familyId) ?? 0,
     };
     out.set(familyId, featuresToContribution(familyId, input, now));
   }

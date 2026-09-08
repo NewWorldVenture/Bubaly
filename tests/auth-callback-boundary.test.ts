@@ -29,8 +29,11 @@ describe('auth callback boundary', () => {
     expect(source).toContain('error: membershipError');
     expect(source).toContain("console.error('[auth-callback] membership lookup failed', membershipError);");
     // The onboarding detour is reached only on a read that actually succeeded —
-    // provisioning a second family off a failed read is the worse outcome.
-    expect(source).toContain("else if (membership.length === 0) destination = '/onboarding';");
+    // provisioning a second family off a failed read is the worse outcome. Match
+    // the SHAPE (an else-branch off the error check) rather than one formatting
+    // of it, so adding a sibling branch does not read as a regression.
+    expect(source).toMatch(/}\s*else if \(membership\.length === 0\)/);
+    expect(source).toContain("destination = '/onboarding'");
   });
 
   it('never answers a signed-in visitor with a login redirect after a failed DB read', () => {

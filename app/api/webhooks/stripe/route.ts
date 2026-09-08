@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { markReferralConverted } from '@/lib/referrals/server';
+import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
@@ -60,10 +60,20 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
   );
   if (subscriptionError) throw new Error('Subscription persistence failed');
 
-  // Credit a pending referral when a referred family first becomes paid.
+  // Credit a pending referral when a referred family first becomes paid, then
+  // fulfil it: both families' Stripe customer balances are credited and the
+  // row flips to 'rewarded' only once Stripe confirms both (idempotent on
+  // retries — see rewardReferral). Best-effort: never fails the webhook.
   if (sub.status === 'active' || sub.status === 'trialing') {
     try { await markReferralConverted(supabase, familyId); }
     catch (e) { console.error('[referral] conversion crediting failed', e); }
+    try {
+      const referredCustomerRef = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+      const reward = await rewardConvertedReferral(supabase, familyId, { referredCustomerRef });
+      if (reward && reward.outcome !== 'rewarded' && reward.outcome !== 'already_rewarded') {
+        console.warn('[referral] reward not completed on this event', reward);
+      }
+    } catch (e) { console.error('[referral] reward fulfilment failed', e); }
   }
 
   // Alert the super admin on the two growth transitions — a NEW paid conversion
