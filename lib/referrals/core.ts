@@ -98,11 +98,18 @@ export function summarizeReferrals(rows: ReferralRow[]): ReferralSummary {
 // defined here in the same pure module as the rest of the referral logic rather
 // than assembled inside a page.
 //
-// Two sources, because a family recruits in two ways: a referral code a
-// stranger redeems, and an invite a relative accepts. Both create a household
-// that would not otherwise exist, and counting only the first understated the
-// loop by exactly the share of families who invite Grandma before they think
-// about a code.
+// ONLY ONE SOURCE COUNTS, and getting that wrong is how a viral dashboard lies.
+// A `referrals` row carries `referred_family_id`: a household that did not
+// exist before now does. An `invites` row is `(family_id, email, role, token,
+// accepted_by)` — accepting one adds a MEMBER to the family that sent it and
+// writes no row in `families` at all. Summing the two put a household that
+// invited a spouse, two grandparents and a sitter at a coefficient of 4.00 with
+// zero new households behind it, on a tile whose own definition is "above 1 the
+// product grows without spend".
+//
+// Accepted invites are still worth seeing, so they are reported beside the
+// coefficient as `membersInvited` — a different unit, separately labelled, and
+// deliberately NOT part of `joined` or of the division.
 
 /** A referral row reduced to its status. */
 export type ReferralStatusRow = { status: string };
@@ -112,13 +119,17 @@ export type InviteStatusRow = { status: string };
 export type ReferralCoefficient = {
   /** Existing households — the denominator. */
   households: number;
-  /** Households that arrived through a referral code. */
+  /** Households that arrived through a referral code — the only source of new households. */
   fromReferrals: number;
-  /** Households that arrived by accepting an invite. */
-  fromInvites: number;
+  /**
+   * People who accepted an invite into an EXISTING household. Reported so the
+   * loop's other half is visible; never added to `joined`, because an invite
+   * creates a member, not a family.
+   */
+  membersInvited: number;
   /** joined / households. `null` when there are no households to divide by. */
   coefficient: number | null;
-  /** Total new households attributable to the loop. */
+  /** New households attributable to the loop. */
   joined: number;
 };
 
@@ -130,7 +141,8 @@ export type ReferralCoefficient = {
  * dashboard makes once.
  */
 const JOINED_REFERRAL_STATUSES = new Set(['signed_up', 'converted', 'rewarded']);
-const JOINED_INVITE_STATUSES = new Set(['accepted']);
+/** Accepted invites — counted as members joining a household, never as households. */
+const ACCEPTED_INVITE_STATUSES = new Set(['accepted']);
 
 /** X12 — new households per existing household. */
 export function referralCoefficient(input: {
@@ -140,12 +152,12 @@ export function referralCoefficient(input: {
 }): ReferralCoefficient {
   const households = Math.max(0, Math.trunc(input.households));
   const fromReferrals = input.referralRows.filter((r) => JOINED_REFERRAL_STATUSES.has(r.status)).length;
-  const fromInvites = input.inviteRows.filter((r) => JOINED_INVITE_STATUSES.has(r.status)).length;
-  const joined = fromReferrals + fromInvites;
+  const membersInvited = input.inviteRows.filter((r) => ACCEPTED_INVITE_STATUSES.has(r.status)).length;
+  const joined = fromReferrals;
   return {
     households,
     fromReferrals,
-    fromInvites,
+    membersInvited,
     joined,
     coefficient: households > 0 ? Math.round((joined / households) * 100) / 100 : null,
   };

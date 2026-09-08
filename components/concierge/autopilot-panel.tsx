@@ -11,8 +11,12 @@
 // runs with `trigger_type = 'plan_accepted'` and the legacy `status =
 // 'executed'`, which is a third definition of "handled" that disagreed with the
 // brief and with time-saved. It now counts exactly what
-// `lib/metric/time-saved.ts` says counts — `HANDLED_RUN_STATES`, any trigger —
-// so the same week reads the same number wherever the family looks.
+// `lib/metric/time-saved.ts` says counts — `HANDLED_RUN_OR_FILTER`, any
+// trigger — so the same week reads the same number wherever the family looks.
+// That filter reads BOTH state columns on purpose: `executeQueuedRunAction`,
+// the action the "Do it" button below calls, stamps only the legacy `status`,
+// so a run this panel lists under "Done for you" has to be a run the header
+// counts. It used to be neither, and the panel contradicted itself.
 //
 // And a read that fails says so. The panel used to swallow every error and
 // render an empty feed, which is the same lie as a zero: "Bubaly did nothing"
@@ -21,11 +25,11 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { AlertTriangle, Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { isManager } from '@/lib/constants/roles';
 import { AUTOPILOT_POLICY_NAME, dialLevel, type AutopilotLevel } from '@/lib/autonomy/loop';
 import { countOrNull, type MetricCount } from '@/lib/metric/count';
-import { HANDLED_RUN_STATES } from '@/lib/metric/time-saved';
+import { HANDLED_RUN_OR_FILTER } from '@/lib/metric/time-saved';
 import {
   dismissQueuedRunAction, executeQueuedRunAction, setConciergeAutopilotAction,
 } from '@/app/(app)/dashboard/concierge/actions';
@@ -65,32 +69,27 @@ export function AutopilotPanel({ className }: { className?: string }) {
     const supabase = createClient();
     const sinceIso = new Date(Date.now() - WEEK_MS).toISOString();
     try {
-      // The ONE handled-this-week definition, counted in PostgreSQL.
-      //
-      // Awaited beside the batch, not inside it: countOrNull answers a
-      // `number | null`, while settleAll substitutes { data, count, error } for
-      // a rejection — a shape with no count to read. Its own catch keeps it
-      // owned even if a `.from()` below throws while the array is being built,
-      // and `null` is already what this panel renders as "unavailable", so a
-      // failed count degrades to the same honest state as a failed read.
-      const handledCountPromise = countOrNull(
-        supabase.from('family_automation_runs').select('id', { count: 'exact', head: true })
-          .eq('family_id', familyId).in('state', HANDLED_RUN_STATES).gte('created_at', sinceIso),
-        'autopilot handled runs',
-      ).catch((cause) => {
-        console.error('[autopilot-panel] handled count threw', cause);
-        return null;
-      });
-
-      const [policy, runRows] = await settleAll([
-        supabase.from('trust_policies').select('effect')
-          .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle(),
-        supabase.from('family_automation_runs')
-          .select('id, status, trigger_type, summary, created_at, metadata')
-          .eq('family_id', familyId).eq('trigger_type', 'plan_accepted')
-          .order('created_at', { ascending: false }).limit(30),
+      // `settleAll` for the two feeds so an unreachable table degrades one of
+      // them rather than both; the count runs alongside and answers `null` when
+      // its own read fails.
+      const [[policy, runRows], handledCount] = await Promise.all([
+        settleAll([
+          supabase.from('trust_policies').select('effect')
+            .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle(),
+          supabase.from('family_automation_runs')
+            .select('id, status, trigger_type, summary, created_at, metadata')
+            .eq('family_id', familyId).eq('trigger_type', 'plan_accepted')
+            .order('created_at', { ascending: false }).limit(30),
+        ]),
+        // The ONE handled-this-week definition, counted in PostgreSQL.
+        countOrNull(
+          settle(
+            supabase.from('family_automation_runs').select('id', { count: 'exact', head: true })
+              .eq('family_id', familyId).or(HANDLED_RUN_OR_FILTER).gte('created_at', sinceIso),
+          ),
+          'autopilot handled runs',
+        ),
       ]);
-      const handledCount = await handledCountPromise;
       // A failed queue read must not render as an empty queue: "nothing is
       // waiting for you" is a claim, and we cannot make it.
       if (runRows.error) {

@@ -48,7 +48,7 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
   const [
     runsRes, plansRes, eventsRes,
     signalCount, suggestionCount, recommendationCount, decidedCount,
-    activationRes, subsRes, householdCount, referralRes, inviteRes,
+    activationRes, subsRes, householdCount, referralRes, inviteRes, billingEventRes,
   ] = await Promise.all([
     sb.from('family_automation_runs').select('id, request_id, state').gte('created_at', sinceIso).limit(ROW_CAP),
     sb.from('ai_plans').select('request_id').gte('created_at', sinceIso).limit(ROW_CAP),
@@ -60,10 +60,21 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
     countOrNull(sb.from('approval_requests').select('id', { count: 'exact', head: true }).not('decided_at', 'is', null).gte('decided_at', sinceIso), 'approvals decided'),
 
     sb.from('activation_events').select('family_id, created_at').eq('milestone', FIRST_VALUE_MILESTONE).not('family_id', 'is', null).limit(ROW_CAP),
-    sb.from('subscriptions').select('family_id, plan, status, created_at').limit(ROW_CAP),
+    // `created_at` is deliberately NOT selected: this repo writes one
+    // subscriptions row per family at family creation and updates it in place,
+    // so that column is the family's birthday, not the day it started paying.
+    // `updated_at` (kept fresh by trg_set_updated_at) is the row's own upper
+    // bound on the paid transition; the billing event below is the real one.
+    sb.from('subscriptions').select('family_id, plan, status, updated_at').limit(ROW_CAP),
     countOrNull(sb.from('families').select('id', { count: 'exact', head: true }), 'families'),
     sb.from('referrals').select('status').limit(ROW_CAP),
     sb.from('invites').select('status').limit(ROW_CAP),
+    // The billing EVENT: the webhook records one `admin_notifications` row of
+    // kind 'subscription' the first time a family goes paid+active
+    // (`isNewPaidConversion` fires once, not on renewals), with the family id in
+    // `related_id`. That row's `created_at` IS the conversion instant.
+    sb.from('admin_notifications').select('related_id, created_at')
+      .eq('kind', 'subscription').not('related_id', 'is', null).limit(ROW_CAP),
   ]);
 
   // X3 — rework rate over the window's runs.
@@ -97,21 +108,40 @@ export async function loadStrategyMetrics(sb: DB, now: Date = new Date(), window
     : null;
 
   // X10 — conversion among families that reached first value.
+  //
+  // A failed billing-event read is NOT fatal here: the fallback is the paid
+  // row's own `updated_at`, which the pure function then marks approximate. A
+  // failed activation or subscription read is, because there is nothing left to
+  // divide.
   let conversion: ConversionAfterValue | null = null;
   if (activationRes.error || subsRes.error) {
     console.error('[metric] conversion-after-value read failed', activationRes.error ?? subsRes.error);
   } else {
+    if (billingEventRes.error) console.error('[metric] billing conversion events read failed', billingEventRes.error);
+    const eventPaidAt = new Map<string, string>();
+    for (const row of billingEventRes.data ?? []) {
+      if (!row.related_id) continue;
+      const prev = eventPaidAt.get(row.related_id);
+      if (prev === undefined || row.created_at < prev) eventPaidAt.set(row.related_id, row.created_at);
+    }
     conversion = conversionAfterValue(
       (activationRes.data ?? [])
         .filter((a): a is typeof a & { family_id: string } => Boolean(a.family_id))
         .map((a) => ({ familyId: a.family_id, reachedAt: a.created_at })),
-      (subsRes.data ?? []).map((s) => ({
-        familyId: s.family_id, plan: s.plan, status: s.status, createdAt: s.created_at,
-      })),
+      (subsRes.data ?? []).map((s) => {
+        const event = eventPaidAt.get(s.family_id);
+        return {
+          familyId: s.family_id, plan: s.plan, status: s.status,
+          paidAt: event ?? s.updated_at,
+          basis: (event ? 'event' : 'row_updated_at') as 'event' | 'row_updated_at',
+        };
+      }),
     );
   }
 
-  // X12 — new households per existing household.
+  // X12 — new households per existing household. `invites` is read for the
+  // members-invited figure only: accepting one adds a person to a family that
+  // already exists, so it never reaches the coefficient's numerator.
   let referrals: ReferralCoefficient | null = null;
   if (referralRes.error || inviteRes.error || householdCount === null) {
     console.error('[metric] referral coefficient read failed', referralRes.error ?? inviteRes.error ?? 'household count read failed');

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { countOrNull, sumCounts, type MetricCount } from './count';
 import {
-  HANDLED_RUN_STATES, computeTimeSaved, type SavedKind, type TimeSavedResult,
+  HANDLED_RUN_OR_FILTER, computeTimeSaved, type SavedKind, type TimeSavedResult,
 } from './time-saved';
 
 type DB = SupabaseClient<Database>;
@@ -35,13 +35,17 @@ export type HandledThisWeek = {
  *     run kicked off by a routine, an inbound email or a Handle It request is
  *     as handled as one the family accepted a plan for, and counting only
  *     `plan_accepted` under-reported Bubaly's own work on its own dashboard.
+ *     "Handled state" is read from BOTH columns (`HANDLED_RUN_OR_FILTER`) —
+ *     the concierge approval path stamps only the legacy `status`, so a filter
+ *     on `state` alone missed exactly the runs a manager approved by hand.
  *   * Autopilot suggestions Bubaly executed on its own.
  *   * The specialist agents' completed activity.
  *   * Reminders that actually went out.
  *
- * A run is counted ONCE — the query filters `state`, so a run cannot be added
- * again by its trigger, its legacy `status`, or by the fact that it also
- * appears in the completed list the Command Center renders.
+ * A run is counted ONCE — the query returns rows, not matches, so a run whose
+ * `state` and `status` both say handled is one row; nor can it be added again
+ * by its trigger or by the fact that it also appears in the completed list the
+ * Command Center renders.
  *
  * Every count is error-aware: a failed read is `null`, never 0.
  */
@@ -54,7 +58,7 @@ export async function countHandledThisWeek(
   const [run, autopilot, assistant, reminder] = await Promise.all([
     countOrNull(
       supabase.from('family_automation_runs').select('id', { count: 'exact', head: true })
-        .eq('family_id', familyId).in('state', HANDLED_RUN_STATES).gte('created_at', sinceIso),
+        .eq('family_id', familyId).or(HANDLED_RUN_OR_FILTER).gte('created_at', sinceIso),
       'handled runs',
     ),
     countOrNull(
