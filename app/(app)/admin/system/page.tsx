@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { CheckCircle2, XCircle, Users, Home, DollarSign, FolderLock, Database, RefreshCw } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settle } from '@/lib/supabase/settle';
+import { settle, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -65,7 +65,7 @@ export default async function AdminSystemPage() {
     ['documents', documentsResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -95,7 +95,7 @@ export default async function AdminSystemPage() {
 
   return (
     <div className="module-page">
-      <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} />
+      <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>

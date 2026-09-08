@@ -14,8 +14,8 @@ export async function createServer() {
   // and would read as an instant logout.
   const secure = isSecureOrigin(process.env.NEXT_PUBLIC_SITE_URL);
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     {
       // Same scope + transport the browser client writes, so a session refreshed
       // on the server keeps the cookie the browser already has instead of
@@ -37,12 +37,23 @@ export async function createServer() {
   );
 }
 
+// A credential pasted into a dashboard picks up a trailing newline or a wrapping
+// pair of quotes more often than anyone admits, and Supabase rejects the result
+// with "Unregistered API key" / "Invalid Compact JWS" — errors that name nothing
+// you can act on. Neither a URL nor a key ever legitimately carries surrounding
+// whitespace or quotes, so removing them can only turn a broken deployment into
+// a working one.
+function cleanEnv(value: string | undefined): string {
+  const trimmed = (value ?? '').trim();
+  return /^(["']).*\1$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
 // Service-role client. SERVER ONLY. Bypasses RLS — use only for webhooks,
 // cron/notification dispatch, and trusted background jobs. Never expose to the browser.
 export function createServiceClient() {
   return createAdmin<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY),
     { auth: { persistSession: false } },
   );
 }
