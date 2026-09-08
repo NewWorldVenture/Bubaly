@@ -20,6 +20,11 @@ async function probe(
   url: string | undefined,
   anonKey: string | undefined,
   timeoutMs: number,
+  // When true, a 401/403 counts as a FAILURE rather than "reachable". The
+  // connectivity probes want the opposite — being told "not authorised" still
+  // proves the gateway answered — but a probe whose whole purpose is to check a
+  // credential must not pass when that credential is rejected.
+  keyMustBeAccepted = false,
 ): Promise<ProbeCheck> {
   if (!url || !anonKey) {
     return { ok: false, latencyMs: null, error: 'supabase env not configured' };
@@ -39,6 +44,9 @@ async function probe(
     // broken (this is the LB-001 shape for the auth service).
     if (res.status >= 500) {
       return { ok: false, latencyMs, error: `${label} ${res.status}` };
+    }
+    if (keyMustBeAccepted && (res.status === 401 || res.status === 403)) {
+      return { ok: false, latencyMs, error: `${label} rejected the key (${res.status})` };
     }
     return { ok: true, latencyMs };
   } catch (err) {
@@ -69,4 +77,28 @@ export function probeAuth(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<ProbeCheck> {
   return probe('/auth/v1/health', 'gotrue', url, anonKey, timeoutMs);
+}
+
+/**
+ * Does the SERVICE-ROLE key still work?
+ *
+ * The other probes deliberately send the anon key, so they answer "is Supabase
+ * reachable" and nothing more. That left a real gap: `checkRequiredEnv` only
+ * tests that SUPABASE_SERVICE_ROLE_KEY is *present*, never that it is *valid* —
+ * so a wrong, rotated, or truncated key reported a perfectly healthy `ok` while
+ * every admin page, webhook and cron job silently read nothing. That is exactly
+ * the state production reached, and the only thing that surfaced it was an
+ * administrator noticing an empty dashboard.
+ *
+ * A rejected key is reported as `degraded`, never 503: admin and background work
+ * are broken, but public and signed-in traffic still serve fine, so failing the
+ * health check would yank healthy instances out of rotation over an outage that
+ * does not affect them.
+ */
+export function probeServiceRole(
+  url: string | undefined,
+  serviceRoleKey: string | undefined,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<ProbeCheck> {
+  return probe('/rest/v1/', 'service-role', url, serviceRoleKey, timeoutMs, true);
 }

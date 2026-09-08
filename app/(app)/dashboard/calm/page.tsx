@@ -3,6 +3,7 @@ import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeReadError } from '@/lib/supabase/settle';
 import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
 import { loadFamilyContext } from '@/lib/reasoning/context';
@@ -48,7 +49,7 @@ export default async function CalmPage() {
     ['reminder', reminderResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error instanceof Error ? res.error.message : String(res.error)}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an

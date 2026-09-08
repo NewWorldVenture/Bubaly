@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
 
@@ -37,7 +37,7 @@ export default async function ActivityPage() {
     ['grocery', groceryResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an

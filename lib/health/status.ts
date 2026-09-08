@@ -49,6 +49,9 @@ export type HealthReport = {
     env: EnvCheck;
     database: ProbeCheck;
     auth: ProbeCheck;
+    // Optional: only reported when the caller supplied a service-role probe.
+    // Absent means "not checked", which is different from "checked and fine".
+    serviceRole?: ProbeCheck;
   };
 };
 
@@ -68,10 +71,19 @@ export type HealthReport = {
  *   the problem in the body for alerting.
  * - `ok` / 200 — every probe passed.
  */
-export function summarizeHealth(env: EnvCheck, database: ProbeCheck, auth: ProbeCheck): HealthStatus {
+export function summarizeHealth(
+  env: EnvCheck,
+  database: ProbeCheck,
+  auth: ProbeCheck,
+  serviceRole?: ProbeCheck,
+): HealthStatus {
   if (!env.ok) return 'error';
   if (!database.ok) return 'error';
   if (!auth.ok) return 'degraded';
+  // Present-but-invalid service-role key. `checkRequiredEnv` cannot see this —
+  // it only tests presence — so without this branch the endpoint reports `ok`
+  // while every admin page, webhook and cron job reads nothing at all.
+  if (serviceRole && !serviceRole.ok) return 'degraded';
   return 'ok';
 }
 
@@ -80,12 +92,13 @@ export function buildHealthReport(
   database: ProbeCheck,
   auth: ProbeCheck,
   now: Date = new Date(),
+  serviceRole?: ProbeCheck,
 ): HealthReport {
-  const status = summarizeHealth(env, database, auth);
+  const status = summarizeHealth(env, database, auth, serviceRole);
   return {
     status,
     httpStatus: status === 'error' ? 503 : 200,
     timestamp: now.toISOString(),
-    checks: { env, database, auth },
+    checks: { env, database, auth, ...(serviceRole ? { serviceRole } : {}) },
   };
 }
