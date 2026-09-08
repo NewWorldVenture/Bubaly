@@ -3,6 +3,7 @@
 // cookie that dies with the tab, a network blip read as a logout, a rotated
 // refresh token spent twice, a sign-out on one device ending another's session.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import {
@@ -238,6 +239,29 @@ describe('sign-out is the only thing that ends a session', () => {
   it('expires the auth cookies on the response itself', () => {
     expect(signout).toContain('isAuthCookieName(cookie.name)');
     expect(signout).toContain("res.cookies.set(cookie.name, '', { path: '/', maxAge: 0 })");
+  });
+
+  it('is reachable — the route is POST-only, so nothing may link to it', () => {
+    // The handler exports POST and nothing else, so `<a href="/auth/signout">`
+    // is a GET the route answers 405. That shipped on the trial-paywall and
+    // account-closed gates, where the sign-out link is the ONLY way out of a
+    // full-screen overlay: a user who wanted to leave simply could not.
+    expect(signout).toContain('export async function POST(');
+    expect(signout).not.toContain('export async function GET(');
+
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === '.next' || entry === '.git') continue;
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(path) && /href=["'`]\/auth\/signout/.test(readFileSync(path, 'utf8'))) {
+          offenders.push(path);
+        }
+      }
+    };
+    for (const dir of ['app', 'components']) walk(dir);
+    expect(offenders, 'sign out must be posted, not linked').toEqual([]);
   });
 });
 

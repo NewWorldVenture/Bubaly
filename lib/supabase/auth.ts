@@ -91,7 +91,11 @@ export async function effectivePlanLevel(rawLevel: number): Promise<number> {
 export async function getUserContext(): Promise<UserContext | { needsFamily: true } | null> {
   const supabase = await createServer();
   const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError) throwContextUnavailable('authenticated user', authError);
+  // An absent session is the ordinary signed-out state, not a failure. Throwing
+  // on it replaced the login redirect with a full-page error card on every
+  // authenticated route — the caller (`requireUserContext`) sends a null
+  // context to /login, which is what an expired cookie should do.
+  if (authError && !isSessionMissing(authError)) throwContextUnavailable('authenticated user', authError);
   if (!auth.user) return null;
 
   const { data: members, error: membersError } = await supabase
@@ -138,12 +142,17 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
   }
   if (memberships.length === 0) return { needsFamily: true };
 
+  // Preferences only choose WHICH family is active among the ones already
+  // resolved above. A failed read there is not missing tenant context, so it
+  // must not be fatal: treating it as one took every authenticated page down
+  // over a stored preference. Fall back to the first membership — the right
+  // answer outright for the single-family majority — and log the failure.
   const { data: prefs, error: prefsError } = await supabase
     .from('user_preferences')
     .select('active_family_id')
     .eq('user_id', auth.user.id)
     .maybeSingle();
-  if (prefsError) throwContextUnavailable('user preference', prefsError);
+  if (prefsError) console.error('[auth] user preference query failed; using the first membership', prefsError);
 
   const active =
     memberships.find((m) => m.familyId === prefs?.active_family_id) ?? memberships[0];

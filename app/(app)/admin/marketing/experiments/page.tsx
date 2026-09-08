@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { FlaskConical, Trophy } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
@@ -27,10 +28,13 @@ export default async function ABTestingPage() {
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
+  // `ab_experiments` is read unbounded, so `keys` is unbounded too — batch the
+  // filter rather than building one query string out of every key.
   const keys = (experiments ?? []).map((e) => e.key);
-  const eventResult = keys.length
-    ? await supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', keys).limit(100000)
-    : { data: [] as { experiment_key: string; variant_key: string; kind: string }[], error: null };
+  const eventResult = await readInChunks<{ experiment_key: string; variant_key: string; kind: string }, typeof experimentsError>(
+    keys,
+    (chunk) => supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', chunk).limit(100000),
+  );
   if (experimentsError || eventResult.error) {
     console.error('[admin-marketing-experiments] experiment read failed', experimentsError ?? eventResult.error);
     return <AdminExperimentsReadError />;

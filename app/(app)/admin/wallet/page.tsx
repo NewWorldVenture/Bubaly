@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import Link from 'next/link';
 import { Wallet, ShieldCheck } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
+import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
@@ -43,7 +43,7 @@ export default async function AdminWalletPage() {
     ['audit', auditResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -72,7 +72,7 @@ export default async function AdminWalletPage() {
 
   return (
     <div className="space-y-5">
-      <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} />
+      <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">

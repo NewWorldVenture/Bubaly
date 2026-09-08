@@ -380,7 +380,7 @@ async function fetchRows(
     case 'meals': {
       const [plans, mealRows] = await Promise.all([
         settle(sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30)),
-        settle(sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20)),
+        settle(sb.from('meals').select('id, name, meal_type, notes').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20)),
       ]);
       return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
     }

@@ -3704,6 +3704,7 @@
   "dashboardConflicts.aiConflictResolution": "AI Conflict Resolution",
   "dashboardConflicts.commandCenter": "Command Center",
   "dashboardConflicts.overlappingEventsInTheNextTwo": "Overlapping events in the next two weeks, with one-tap fixes and AI suggestions.",
+  "dashboardConflicts.showingTheFirstConflicts": "Showing the first {count} conflicts. Resolve these and the rest will appear.",
   "dashboardDental.dentalVisitsCleanings": "Dental visits & cleanings",
   "dashboardFamilyAccess.andEnterItNoEmailNeeded": "and enter it — no email needed.",
   "dashboardFamilyAccess.createAUsernamePinForYour": "Create a username + PIN for your child above.",

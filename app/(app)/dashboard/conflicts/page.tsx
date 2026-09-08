@@ -21,6 +21,11 @@ function whenLabel(startsAt: string, endsAt: string | null): string {
   return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
 
+/** The soonest events to consider, and the most overlaps worth showing at once.
+ *  A resolver listing thousands of pairs is unusable long before it is slow. */
+const MAX_EVENTS = 500;
+const MAX_CONFLICTS = 100;
+
 export default async function ConflictsPage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/conflicts');
@@ -37,7 +42,10 @@ export default async function ConflictsPage() {
       .eq('family_id', familyId)
       .gte('starts_at', now.toISOString())
       .lte('starts_at', in14.toISOString())
-      .order('starts_at', { ascending: true }),
+      .order('starts_at', { ascending: true })
+      // Bounded on both sides: the read, and the pairs it can produce below.
+      // Neither was, and a dense fortnight rendered a card per overlapping pair.
+      .limit(MAX_EVENTS),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 
@@ -47,7 +55,8 @@ export default async function ConflictsPage() {
     location: e.location, assignee_id: e.assignee_id,
   }));
 
-  const conflicts = detectConflicts(timed);
+  const conflicts = detectConflicts(timed, { maxConflicts: MAX_CONFLICTS });
+  const truncated = conflicts.length >= MAX_CONFLICTS;
   const views: ConflictView[] = conflicts.map((c) => {
     const qf = quickFixMoveAfter(c);
     const ev = (e: TimedEvent) => ({
@@ -93,6 +102,11 @@ export default async function ConflictsPage() {
         </div>
       </div>
 
+      {truncated && (
+        <p className="text-sm text-muted">
+          {t('dashboardConflicts.showingTheFirstConflicts', { count: MAX_CONFLICTS })}
+        </p>
+      )}
       <ConflictResolver conflicts={views} />
     </div>
   );

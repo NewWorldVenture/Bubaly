@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
+import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -94,7 +94,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
     ['super_admins', superAdminsRes],
   ] as const) {
-    if (res.error) loadErrors.push(`Could not load “${label}”: ${res.error.message}`);
+    if (res.error) loadErrors.push(`Could not load “${label}”: ${describeReadError(res.error)}`);
   }
 
   // Only `family_members` is load-bearing here: `enriched` maps over it, so
@@ -213,6 +213,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
             <div>
               <p className="text-sm font-semibold text-danger">{tr('adminUsers.someDataCouldntBeLoadedFrom')}</p>
+              {credentialHint(loadErrors, describeConfiguredServiceKey()) ? (
+                <p className="mt-1.5 text-xs font-medium text-danger">{credentialHint(loadErrors, describeConfiguredServiceKey())}</p>
+              ) : null}
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
                 {loadErrors.map((err, i) => <li key={i}>{err}</li>)}
               </ul>

@@ -3655,6 +3655,7 @@
   "dashboardConflicts.aiConflictResolution": "KI-Konfliktlösung",
   "dashboardConflicts.commandCenter": "Kommandozentrale",
   "dashboardConflicts.overlappingEventsInTheNextTwo": "Überschneidende Termine in den nächsten zwei Wochen, mit Ein-Tipp-Lösungen und KI-Vorschlägen.",
+  "dashboardConflicts.showingTheFirstConflicts": "Die ersten {count} Konflikte werden angezeigt. Lösen Sie diese, dann erscheinen die übrigen.",
   "dashboardDental.dentalVisitsCleanings": "Zahnarztbesuche & Reinigungen",
   "dashboardFamilyAccess.andEnterItNoEmailNeeded": "und geben Sie ihn ein – keine E-Mail nötig.",
   "dashboardFamilyAccess.createAUsernamePinForYour": "Erstellen Sie oben einen Benutzernamen + PIN für Ihr Kind.",

@@ -1,8 +1,8 @@
 import { FAQAccordion } from '@/components/marketing/faq-accordion';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { MarketingPageStructuredData } from '@/components/marketing/structured-data';
-import { readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
+import { localizeAeoQuestions, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
 
 export async function MarketingAeoSection({
   path,
@@ -14,8 +14,12 @@ export async function MarketingAeoSection({
   description: string;
 }) {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const result = await readAeoQuestionsForPathCached(path);
-  const items = result.questions.map((item) => ({ q: item.question, a: item.answer }));
+  // The heading and description come from the message catalogue, so without
+  // this the section rendered translated chrome around English answers.
+  const localized = await localizeAeoQuestions(result.questions, locale.code);
+  const items = localized.map((item) => ({ q: item.question, a: item.answer }));
 
   return (
     <>

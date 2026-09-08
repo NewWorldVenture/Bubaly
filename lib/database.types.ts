@@ -1635,6 +1635,11 @@ export interface Database {
         { id?: string; question: string; answer?: string | null; entity?: string | null; source_path?: string | null; pattern?: string | null; status?: string; clarity_score?: number | null; last_reviewed?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ question: string; answer: string | null; entity: string | null; source_path: string | null; pattern: string | null; status: string; clarity_score: number | null; last_reviewed: string | null; metadata: Json }>
       >;
+      marketing_aeo_question_translations: T<
+        { id: string; question_id: string; locale: string; question: string; answer: string; source: string; reviewed_at: string | null } & Stamps,
+        { id?: string; question_id: string; locale: string; question: string; answer: string; source?: string; reviewed_at?: string | null },
+        Partial<{ question: string; answer: string; source: string; reviewed_at: string | null }>
+      >;
       marketing_settings: T<
         { key: string; value: Json; updated_by: string | null; updated_at: string },
         { key: string; value?: Json; updated_by?: string | null },

@@ -5,8 +5,8 @@ import {
   HardDrive, Server, Database, Mail, Cloud, Cpu, LifeBuoy, ShieldCheck,
   BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
+import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -112,7 +112,7 @@ export default async function AdminDashboardPage() {
     ['unread notifications (count)', unreadNoteCountResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
   if (loadErrors.length > 0) {
     console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
   }
@@ -245,6 +245,9 @@ export default async function AdminDashboardPage() {
       {loadErrors.length > 0 && (
         <div className="rounded-xl border border-danger/30 bg-danger/10 p-4">
           <p className="text-sm font-semibold text-danger">{tr('admin.someDataCouldNotBeLoaded')}</p>
+          {credentialHint(loadErrors, describeConfiguredServiceKey()) ? (
+            <p className="mt-1.5 text-xs font-medium text-danger">{credentialHint(loadErrors, describeConfiguredServiceKey())}</p>
+          ) : null}
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
             {loadErrors.map((err) => <li key={err}>{err}</li>)}
           </ul>

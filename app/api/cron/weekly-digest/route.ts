@@ -41,13 +41,18 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let failed = 0;
   for (const family of families) {
-    const [{ data: events, error: eventsError }, { data: chores, error: choresError }, { data: meals, error: mealsError }, { data: members, error: membersError }] = await settleAll([
+    // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
+    // the definition table — it carries neither `status` nor `assignee_id`, so
+    // reading those from it errors and skipped every family's digest. Counts,
+    // not rows: only the totals are rendered.
+    const [{ data: events, error: eventsError }, { count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: members, error: membersError }] = await settleAll([
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
         .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
-      supabase.from('chores').select('title, points, assignee_id').eq('family_id', family.id)
-        .in('status', ['todo', 'in_progress']).not('assignee_id', 'is', null),
-      supabase.from('meal_plans').select('id').eq('family_id', family.id)
-        .gte('planned_for', weekStart.slice(0, 10)).lte('planned_for', weekEnd.slice(0, 10)),
+      supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
+        .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
+      supabase.from('meal_plans').select('id', { count: 'exact', head: true })
+        .eq('family_id', family.id)
+        .gte('plan_date', weekStart.slice(0, 10)).lte('plan_date', weekEnd.slice(0, 10)),
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 
@@ -86,8 +91,8 @@ export async function GET(req: NextRequest) {
         familyName: family.name,
         adminName: adminMember.display_name,
         events: (events ?? []).map((e) => ({ title: e.title, date: e.starts_at.slice(0, 10) })),
-        openChores: chores?.length ?? 0,
-        mealsPlanned: meals?.length ?? 0,
+        openChores: openChores ?? 0,
+        mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
         // One "families like yours" line, only for families opted into benchmarks
         // and only from the k-anonymized rows the nightly aggregation persisted.

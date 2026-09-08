@@ -222,7 +222,10 @@ describe('role-aware landing', () => {
   });
 
   it('is applied by the OAuth callback only when every membership is a guest one', () => {
-    expect(callback).toContain("if (membership.length === 0) destination = '/onboarding';");
+    // Shape, not formatting: the membership branch became an else off the
+    // error check (a failed read must not read as "no family"), so the
+    // onboarding arm is now braced rather than a one-liner.
+    expect(callback).toMatch(/else if \(membership\.length === 0\) \{[\s\S]{0,80}?destination = '\/onboarding';/);
     expect(callback).toContain("else if (membership.every((m) => m.role === 'guest')) {");
     expect(callback).toContain("destination = landingPathForRole('guest');");
   });

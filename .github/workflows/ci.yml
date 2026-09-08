@@ -31,6 +31,13 @@ jobs:
       - name: Migration filename audit
         run: npm run db:audit:migrations
 
+      # Catches the failures typechecking cannot: a table, column, rpc or API
+      # route a query names that does not exist, and tables left deny-all by
+      # RLS-with-no-policy. All of those compile fine and surface in production
+      # as a page that renders empty.
+      - name: Supabase query audit
+        run: npm run db:audit:queries
+
       - name: Marketing asset audit
         run: npm run marketing:audit:assets
 
