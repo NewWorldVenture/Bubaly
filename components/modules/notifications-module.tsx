@@ -106,7 +106,15 @@ export function NotificationsModule() {
       if (action.kind === 'chore-signoff') {
         const result = await setChoreStatusAction(action.assignmentId, 'submitted');
         if (!result.ok) { toastError(result.error); return; }
-        success(t('notificationActions.choreMarkedDone'));
+        // The SETTLED status, not the one asked for. `completeChoreAssignment`
+        // lands on 'done' only when the chore's `requires_approval` is false,
+        // and that column is `not null default true` — so the ordinary chore is
+        // written as 'submitted' and is still waiting for a parent. Saying
+        // "Chore marked done." about it would claim a completion the row does
+        // not record. This is the same branch the chores board makes.
+        success(result.status === 'done'
+          ? t('notificationActions.choreMarkedDone')
+          : t('notificationActions.choreSubmittedForApproval'));
       } else {
         const result = await decideApproval({ id: action.approvalId, decision: decision ?? 'approved' });
         if (!result.ok) { toastError(result.error); return; }

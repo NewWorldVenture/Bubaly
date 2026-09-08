@@ -7685,6 +7685,7 @@
   "notificationActions.approve": "Aprobar",
   "notificationActions.approveAria": "Aprobar: {title}",
   "notificationActions.choreMarkedDone": "Tarea marcada como hecha.",
+  "notificationActions.choreSubmittedForApproval": "Enviado para aprobación.",
   "notificationActions.couldNotCompleteThatAction": "No se pudo completar esa acción. Inténtalo de nuevo.",
   "notificationActions.decisionSaved": "Decisión guardada.",
   "notificationActions.decline": "Rechazar",

@@ -7734,6 +7734,7 @@
   "notificationActions.approve": "Approve",
   "notificationActions.approveAria": "Approve: {title}",
   "notificationActions.choreMarkedDone": "Chore marked done.",
+  "notificationActions.choreSubmittedForApproval": "Submitted for approval.",
   "notificationActions.couldNotCompleteThatAction": "Could not complete that action. Please try again.",
   "notificationActions.decisionSaved": "Decision saved.",
   "notificationActions.decline": "Decline",

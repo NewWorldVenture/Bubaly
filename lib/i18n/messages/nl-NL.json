@@ -7685,6 +7685,7 @@
   "notificationActions.approve": "Goedkeuren",
   "notificationActions.approveAria": "Goedkeuren: {title}",
   "notificationActions.choreMarkedDone": "Klus als klaar gemarkeerd.",
+  "notificationActions.choreSubmittedForApproval": "Ingediend ter goedkeuring.",
   "notificationActions.couldNotCompleteThatAction": "Die actie kon niet worden voltooid. Probeer het opnieuw.",
   "notificationActions.decisionSaved": "Beslissing opgeslagen.",
   "notificationActions.decline": "Afwijzen",
