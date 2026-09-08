@@ -7149,6 +7149,7 @@
   "migrateActions.couldNotCheckYourCalendarForDuplicates": "Je agenda kon niet op dubbele items worden gecontroleerd, dus er is niets geïmporteerd. Probeer het opnieuw.",
   "migrateActions.couldNotCheckYourContactsForDuplicates": "Je contacten konden niet op dubbele items worden gecontroleerd, dus er is niets geïmporteerd. Probeer het opnieuw.",
   "migrateActions.couldNotReadYourFamilyToReview": "Je gezin kon niet worden gelezen, dus er is niets geïmporteerd. Probeer het opnieuw.",
+  "migrateActions.theImportStoppedPartWayThrough": "De import is halverwege gestopt. Al opgeslagen: {events} afspraken, {tasks} taken, {grocery} boodschappen, {notes} notities, {contacts} contacten. Hetzelfde bestand opnieuw importeren zou de taken, boodschappen en notities een tweede keer toevoegen.",
   "migrateWizard.acceptsIcsCalendarsAndCsvLists": "Accepteert .ics-agenda's en .csv-lijsten. Tijden zonder tijdzone worden als UTC geïmporteerd.",
   "migrateWizard.acceptsIcsCsvAndVcf": "Accepteert .ics-agenda's, .csv-lijsten en .vcf-contactkaarten.",
   "migrateWizard.anotherApp": "Een andere app?",

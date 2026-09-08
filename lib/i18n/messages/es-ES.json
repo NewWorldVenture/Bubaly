@@ -7149,6 +7149,7 @@
   "migrateActions.couldNotCheckYourCalendarForDuplicates": "No se ha podido comprobar si hay duplicados en tu calendario, así que no se ha importado nada. Inténtalo de nuevo.",
   "migrateActions.couldNotCheckYourContactsForDuplicates": "No se ha podido comprobar si hay duplicados en tus contactos, así que no se ha importado nada. Inténtalo de nuevo.",
   "migrateActions.couldNotReadYourFamilyToReview": "No se ha podido leer tu familia, así que no se ha importado nada. Inténtalo de nuevo.",
+  "migrateActions.theImportStoppedPartWayThrough": "La importación se detuvo a medio camino. Ya se han guardado: {events} eventos, {tasks} tareas, {grocery} artículos de la compra, {notes} notas, {contacts} contactos. Importar el mismo archivo otra vez añadiría las tareas, los artículos de la compra y las notas por segunda vez.",
   "migrateWizard.acceptsIcsCalendarsAndCsvLists": "Acepta calendarios .ics y listas .csv. Las horas sin zona horaria se importan como UTC.",
   "migrateWizard.acceptsIcsCsvAndVcf": "Acepta calendarios .ics, listas .csv y tarjetas de contacto .vcf.",
   "migrateWizard.anotherApp": "¿Otra app?",

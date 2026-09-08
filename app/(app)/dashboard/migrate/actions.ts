@@ -146,6 +146,19 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
 
   const counts: ImportCounts = { events: 0, tasks: 0, grocery: 0, notes: 0, contacts: 0 };
   let skipped = 0;
+
+  // A write that fails part way through is reported with what was ALREADY
+  // saved, not with the database's own sentence. `error.message` is PostgREST
+  // text — "relation … does not exist", a constraint name — in English whatever
+  // the family's locale, and it says nothing about the half of the import that
+  // did land. The counts do, and they are what the family needs before deciding
+  // whether to run the file again: events and contacts are de-duplicated on a
+  // second pass, tasks, grocery items and notes are not. Not `retryable`: a
+  // retry button here would offer exactly that duplication.
+  const partialFailure = (label: string, error: { message: string }): ImportResult => {
+    console.error(`[migrate] ${label} write failed`, error);
+    return { ok: false, error: t('migrateActions.theImportStoppedPartWayThrough', counts) };
+  };
   let assigned = 0;
 
   // Member ids are caller input, so they are checked against the family before
@@ -183,7 +196,7 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     });
     for (let i = 0; i < toInsert.length; i += 500) {
       const { error, count } = await supabase.from('calendar_events').insert(toInsert.slice(i, i + 500), { count: 'exact' });
-      if (error) return { ok: false, error: `Events: ${error.message}` };
+      if (error) return partialFailure('calendar events', error);
       counts.events += count ?? toInsert.slice(i, i + 500).length;
     }
   }
@@ -193,7 +206,7 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   if (tasks.length) {
     const rows = tasks.map((t2) => ({ family_id: familyId, title: t2.name.slice(0, 200), description: t2.extra ?? null, created_by: userId }));
     const { data: created, error } = await supabase.from('chores').insert(rows).select('id');
-    if (error) return { ok: false, error: `Tasks: ${error.message}` };
+    if (error) return partialFailure('chores', error);
     counts.tasks = created?.length ?? rows.length;
     const assignments = (created ?? []).flatMap((row, i) => {
       const member = memberOf(tasks[i]?.memberId);
@@ -203,7 +216,7 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     });
     if (assignments.length) {
       const { error: assignErr } = await supabase.from('chore_assignments').insert(assignments);
-      if (assignErr) return { ok: false, error: `Tasks: ${assignErr.message}` };
+      if (assignErr) return partialFailure('chore assignments', assignErr);
     }
   }
 
@@ -216,12 +229,12 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     listId = list?.id ?? null;
     if (!listId) {
       const { data: createdList, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: listName, created_by: userId }).select('id').single();
-      if (error) return { ok: false, error: `Grocery list: ${error.message}` };
+      if (error) return partialFailure('grocery list', error);
       listId = createdList.id;
     }
     const rows = grocery.map((g) => ({ family_id: familyId, list_id: listId!, name: g.name.slice(0, 200), quantity: g.extra ?? null, created_by: userId }));
     const { error, count } = await supabase.from('grocery_items').insert(rows, { count: 'exact' });
-    if (error) return { ok: false, error: `Grocery: ${error.message}` };
+    if (error) return partialFailure('grocery items', error);
     counts.grocery = count ?? rows.length;
   }
 
@@ -230,7 +243,7 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   if (notes.length) {
     const rows = notes.map((n) => ({ family_id: familyId, title: n.name.slice(0, 200), body: n.extra ?? '', created_by: userId }));
     const { error, count } = await supabase.from('notes').insert(rows, { count: 'exact' });
-    if (error) return { ok: false, error: `Notes: ${error.message}` };
+    if (error) return partialFailure('notes', error);
     counts.notes = count ?? rows.length;
   }
 
@@ -291,7 +304,7 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     }
     for (let i = 0; i < rows.length; i += 500) {
       const { error, count } = await supabase.from('family_contacts').insert(rows.slice(i, i + 500), { count: 'exact' });
-      if (error) return { ok: false, error: `Contacts: ${error.message}` };
+      if (error) return partialFailure('contacts', error);
       counts.contacts += count ?? rows.slice(i, i + 500).length;
     }
   }
