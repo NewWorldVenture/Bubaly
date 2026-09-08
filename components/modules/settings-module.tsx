@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson } from 'lucide-react';
+import Link from 'next/link';
+// FileJson is the privacy export's; Gift and X are the referral panel's. Both
+// sets are still rendered, so the icon import is a union.
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson, Gift, X } from 'lucide-react';
+import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/core';
+import { fmtMoney } from '@/lib/utils/format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -18,7 +23,7 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
+import { ROLE_LABELS, isAdmin } from '@/lib/constants/roles';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
 } from '@/lib/constants/dashboards';
@@ -30,6 +35,7 @@ import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import { SecurityPanel } from '@/components/settings/security-panel';
 import { PrivacyCenter } from '@/components/settings/privacy-center';
 import { NavigationChoices } from '@/components/settings/navigation-choices';
+import { InviteForm } from '@/components/family/invite-form';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -61,12 +67,17 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
   profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock', privacy: 'privacy',
 };
 
-export function SettingsModule() {
+export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
   const t = useTranslations();
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  // M39 — after a member invite goes out, offer the next natural ask: another
+  // family. Amounts come from the referral config the page resolved (defaults
+  // otherwise), never typed here.
+  const [showReferralCta, setShowReferralCta] = useState(false);
+  const referral = referralConfig ?? DEFAULT_REFERRAL_CONFIG;
   const [editMember, setEditMember] = useState<Tables<'family_members'> | null>(null);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -350,6 +361,27 @@ export function SettingsModule() {
             </li>
           ))}
         </ul>
+        {showReferralCta && referral.enabled && (
+          <div
+            className="mt-4 flex items-center gap-3 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5"
+            role="status"
+            data-testid="invite-referral-cta"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><Gift className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{t('settingsModule.knowAnotherFamily')}</p>
+              <p className="text-xs text-muted">
+                {t('settingsModule.giveGetWhenTheyUpgrade', { give: fmtMoney(referral.referredRewardCents), get: fmtMoney(referral.referrerRewardCents) })}
+              </p>
+            </div>
+            <Link href="/referrals" className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">
+              {t('settingsModule.referAFamily')}
+            </Link>
+            <button type="button" onClick={() => setShowReferralCta(false)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-fg" aria-label={t('settingsModule.dismiss')}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </Card>
       </>)}
 
@@ -382,7 +414,7 @@ export function SettingsModule() {
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); success(t('settingsModule.inviteSent')); }}
+          onSent={() => { setInviteOpen(false); setShowReferralCta(true); success(t('settingsModule.inviteSent')); }}
         />
       )}
 
@@ -453,54 +485,9 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
   onClose: () => void; onSent: () => void;
 }) {
   const t = useTranslations();
-  const { error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get('email') ?? '').trim().toLowerCase();
-    const role = String(form.get('role') ?? 'adult') as MemberRole;
-    if (!email) return toastError(t('settingsModule.emailIsRequired'));
-    setLoading(true);
-    const supabase = createClient();
-    const { data: invite, error } = await supabase.from('invites').insert({
-      family_id: familyId,
-      email,
-      role,
-      invited_by: userId,
-    }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, t('settingsModule.failed'))); }
-
-    // Fire invite email (non-blocking — don't fail UI if email fails)
-    void fetch('/api/email/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inviteId: invite.id }),
-    });
-
-    setLoading(false);
-    onSent();
-  }
-
   return (
     <Modal open onClose={onClose} title={t('settings.inviteFamilyMember')} description={t('settingsModule.theyLlReceiveAnEmail')}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Field label={t('settings.emailAddress')} required>
-          {(id) => <Input id={id} name="email" type="email" placeholder="person@example.com" autoFocus />}
-        </Field>
-        <Field label={t('settings.role')}>
-          {(id) => (
-            <Select id={id} name="role" defaultValue="adult">
-              {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </Select>
-          )}
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>
-          <Button type="submit" loading={loading}><Mail className="h-4 w-4" /> {t('settings.sendInvite')}</Button>
-        </div>
-      </form>
+      <InviteForm familyId={familyId} userId={userId} onSent={onSent} onCancel={onClose} />
     </Modal>
   );
 }

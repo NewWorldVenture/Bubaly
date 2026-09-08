@@ -27,12 +27,46 @@ import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import { describeActionError } from '@/lib/supabase/errors';
 import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotency';
+import { captureSignupReferral } from '@/lib/referrals/signup';
+import type { OnboardingAnswers } from '@/lib/onboarding/facts';
+import { rememberOnboardingFacts } from '@/lib/onboarding/remember';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 function onboardingFailure(operation: string, error: unknown, fallback: string): { ok: false; error: string } {
   console.error(`[onboarding] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, fallback) };
+}
+
+/**
+ * Persist the wizard's answers as family memory (M30) without ever being able
+ * to fail the finalize. The scope is built here rather than by the caller
+ * because finalize has no `requireUserContext` — it runs before the membership
+ * a `ServiceScope` would normally be derived from is readable.
+ */
+async function rememberOnboardingFactsSafely(
+  admin: ReturnType<typeof createServiceClient>,
+  input: { familyId: string; userId: string; timezone: string; answers: OnboardingAnswers },
+): Promise<void> {
+  try {
+    const { data: member } = await admin
+      .from('family_members').select('id')
+      .eq('family_id', input.familyId).eq('user_id', input.userId).maybeSingle();
+    await rememberOnboardingFacts(
+      {
+        db: admin,
+        familyId: input.familyId,
+        userId: input.userId,
+        memberId: member?.id ?? null,
+        role: 'parent',
+        actorKind: 'member',
+        tz: input.timezone || 'UTC',
+      },
+      input.answers,
+    );
+  } catch (e) {
+    console.error('[onboarding] remembering onboarding answers failed', e);
+  }
 }
 
 /**
@@ -657,6 +691,17 @@ export async function finalizeOnboardingAction(input: {
   );
   if (activeErr) return onboardingFailure('active family selection', activeErr, t('actions.couldNotFinishSettingUp2'));
 
+  // 3b. Referral attribution: a `/signup?ref=CODE` visit (cookie, or the auth
+  //     metadata the email form wrote) becomes this family's referrals row with
+  //     source 'signup_link'. Once per family — applyReferralCode enforces one
+  //     referral per referred family, and a replay is answered quietly. Never
+  //     blocks onboarding.
+  await captureSignupReferral({
+    referredFamilyId: familyId,
+    referredEmail: profile.email || auth.user.email || null,
+    metadataCode: auth.user.user_metadata?.referral_code,
+  });
+
   // 4. Save family details / onboarding questionnaire (service-role + logged —
   //    same flaky-RLS rationale as steps 2/3b: a silent failure here loses the
   //    household details the user just typed).
@@ -820,6 +865,29 @@ export async function finalizeOnboardingAction(input: {
     { onConflict: 'user_id' },
   );
   if (prefErr) return onboardingFailure('onboarding preferences save', prefErr, t('actions.couldNotFinishSettingUp2'));
+
+  // 6c. Remember what the family just told us (M30). The answers were going
+  //      only into `family_onboarding`, which nothing but marketing segments
+  //      read — so Bubaly went on asking a household how many children it has
+  //      two minutes after it said. These are the person's own words, so they
+  //      land as confirmed facts, and the family's memory switch is honoured
+  //      inside the helper. Best-effort by construction: it never throws, and a
+  //      memory that missed must not cost someone their finished onboarding.
+  //      Kept as one helper call so a parallel change to this action (referral
+  //      capture) merges beside it rather than through it.
+  await rememberOnboardingFactsSafely(admin, {
+    familyId,
+    userId: auth.user.id,
+    timezone: family.timezone,
+    answers: {
+      householdAdults: details.householdAdults,
+      householdChildren: details.householdChildren,
+      childAges: details.childAges,
+      region: details.region ?? null,
+      country: details.country ?? null,
+      goals,
+    },
+  });
 
   // 7. Audit
   await logAudit(supabase, {

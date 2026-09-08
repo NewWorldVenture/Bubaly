@@ -4,6 +4,8 @@ import {
   stepCounter, suggestFamilyName, canAdvance, emptyDraft, buildFinalizePayload,
   isFirstStep, isLastFormStep, serializeDraftState, parseDraftState,
 } from '@/lib/onboarding/flow';
+import { onboardingFacts } from '@/lib/onboarding/facts';
+import { buildOutcomePlan, pickFirstThing } from '@/lib/outcomes/launcher';
 
 describe('step navigation', () => {
   it('advances and clamps at the terminal step', () => {
@@ -193,5 +195,94 @@ describe('draft persistence (sessionStorage resume)', () => {
     expect(restored.draft.name).toBe('Kim');
     expect(restored.draft.members).toEqual([]);
     expect(restored.draft.timezone).toBe('UTC');
+  });
+});
+
+// M30 — the wizard's answers reach memory, and its last screen hands the family
+// into something real. Both are driven from what the draft already carries, so
+// they are pinned here beside the draft rather than in isolation.
+describe('the draft feeds family memory (M30)', () => {
+  it('turns the answers the wizard collected into facts', () => {
+    const draft = emptyDraft({
+      name: 'Jordan', familyName: 'The Jordan Family',
+      adults: 2, children: 2, childAges: [6, 9], goals: ['meals', 'chores'],
+    });
+    const { details } = buildFinalizePayload(draft);
+    const facts = onboardingFacts({
+      householdAdults: details.householdAdults,
+      householdChildren: details.householdChildren,
+      childAges: details.childAges,
+      region: details.region ?? null,
+      country: details.country ?? null,
+      goals: details.goals,
+    });
+    expect(facts.map((f) => f.key)).toEqual(['Household size', 'Children’s ages', 'What this family wants help with']);
+    expect(facts[0].content).toBe('2 adults and 2 children');
+  });
+
+  it('remembers nothing from a wizard run that skipped the About step', () => {
+    const draft = emptyDraft({ name: 'Kim', familyName: 'The Kim Family', adults: 0, children: 0 });
+    const { details } = buildFinalizePayload(draft);
+    expect(onboardingFacts({
+      householdAdults: details.householdAdults,
+      householdChildren: details.householdChildren,
+      childAges: details.childAges,
+      goals: details.goals,
+    })).toEqual([]);
+  });
+
+  it('drops the placeholder zero ages the payload already filters', () => {
+    const draft = emptyDraft({ name: 'Kim', familyName: 'The Kim Family', adults: 2, children: 2, childAges: [0, 8] });
+    const { details } = buildFinalizePayload(draft);
+    expect(details.childAges).toEqual([8]);
+    const facts = onboardingFacts({
+      householdAdults: details.householdAdults,
+      householdChildren: details.householdChildren,
+      childAges: details.childAges,
+      goals: details.goals,
+    });
+    expect(facts.find((f) => f.key === 'Children’s ages')?.content).toBe('8');
+  });
+});
+
+describe('the done screen offers one real thing to do (M30)', () => {
+  it('points at today when the family has a day to look at', () => {
+    const thing = pickFirstThing({ eventsToday: 3, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 });
+    expect(thing.reason).toBe('events');
+    expect(thing.outcomeId).toBe('run_today');
+    expect(thing.href).toBe(buildOutcomePlan('run_today')[0].href);
+  });
+
+  it('prefers what is overdue over what is merely scheduled', () => {
+    const thing = pickFirstThing({ eventsToday: 3, overdueTasks: 2, openGrocery: 4, birthdaysSoon: 1 });
+    expect(thing.reason).toBe('overdue');
+    expect(thing.href).toBe(buildOutcomePlan('run_today')[1].href);
+  });
+
+  it('falls through to the shopping list, then a birthday', () => {
+    expect(pickFirstThing({ eventsToday: 0, overdueTasks: 0, openGrocery: 4, birthdaysSoon: 1 }).reason).toBe('grocery');
+    expect(pickFirstThing({ eventsToday: 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 1 }).reason).toBe('birthday');
+  });
+
+  it('still offers something to a family whose data is empty', () => {
+    const thing = pickFirstThing();
+    expect(thing.reason).toBe('default');
+    expect(thing.href.startsWith('/')).toBe(true);
+  });
+
+  it('always lands on a step of the outcome it names — never an invented route', () => {
+    const snapshots = [
+      { eventsToday: 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 },
+      { eventsToday: 1, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 },
+      { eventsToday: 0, overdueTasks: 1, openGrocery: 0, birthdaysSoon: 0 },
+      { eventsToday: 0, overdueTasks: 0, openGrocery: 1, birthdaysSoon: 0 },
+      { eventsToday: 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 1 },
+    ];
+    for (const ctx of snapshots) {
+      const thing = pickFirstThing(ctx);
+      expect(buildOutcomePlan(thing.outcomeId, ctx).map((s) => s.href)).toContain(thing.href);
+      expect(thing.labelKey.startsWith('doOneThing.')).toBe(true);
+      expect(thing.detailKey.startsWith('doOneThing.')).toBe(true);
+    }
   });
 });

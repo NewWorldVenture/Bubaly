@@ -55,14 +55,14 @@ export default async function ReferralsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { label: 'Invited', value: summary.total },
-          { label: 'Signed up', value: summary.signedUp },
-          { label: 'Upgraded', value: summary.converted },
-          { label: 'Earned', value: fmtMoney(summary.earnedCents) },
+          { label: 'Invited', labelKey: 'referrals.tileInvited', value: summary.total },
+          { label: 'Signed up', labelKey: 'referrals.tileSignedUp', value: summary.signedUp },
+          { label: 'Upgraded', labelKey: 'referrals.tileUpgraded', value: summary.converted },
+          { label: 'Earned', labelKey: 'referrals.tileEarned', value: fmtMoney(summary.earnedCents) },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <p className="text-2xl font-bold leading-none">{s.value}</p>
-            <p className="mt-1 text-xs text-muted">{s.label}</p>
+            <p className="mt-1 text-xs text-muted">{t(s.labelKey)}</p>
           </div>
         ))}
       </div>

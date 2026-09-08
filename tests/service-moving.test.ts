@@ -275,13 +275,39 @@ describe('listMoveSources', () => {
 });
 
 describe('the "Moving Home" life event launches the Move Planner', () => {
+  // The contract is unchanged: a moves row on file AND its tasks laid out,
+  // through the moving service, so a family already mid-move gets that move
+  // back rather than a second one. What moved is WHERE it lives. The server
+  // action is now auth, scope and copy (its own header says so), and the
+  // launch — plan, handoff, checklist, to-dos, reminders, all-or-nothing —
+  // lives in lib/life-events/launch.ts. Pinning the handoff in the action
+  // would pin the wrong layer, and a copy re-inlined there would drift.
+  const launch = readFileSync('lib/life-events/launch.ts', 'utf8');
+  const moveBranch = launch.slice(launch.indexOf("if (kind === 'move') {"), launch.indexOf("if (kind === 'project') {"));
+
   it('puts a moves row on file and lays out its tasks instead of a parallel checklist', () => {
-    const src = readFileSync('app/(app)/dashboard/life-event-actions.ts', 'utf8');
-    const branch = src.slice(src.indexOf("template.key === 'moving'"), src.indexOf("from('life_event_plans')"));
-    expect(branch).toContain('createMove(scope, { title: template.title, moveDate: anchor })');
-    expect(branch).toContain('planTasks(scope, { moveId: move.data.move.id })');
-    expect(branch).toContain("href: '/dashboard/moving'");
-    expect(branch).toMatch(/if \(!move\.ok\) return \{ ok: false, error: move\.error \}/);
-    expect(branch).toMatch(/if \(!tasks\.ok\) return \{ ok: false, error: tasks\.error \}/);
+    expect(moveBranch).toContain('createMove(scope, { title, moveDate: anchor })');
+    expect(moveBranch).toContain('planTasks(scope, { moveId: move.data.move.id })');
+    expect(moveBranch).toContain('href: HANDOFF_HREF.move');
+    expect(moveBranch).toMatch(/if \(!move\.ok\) return move;/);
+    expect(moveBranch).toMatch(/if \(!tasks\.ok\) return tasks;/);
+    // No direct write: the service is the only way a move gets opened here.
+    expect(moveBranch).not.toContain("from('moves')");
+  });
+
+  it('never deletes a move it only found — rollback undoes what this launch created', () => {
+    // createMove answers `created: false` for a move already on file; a
+    // rollback that deleted it would take a family's real move down with an
+    // unrelated failure. The flag rides on the handoff and the undo checks it.
+    expect(moveBranch).toContain('created: move.data.created');
+    const undo = launch.slice(launch.indexOf('async function deleteHandoff'));
+    expect(undo).toMatch(/if \(!handoff\.created\) return;/);
+  });
+
+  it('keeps the action a thin shell rather than a second copy of the handoff', () => {
+    const action = readFileSync('app/(app)/dashboard/life-event-actions.ts', 'utf8');
+    expect(action).toContain("from '@/lib/life-events/launch'");
+    expect(action).not.toContain('createMove(');
+    expect(action).not.toContain("from('moves')");
   });
 });

@@ -10,10 +10,24 @@ import {
 const VALID_CATEGORIES: LifeEventItemCategory[] = ['plan', 'buy', 'book', 'notify', 'document', 'health', 'home', 'celebrate'];
 
 describe('template catalog integrity', () => {
-  it('has the six expected life events with unique keys', () => {
+  it('has the eleven expected life events with unique keys', () => {
     const keys = LIFE_EVENT_TEMPLATES.map((t) => t.key);
-    expect(keys).toEqual(expect.arrayContaining(['new_baby', 'moving', 'school_start', 'vacation', 'new_pet', 'new_job']));
+    // The original six, plus M25's holidays + emergency_prep and M34's camp,
+    // aging_parent and renovation. `holidays` covers both the "holiday" the
+    // outcome launcher runs and the "holidays" the checklist calls it.
+    expect(keys).toEqual(expect.arrayContaining([
+      'new_baby', 'moving', 'school_start', 'vacation', 'new_pet', 'new_job',
+      'holidays', 'emergency_prep', 'camp', 'aging_parent', 'renovation',
+    ]));
+    expect(keys).toHaveLength(11);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('gives every template a distinct icon key the module can resolve', () => {
+    for (const t of LIFE_EVENT_TEMPLATES) {
+      expect(t.icon, t.key).toMatch(/^[a-z-]+$/);
+      expect(t.description.length, t.key).toBeGreaterThan(20);
+    }
   });
   it('every template has items with valid categories and a title', () => {
     for (const t of LIFE_EVENT_TEMPLATES) {

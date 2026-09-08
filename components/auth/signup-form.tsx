@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MailCheck, Sparkles, Smartphone, Mail } from 'lucide-react';
+import { MailCheck, Sparkles, Smartphone, Mail, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
@@ -15,6 +15,8 @@ import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { describeDbError } from '@/lib/supabase/errors';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { isPlausibleReferralCode, normalizeCode } from '@/lib/referrals/core';
+import { rememberReferralCodeAction } from '@/app/(auth)/signup/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SignupForm() {
@@ -27,6 +29,15 @@ export function SignupForm() {
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+
+  // A `/signup?ref=CODE` visit: keep the code (an httpOnly cookie, and the auth
+  // metadata on the email path) so it survives confirmation and every signup
+  // avenue, and the onboarding wizard can attribute the new family.
+  const rawRef = params.get('ref');
+  const referralCode = rawRef && isPlausibleReferralCode(rawRef) ? normalizeCode(rawRef) : null;
+  useEffect(() => {
+    if (referralCode) void rememberReferralCodeAction(referralCode);
+  }, [referralCode]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -51,7 +62,7 @@ export function SignupForm() {
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
-          data: { full_name: parsed.data.fullName },
+          data: { full_name: parsed.data.fullName, ...(referralCode ? { referral_code: referralCode } : {}) },
           emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
@@ -108,6 +119,12 @@ export function SignupForm() {
           {t('signup.oneCalmHomeForYourCalendar')}
           {plan ? ` — start on the ${plan} plan, free` : ' — free to start, no credit card'}.
         </p>
+        {referralCode && (
+          <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand-text" data-testid="signup-referral">
+            <Gift className="h-3.5 w-3.5" aria-hidden />
+            {t('signup.referralCodeNoted', { code: referralCode })}
+          </p>
+        )}
       </div>
 
       {showPhone ? (

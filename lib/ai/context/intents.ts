@@ -26,12 +26,17 @@ import type { ServiceScope } from '@/lib/services/types';
 
 export type IntentKey =
   | 'plan_meals' | 'plan_week' | 'organize_weekend' | 'remind_everyone' | 'prepare_vacation'
-  | 'spending_review' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief' | 'plan_move'
+  | 'spending_review' | 'purchase_advice' | 'find_vendor' | 'what_am_i_forgetting' | 'daily_brief' | 'plan_move'
+  // M25 outcome templates: the recurring family days an outcome card can launch.
+  | 'tournament_day' | 'school_morning' | 'back_to_school' | 'holiday' | 'emergency_prep'
+  // M34: "we're getting a puppy" — a transition, planned rather than checklisted.
+  | 'life_event'
   | 'answer_question' | 'capture' | 'navigate' | 'chief_of_staff' | 'other';
 
 export const INTENT_KEYS: readonly [IntentKey, ...IntentKey[]] = [
   'plan_meals', 'plan_week', 'organize_weekend', 'remind_everyone', 'prepare_vacation',
-  'spending_review', 'find_vendor', 'what_am_i_forgetting', 'daily_brief', 'plan_move',
+  'spending_review', 'purchase_advice', 'find_vendor', 'what_am_i_forgetting', 'daily_brief', 'plan_move',
+  'tournament_day', 'school_morning', 'back_to_school', 'holiday', 'emergency_prep', 'life_event',
   'answer_question', 'capture', 'navigate', 'chief_of_staff', 'other',
 ];
 
@@ -67,10 +72,20 @@ export const INTENT_SLICES: Record<IntentKey, SliceName[]> = {
   remind_everyone: ['people', 'schedule', 'activities', 'tasks', 'memory'],
   prepare_vacation: ['people', 'travel', 'documents', 'schedule', 'tasks', 'home', 'memory'],
   spending_review: ['people', 'money', 'memory'],
+  // "Should we buy X?" is answered from what the household already OWNS before
+  // it is answered from what it can afford, so `home` (inventory, assets) and
+  // `shopping` lead the money slice rather than trailing it.
+  purchase_advice: ['people', 'home', 'shopping', 'money', 'memory'],
   find_vendor: ['people', 'vendors', 'home', 'memory'],
   what_am_i_forgetting: ['people', 'proactive', 'schedule', 'tasks', 'activities', 'documents', 'home', 'money', 'memory'],
   daily_brief: ['people', 'schedule', 'tasks', 'activities', 'food', 'proactive', 'memory'],
   plan_move: ['people', 'moving', 'home', 'tasks', 'schedule', 'activities', 'memory'],
+  tournament_day: ['people', 'schedule', 'activities', 'food', 'tasks', 'memory'],
+  school_morning: ['people', 'schedule', 'activities', 'tasks', 'food', 'memory'],
+  back_to_school: ['people', 'schedule', 'activities', 'tasks', 'shopping', 'documents', 'memory', 'proactive'],
+  holiday: ['people', 'schedule', 'food', 'shopping', 'tasks', 'travel', 'money', 'memory', 'proactive'],
+  emergency_prep: ['people', 'home', 'documents', 'tasks', 'shopping', 'memory', 'proactive'],
+  life_event: ['people', 'schedule', 'tasks', 'home', 'shopping', 'travel', 'memory', 'proactive'],
   answer_question: ['people', 'schedule', 'tasks', 'memory', 'food', 'activities', 'proactive'],
   capture: ['people', 'schedule', 'tasks', 'shopping'],
   navigate: ['people'],
@@ -113,7 +128,24 @@ const CONCIERGE_RULES: { intent: IntentKey; re: RegExp; confidence: number }[] =
   { intent: 'daily_brief', confidence: 0.95, re: /\b(daily brief|morning brief|brief me|what'?s (on|happening|up) today|what does (today|my day|the day) look like|today'?s (plan|summary|agenda|brief)|how does (today|the day) look)\b/i },
   { intent: 'what_am_i_forgetting', confidence: 0.95, re: /\b(what am i forgetting|what are we forgetting|am i forgetting|anything (i'?m|we'?re|i am|we are) (forgetting|missing)|what did (i|we) miss|what'?s (falling through|slipping)|anything (i|we) (missed|overlooked)|what (have|did) (i|we) (forgotten|overlooked))\b/i },
   { intent: 'spending_review', confidence: 0.9, re: /\b(why did we spend|why are we spending|spending (review|report|this month|last month|summary)|where (did|does|is) (our|the) money (go|going)|over budget|how much (did|have|are) we spen[dt]|budget (review|check|status)|spen[dt] too much|too much (money|on))\b/i },
+  // M17 "Before you buy": a purchase DECISION, not a shopping capture. It sits
+  // above the capture heuristics deliberately — "buy batteries" is a list item,
+  // "should we buy another drill?" is a question the household inventory can
+  // answer — and above find_vendor so "should we replace the dishwasher or get
+  // it fixed?" is read as the purchase it is.
+  { intent: 'purchase_advice', confidence: 0.9, re: /\b(should (we|i) (buy|get|order|replace|upgrade|splurge on)|do (we|i) (really )?need (a|an|another|more)|is it worth (buying|getting|replacing|upgrading)|worth buying|before (we|i) buy|do (we|i) already (have|own)|can (we|i) afford)\b/i },
   { intent: 'find_vendor', confidence: 0.9, re: /\b(find (a|an|me a|us a|the|our) (plumber|electrician|handyman|contractor|roofer|painter|landscaper|gardener|cleaner|babysitter|sitter|tutor|mechanic|hvac|repair|vendor|pro\b|someone (to|who))|need (a|an) (plumber|electrician|handyman|contractor|roofer|painter|landscaper|cleaner|babysitter|tutor|mechanic|repair)|who (should|can|do) (we|i) call (for|about)|get (the |our |a )?\w+( \w+)? (fixed|repaired|serviced))\b/i },
+  // M25 outcome workflows. These sit ABOVE prepare_vacation deliberately:
+  // "get ready for the holidays" is the December season, not a flight, and the
+  // vacation rule matches the bare word "holiday". A British "our holiday"
+  // (singular) still falls through to prepare_vacation, which is what it means.
+  { intent: 'tournament_day', confidence: 0.9, re: /\b(tournament|game ?day|match ?day|swim meet|track meet|(the )?(big )?(game|match|meet) (day|weekend)|all[- ]day (tournament|meet))\b/i },
+  { intent: 'back_to_school', confidence: 0.92, re: /\b(back[- ]to[- ]school|new school year|school year (starts|starting|prep)|first day of school|school (starts|starting) (again|back|next)|school supplies|(get|getting) (us |the kids |everyone )?ready for school)\b/i },
+  { intent: 'school_morning', confidence: 0.9, re: /\b(school (morning|mornings|run)|morning routine|out the door (on time|in the morning)|get (the kids|everyone) (out the door|to school on time))\b/i },
+  { intent: 'holiday', confidence: 0.9, re: /\b(the holidays|holiday season|festive season|christmas|thanksgiving|hanukkah|chanukah|diwali|easter|new year'?s|holiday (planning|prep|shopping|dinner|cards|meal))\b/i },
+  { intent: 'emergency_prep', confidence: 0.9, re: /\b(emergency (plan|kit|prep|preparedness|supplies|contacts)|disaster (plan|prep|kit)|go[- ]bag|evacuation plan|(hurricane|storm|wildfire|earthquake|blackout|power outage) (prep|ready|kit|plan)|(prepare|prep|get ready) for (an |a )?(emergency|disaster|hurricane|storm|wildfire|earthquake|evacuation|outage))\b/i },
+  // M34: a transition the family is about to live through, not a task.
+  { intent: 'life_event', confidence: 0.88, re: /\b((we'?re|we are|i'?m|i am) (getting|adopting|expecting|having) (a |an |our )?(puppy|dog|kitten|cat|pet|baby|newborn|rescue)|(bringing|welcoming) (home )?(a |our )?(puppy|kitten|new pet|new baby)|new (puppy|kitten|pet|baby) (is )?(coming|arriving|joining)|life event|life change|starting (a )?new job|new job starts)\b/i },
   { intent: 'prepare_vacation', confidence: 0.9, re: /\b((prepare|prep|get ready|ready|pack)( us| me)? for (our |the |a |this |next )?(vacation|trip|holiday|getaway|travel|flight)|(vacation|trip|holiday) (prep|preparation|checklist|packing|readiness)|packing list|pack for\b|are we ready for (our |the )?(trip|vacation|holiday))/i },
   { intent: 'remind_everyone', confidence: 0.95, re: /\b(remind (everyone|everybody|the family|the kids|all of us|us all|the whole family)|tell (everyone|everybody|the family|the kids)|let (everyone|everybody|the family) know|make an announcement|announce (to|that)|send (a |an )?(reminder|message|announcement) to (everyone|everybody|the family|all))\b/i },
   { intent: 'plan_meals', confidence: 0.95, re: /\b((plan|figure out|sort out|prep|organi[sz]e|make|set up|build|create) (our |the |this |next |some |my |a )?(week'?s |weekly |week of )?(meals?|dinners?|lunches|menu|meal plan)|meal plan|what'?s for dinner|dinner (ideas|plan)|what should we (eat|cook|have for dinner|make for dinner))\b/i },
@@ -140,7 +172,16 @@ const INBOUND_MODULE_RE = /inbox|front[-_ ]?desk|contact[-_ ]?cent(er|re)|concie
 
 function firstMatch(text: string): IntentClassification | null {
   for (const rule of CONCIERGE_RULES) {
-    if (rule.re.test(text)) return { intent: rule.intent, confidence: rule.confidence, entities: {}, source: 'fast_path' };
+    const match = rule.re.exec(text);
+    if (!match) continue;
+    const entities: Record<string, string> = {};
+    if (rule.intent === 'purchase_advice') {
+      // What comes after the trigger is the thing being considered — the
+      // advisor needs it by name to check it against the inventory.
+      const item = text.slice(match.index + match[0].length).replace(/^[\s,:-]+/, '').replace(/[?!.]+\s*$/, '').trim();
+      if (item) entities.item = item.slice(0, 200);
+    }
+    return { intent: rule.intent, confidence: rule.confidence, entities, source: 'fast_path' };
   }
   return null;
 }
@@ -183,6 +224,9 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
       case 'plan_event':
         // A party is planned like a weekend: schedule, people, food.
         return { intent: 'organize_weekend', confidence: 0.7, entities: { ...entities, topic: 'event' }, source: 'fast_path' };
+      // M34: the command bar already recognises the transition; plan it rather
+      // than only linking to the playbook list.
+      case 'start_life_event': return { intent: 'life_event', confidence: 0.85, entities, source: 'fast_path' };
     }
   }
 
@@ -243,10 +287,17 @@ const INTENT_DESCRIPTIONS: Record<IntentKey, string> = {
   remind_everyone: 'send a reminder or announcement to the household',
   prepare_vacation: 'get ready for a trip: checklists, packing, documents, house prep',
   spending_review: 'understand or review spending, budgets or bills',
+  purchase_advice: 'decide whether to buy a specific thing: do we own one, does it fit, can we afford it',
   find_vendor: 'find or contact a service provider for a home problem',
   what_am_i_forgetting: 'check readiness or what might have been missed',
   daily_brief: 'a summary of today',
   plan_move: 'plan a house move: the dated checklist, address changes, school and vet records, utilities',
+  tournament_day: 'a whole-day sports commitment: a tournament, a meet, a game day',
+  school_morning: 'the weekday school-morning routine: who leaves when, with what',
+  back_to_school: 'the start of a school year: supplies, forms, routines, after-school care',
+  holiday: 'the holiday season: gatherings, cooking, gifts, travel windows',
+  emergency_prep: 'household emergency readiness: kit, documents, contacts, a plan',
+  life_event: 'a family transition beginning — a new pet, a new baby, a new job, a renovation',
   answer_question: 'a question answerable from household data with nothing to change',
   capture: 'a single item to save: a task, event, note or shopping item',
   navigate: 'open a page or module',

@@ -42,7 +42,8 @@ export const prepareVacationTemplate: WorkflowTemplate = {
   guidance: [
     'Use the `vacation_id` of the trip in the context for every trip step. If the context shows no matching trip, keep only the put_trip_on_file step (filled from the request), drop every step that needs a vacation_id, and add a followup for one hour later with the prompt "Prepare the trip that is now on file".',
     'Each traveller with a conflict, a missing document or a packing list gets their own task with them (or a parent for a child) as assignee; repeat prep_task as prep_task_2 and so on.',
-    'Add a reminder two days before departure for the critical items and one the evening before for the home checklist (trash, mail, pets, thermostat).',
+    'Add a reminder two days before departure for the critical items and one the evening before for the home checklist (trash, mail, thermostat).',
+    'Pet care is one task PER ANIMAL, written from the pets step — never a single "pets covered" line. Say each pet by name and carry its care notes; if the family has no pets on file the pet steps do nothing.',
     'Never invent a trip, a date or a document the context does not show.',
   ],
   steps: [
@@ -56,6 +57,10 @@ export const prepareVacationTemplate: WorkflowTemplate = {
     { key: 'documents', stepType: 'retrieve', toolName: 'trips.documentsRisk', description: 'Check passports and travel documents', input: (ctx) => ({ vacation_id: vacationId(ctx) }) },
     { key: 'readiness_before', stepType: 'retrieve', toolName: 'trips.computeReadiness', description: 'Measure how ready the family is today', input: (ctx) => ({ vacation_id: vacationId(ctx) }) },
     { key: 'home_tasks', stepType: 'retrieve', toolName: 'home.listOpenMaintenance', description: 'Check home tasks due before departure', input: (ctx) => ({ due_before: localTime(departureKey(ctx), 23, 59) }), optional: true },
+    // "Pets covered" was one line on the home checklist, which is not a plan:
+    // two dogs and a diabetic cat are three arrangements. The pets table (0083)
+    // says who actually lives here.
+    { key: 'pets', stepType: 'retrieve', toolName: 'trips.petPrep', description: 'Read the pets that need a sitter or boarding', input: (ctx) => ({ vacation_id: vacationId(ctx) }), optional: true },
     {
       key: 'build_plan', stepType: 'act', toolName: 'trips.buildPlan', description: 'Build the trip plan: activities, budget and checklists',
       dependsOn: ['trip', 'conflicts', 'documents'], input: (ctx) => ({ vacation_id: vacationId(ctx), preferences: null }),
@@ -69,8 +74,13 @@ export const prepareVacationTemplate: WorkflowTemplate = {
       modelFills: 'title and assignee — one copy per traveller or issue', optional: true,
     },
     {
+      key: 'pet_care', stepType: 'act', toolName: 'trips.createPetCareTasks', description: 'Add one sitter or boarding task per pet, with its care notes',
+      dependsOn: ['trip', 'pets'], input: (ctx) => ({ vacation_id: vacationId(ctx), assignee: null }),
+      modelFills: 'assignee: who arranges the care, when the request or the context names someone', optional: true,
+    },
+    {
       key: 'home_checklist', stepType: 'act', toolName: 'tasks.createTodo', description: 'Add the home-away checklist',
-      dependsOn: ['home_tasks'], input: (ctx) => ({ title: 'Before we leave: trash out, mail held, pets covered, thermostat set', due_date: shiftDay(departureKey(ctx), -1), priority: 'medium' }),
+      dependsOn: ['home_tasks'], input: (ctx) => ({ title: 'Before we leave: trash out, mail held, thermostat set', due_date: shiftDay(departureKey(ctx), -1), priority: 'medium' }),
     },
     {
       key: 'critical_reminder', stepType: 'act', toolName: 'reminders.create', description: 'Remind the family about the critical items two days before',
@@ -108,6 +118,16 @@ export const prepareVacationTemplate: WorkflowTemplate = {
   followups: (ctx) => {
     const trip = tripFor(ctx);
     if (!trip?.startDate) return [];
-    return [{ after: localTime(shiftDay(trip.startDate, -2), 9), prompt: `Two days before ${trip.title}: check the packing lists and tasks, and escalate anything critical that is still open.` }];
+    return [
+      { after: localTime(shiftDay(trip.startDate, -2), 9), prompt: `Two days before ${trip.title}: check the packing lists and tasks, and escalate anything critical that is still open.` },
+      // Trip disrupted. Departure morning is when a delay or a cancellation
+      // actually happens, and `trips.replanDisruption` is the step that answers
+      // it: it says what moved and what a PERSON still has to rebook. It never
+      // rebooks anything, so this follow-up must not promise that it will.
+      {
+        after: localTime(trip.startDate, 7),
+        prompt: `Trip disrupted? On the first day of ${trip.title}, check whether a flight or a stay is delayed or cancelled. If one is, run trips.replanDisruption for it, tell the family what moved on the itinerary, and list what still needs a person to rebook — do not say anything was rebooked.`,
+      },
+    ];
   },
 };

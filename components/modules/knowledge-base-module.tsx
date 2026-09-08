@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Brain, Plus, Search, Pin, PinOff, Pencil, Trash2, Copy, Check, Database,
+  Bot, Brain, Plus, Search, Pin, PinOff, Pencil, Trash2, Copy, Check, Database,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -115,6 +115,13 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
         description={t('knowledgeBaseModule.everythingTheFamilyShouldNever')}
         action={
           <div className="flex items-center gap-2">
+            {/* M22: the other half of what Bubaly holds — the routines it
+                detected and the traits it learned — lives in Settings → Bubaly
+                AI. One click, so a family reviews all of it in one sitting. */}
+            <Link href="/dashboard/settings#ai"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
+              <Bot className="h-4 w-4" /> {t('knowledgeBase.whatBubalyBelieves')}
+            </Link>
             {canSeed && (
               <Link href="/dashboard/knowledge/seed"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">

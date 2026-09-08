@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '../../src/components/AppText';
 import { Field } from '../../src/components/Field';
 import { GlassCard } from '../../src/components/GlassCard';
 import { Pill } from '../../src/components/Pill';
 import { Screen } from '../../src/components/Screen';
-import { askAssistant, AssistantError } from '../../src/lib/api';
+import { askAssistant, AssistantError, transcribeSpeech } from '../../src/lib/api';
 import { cardSections, type AssistantAction, type AssistantCard, type CardSection } from '../../src/lib/assistant-core';
 import { useAuth } from '../../src/lib/auth';
 import { webUrl } from '../../src/lib/config';
@@ -24,7 +25,9 @@ export default function AssistantScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mic, setMic] = useState<'idle' | 'recording' | 'transcribing'>('idle');
   const listRef = useRef<FlatList<Message>>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const send = async (text: string) => {
     const message = text.trim();
@@ -44,6 +47,47 @@ export default function AssistantScreen() {
       setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'error', content }]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const fail = (content: string) => setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'error', content }]);
+
+  // Talk to Bubaly: record -> POST the file to /api/ai/voice/transcribe with the
+  // bearer token -> send the transcript as an ordinary turn. Every failure is
+  // said out loud (including the honest 503 when transcription is not
+  // configured); a recording is never silently dropped.
+  const startRecording = async () => {
+    if (mic !== 'idle' || busy) return;
+    if (!accessToken) { fail('Sign in again to use the assistant.'); return; }
+    try {
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) { fail('Bubaly needs microphone access to listen. Enable it in Settings.'); return; }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setMic('recording');
+    } catch {
+      setMic('idle');
+      fail('Could not start recording. Try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (mic !== 'recording') return;
+    setMic('transcribing');
+    try {
+      await recorder.stop();
+      await setAudioModeAsync({ allowsRecording: false });
+      const uri = recorder.uri;
+      if (!uri) { fail('That recording came back empty. Try again.'); return; }
+      if (!accessToken) { fail('Sign in again to use the assistant.'); return; }
+      const text = await transcribeSpeech({ token: accessToken, recording: { uri } });
+      setMic('idle');
+      await send(text);
+    } catch (e) {
+      fail(e instanceof AssistantError ? e.message : 'Bubaly could not transcribe that. Try again.');
+    } finally {
+      setMic('idle');
     }
   };
 
@@ -87,12 +131,37 @@ export default function AssistantScreen() {
             </View>
           }
           renderItem={({ item }) => <Bubble message={item} />}
-          ListFooterComponent={busy ? <AppText variant="muted" style={{ paddingVertical: spacing[2] }}>Bubaly is thinking…</AppText> : null}
+          ListFooterComponent={
+            busy ? <AppText variant="muted" style={{ paddingVertical: spacing[2] }}>Bubaly is thinking…</AppText>
+              : mic === 'recording' ? <AppText variant="muted" style={{ paddingVertical: spacing[2] }}>Listening… tap the square to send.</AppText>
+                : mic === 'transcribing' ? <AppText variant="muted" style={{ paddingVertical: spacing[2] }}>Turning that into words…</AppText>
+                  : null
+          }
         />
         <View style={{ flexDirection: 'row', gap: spacing[2], paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg, alignItems: 'flex-end' }}>
           <View style={{ flex: 1 }}>
-            <Field placeholder="Message Bubaly…" value={draft} onChangeText={setDraft} returnKeyType="send" onSubmitEditing={() => send(draft)} editable={!busy} accessibilityLabel="Message" multiline />
+            <Field placeholder="Message Bubaly…" value={draft} onChangeText={setDraft} returnKeyType="send" onSubmitEditing={() => send(draft)} editable={!busy && mic === 'idle'} accessibilityLabel="Message" multiline />
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={mic === 'recording' ? 'Stop and send' : 'Speak'}
+            accessibilityState={{ busy: mic === 'transcribing', selected: mic === 'recording' }}
+            disabled={busy || mic === 'transcribing'}
+            onPress={() => { void (mic === 'recording' ? stopRecording() : startRecording()); }}
+            style={({ pressed }) => ({
+              width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: mic === 'recording' ? colors.danger : colors.border,
+              backgroundColor: mic === 'recording' ? colors.danger : colors.surface,
+              opacity: busy || mic === 'transcribing' ? 0.5 : pressed ? 0.85 : 1,
+            })}
+          >
+            <Ionicons
+              name={mic === 'recording' ? 'square' : 'mic-outline'}
+              size={mic === 'recording' ? 18 : 22}
+              color={mic === 'recording' ? colors.brandFg : colors.muted}
+            />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send"

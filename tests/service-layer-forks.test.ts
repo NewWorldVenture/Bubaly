@@ -69,6 +69,11 @@ const KNOWN_FORKS: Record<string, string> = {
   inventory_moves: 'same — recordMove is the tool path, the module still inserts its own moves',
   move_tasks: 'service added for the assistant’s tools (M14); the module’s own CRUD is not converted yet',
   moves: 'same — planTasks/setMoveDate are the tool path, the module still writes the move row',
+  // The memory work (M22) gave routines a service so the "what Bubaly
+  // believes" view could list and reset them. routines-panel.tsx still creates,
+  // renames and deletes its own templates straight from the browser — a new
+  // caller, not a conversion, exactly like the M13/M14 pair above.
+  routine_templates: 'service added for the memory view (M22); the panel’s own CRUD is not converted yet',
   maintenance_tasks: 'not yet converted',
   meals: 'not yet converted',
   notifications: 'not yet converted',

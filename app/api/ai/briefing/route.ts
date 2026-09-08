@@ -10,6 +10,7 @@ import { listUnread } from '@/lib/services/notifications';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from '@/lib/briefing/sources';
 import { viewerFor } from '@/lib/ai/context/policy';
+import { countHandledThisWeek } from '@/lib/metric/time-saved-server';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -432,6 +433,12 @@ ${UNTRUSTED_CONTENT_RULE}
       }
     }
 
+    // The ONE handled accounting (S-15). `counts.handled` used to be the length
+    // of a list capped at six; it is now the same number Home and the Autopilot
+    // panel show. `null` when the read failed — the brief then falls back to its
+    // own list rather than to a zero.
+    const { total: handledThisWeek } = await countHandledThisWeek(supabase, familyId, now);
+
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
@@ -441,6 +448,7 @@ ${UNTRUSTED_CONTENT_RULE}
       activity: (agentActivity ?? []) as AiActivityRow[],
       decisions: decisions.items,
       notifications: notices,
+      handledThisWeek,
     }, tz);
 
     // Read only because it was RENDERED. `foldAlsoToday` drops duplicates and

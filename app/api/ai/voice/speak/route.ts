@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { createServer } from '@/lib/supabase/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -15,11 +14,16 @@ export const maxDuration = 60;
 // Text-to-speech for "AI speaks back". Takes assistant text + an optional voice,
 // returns an MP3 stream from OpenAI's speech endpoint. The key stays server-side.
 // Honest 503 when OpenAI isn't configured — never synthesizes a fake/silent clip.
+//
+// Auth is `authenticateAI` — the same cookie-or-bearer resolver /api/ai uses —
+// so the phone can be spoken to as well as the browser, and an anonymous caller
+// gets a JSON 401.
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
-    const ctx = await requireUserContext();
-    const supabase = await createServer();
+    const authed = await authenticateAI(req);
+    if (authed instanceof NextResponse) return authed;
+    const { supabase, ctx } = authed;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-speak:${ctx.user.id}`, { limit: 30 });
     if (!limited.ok) return NextResponse.json(
       { error: t('speak.tooManyVoiceRequestsPlease') },

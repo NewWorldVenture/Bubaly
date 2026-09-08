@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
+import { delegationFromPreset, findSharingPreset } from '@/lib/trust/sharing-presets';
 import { ledgerWriter } from '@/lib/trust/ledger';
 import { APPROVAL_MODELS, thresholdFor } from '@/lib/approvals/threshold';
 import type { Json } from '@/lib/database.types';
@@ -253,6 +254,31 @@ export async function createDelegationAction(input: {
   if (e) return actionFailure(e, t('actions.couldNotCreateThatDelegation'));
   revalidatePath('/dashboard/trust');
   return { ok: true };
+}
+
+/**
+ * The Access & Sharing presets (M23). The client names a preset KEY and the two
+ * members; the scope and the expiry are looked up here, on the server, from
+ * `lib/trust/sharing-presets`. Letting the client post domains and an expiry
+ * would make the preset a suggestion — "Babysitter tonight" could then write
+ * `finances` for a year. The row itself is written by `createDelegationAction`,
+ * which keeps the manager check, the future-expiry check and the domain filter
+ * in one place.
+ */
+export async function createSharingPresetAction(input: {
+  presetKey: string; fromMemberId: string; toMemberId: string;
+}): Promise<Result> {
+  const t = await getTranslations();
+  const preset = findSharingPreset(input.presetKey);
+  if (!preset) return { ok: false, error: t('actions.unknownSharingPreset') };
+  const delegation = delegationFromPreset(preset, {
+    fromMemberId: input.fromMemberId,
+    toMemberId: input.toMemberId,
+    // Persisted and read back on this page, so it is stored in the manager's
+    // own language rather than always in English.
+    reason: t(preset.reasonKey),
+  });
+  return createDelegationAction(delegation);
 }
 
 export async function revokeDelegationAction(input: { id: string }): Promise<Result> {

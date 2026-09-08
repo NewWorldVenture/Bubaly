@@ -20,6 +20,7 @@ import { NAV_CATALOG } from '@/lib/constants/navigation';
 import { routeCommand } from '@/lib/command-bar/route';
 import { answerAIRequest, submitAIRequest, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { moduleFromPathname, suggestedPromptsFor } from '@/lib/concierge/suggested-prompts';
+import { MicButton } from '@/components/voice/mic-button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -54,6 +55,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
   const [inline, setInline] = useState<Inline | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const answerRef = useRef<HTMLInputElement>(null);
@@ -111,6 +113,13 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
     }
   }, [busy, conversationId, entityIds, handle, moduleName, router]);
 
+  // Speaking is asking: the transcript goes straight through the same submit
+  // path a typed request takes, so voice is never a second-class entry.
+  const onTranscript = useCallback((spoken: string) => {
+    setText(spoken);
+    void submit(spoken);
+  }, [submit]);
+
   const reply = useCallback(async () => {
     if (inline?.kind !== 'clarification' || !answer.trim() || busy) return;
     if (!inline.runId) { toastError(t('askBubaly.bubalyLostTrackOfThat')); setInline(null); return; }
@@ -153,6 +162,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
           placeholder={hero ? 'Plan our week, take care of dinner, find a plumber…' : ASK_BUBALY_PLACEHOLDER}
           className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted sm:h-11 sm:text-sm"
         />
+        <MicButton size="sm" disabled={busy} onTranscript={onTranscript} onError={setMicError} />
         <button
           type="submit"
           disabled={!text.trim() || busy}
@@ -166,8 +176,8 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
       {busy && (
         <p className="mt-2 text-xs text-muted" role="status">{t('askBubaly.bubalyIsLookingAtYourFamilys')}</p>
       )}
-      {error && (
-        <p className="mt-2 text-sm text-danger" role="alert">{error}</p>
+      {(error || micError) && (
+        <p className="mt-2 text-sm text-danger" role="alert">{error ?? micError}</p>
       )}
 
       {inline?.kind === 'clarification' && (
