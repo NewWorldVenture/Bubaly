@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ITEM_CATEGORIES, ITEM_STATUSES, LOCATION_KINDS, categoryMeta, inventorySummary, lentOut, locationLabel, locationPath, locationTree,
-  searchItems, valueSummary, warrantyAlerts, type ItemLike, type LocationLike,
+  CONFIRM_REASON, ITEM_CATEGORIES, ITEM_STATUSES, LOCATION_KINDS, categoryMeta, inventorySummary, isConfirmation, lastConfirmed, lastMoved,
+  lentOut, locationLabel, locationPath, locationTree, searchItems, valueSummary, warrantyAlerts,
+  type ItemLike, type LocationLike, type MoveLike,
 } from '@/lib/inventory/finder';
 
 const TODAY = new Date('2026-09-05T12:00:00');
@@ -148,5 +149,45 @@ describe('loans, warranties, value', () => {
     expect(s).toMatchObject({ items: 3, located: 1, unlocated: 2, rooms: 3, lent: 1, overdueLoans: 1 });
     expect(s.text).toBe('3 items · 1 placed · 1 lent out');
     expect(inventorySummary([], [], TODAY).text).toBe('Nothing catalogued yet');
+  });
+});
+
+// "Is it still there?" — a catalogue is only as good as its last check, and
+// the card may never claim a check nobody recorded. A confirmation is a move
+// row with from = to and reason 'confirmed'; anything else is a relocation.
+describe('confirmations', () => {
+  const move = (p: Partial<MoveLike> & { id: string; item_id: string }): MoveLike =>
+    ({ from_location_id: null, to_location_id: null, moved_at: '2026-09-01T10:00:00Z', reason: null, ...p });
+
+  it('tells a confirmation from a relocation and from a same-place move with another reason', () => {
+    expect(CONFIRM_REASON).toBe('confirmed');
+    expect(isConfirmation({ from_location_id: 'drawer', to_location_id: 'drawer', reason: 'confirmed' })).toBe(true);
+    expect(isConfirmation({ from_location_id: null, to_location_id: null, reason: 'confirmed' })).toBe(true);
+    expect(isConfirmation({ from_location_id: 'drawer', to_location_id: 'box', reason: 'confirmed' })).toBe(false);
+    expect(isConfirmation({ from_location_id: 'drawer', to_location_id: 'drawer', reason: 'spring clean' })).toBe(false);
+    expect(isConfirmation({ from_location_id: 'drawer', to_location_id: 'drawer', reason: null })).toBe(false);
+  });
+
+  it('reads back the latest confirmation for the item, and nothing when nobody confirmed it', () => {
+    const moves: MoveLike[] = [
+      move({ id: 'm1', item_id: 'passport', from_location_id: 'drawer', to_location_id: 'drawer', reason: CONFIRM_REASON, moved_at: '2026-08-01T10:00:00Z' }),
+      move({ id: 'm2', item_id: 'passport', from_location_id: 'drawer', to_location_id: 'drawer', reason: CONFIRM_REASON, moved_at: '2026-09-03T09:00:00Z' }),
+      move({ id: 'm3', item_id: 'passport', from_location_id: 'box', to_location_id: 'drawer', reason: 'tidy', moved_at: '2026-09-04T09:00:00Z' }),
+      move({ id: 'm4', item_id: 'helmet', from_location_id: 'garage', to_location_id: 'garage', reason: CONFIRM_REASON, moved_at: '2026-09-05T09:00:00Z' }),
+    ];
+    expect(lastConfirmed(moves, 'passport')).toEqual({ moveId: 'm2', at: '2026-09-03T09:00:00Z', locationId: 'drawer' });
+    expect(lastConfirmed(moves, 'nothing')).toBeNull();
+    expect(lastConfirmed([], 'passport')).toBeNull();
+    // A relocation is never reported as a confirmation, and vice versa.
+    expect(lastMoved(moves, 'passport')).toEqual({ moveId: 'm3', at: '2026-09-04T09:00:00Z', fromLocationId: 'box', toLocationId: 'drawer' });
+    expect(lastMoved(moves, 'helmet')).toBeNull();
+  });
+
+  it('ignores a row whose timestamp cannot be read, whichever order it arrives in', () => {
+    const good = move({ id: 'good', item_id: 'passport', from_location_id: 'drawer', to_location_id: 'drawer', reason: CONFIRM_REASON, moved_at: '2026-09-03T09:00:00Z' });
+    const bad = move({ id: 'bad', item_id: 'passport', from_location_id: 'drawer', to_location_id: 'drawer', reason: CONFIRM_REASON, moved_at: 'not a date' });
+    expect(lastConfirmed([good, bad], 'passport')?.moveId).toBe('good');
+    expect(lastConfirmed([bad, good], 'passport')?.moveId).toBe('good');
+    expect(lastConfirmed([bad], 'passport')).toBeNull();
   });
 });

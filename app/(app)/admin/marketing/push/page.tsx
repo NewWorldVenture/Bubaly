@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BellRing, Send, AlertTriangle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +28,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> 
 export default async function PushPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [campaignsResult, devicesResult] = await Promise.all([
+  const [campaignsResult, devicesResult] = await settleAll([
     supabase.from('marketing_push_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
     supabase.from('push_devices').select('id', { count: 'exact', head: true }).eq('enabled', true),
   ]);

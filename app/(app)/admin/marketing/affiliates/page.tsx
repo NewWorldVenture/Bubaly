@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Handshake, DollarSign, BadgeCheck, Wallet } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { formatCents } from '@/lib/marketing/crm';
@@ -21,7 +22,7 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 export default async function AffiliatesPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [affiliatesResult, referralsResult] = await Promise.all([
+  const [affiliatesResult, referralsResult] = await settleAll([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
     supabase.from('affiliate_referrals').select('affiliate_id, status, commission_cents').limit(10000),
   ]);

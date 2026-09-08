@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Flame, Target, Inbox, ThermometerSun } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -23,8 +24,8 @@ export default async function LeadScoringPage() {
   const supabase = createServiceClient();
 
   const [ticketsResult, customersResult] = await Promise.all([
-    supabase.from('support_tickets').select('id, subject, description, requester_name, requester_email, status, created_at, family_id')
-      .contains('tags', ['contact-form']).order('created_at', { ascending: false }).limit(100),
+    settle(supabase.from('support_tickets').select('id, subject, description, requester_name, requester_email, status, created_at, family_id')
+      .contains('tags', ['contact-form']).order('created_at', { ascending: false }).limit(100)),
     getMarketingCustomersWithError(supabase),
   ]);
   const readError = ticketsResult.error ?? customersResult.error;

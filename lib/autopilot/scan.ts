@@ -6,16 +6,26 @@
 // clears stale OPEN suggestions whose signal vanished, and auto-executes new
 // high-confidence reminders (reversibly — it inserts a real `reminders` row).
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
+import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
+import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 
 type DB = SupabaseClient<Database>;
 
-export type AutopilotScanResult = { scanned: number; autoExecuted: number; cleared: number; notified: number };
+export type AutopilotScanResult = {
+  scanned: number;
+  autoExecuted: number;
+  cleared: number;
+  notified: number;
+  /** Narrow trust policies the family's approval history supports (M7). Offered, never applied. */
+  policyCandidates: number;
+};
 
 const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_executed']);
 
@@ -51,7 +61,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     membersResult, groceriesResult, apptRemindersResult,
     eventsResult, subsResult, stressResult, medsResult,
     choreHistoryResult, twinProfilesResult, mealPlansResult, insuranceResult, wishlistResult, existingResult,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
     supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', `${today}T00:00:00Z`).limit(100),
@@ -185,7 +195,12 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
   // 1) Clear stale OPEN suggestions whose signal disappeared this scan.
-  const stale = (existing ?? []).filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key)).map((e) => e.id);
+  //    `policy:*` rows belong to the policy pass below, which reconciles them
+  //    against the approval history; they are never in `drafts`, so without
+  //    this carve-out every scan would delete the offer it had just made.
+  const stale = (existing ?? [])
+    .filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key) && !isPolicySuggestionKey(e.dedupe_key))
+    .map((e) => e.id);
   if (stale.length > 0) {
     const { error: staleError } = await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
     if (staleError) throw new Error('Autopilot could not clear stale suggestions');
@@ -307,5 +322,16 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     }
   }
 
-  return { scanned: drafts.length, autoExecuted, cleared: stale.length, notified };
+  // Household Autopilot (M7): what the family has approved three times over,
+  // never refused and never seen fail is offered back as ONE narrow policy.
+  // A suggestion only — the policy is written when a manager accepts it.
+  const policy = await runPolicyScan(supabase, familyId, userId, { now });
+
+  return {
+    scanned: drafts.length,
+    autoExecuted,
+    cleared: stale.length + policy.cleared,
+    notified,
+    policyCandidates: policy.candidates,
+  };
 }

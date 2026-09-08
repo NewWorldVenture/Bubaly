@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CheckCircle2, XCircle, CreditCard, Mail, Calendar, Database, HardDrive, KeyRound } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -55,8 +56,8 @@ export default async function AdminIntegrationsPage() {
     checkAuth(supabase),
     checkStripe(),
     Promise.resolve(checkEmail()),
-    supabase.from('user_preferences').select('user_id', { count: 'exact', head: true })
-      .not('notification_prefs->googleCalendarToken', 'is', null),
+    settle(supabase.from('user_preferences').select('user_id', { count: 'exact', head: true })
+      .not('notification_prefs->googleCalendarToken', 'is', null)),
   ]);
   if (googleCalendarResult.error) {
     console.error('[admin-integrations] connected-account read failed', googleCalendarResult.error);

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { CheckCircle2, XCircle, Users, Home, DollarSign, FolderLock, Database, RefreshCw } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
@@ -48,23 +50,29 @@ export default async function AdminSystemPage() {
     documentsResult,
   ] = await Promise.all([
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase.from('families').select('id', { count: 'exact', head: true }),
-    supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).limit(2000),
-    supabase.from('subscriptions').select('plan, status'),
-    supabase.from('documents').select('size_bytes'),
+    settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
+    settle(supabase.from('families').select('id', { count: 'exact', head: true })),
+    settle(supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).limit(2000)),
+    settle(supabase.from('subscriptions').select('plan, status')),
+    settle(supabase.from('documents').select('size_bytes')),
   ]);
 
-  const readError = [
-    userCountResult.error,
-    familyCountResult.error,
-    profilesResult.error,
-    subscriptionsResult.error,
-    documentsResult.error,
-  ].find(Boolean);
+  const readFailures = ([
+    ['user count', userCountResult],
+    ['family count', familyCountResult],
+    ['profiles', profilesResult],
+    ['subscriptions', subscriptionsResult],
+    ['documents', documentsResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[admin-system] usage read failed', readError);
-    return <AdminSystemReadError />;
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[admin-system] usage read failed — rendering degraded', readError);
   }
 
   const { count: userCount } = userCountResult;
@@ -87,6 +95,7 @@ export default async function AdminSystemPage() {
 
   return (
     <div className="module-page">
+      <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>

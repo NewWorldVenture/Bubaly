@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   shortTime, sortRides, groupByDate, driverConflicts, upcomingRides,
-  needsDriverCount, assessDriverSchedule, type RideLike,
+  needsDriverCount, assessDriverSchedule, rideWindow, type RideLike,
 } from '@/lib/rides/schedule';
 
 const ride = (over: Partial<RideLike>): RideLike => ({
@@ -156,5 +156,24 @@ describe('needsDriverCount', () => {
       ride({ driver_id: null, status: 'completed' }),
       ride({ driver_id: 'd1' }),
     ])).toBe(1);
+  });
+});
+
+describe('rideWindow', () => {
+  it('places the pickup on the family wall clock and ends at the recorded drop-off', () => {
+    const w = rideWindow({ ride_date: '2026-09-05', pickup_time: '14:30', dropoff_time: '15:15:00' }, 'America/New_York');
+    expect(w).toEqual({ start: Date.parse('2026-09-05T18:30:00Z'), end: Date.parse('2026-09-05T19:15:00Z'), knownEnd: true });
+  });
+
+  it('assumes a default duration when the drop-off is missing or not after the pickup', () => {
+    const w = rideWindow({ ride_date: '2026-09-05', pickup_time: '14:30', dropoff_time: null }, 'UTC', 45);
+    expect(w).toEqual({ start: Date.parse('2026-09-05T14:30:00Z'), end: Date.parse('2026-09-05T15:15:00Z'), knownEnd: false });
+    const backwards = rideWindow({ ride_date: '2026-09-05', pickup_time: '14:30', dropoff_time: '14:00' }, 'UTC');
+    expect(backwards).toEqual({ start: Date.parse('2026-09-05T14:30:00Z'), end: Date.parse('2026-09-05T15:30:00Z'), knownEnd: false });
+  });
+
+  it('returns null for a ride that cannot be placed', () => {
+    expect(rideWindow({ ride_date: '2026-09-05', pickup_time: null, dropoff_time: null }, 'UTC')).toBeNull();
+    expect(rideWindow({ ride_date: 'someday', pickup_time: '14:30', dropoff_time: null }, 'UTC')).toBeNull();
   });
 });

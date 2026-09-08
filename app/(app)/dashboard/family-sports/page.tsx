@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Trophy, CalendarClock, Users, MapPin, Flag } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
@@ -22,7 +23,7 @@ export default async function FamilySportsPage() {
   const now = new Date().toISOString();
   const in14 = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  const [membersRes, teamsRes, gamesRes, eventsRes] = await Promise.all([
+  const [membersRes, teamsRes, gamesRes, eventsRes] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('teams').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('game_results').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(6),

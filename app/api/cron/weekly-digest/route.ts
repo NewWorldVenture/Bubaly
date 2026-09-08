@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
@@ -40,15 +41,16 @@ export async function GET(req: NextRequest) {
   for (const family of families) {
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
-    // reading those from it errors and skipped every family's digest.
-    const [{ count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: events, error: eventsError }, { data: members, error: membersError }] = await Promise.all([
+    // reading those from it errors and skipped every family's digest. Counts,
+    // not rows: only the totals are rendered.
+    const [{ data: events, error: eventsError }, { count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: members, error: membersError }] = await settleAll([
+      supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
+        .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id)
         .gte('plan_date', weekStart.slice(0, 10)).lte('plan_date', weekEnd.slice(0, 10)),
-      supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
-        .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 

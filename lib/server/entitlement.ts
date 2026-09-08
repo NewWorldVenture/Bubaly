@@ -11,6 +11,7 @@
 // Grandfathering falls out of the data: only families created after migration
 // 0161 carry a trial_ends_at, so existing free families (NULL) are never locked.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { planLevel } from '@/lib/constants/plans';
 
@@ -77,7 +78,7 @@ export async function resolveEntitlement(
     const activeId = familyIds.includes(prefs?.active_family_id ?? '')
       ? (prefs!.active_family_id as string) : familyIds[0];
 
-    const [{ data: fam }, { data: subs }] = await Promise.all([
+    const [{ data: fam }, { data: subs }] = await settleAll([
       supabase.from('families').select('trial_ends_at, closed_at').eq('id', activeId).maybeSingle(),
       supabase.from('subscriptions').select('plan, status').eq('family_id', activeId).in('status', ['active', 'trialing']),
     ]);

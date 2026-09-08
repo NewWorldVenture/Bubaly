@@ -10,7 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
-import { computeDeparture } from '@/lib/trips/departure';
+import { departureFromEstimate } from '@/lib/trips/drive-time';
 import type { TripRecommendations } from '@/lib/trips/research';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -132,16 +132,18 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
   if (!title) return { ok: false, error: t('actions.aTitleIsRequired') };
   if (!input.eventStart) return { ok: false, error: t('actions.missingEventTime') };
 
-  const plan = computeDeparture({
-    eventStartISO: input.eventStart,
+  // Through the shared estimate → departure mapping (lib/trips/drive-time), the
+  // same one Schedule Intelligence uses for the calendar card, so the leave-by
+  // saved here and the one the event detail shows are the same minute.
+  const plan = departureFromEstimate({
     driveSeconds: input.driveSeconds,
     prepMinutes: input.prepMinutes,
     parkMinutes: input.parkMinutes,
     trafficFactor: input.trafficFactor,
     weatherDelayMinutes: input.weatherDelayMinutes,
     bufferMinutes: input.bufferMinutes,
-    now: new Date(),
-  });
+    source: 'manual',
+  }, input.eventStart, new Date());
 
   const reminderEventId = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: null,
@@ -206,16 +208,15 @@ export async function refreshDeparturePlanAction(input: {
   if (fetchErr) return { ok: false, error: describeDbError(fetchErr) };
   if (!existing) return { ok: false, error: t('actions.departurePlanNotFound') };
 
-  const plan = computeDeparture({
-    eventStartISO: existing.event_start,
+  const plan = departureFromEstimate({
     driveSeconds: input.driveSeconds,
     prepMinutes: existing.prep_minutes,
     parkMinutes: existing.park_minutes,
     trafficFactor: input.trafficFactor,
     weatherDelayMinutes: input.weatherDelayMinutes,
     bufferMinutes: existing.buffer_minutes,
-    now: new Date(),
-  });
+    source: 'manual',
+  }, existing.event_start, new Date());
 
   const reminderEventId = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: existing.reminder_event_id,

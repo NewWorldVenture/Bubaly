@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckCircle2, Star, CalendarDays, Trophy, PartyPopper } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { Avatar } from '@/components/ui/avatar';
@@ -22,7 +23,7 @@ export default async function KidsPage() {
   const end = new Date(start.getTime() + 86400000);
 
   // Only the child's own tasks + shared family events. No finance/health.
-  const [myTasksRes, doneRes, eventsRes] = await Promise.all([
+  const [myTasksRes, doneRes, eventsRes] = await settleAll([
     supabase.from('chore_assignments').select('id, chore_id, status, due_at').eq('family_id', familyId).eq('member_id', me.id).in('status', ['todo', 'in_progress']).order('due_at').limit(10),
     supabase.from('chore_assignments').select('points_awarded').eq('family_id', familyId).eq('member_id', me.id).in('status', ['done', 'approved']),
     supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(6),

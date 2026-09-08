@@ -12,6 +12,8 @@
 import { rankNextActions, type ActionInput, type ActionPriority, type NextAction } from '@/lib/opportunities/next-actions';
 import { RUN_STATE_LABELS, summarizeSteps, type RunState, type StepState } from '@/lib/ai/runs/states';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { topInsight, type ScheduleInsight } from '@/lib/schedule/intelligence';
+import { toolDomain } from '@/lib/ai/tool-domains';
 
 // ─── Today ───────────────────────────────────────────────────────────────────
 
@@ -34,9 +36,12 @@ export type TodayItem = {
   allDay: boolean;
   /** `family_members.id` the item is about, when the row carries one. */
   memberId: string | null;
-  /** "Due today" / "Overdue by 2 days" — from `rankNextActions`, so the copy is the same everywhere. */
+  /** "Due today" / "Overdue by 2 days" — from `rankNextActions`, so the copy is the same everywhere.
+   *  For an event with a schedule insight, the insight's reason ("Leave by 5:25 PM…"). */
   reason: string;
   bucket: NextAction['bucket'];
+  /** The most pressing schedule insight for an event (lib/schedule/intelligence), when there is one. */
+  insight?: ScheduleInsight;
 };
 
 export type TodayView = {
@@ -61,6 +66,12 @@ export type TodayInput = {
   now: Date;
   /** Cap on the task list; the schedule is never capped because a day is a day. */
   taskLimit?: number;
+  /**
+   * Schedule insights by event id (lib/schedule/intelligence). An event that
+   * has one gets the insight's reason instead of the bare "Today", and carries
+   * the insight so the strip can colour it by severity and link to the fix.
+   */
+  insights?: Record<string, ScheduleInsight[]>;
 };
 
 /**
@@ -99,9 +110,12 @@ export function buildToday(input: TodayInput): TodayView {
   const schedule: TodayItem[] = [];
   for (const e of input.events) {
     if (dayKeyInZone(e.starts_at, tz) !== todayKey) continue;
+    const insight = e.all_day ? null : topInsight(input.insights?.[e.id]);
     schedule.push({
       key: `event:${e.id}`, kind: 'event', id: e.id, title: e.title, href: '/dashboard/calendar',
-      at: e.starts_at, allDay: e.all_day, memberId: e.assignee_id ?? null, reason: e.all_day ? 'All day' : 'Today', bucket: 'today',
+      at: e.starts_at, allDay: e.all_day, memberId: e.assignee_id ?? null,
+      reason: insight ? insight.reason : e.all_day ? 'All day' : 'Today', bucket: 'today',
+      ...(insight ? { insight } : {}),
     });
   }
 
@@ -266,8 +280,30 @@ export type CompletedRunRow = {
   progress: unknown;
   completed_at: string | null;
   updated_at: string;
+  /** Joins the run to its plan's steps and reasoning_summary. Optional, so a caller without evidence still lists the run. */
+  plan_id?: string | null;
 };
-export type AiActivityRow = { id: string; title: string; detail: string | null; href: string | null; created_at: string };
+export type AiActivityRow = {
+  id: string;
+  title: string;
+  detail: string | null;
+  href: string | null;
+  created_at: string;
+  /** The specialist agent that wrote the row (`agent_activity.agent`), when the caller selected it. */
+  agent?: string | null;
+};
+
+// The persisted rows that say WHAT a run did and WHY. Read by
+// lib/ai/runs/evidence.ts; never inferred here.
+export type CompletedStepRow = { id: string; plan_id: string; step_type: string; tool_name: string | null; status: string };
+export type CompletedToolCallRow = { run_id: string | null; plan_step_id: string | null; tool_name: string; state: string; resource_table: string | null };
+export type CompletedPlanRow = { id: string; reasoning_summary: string | null };
+export type CompletedEvidence = { steps: CompletedStepRow[]; toolCalls: CompletedToolCallRow[]; plans: CompletedPlanRow[] };
+
+export const EMPTY_EVIDENCE: CompletedEvidence = { steps: [], toolCalls: [], plans: [] };
+
+/** One tool that acted: the canonical name the ledger recorded and its domain (`calendar.createEvent` → `calendar`). */
+export type CompletedSource = { tool: string; domain: string };
 
 export type CompletedItem = {
   key: string;
@@ -278,20 +314,97 @@ export type CompletedItem = {
   href: string;
   at: string;
   partial: boolean;
+  /**
+   * Which tools acted (M6), from persisted state only: the run's succeeded
+   * write calls in `ai_tool_calls`, else its completed act/notify steps'
+   * `tool_name`; an agent_activity row names the agent that wrote it. Empty
+   * when nothing persisted says — never guessed from the title.
+   */
+  sources: CompletedSource[];
+  /** An excerpt of the plan's persisted `reasoning_summary`; null when the plan recorded none. */
+  reason: string | null;
 };
 
-function progressSummary(progress: unknown): string | null {
+export function progressSummary(progress: unknown): string | null {
   if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return null;
   const summary = (progress as Record<string, unknown>).summary;
   return typeof summary === 'string' && summary.trim() ? summary : null;
 }
 
+/** Step types whose tool writes something a family sees; `retrieve`/`verify` only read. */
+const WRITE_STEP_TYPES: ReadonlySet<string> = new Set(['act', 'notify']);
+const FINISHED_STEP_STATES: ReadonlySet<string> = new Set(['completed', 'partially_completed']);
+
+export const REASON_EXCERPT_LENGTH = 140;
+
+/**
+ * The first `max` characters of a persisted summary, cut at a word and marked
+ * as cut, so a ledger row's "why" is short without pretending to be whole.
+ */
+export function excerpt(text: string | null | undefined, max = REASON_EXCERPT_LENGTH): string | null {
+  const clean = (text ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const atWord = cut.lastIndexOf(' ');
+  const kept = atWord > max / 2 ? cut.slice(0, atWord) : cut;
+  return `${kept.replace(/[\s,;:.–-]+$/, '')}…`;
+}
+
+function uniqueSources(toolNames: readonly string[]): CompletedSource[] {
+  const seen = new Set<string>();
+  const out: CompletedSource[] = [];
+  for (const raw of toolNames) {
+    const tool = raw.trim();
+    if (!tool || seen.has(tool)) continue;
+    seen.add(tool);
+    out.push({ tool, domain: toolDomain(tool) });
+  }
+  return out;
+}
+
+/**
+ * What a run did, from its ledger. The `ai_tool_calls` rows that succeeded
+ * and were writes — attached to an act/notify step, or carrying the resource
+ * they touched — are the record; a run whose ledger rows are missing falls
+ * back to the act/notify steps that reached completed. Reads
+ * (`calendar.searchEvents`) never count as acting, and a run with neither
+ * says nothing rather than something.
+ */
+export function runSources(run: { id: string; plan_id?: string | null }, evidence: CompletedEvidence): CompletedSource[] {
+  const steps = run.plan_id ? evidence.steps.filter((s) => s.plan_id === run.plan_id) : [];
+  const writeStepIds = new Set(steps.filter((s) => WRITE_STEP_TYPES.has(s.step_type)).map((s) => s.id));
+  const fromLedger = evidence.toolCalls
+    .filter((c) => c.run_id === run.id && c.state === 'succeeded' && ((c.plan_step_id !== null && writeStepIds.has(c.plan_step_id)) || !!c.resource_table))
+    .map((c) => c.tool_name);
+  if (fromLedger.length) return uniqueSources(fromLedger);
+  const fromSteps = steps
+    .filter((s) => WRITE_STEP_TYPES.has(s.step_type) && FINISHED_STEP_STATES.has(s.status) && !!s.tool_name)
+    .map((s) => s.tool_name as string);
+  return uniqueSources(fromSteps);
+}
+
+/** The plan's persisted reasoning_summary, excerpted; null when the plan recorded none. */
+export function runReason(run: { plan_id?: string | null }, evidence: CompletedEvidence): string | null {
+  if (!run.plan_id) return null;
+  return excerpt(evidence.plans.find((p) => p.id === run.plan_id)?.reasoning_summary);
+}
+
+export type MergeCompletedOptions = {
+  /** The persisted steps, tool calls and plans behind the runs; omitted means the items carry no source and no reason. */
+  evidence?: CompletedEvidence;
+  limit?: number;
+};
+
 /**
  * Recent outcomes: finished runs and the specialist agents' completed actions,
  * newest first. A partially completed run is listed honestly as partial (§29)
- * rather than hidden or rounded up to "done".
+ * rather than hidden or rounded up to "done"; the source and reason under a
+ * run come from `evidence` — the ledger and the plan — or are absent.
  */
-export function mergeCompletedByBubaly(runs: CompletedRunRow[], activity: AiActivityRow[], limit = 6): CompletedItem[] {
+export function mergeCompletedByBubaly(runs: CompletedRunRow[], activity: AiActivityRow[], options: MergeCompletedOptions = {}): CompletedItem[] {
+  const evidence = options.evidence ?? EMPTY_EVIDENCE;
+  const limit = options.limit ?? 6;
   const items: CompletedItem[] = [];
   for (const r of runs) {
     if (r.state !== 'completed' && r.state !== 'partially_completed') continue;
@@ -299,10 +412,16 @@ export function mergeCompletedByBubaly(runs: CompletedRunRow[], activity: AiActi
       key: `run:${r.id}`, kind: 'run', title: r.summary?.trim() || 'A request from your family',
       detail: progressSummary(r.progress), href: runPagePath(r.id), at: r.completed_at ?? r.updated_at,
       partial: r.state === 'partially_completed',
+      sources: runSources(r, evidence),
+      reason: runReason(r, evidence),
     });
   }
   for (const a of activity) {
-    items.push({ key: `activity:${a.id}`, kind: 'activity', title: a.title, detail: a.detail, href: a.href ?? '/dashboard/agents', at: a.created_at, partial: false });
+    items.push({
+      key: `activity:${a.id}`, kind: 'activity', title: a.title, detail: a.detail, href: a.href ?? '/dashboard/agents', at: a.created_at, partial: false,
+      sources: a.agent ? uniqueSources([a.agent]) : [],
+      reason: null,
+    });
   }
   return items
     .sort((a, b) => {

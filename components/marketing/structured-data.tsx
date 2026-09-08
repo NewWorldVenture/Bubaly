@@ -44,8 +44,8 @@ export async function SiteStructuredData() {
     name: 'Bubaly',
     url: SITE_URL,
     logo: `${SITE_URL}/brand/bubaly-logo.png`,
-    description:
-      t('structuredData.bubalyIsTheAiOperating'),
+    // The same outcome-language description the homepage's metadata uses.
+    description: t('root.metaDescriptionOutcomes'),
     sameAs: Object.values(social),
   };
 
@@ -70,7 +70,9 @@ export async function SiteStructuredData() {
       '@type': 'Offer',
       price: '0',
       priceCurrency: 'USD',
-      description: t('structuredData.freeStarterPlanNoCredit'),
+      // There is no "Free Starter plan": the offer is a 5-day trial of Family
+      // Basic, then a paid plan (lib/constants/plans.ts). Say exactly that.
+      description: t('structuredData.offerTrial'),
     },
   };
 

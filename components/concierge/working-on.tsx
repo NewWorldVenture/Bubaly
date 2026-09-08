@@ -40,7 +40,15 @@ async function fetchWorking(supabase: SupabaseBrowser, familyId: string): Promis
   return { data: workingRunsFrom(runRows, stepRows), error: null };
 }
 
-export function WorkingOn({ familyId, initial, className }: { familyId: string; initial: WorkingRun[]; className?: string }) {
+export function WorkingOn({
+  familyId, initial, historyHref, className,
+}: {
+  familyId: string;
+  initial: WorkingRun[];
+  /** Where the whole run history lives (M35); rendered as an "All runs" link in the header. */
+  historyHref?: string | null;
+  className?: string;
+}) {
   const t = useTranslations();
   const [rows, setRows] = useState<WorkingRun[]>(initial);
 
@@ -60,9 +68,16 @@ export function WorkingOn({ familyId, initial, className }: { familyId: string; 
 
   return (
     <section aria-labelledby="working-on-heading" className={className}>
-      <div className="mb-3 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
-        <h2 id="working-on-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">{t('workingOn.bubalyIsWorkingOn')}</h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-brand-text" aria-hidden />
+          <h2 id="working-on-heading" className="text-sm font-semibold uppercase tracking-wide text-muted">{t('workingOn.bubalyIsWorkingOn')}</h2>
+        </div>
+        {historyHref && (
+          <Link href={historyHref} className="flex min-h-11 items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline focus-ring">
+            {t('workingOn.allRuns')} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        )}
       </div>
       {rows.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">

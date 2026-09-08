@@ -15,6 +15,7 @@ import { gatherSignalsResult, type FamilySignals } from '@/lib/family/signals';
 import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import type { SliceDefinition } from '../policy';
 
 const MAX_ITEMS_PER_ANSWER = 3;
@@ -71,10 +72,10 @@ export const proactiveSlice: SliceDefinition = {
     const [signals, report, liveSignals, autopilot, recommendations] = await Promise.all([
       loadSignals(scope.familyId),
       loadReasoningReport(scope.db, scope.familyId, env.now),
-      scope.db.from('family_signals').select('kind, title, detail, score').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS),
-      scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS),
-      scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS),
-    ]);
+      settle(scope.db.from('family_signals').select('kind, title, detail, score').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
+      settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
+      settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
+  ]);
     const readError = liveSignals.error ?? autopilot.error ?? recommendations.error;
     if (readError) {
       console.error('[ai-context:proactive] suggestion read failed', readError);

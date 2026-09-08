@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { PenSquare, Sparkles, Wand2 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getPosts } from '@/lib/social/queries';
 import { AI_KIND_LABELS, type AiGenerationKind } from '@/lib/social/ai-kinds';
@@ -21,8 +22,8 @@ export default async function ContentStudioPage() {
 
   const [drafts, { data: generations }, { data: templates }] = await Promise.all([
     getPosts(familyId, ['draft']),
-    supabase.from('social_ai_generations').select('id, kind, prompt, model, status, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(8),
-    supabase.from('social_content_templates').select('id, name, kind').eq('family_id', familyId).is('deleted_at', null).limit(8),
+    settle(supabase.from('social_ai_generations').select('id, kind, prompt, model, status, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(8)),
+    settle(supabase.from('social_content_templates').select('id, name, kind').eq('family_id', familyId).is('deleted_at', null).limit(8)),
   ]);
 
   return (

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -19,7 +20,7 @@ export default async function EconomyPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [currenciesRes, membersRes, txnsRes, rewardsRes, redemptionsRes] = await Promise.all([
+  const [currenciesRes, membersRes, txnsRes, rewardsRes, redemptionsRes] = await settleAll([
     supabase.from('family_currencies').select('id, name, emoji, unit_label, is_active').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
     supabase.from('family_members').select('id, display_name, color, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('currency_transactions').select('currency_id, member_id, direction, amount').eq('family_id', familyId).limit(5000),

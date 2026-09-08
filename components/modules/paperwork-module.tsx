@@ -165,8 +165,8 @@ export function PaperworkModule({ items }: { items: Item[] }) {
           const actions = parseActions(it.actions);
           const busyItem = busyKey === it.id;
           return (
-            <article key={it.id} className={cn(
-              'rounded-2xl border p-4 transition',
+            <article key={it.id} id={`paperwork-${it.id}`} className={cn(
+              'scroll-mt-24 rounded-2xl border p-4 transition',
               it.urgency === 'urgent' && it.status === 'needs_action'
                 ? 'border-rose-400/40 bg-rose-500/[0.05]'
                 : 'border-border bg-surface',

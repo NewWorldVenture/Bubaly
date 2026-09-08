@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Gavel, Clock, ShieldCheck, Zap, Loader2, TrendingUp, Flame } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -49,7 +50,7 @@ export function AuctionPanel({
   const refetch = useRef<() => void>(() => {});
   refetch.current = async () => {
     const sb = createClient();
-    const [{ data: l }, { data: b }] = await Promise.all([
+    const [{ data: l }, { data: b }] = await settleAll([
       sb.from('marketplace_listings').select('sale_format, status, starting_bid_cents, current_bid_cents, bid_count, reserve_cents, buy_now_cents, auction_starts_at, auction_ends_at, highest_bidder_family_id').eq('id', listingId).maybeSingle(),
       sb.from('marketplace_bids').select('id, bidder_family_id, amount_cents, status, created_at, is_auto').eq('listing_id', listingId).order('created_at', { ascending: false }).limit(20),
     ]);

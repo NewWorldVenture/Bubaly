@@ -107,3 +107,28 @@ export async function requeueCallAction(id: string, phone?: string): Promise<Res
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/**
+ * A parent made the call themselves and is recording what happened. This is
+ * the only way a row reaches 'completed' today: Bubaly has no outbound voice
+ * integration, so no provider ever writes `provider_ref`, and the UI shows such
+ * a row as "Done — logged by hand" rather than "Called" (see
+ * `callDisplayState` in lib/concierge-calls/brief.ts).
+ */
+export async function logCallOutcomeAction(id: string, outcome: string): Promise<Result> {
+  const t = await getTranslations();
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanManage') };
+  const text = (outcome ?? '').trim();
+  if (text.length < 2) return { ok: false, error: t('actions.sayWhatHappenedOnThe') };
+  const supabase = await createServer();
+  const { error } = await supabase.from('concierge_calls')
+    .update({ status: 'completed', outcome: text.slice(0, 2000), completed_at: new Date().toISOString() })
+    .eq('id', id).eq('family_id', ctx.active.familyId).in('status', ['draft', 'queued', 'failed', 'action_needed']);
+  if (error) return { ok: false, error: error.message };
+  await logAudit(supabase, {
+    familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
+    resource: 'concierge_calls', resourceId: id, metadata: { loggedByHand: true },
+  });
+  return { ok: true };
+}

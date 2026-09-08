@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { ErrorState } from '@/components/ui/states';
@@ -15,7 +16,7 @@ export default async function MealVotePage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [votesRes, optionsRes, ballotsRes, recipesRes] = await Promise.all([
+  const [votesRes, optionsRes, ballotsRes, recipesRes] = await settleAll([
     supabase.from('meal_votes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
     supabase.from('meal_vote_options').select('id, vote_id, recipe_id, label, photo_url').eq('family_id', familyId),
     supabase.from('meal_vote_ballots').select('vote_id, option_id, member_id, choice').eq('family_id', familyId),

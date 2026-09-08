@@ -6,6 +6,7 @@ import {
   ShoppingBag, Clock, Gift, HelpCircle, Repeat, HandHeart,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { FollowButton } from '@/components/marketplace/follow-button';
@@ -49,7 +50,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   const nameOf = (mid: string | null) => members?.find((m) => m.id === mid)?.display_name ?? 'Someone';
   const isOwner = store.member_id === selfId;
 
-  const [reviewsRes, listingsRes, followRes, selfFollowRes, ordersRes, listingCountRes] = await Promise.all([
+  const [reviewsRes, listingsRes, followRes, selfFollowRes, ordersRes, listingCountRes] = await settleAll([
     sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('reviewee_member', store.member_id).order('created_at', { ascending: false }).limit(12),
     sb.from('marketplace_listings').select('id, title, kind, category, price_cents, rent_period, photo_url, location, status').eq('family_id', familyId).eq('member_id', store.member_id).in('status', ['available', 'pending']).order('created_at', { ascending: false }).limit(24),
     sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id),

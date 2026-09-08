@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CalendarClock, ArrowLeft } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
@@ -34,7 +35,7 @@ export default async function ConflictsPage() {
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
 
-  const [{ data: events }, { data: members }] = await Promise.all([
+  const [{ data: events }, { data: members }] = await settleAll([
     supabase
       .from('calendar_events')
       .select('id, title, starts_at, ends_at, all_day, location, assignee_id')

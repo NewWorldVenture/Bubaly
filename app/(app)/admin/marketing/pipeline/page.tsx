@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { TrendingUp, DollarSign, Trophy, Percent } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -30,7 +31,7 @@ const STAGE_TINT: Record<DealStage, string> = {
 export default async function PipelinePage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const [dealsResult, contactsResult] = await Promise.all([
+  const [dealsResult, contactsResult] = await settleAll([
     supabase.from('crm_deals').select('*').order('created_at', { ascending: false }).limit(500),
     supabase.from('crm_contacts').select('id, first_name, last_name, email').order('created_at', { ascending: false }).limit(500),
   ]);

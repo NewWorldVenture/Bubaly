@@ -43,6 +43,20 @@ export type ApprovalCardData = {
   agent?: string | null;
   priority?: string | null;
   /**
+   * What Bubaly looked at before it asked — the NAMES of the context slices
+   * assembled for this request (`ai_request_context`), and the names policy
+   * withheld. Names only: a parent deciding "add soccer at 9am" should be able
+   * to see that the answer was built from the calendar and the family's food
+   * preferences without the card turning into a data dump, and the withheld
+   * list is the proof that the money slice stayed out of a meal plan (§27).
+   *
+   * Absent when the caller did not resolve it (a card built from a bare row,
+   * an approval with no AI request behind it, or a viewer who may not see the
+   * context). The renderer draws nothing then — an empty "Based on" would be a
+   * claim, not evidence.
+   */
+  basedOn?: { read: string[]; withheld: string[] };
+  /**
    * How many approvals this needs under its model, and how many are in.
    * Optional because a card stored before these existed has neither; the
    * renderer treats a missing threshold as a plain single approval.
@@ -179,12 +193,41 @@ export function consequencesOf(row: Pick<TrustApproval, 'consequences'>): string
 }
 
 /**
+ * The "Based on" evidence, reduced to slice NAMES.
+ *
+ * Everything that is not a short identifier is dropped rather than rendered:
+ * the caller reads `ai_request_context`, whose snapshot column holds the rows
+ * themselves, and this is the last gate before that data could reach a card.
+ * Returns undefined when there is nothing to show, so an approval with no
+ * context behind it draws no expander at all.
+ */
+export function basedOnFrom(value: unknown): { read: string[]; withheld: string[] } | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const names = (raw: unknown) =>
+    stringList(raw)
+      .map((name) => name.trim())
+      .filter((name) => /^[a-z][a-z0-9_]{0,31}$/.test(name))
+      .slice(0, 16);
+  const read = names(record.read);
+  const withheld = names(record.withheld);
+  if (read.length === 0 && withheld.length === 0) return undefined;
+  return { read, withheld };
+}
+
+/**
  * Card data for one row. `requestedBy` is resolved by the caller (a member's
  * name, or null) — an AI request is always shown as "Bubaly".
  */
 export function toApprovalCardData(
   row: TrustApproval,
-  opts: { requestedBy: string | null; canEdit: boolean; managerCount?: number },
+  opts: {
+    requestedBy: string | null;
+    canEdit: boolean;
+    managerCount?: number;
+    /** Slice names from the request's context snapshot; see `basedOnFrom`. */
+    basedOn?: unknown;
+  },
 ): ApprovalCardData {
   const classified = classifyPayload(row);
   const editableFields = editableFieldsFor(editableArgsOf(classified));
@@ -212,5 +255,6 @@ export function toApprovalCardData(
     editableFields,
     agent: row.agent,
     priority: row.priority,
+    basedOn: basedOnFrom(opts.basedOn),
   };
 }

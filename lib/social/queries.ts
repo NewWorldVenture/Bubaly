@@ -4,6 +4,7 @@
 // pages so the UI is fully Supabase-backed — no fabricated rows anywhere.
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import type { Tables } from '@/lib/database.types';
 import type { SocialPostStatusEnum } from '@/lib/database.types';
 
@@ -78,10 +79,10 @@ export async function getPosts(
 export async function getPost(familyId: string, postId: string) {
   const supabase = await createServer();
   const [postRes, variantsRes, targetsRes, resultsRes] = await Promise.all([
-    supabase.from('social_posts').select('*').eq('family_id', familyId).eq('id', postId).maybeSingle(),
-    supabase.from('social_post_variants').select('*').eq('family_id', familyId).eq('post_id', postId),
-    supabase.from('social_post_targets').select('*').eq('family_id', familyId).eq('post_id', postId),
-    supabase.from('social_publish_results').select('*').eq('family_id', familyId).eq('post_id', postId).order('attempted_at', { ascending: false }),
+    settle(supabase.from('social_posts').select('*').eq('family_id', familyId).eq('id', postId).maybeSingle()),
+    settle(supabase.from('social_post_variants').select('*').eq('family_id', familyId).eq('post_id', postId)),
+    settle(supabase.from('social_post_targets').select('*').eq('family_id', familyId).eq('post_id', postId)),
+    settle(supabase.from('social_publish_results').select('*').eq('family_id', familyId).eq('post_id', postId).order('attempted_at', { ascending: false })),
   ]);
   // Fail closed on a read error (a missing post is null with no error — that is a
   // legitimate not-found, not a failure — so only throw when error is present).
@@ -116,8 +117,8 @@ export async function getCalendarItems(familyId: string): Promise<Tables<'social
 export async function getInbox(familyId: string) {
   const supabase = await createServer();
   const [commentsRes, messagesRes] = await Promise.all([
-    supabase.from('social_comments').select('*').eq('family_id', familyId).is('deleted_at', null).order('posted_at', { ascending: false }).limit(100),
-    supabase.from('social_messages').select('*').eq('family_id', familyId).is('deleted_at', null).order('posted_at', { ascending: false }).limit(100),
+    settle(supabase.from('social_comments').select('*').eq('family_id', familyId).is('deleted_at', null).order('posted_at', { ascending: false }).limit(100)),
+    settle(supabase.from('social_messages').select('*').eq('family_id', familyId).is('deleted_at', null).order('posted_at', { ascending: false }).limit(100)),
   ]);
   return { comments: orThrow(commentsRes, 'social_comments', familyId), messages: orThrow(messagesRes, 'social_messages', familyId) };
 }
@@ -143,8 +144,8 @@ export async function getAnalytics(familyId: string): Promise<{
 }> {
   const supabase = await createServer();
   const [snapsRes, publishedRes] = await Promise.all([
-    supabase.from('social_analytics_snapshots').select('*').eq('family_id', familyId).limit(1000),
-    supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['published', 'partially_published']),
+    settle(supabase.from('social_analytics_snapshots').select('*').eq('family_id', familyId).limit(1000)),
+    settle(supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['published', 'partially_published'])),
   ]);
   throwIfError(snapsRes.error, 'social_analytics_snapshots', familyId);
   throwIfError(publishedRes.error, 'social_posts', familyId);
@@ -176,12 +177,12 @@ export async function getSocialOverview(familyId: string) {
   const supabase = await createServer();
   const [accounts, feedCount, drafts, scheduled, published, failed, openInbox] = await Promise.all([
     getAccounts(familyId),
-    supabase.from('social_feed_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
-    supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'draft'),
-    supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'scheduled'),
-    supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['published', 'partially_published']),
-    supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'failed'),
-    supabase.from('social_comments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'open'),
+    settle(supabase.from('social_feed_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId)),
+    settle(supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'draft')),
+    settle(supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'scheduled')),
+    settle(supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['published', 'partially_published'])),
+    settle(supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'failed')),
+    settle(supabase.from('social_comments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'open')),
   ]);
   // Fail closed if any overview count read errored — an overview that silently
   // shows all-zeros on a broken table is a misleading "nothing here" state.

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Layers } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -20,7 +21,7 @@ export default async function SegmentsPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
   const [segmentsResult, customersResult] = await Promise.all([
-    supabase.from('marketing_segments').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+    settle(supabase.from('marketing_segments').select('*').is('deleted_at', null).order('created_at', { ascending: false })),
     getMarketingCustomersWithError(supabase),
   ]);
   const readError = segmentsResult.error ?? customersResult.error;

@@ -8,6 +8,7 @@ import { deleteCalendarEventAction } from '@/app/(app)/dashboard/calendar/action
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { AiInsight } from '@/components/ai/ai-insight';
+import { EventScheduleInsights } from '@/components/calendar/event-detail';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -109,6 +110,11 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
           )}
         </div>
         {event.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{event.description}</p>}
+
+        {/* M8: the composed schedule model for this event — leave-by, driver,
+            car, dinner and care constraints — read live, fail-closed. All-day
+            rows carry no time to reason about, so they get no check. */}
+        {!event.all_day && <EventScheduleInsights eventId={event.id} />}
 
         <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label={t('eventDetailModal.aiPrepChecklist')} />
 

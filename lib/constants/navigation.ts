@@ -33,18 +33,20 @@ export function isNavItemVisibleToRole(
 /** A titled section of the app sidebar. */
 export type NavGroup = { title: string; layout: 'list' | 'grid'; items: NavItem[] };
 
-/** Marketing top-nav. */
+/** Marketing top-nav — outcome-first: it leads with what Bubaly handles, and
+ *  /security is the Trust Center. Six items; /ai stays reachable from the
+ *  footer and the homepage's decisions band. Pricing → FAQ → Trust Center
+ *  adjacency is pinned by tests/marketing-faq-nav-and-tabs.test.ts. */
 export const MARKETING_NAV = [
   // `label` stays as the English source of truth (it is what the catalogue key
   // resolves to, and what non-UI callers read); `labelKey` is what the header
   // renders through t(). Keeping both means a caller that is not translating
   // still gets a real string rather than a raw key.
-  { href: '/features', label: 'Features', labelKey: 'marketing.nav.features' },
+  { href: '/features', label: 'What Bubaly handles', labelKey: 'marketing.nav.whatBubalyHandles' },
   { href: '/how-it-works', label: 'How It Works', labelKey: 'marketing.nav.howItWorks' },
-  { href: '/ai', label: 'AI Assistant', labelKey: 'marketing.nav.aiAssistant' },
   { href: '/pricing', label: 'Pricing', labelKey: 'marketing.nav.pricing' },
   { href: '/faq', label: 'FAQ', labelKey: 'marketing.nav.faq' },
-  { href: '/security', label: 'Security', labelKey: 'marketing.nav.security' },
+  { href: '/security', label: 'Trust Center', labelKey: 'marketing.nav.trustCenter' },
   { href: '/blog', label: 'Blog', labelKey: 'marketing.nav.blog' },
 ] as const;
 

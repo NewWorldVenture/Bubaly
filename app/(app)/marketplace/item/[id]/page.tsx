@@ -6,6 +6,7 @@ import {
   ShoppingBag, Repeat, HandHeart, Store as StoreIcon, AlertTriangle,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { SaveButton } from '@/components/marketplace/save-button';
@@ -78,12 +79,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const sellerName = members?.find((m) => m.id === listing.member_id)?.display_name ?? 'A neighbor';
 
   const [sellerReviewsRes, listingReviewsRes, saveRes, offerRes, sellerListingsRes, sellerOrdersRes, storeRes] = await Promise.all([
-    sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', sellerId),
-    sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('listing_id', id).order('created_at', { ascending: false }).limit(10),
-    sb.from('marketplace_saves').select('id').eq('listing_id', id).eq('member_id', selfId).maybeSingle(),
-    sb.from('marketplace_offers').select('id, member_id, kind, amount_cents, message, created_at').eq('listing_id', id).eq('status', 'open').order('created_at', { ascending: true }),
-    sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId),
-    sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed'),
+    settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', sellerId)),
+    settle(sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('listing_id', id).order('created_at', { ascending: false }).limit(10)),
+    settle(sb.from('marketplace_saves').select('id').eq('listing_id', id).eq('member_id', selfId).maybeSingle()),
+    settle(sb.from('marketplace_offers').select('id, member_id, kind, amount_cents, message, created_at').eq('listing_id', id).eq('status', 'open').order('created_at', { ascending: true })),
+    settle(sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId)),
+    settle(sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed')),
     listing.member_id
       ? sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', listing.member_id).eq('is_active', true).maybeSingle()
       : Promise.resolve({ data: null, error: null }),

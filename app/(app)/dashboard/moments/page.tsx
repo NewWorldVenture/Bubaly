@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { MomentsView } from '@/components/moments/moments-view';
 import { MomentOrganizer, type OrganizerMoment } from '@/components/moments/moment-organizer';
 import { activeMoments, type MomentSignals } from '@/lib/moments/organizer';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import type { MomentDeparture } from '@/lib/moments/prep';
+import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -14,20 +17,36 @@ const DAY = 86_400_000;
 export default async function Page() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  // M8 — the composed leave-by per upcoming event: the REAL drive time when
+  // the family saved a departure plan for it (Trip Intelligence), which beats
+  // the per-category buffer the prep card would otherwise assume. Only the
+  // real ones are handed down; a buffer leave-by is what the card computes
+  // itself. The loader is fail-closed: a failed read is logged there and the
+  // view shows a retryable note rather than pretending nothing was saved.
+  const schedule = await loadScheduleIntelligence(supabase, {
+    familyId, tz: ctx.active.family.timezone || 'UTC', now: new Date(), fromMs: Date.now(), horizonDays: 30, eventLimit: 24,
+  });
+  const departures: Record<string, MomentDeparture> = {};
+  if (schedule.ok) {
+    for (const [eventId, d] of Object.entries(schedule.data.departures)) {
+      if (d.source === 'drive_time') departures[eventId] = { leaveByISO: d.leaveByISO, travelMinutes: d.travelMinutes };
+    }
+  }
 
   // R12: compute the life moments the family is in right now, so the page opens by
   // MOMENT (organizing layer) before the event-prep list below. Best-effort — any
   // hiccup (or a not-yet-migrated table) just hides the band.
   let organizerMoments: OrganizerMoment[] = [];
   try {
-    const supabase = await createServer();
     const now = new Date();
     const todayIso = now.toISOString().slice(0, 10);
     const in21 = new Date(now.getTime() + 21 * DAY).toISOString();
     const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);
 
-    const [members, trips, holidays, homework, dismissedRows] = await Promise.all([
+    const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),
       supabase.from('vacations').select('title, start_date').eq('family_id', familyId).not('start_date', 'is', null).gte('start_date', todayIso).order('start_date').limit(1),
       supabase.from('calendar_events').select('title, starts_at').eq('family_id', familyId).eq('category', 'holiday').gte('starts_at', now.toISOString()).lte('starts_at', in21).order('starts_at').limit(1),
@@ -73,7 +92,7 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       {organizerMoments.length > 0 && <MomentOrganizer moments={organizerMoments} />}
-      <MomentsView />
+      <MomentsView departures={departures} departuresFailed={!schedule.ok} />
     </div>
   );
 }

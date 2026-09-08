@@ -2,6 +2,7 @@
 // Gathers the real Supabase counts that power the Operations, Stress and
 // Autonomous Management surfaces. One round of queries, shared by all three.
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
 
@@ -60,7 +61,7 @@ export async function gatherSignalsResult(familyId: string): Promise<FamilySigna
     routines,
     meals,
     grocery,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('calendar_events').select('starts_at')
       .eq('family_id', familyId).gte('starts_at', iso(start)).lte('starts_at', iso(in7)),
     supabase.from('appointments').select('id, starts_at')

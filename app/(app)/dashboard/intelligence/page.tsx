@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { IntelligenceModule } from '@/components/modules/intelligence-module';
 import { computeContribution, contributionFeatures, type ContributionInput } from '@/lib/network/contribution';
@@ -25,8 +26,8 @@ export default async function IntelligencePage() {
   // The family's OWN data → the coarse buckets they'd contribute (shown only to
   // them; nothing shared or stored). Best-effort: a missing table yields 0/empty.
   const [members, mealPlans, teams, classes] = await Promise.all([
-    supabase.from('family_members').select('birthday').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
+    settle(supabase.from('family_members').select('birthday').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey)),
     cnt(supabase.from('teams').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true)),
     cnt(supabase.from('school_classes').select('id', { count: 'exact', head: true }).eq('family_id', familyId)),
   ]);

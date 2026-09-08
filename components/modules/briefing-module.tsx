@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { ErrorState } from '@/components/ui/states';
@@ -8,14 +9,19 @@ import {
   Sun, Moon, CalendarDays, RefreshCw, Sparkles, AlertTriangle,
   CheckCircle2, Clock, X, Loader2, TrendingUp,
   ChevronRight, Star, Tv2, LayoutGrid,
+  Bell, Lightbulb, MessageCircleQuestion, ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ApprovalCard } from '@/components/approvals/approval-card';
+import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
+import { RecommendationActions } from '@/components/family/record-actions';
 import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
 import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
+import type { BriefDecisions } from '@/lib/briefing/response-schema';
 import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
-  type BriefingData,
+  type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -153,6 +159,171 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
             <li className="text-xs text-muted text-center pt-1">+{items.length - 8} {tr('briefing.moreAcrossBillsHomeHealthAmp')}</li>
           )}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Decisions ────────────────────────────────────────────────────────────────
+//
+// What is waiting on a person, rendered FIRST — before the digest, the score
+// and the schedule — because a pending approval is the one line in the brief
+// that unblocks work. Every item is a row read from the tables
+// (`lib/briefing/decisions.ts`), never the model's word, and the decision is
+// made right here where it can be: an AI approval is the shared ApprovalCard
+// (Approve / Edit / Decline resumes the run), a money approval gets the
+// wallet's one-tap buttons, a recommendation gets Accept / Dismiss, and a run
+// waiting on an answer links to its question. Same components, same rows,
+// same ranking as Home's "Needs you" list, so the two never disagree.
+
+type DecisionMeta = {
+  icon: React.ComponentType<{ className?: string }>;
+  iconBg: string;
+  cta: string;
+  ctaKey: string;
+  subtitle: string;
+  subtitleKey: string;
+};
+
+const DECISION_META: Record<string, DecisionMeta> = {
+  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'A family member is waiting on your approval.', subtitleKey: 'briefing.decisionSubtitleMoney' },
+  run_awaiting_approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'Bubaly is ready and waiting for the go-ahead.', subtitleKey: 'briefing.decisionSubtitleOk' },
+  run_awaiting_answer: { icon: MessageCircleQuestion, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Answer', ctaKey: 'briefing.decisionCtaAnswer', subtitle: 'One quick answer and Bubaly can finish this.', subtitleKey: 'briefing.decisionSubtitleAnswer' },
+  recommendation: { icon: Lightbulb, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: 'Bubaly suggests this; accept it and it gets done.', subtitleKey: 'briefing.decisionSubtitleRecommendation' },
+};
+const DEFAULT_DECISION_META: DecisionMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: '', subtitleKey: '' };
+
+/** Cards shown in the brief; the rest are one tap away on Home, which lists them all. */
+const DECISIONS_SHOWN = 6;
+const DECISION_ID_PREFIX = /^[a-z_]+:/;
+
+function DecisionsSection({ decisions }: { decisions: BriefDecisions }) {
+  const tr = useTranslations();
+  const { items, approvals, moneyApprovalKinds, canDecide } = decisions;
+  const shown = items.slice(0, DECISIONS_SHOWN);
+  const more = items.length - shown.length;
+  const heading = items.length === 1
+    ? tr('briefing.oneDecisionNeedsYou')
+    : tr('briefing.decisionsNeedYou', { count: items.length });
+
+  return (
+    <section aria-labelledby="brief-decisions-heading" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <ShieldCheck className="h-4 w-4 text-amber-400" aria-hidden />
+        <h2 id="brief-decisions-heading" className="text-sm font-semibold text-fg uppercase tracking-wider">{heading}</h2>
+      </div>
+      <p className="text-sm text-muted mb-4">{tr('briefing.decisionsIntro')}</p>
+      <ul className="space-y-2.5">
+        {shown.map((item) => {
+          const rawId = item.id.replace(DECISION_ID_PREFIX, '');
+          const meta = DECISION_META[item.kind] ?? DEFAULT_DECISION_META;
+          const Icon = meta.icon;
+
+          if (item.kind === 'ai_approval') {
+            const card = approvals[rawId];
+            if (card) return <li key={item.id}><ApprovalCard approval={card} canDecide={canDecide} compact /></li>;
+          }
+
+          const cardClass = 'flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4 transition';
+          const subtitle = meta.subtitleKey ? tr(meta.subtitleKey) : '';
+          const body = (
+            <>
+              <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', meta.iconBg)}>
+                <Icon className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-fg">{item.title}</p>
+                {subtitle && <p className="mt-0.5 truncate text-xs text-muted">{subtitle}</p>}
+              </div>
+            </>
+          );
+
+          // Buttons cannot nest inside a link, so rows with one-tap actions
+          // are a list item whose title links out.
+          const moneyKind = item.kind === 'approval' ? moneyApprovalKinds[rawId] : undefined;
+          if (moneyKind !== undefined && canDecide) {
+            return (
+              <li key={item.id} className={cardClass}>
+                <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90 focus-ring">{body}</Link>
+                <HomeApprovalActions approvalId={rawId} kind={moneyKind} />
+              </li>
+            );
+          }
+          if (item.kind === 'recommendation' && canDecide) {
+            return (
+              <li key={item.id} className={cn(cardClass, 'flex-col items-stretch gap-3 sm:flex-row sm:items-center')}>
+                <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90 focus-ring">{body}</Link>
+                <div className="flex justify-end"><RecommendationActions id={rawId} /></div>
+              </li>
+            );
+          }
+          return (
+            <li key={item.id}>
+              <Link href={item.href} className={cn(cardClass, 'min-h-[44px] hover:bg-elevated focus-ring')}>
+                {body}
+                <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-text">
+                  {tr(meta.ctaKey)} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {more > 0 && (
+        <Link href="/home" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-text focus-ring">
+          {tr('briefing.moreDecisionsOnHome', { count: more })} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      )}
+    </section>
+  );
+}
+
+type AlsoTodayRow = NonNullable<BriefingResponse['alsoToday']>[number];
+
+/**
+ * "Also today" — the notifications that did not earn an interruption.
+ *
+ * These rows were classified 'digest' by lib/notifications/priority.ts, folded
+ * in by `buildBrief` and marked read by the route that rendered them, so each
+ * one is said exactly once: here, with a link to the thing it is about, instead
+ * of once in the bell and again in the list.
+ *
+ * `unavailable` is the read-boundary case. If the notification queue could not
+ * be read, this says so and stays retryable — it must never render as an empty
+ * "nothing else today", which is a claim the failed read cannot support.
+ */
+function AlsoToday({ items, unavailable }: { items: AlsoTodayRow[]; unavailable: boolean }) {
+  const tr = useTranslations();
+  return (
+    <div className="rounded-2xl border border-border bg-surface/30 p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted" />
+        <span className="text-sm font-semibold uppercase tracking-wider text-fg">{tr('briefing.alsoToday')}</span>
+      </div>
+      {unavailable ? (
+        <p className="flex items-center gap-2 py-1 text-sm text-amber-300">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {tr('briefing.alsoTodayUnavailable')}
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <li key={item.id}>
+                <a
+                  href={item.href}
+                  className="flex min-h-11 items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 transition-colors hover:bg-surface/70"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-fg">{item.title}</span>
+                    {item.detail && <span className="block truncate text-xs text-muted">{item.detail}</span>}
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted" aria-hidden="true" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">{tr('briefing.alsoTodayHint')}</p>
+        </>
       )}
     </div>
   );
@@ -642,6 +813,9 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const currentBriefing = active?.data?.briefing ?? null;
   const generatedAt = active?.data?.generatedAt;
   const digest = active?.data?.digest;
+  const decisions = active?.data?.decisions;
+  const alsoToday = active?.data?.alsoToday ?? [];
+  const alsoTodayUnavailable = active?.data?.alsoTodayUnavailable ?? false;
   const generate = session.generate;
   const today = now.toISOString().slice(0, 10);
 
@@ -768,6 +942,11 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
             </div>
           </div>
 
+          {/* What needs a decision comes first: it is the part of the brief
+              that unblocks work, and it is read from the approval and run
+              rows — the route sends it only when there is something. */}
+          {decisions && decisions.items.length > 0 && <div className="mb-6"><DecisionsSection decisions={decisions} /></div>}
+
           {/* Cross-domain concierge: "What does my family need to do today?" */}
           {digest && <div className="mb-6"><NeedsAttention digest={digest} /></div>}
 
@@ -780,6 +959,13 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
           {tab === 'morning' && <MorningContent data={currentBriefing} relationships={relationships} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}
           {tab === 'weekly'  && <WeeklyContent  data={currentBriefing} />}
+
+          {/* Last, and deliberately: the quiet notifications are the part you
+              are allowed to skim past. The weekly tab does not fold them — its
+              window is a different one. */}
+          {tab !== 'weekly' && (alsoToday.length > 0 || alsoTodayUnavailable) && (
+            <div className="mt-6"><AlsoToday items={alsoToday} unavailable={alsoTodayUnavailable} /></div>
+          )}
         </div>
       )}
     </div>

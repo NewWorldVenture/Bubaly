@@ -41,25 +41,24 @@ jobs:
       - name: Marketing asset audit
         run: npm run marketing:audit:assets
 
-      - name: Typecheck
-        run: npm run typecheck
-        env:
-          # The standalone check needs the same schema/type heap as next build.
-          NODE_OPTIONS: --max-old-space-size=4096
-
       - name: Lint
         run: npm run lint
 
       - name: Unit tests
         run: npm test
 
+      # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
+      # type-check and lint passes inside `next build` — they were a duplicate
+      # of the two steps here, and the one worker that ran them peaked at
+      # 4,471 MB against the 4,096 MB cap below, which is where a Vercel
+      # deployment died. Building first still generates .next/types/**, which
+      # tsconfig.json includes, so the Typecheck step that follows validates
+      # every route signature as well as the app — the same coverage the build
+      # used to give, in its own process instead of alongside webpack's.
       - name: Build
         run: npm run build
         env:
-          # `next build` type-checks every route plus the generated .next/types
-          # in one worker; the 435-table types file pushes that past Node's
-          # default ~2 GB heap on the runner (OOM at "checking validity of
-          # types"). 4 GB fits the 7 GB runner with room for webpack.
+          # Webpack alone; the type-check moved to its own step below.
           NODE_OPTIONS: --max-old-space-size=4096
           # Dummy values so static generation doesn't crash on missing config.
           # Real data is fetched at runtime; build-time fetches fail closed
@@ -68,6 +67,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
           SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
           NEXT_PUBLIC_APP_URL: https://example.com
+
+      - name: Typecheck
+        run: npm run typecheck
+        env:
+          # Checks app + tests + the .next/types route types the Build step
+          # just generated; needs the same schema/type heap as before.
+          NODE_OPTIONS: --max-old-space-size=4096
 
   mobile:
     # The Expo app (mobile/) is its own npm project sharing design/tokens.json

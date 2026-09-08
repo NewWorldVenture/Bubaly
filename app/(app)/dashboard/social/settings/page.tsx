@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getSocialAccess } from '@/lib/social/access';
 import { updateSettingsAction, grantAccessAction } from '@/app/(app)/dashboard/social/actions';
@@ -21,9 +22,9 @@ export default async function SocialSettingsPage() {
   const supabase = await createServer();
 
   const [settingsRes, membersRes, permsRes, access] = await Promise.all([
-    supabase.from('social_settings').select('*').eq('family_id', familyId).maybeSingle(),
-    supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('social_access_permissions').select('user_id, social_role').eq('family_id', familyId),
+    settle(supabase.from('social_settings').select('*').eq('family_id', familyId).maybeSingle()),
+    settle(supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true)),
+    settle(supabase.from('social_access_permissions').select('user_id, social_role').eq('family_id', familyId)),
     getSocialAccess(familyId),
   ]);
 

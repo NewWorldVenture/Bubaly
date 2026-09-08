@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
-import { ErrorState } from '@/components/ui/states';
+
 import { ActivityFeed } from './activity-feed';
 
 export const metadata: Metadata = { title: 'Activity' };
@@ -15,7 +17,7 @@ export default async function ActivityPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [membersResult, announcementsResult, eventsResult, choresResult, photosResult, notesResult, groceryResult] = await Promise.all([
+  const [membersResult, announcementsResult, eventsResult, choresResult, photosResult, notesResult, groceryResult] = await settleAll([
     supabase.from('family_members').select('id, user_id, display_name, color').eq('family_id', familyId),
     supabase.from('family_announcements').select('id, title, created_at, author_member_id').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
     supabase.from('calendar_events').select('id, title, created_at, assignee_id').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
@@ -25,18 +27,24 @@ export default async function ActivityPage() {
     supabase.from('grocery_items').select('id, name, created_at, created_by').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
   ]);
 
-  const readError = [
-    membersResult.error,
-    announcementsResult.error,
-    eventsResult.error,
-    choresResult.error,
-    photosResult.error,
-    notesResult.error,
-    groceryResult.error,
-  ].find(Boolean);
+  const readFailures = ([
+    ['members', membersResult],
+    ['announcements', announcementsResult],
+    ['events', eventsResult],
+    ['chores', choresResult],
+    ['photos', photosResult],
+    ['notes', notesResult],
+    ['grocery', groceryResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[dashboard/activity] activity feed read failed', readError);
-    return <ErrorState message={t('activity.couldNotLoadFamilyActivity')} />;
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[dashboard/activity] activity feed read failed', readError);
   }
 
   const { data: members } = membersResult;
@@ -57,9 +65,11 @@ export default async function ActivityPage() {
   const choreResult = choreIds.length
     ? await supabase.from('chores').select('id, title').in('id', choreIds)
     : { data: [] as { id: string; title: string }[], error: null };
+  // Titles for chore rows, not the feed itself. Without them choreTitle is
+  // empty and the rows render from what the feed already carries — losing a
+  // label is not losing the page.
   if (choreResult.error) {
-    console.error('[dashboard/activity] chore title read failed', choreResult.error);
-    return <ErrorState message={t('activity.couldNotLoadFamilyActivity')} />;
+    console.warn('[dashboard/activity] chore title read failed — rows lose their titles', choreResult.error);
   }
   const { data: choreRows } = choreResult;
   const choreTitle = new Map((choreRows ?? []).map((c) => [c.id, c.title]));
@@ -76,11 +86,14 @@ export default async function ActivityPage() {
   const feed = mergeActivity(sources, 60);
 
   return (
-    <ActivityFeed
-      feed={feed}
-      memberById={new Map(Object.entries(memberById))}
-      memberByUser={new Map(Object.entries(memberByUser))}
-      members={memberList}
-    />
+    <div className="space-y-5">
+      <PartialReadBanner title={"Some activity could not be loaded:"} failures={readFailures} />
+      <ActivityFeed
+        feed={feed}
+        memberById={new Map(Object.entries(memberById))}
+        memberByUser={new Map(Object.entries(memberByUser))}
+        members={memberList}
+      />
+    </div>
   );
 }

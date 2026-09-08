@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LayoutDashboard, ArrowRight, Plus } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
@@ -65,7 +66,7 @@ export default async function SellingPage() {
   };
 
   const signalResults = ids.length
-    ? await Promise.all([
+    ? await settleAll([
         sb.from('marketplace_saves').select('listing_id').in('listing_id', ids),
         sb.from('marketplace_offers').select('listing_id').eq('status', 'open').in('listing_id', ids),
         sb.from('marketplace_negotiations').select('listing_id, last_actor').eq('status', 'open').in('listing_id', ids),

@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -229,7 +230,7 @@ export async function creditChildWallet(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0', credited: 0 };
 
-  const [{ data: rule, error: ruleError }, { data: buckets, error: bucketsError }] = await Promise.all([
+  const [{ data: rule, error: ruleError }, { data: buckets, error: bucketsError }] = await settleAll([
     supabase.from('wallet_rules').select('split').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId),
   ]);

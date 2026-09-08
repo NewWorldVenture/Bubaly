@@ -73,8 +73,12 @@ describe('PlanSchema is strict-mode compatible', () => {
     expect(step.step_type.enum).toEqual([...PLAN_STEP_TYPES]);
   });
 
-  it('does not offer the model a replan step', () => {
-    expect(PLAN_STEP_TYPES).not.toContain('replan');
+  it('offers the model a replan step, now that the executor port is wired, and tells it the rules', () => {
+    // `replanRun` reaches the executor through `replanPortFor` (continue.ts and
+    // the cron), so a model-emitted replan step runs instead of blocking.
+    expect(PLAN_STEP_TYPES).toContain('replan');
+    const step = ((schema.properties as Record<string, JsonObject>).steps.items as JsonObject).properties as Record<string, JsonObject>;
+    expect(String(step.step_type.description)).toMatch(/replan = .*at most one.*nothing may depend on it/);
   });
 });
 

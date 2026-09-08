@@ -29,6 +29,7 @@ const AUTOPILOT_KIND_LABEL: Record<string, string> = {
   chore: 'chores', birthday: 'birthdays', reminder: 'reminders',
   wellbeing: 'wellbeing signals', finance: 'finances', subscription: 'subscriptions',
   medication: 'medications', meal: 'meal plans', insurance: 'insurance',
+  policy: 'approval history',
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -36,7 +37,13 @@ const SOURCE_LABEL: Record<string, string> = {
   chore_assignments: 'chores', family_members: 'family profiles', family_reminders: 'reminders',
   subscriptions: 'subscriptions', medications: 'medications', meal_plans: 'meal history',
   behavior_logs: 'wellbeing signals', insurance_policies: 'insurance',
+  approval_requests: 'approval history',
 };
+
+/** What accepting a learned-policy suggestion does — and, as importantly, what it does not. */
+const POLICY_SUGGESTION_TIP =
+  'Accepting writes one narrow policy: Bubaly may run this one tool in this one area without asking. '
+  + 'Nothing runs until you accept, and you can switch the policy off any time in Trust → Policies.';
 
 const INSIGHT_KIND_LABEL: Record<string, string> = {
   departure: 'Leave-earlier nudge', conflict: 'Schedule clash', homework: 'Homework due',
@@ -92,7 +99,102 @@ export function explainAutopilot(s: AutopilotLike): Explanation {
     reason: s.detail?.trim() || `Bubaly noticed this in your ${kindLabel}.`,
     factors,
     confidence: s.confidence,
-    tip: conf.tip,
+    // A policy suggestion is never auto-handled, however sure Bubaly is: the
+    // confidence tip would promise an action the scan is built never to take.
+    tip: s.kind === 'policy' ? POLICY_SUGGESTION_TIP : conf.tip,
+  };
+}
+
+// ── trust decisions ──────────────────────────────────────────────────────────
+
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** '12 August 2026' — UTC, so an audit line reads the same on every device. */
+function longDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getUTCDate()} ${MONTHS_LONG[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+function tagsOf(conditions: unknown): string[] {
+  if (!conditions || typeof conditions !== 'object' || Array.isArray(conditions)) return [];
+  const tags = (conditions as { tags?: unknown }).tags;
+  return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [];
+}
+
+export type TrustPolicyLike = {
+  name: string;
+  /** When the policy row was written — for an accepted suggestion, the day the family said yes. */
+  created_at?: string | null;
+  conditions?: unknown;
+  effect?: string | null;
+};
+
+export type TrustDecisionLike = {
+  /** allow | deny | require_approval | approved | rejected | emergency_override | … */
+  decision: string;
+  reason?: string | null;
+  domain?: string | null;
+  capability?: string | null;
+  confidence?: number | null;
+  /** The policy the decision cites, when the audit row names one and it still exists. */
+  policy?: TrustPolicyLike | null;
+};
+
+/** True for a policy Autopilot proposed and a manager accepted, as opposed to one typed into the Trust form. */
+export function isAcceptedPolicy(conditions: unknown): boolean {
+  if (!conditions || typeof conditions !== 'object' || Array.isArray(conditions)) return false;
+  return (conditions as { source?: unknown }).source === 'autopilot';
+}
+
+/**
+ * Explain a trust decision the audit trail recorded. When the decision came
+ * from a policy the family accepted out of an Autopilot suggestion, the
+ * explanation says so and names the day — "allowed by a policy you accepted
+ * on 12 August 2026" — because that is the answer to "why did Bubaly not ask?".
+ */
+export function explainTrustDecision(d: TrustDecisionLike): Explanation {
+  const policy = d.policy ?? null;
+  const accepted = policy ? isAcceptedPolicy(policy.conditions) : false;
+  const tools = policy ? tagsOf(policy.conditions).filter((t) => !t.includes(':')) : [];
+  const allowed = d.decision === 'allow' || d.decision === 'auto_approve';
+  const denied = d.decision === 'deny';
+
+  let reason: string;
+  if (policy && accepted && policy.created_at) {
+    reason = allowed
+      ? `Allowed by a policy you accepted on ${longDate(policy.created_at)}.`
+      : denied
+        ? `Blocked by a policy you accepted on ${longDate(policy.created_at)}.`
+        : `Decided by a policy you accepted on ${longDate(policy.created_at)}.`;
+  } else if (policy) {
+    reason = allowed
+      ? `Allowed by the household policy “${policy.name}”.`
+      : denied
+        ? `Blocked by the household policy “${policy.name}”.`
+        : `Decided by the household policy “${policy.name}”.`;
+  } else {
+    reason = d.reason?.trim() || `${titleCase(d.decision)}${d.domain ? ` for ${titleCase(d.domain)}` : ''}.`;
+  }
+
+  const factors: ExplanationFactor[] = [{ label: 'Decision', value: titleCase(d.decision) }];
+  if (d.domain) factors.push({ label: 'Area', value: titleCase(d.domain), detail: d.capability ? titleCase(d.capability) : undefined });
+  if (policy) {
+    factors.push({
+      label: 'Policy',
+      value: policy.name,
+      detail: tools.length ? `only ${tools.join(', ')}` : accepted ? 'accepted from an Autopilot suggestion' : undefined,
+    });
+  }
+  if (typeof d.confidence === 'number') factors.push({ label: 'Confidence', value: `${Math.round(d.confidence * 100)}%` });
+
+  return {
+    reason,
+    factors,
+    confidence: typeof d.confidence === 'number' ? Math.round(d.confidence * 100) : undefined,
+    tip: policy
+      ? 'Switch the policy off in Trust → Policies and Bubaly asks again.'
+      : undefined,
   };
 }
 

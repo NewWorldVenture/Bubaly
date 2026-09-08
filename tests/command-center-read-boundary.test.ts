@@ -1,17 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { expectSays } from './helpers/translated';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/command-center/page.tsx', 'utf8');
 
+// This asserted that a failed read returns an error page. The property behind
+// that — a missing read must never pass silently as real data — is kept; the
+// response is what changed.
+//
+// Bailing satisfied the property by showing nothing, and cost the whole page
+// whenever one table was unavailable. On production that is routine rather than
+// exceptional: the migration ledger stops at 0001-0003, so later tables can be
+// absent outright. The page now renders and names the failed reads above the
+// content, which is both more useful and equally honest — provided the banner
+// is really there, which is what these assertions pin down.
 describe('command center read boundary', () => {
-  it('fails visibly when family or operating-index reads fail', () => {
-    expect(page).toContain('const readError = [');
-    expect(page).toContain('expiringDocsResult.error');
-    expect(page).toContain('try {');
-    expect(page).toContain('loadOperatingIndex(supabase, familyId, now)');
-    expectSays(page, 'commandCenter.couldNotLoadYourFamily', 'Could not load your family command center from Supabase. Refresh and try again.');
-    expect(page).toContain("return <ErrorState message={");
-    expectSays(page, 'commandCenter.couldNotLoadYourFamily', "Could not load your family command center from Supabase. Refresh and try again.");
+  it('still inspects every read', () => {
+    expect(page).toContain('eventsResult');
+    expect(page).toContain('expiringDocsResult');
+    expect(page).toContain('mealPlansResult');
+    expect(page).toContain('membersResult');
+    expect(page).toContain('openChoresResult');
+  });
+
+  it('collects the failures rather than discarding them', () => {
+    expect(page).toContain('readFailures');
+    expect(page).toMatch(/\.filter\(\(\[, res\]\) => res\.error\)/);
+  });
+
+  it('names them on screen instead of blanking the page', () => {
+    expect(page).toContain('PartialReadBanner');
+    expect(page).toContain('failures={readFailures}');
+    expect(page).toContain('Some data could not be loaded:');
+    expect(page).not.toContain('return <ErrorState');
   });
 });

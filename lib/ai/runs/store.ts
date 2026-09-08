@@ -25,6 +25,7 @@ import type {
   AiRequestKind, AiRiskLevel, AiRunEventType, AiRunType, AiStepType, Database, Json, Tables,
 } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { remapBindings } from './bindings';
@@ -225,10 +226,12 @@ export type PlanStepInput = {
   approvalRequired?: boolean;
   riskLevel?: AiRiskLevel;
   maxRetries?: number;
-  /** Carried over by `editStepInput` so already-finished work is not repeated. */
+  /** Carried over by `editStepInput` and `replanRun` so already-finished work is not repeated. */
   status?: StepState;
   resultJson?: unknown;
   approvalId?: string | null;
+  /** Carried over by `replanRun` with a failed step, so the new version keeps what went wrong. */
+  error?: string | null;
 };
 
 export type PlanInput = {
@@ -355,6 +358,7 @@ export async function savePlan(
     risk_level: step.riskLevel ?? 'low',
     max_retries: step.maxRetries ?? 2,
     result_json: (step.resultJson ?? null) as Json | null,
+    error: step.error ?? null,
   }));
 
   const { error: stepsError } = await db.from('ai_plan_steps').insert(rows);
@@ -739,6 +743,60 @@ export type RunDetail = {
   events: RunEventRow[];
 };
 
+export type ListRunsOptions = {
+  /** Only these §10 states; omit or null for every state. */
+  states?: readonly RunState[] | null;
+  /**
+   * Only these legacy `status` values (0022's vocabulary). Pre-0250 rows carry
+   * the `state` default beside a meaningful `status`, so a caller that filters
+   * on what `displayRunState` shows has to reach that column too.
+   */
+  statuses?: readonly string[] | null;
+  /** The mirror of `statuses`: legacy `status` values to leave out. */
+  excludeStatuses?: readonly string[] | null;
+  /** Paging cursor: rows created strictly before this ISO instant. */
+  before?: string | null;
+  limit?: number;
+};
+
+const LIST_RUNS_MAX = 200;
+
+/**
+ * A family's runs, newest first — the one chronological history (M35).
+ *
+ * Uses the CALLER's client like `loadRunDetail`, so a member sees exactly what
+ * RLS lets them see, and still filters `family_id` explicitly so the same
+ * function is right under the service client. Fails closed and never throws:
+ * a list that came back empty because the read failed would look like a
+ * family Bubaly has never worked for.
+ */
+export async function listRuns(
+  scope: ServiceScope,
+  options: ListRunsOptions = {},
+  opts?: { db?: SupabaseClient<Database> },
+): Promise<ServiceResult<RunRow[]>> {
+  const db = opts?.db ?? scope.db;
+  const limit = Math.max(1, Math.min(options.limit ?? 50, LIST_RUNS_MAX));
+  try {
+    let query = db.from('family_automation_runs').select('*').eq('family_id', scope.familyId);
+    if (options.states && options.states.length) query = query.in('state', [...options.states]);
+    if (options.statuses && options.statuses.length) query = query.in('status', [...options.statuses]);
+    if (options.excludeStatuses && options.excludeStatuses.length) {
+      query = query.not('status', 'in', `(${options.excludeStatuses.join(',')})`);
+    }
+    if (options.before) query = query.lt('created_at', options.before);
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+    if (error) {
+      console.error('[ai/runs] failed to list the runs', error);
+      return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    return ok((data ?? []) as RunRow[]);
+  } catch (error) {
+    console.error('[ai/runs] failed to list the runs', error);
+    return fail(describeDbError(error, 'Bubaly could not read your run history.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+}
+
 /**
  * The run detail read (§17). Uses the CALLER's client on purpose: a member
  * opening a run page should see exactly what RLS lets them see, and a run from
@@ -769,8 +827,8 @@ export async function loadRunDetail(
     run.plan_id
       ? db.from('ai_plan_steps').select('*').eq('plan_id', run.plan_id).eq('family_id', scope.familyId).order('sequence', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    db.from('ai_run_events').select('*').eq('run_id', runId).eq('family_id', scope.familyId)
-      .order('created_at', { ascending: true }).limit(opts?.eventLimit ?? 200),
+    settle(db.from('ai_run_events').select('*').eq('run_id', runId).eq('family_id', scope.familyId)
+      .order('created_at', { ascending: true }).limit(opts?.eventLimit ?? 200)),
   ]);
 
   // A run header without its steps would render as an empty, finished-looking
@@ -787,6 +845,52 @@ export async function loadRunDetail(
     steps: (steps ?? []) as StepRow[],
     events: (events ?? []) as RunEventRow[],
   });
+}
+
+// ─── Tool-call ledger ───────────────────────────────────────────────────────
+
+/**
+ * One line of the tool-call ledger, as the Trust Center shows it.
+ *
+ * `inputs` and `outputs` are deliberately NOT selected. They hold the arguments
+ * a tool was called with and what it returned — an event's guest list, a
+ * document title, a budget line — and the Trust Center's job is to say WHAT
+ * Bubaly did and WHERE to read the whole run, not to re-publish the payload on
+ * a page a whole family can open. The run page (`loadRunDetail`) is the one
+ * place that shows a step's detail, behind the same RLS.
+ */
+export type ToolCallLedgerRow = Pick<
+  Tables<'ai_tool_calls'>,
+  'id' | 'tool_name' | 'state' | 'actor_kind' | 'run_id' | 'request_id' | 'duration_ms' | 'error' | 'created_at' | 'finished_at'
+>;
+
+/**
+ * The family's most recent tool calls, newest first.
+ *
+ * Uses the CALLER's client on purpose (like `loadRunDetail`): a member sees
+ * exactly what 0250's `ai_tool_calls` SELECT policy lets them see, and a row
+ * from another family cannot appear even though `family_id` is also filtered
+ * here. A read error is returned, never swallowed — an empty ledger and a
+ * broken ledger must not look the same on a page whose whole claim is "here is
+ * what Bubaly actually did".
+ */
+export async function loadRecentToolCalls(
+  scope: ServiceScope,
+  opts?: { db?: SupabaseClient<Database>; limit?: number },
+): Promise<ServiceResult<ToolCallLedgerRow[]>> {
+  const db = opts?.db ?? scope.db;
+  const limit = Math.min(Math.max(opts?.limit ?? 25, 1), 100);
+  const { data, error } = await db
+    .from('ai_tool_calls')
+    .select('id, tool_name, state, actor_kind, run_id, request_id, duration_ms, error, created_at, finished_at')
+    .eq('family_id', scope.familyId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error('[ai/runs] tool-call ledger read failed', error);
+    return fail(describeDbError(error, 'Bubaly could not read what it has done.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []) as ToolCallLedgerRow[]);
 }
 
 // ─── Actor re-check ─────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@
 // Nothing here can bypass aggregate.ts's guarantees.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { contributionFeatures, type ContributionInput } from './contribution';
 import {
@@ -43,7 +44,7 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   if (familyIds.length === 0) return new Map();
   const todayKey = now.toISOString().slice(0, 10);
   const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
-  const [members, dinners, teams, classes] = await Promise.all([
+  const [members, dinners, teams, classes] = await settleAll([
     sb.from('family_members').select('family_id, birthday').in('family_id', familyIds).eq('is_active', true),
     sb.from('meal_plans').select('family_id, plan_date').in('family_id', familyIds).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
     sb.from('teams').select('family_id').in('family_id', familyIds).eq('is_active', true),

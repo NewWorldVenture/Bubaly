@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { pantrySummary, expiringSoon } from '@/lib/pantry/logic';
@@ -31,7 +32,7 @@ export default async function KitchenPage() {
   const weekStart = mondayOf(now);
   const weekEnd = new Date(new Date(weekStart).getTime() + 6 * 86400000).toISOString().slice(0, 10);
 
-  const [planRes, pantryRes, leftoverRes, recipesRes, groceryRes, nutritionRes] = await Promise.all([
+  const [planRes, pantryRes, leftoverRes, recipesRes, groceryRes, nutritionRes] = await settleAll([
     supabase.from('meal_plans')
       .select('plan_date, meal_type, meals(name)')
       .eq('family_id', familyId).gte('plan_date', weekStart).lte('plan_date', weekEnd).order('plan_date'),

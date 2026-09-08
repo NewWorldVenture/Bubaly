@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
@@ -119,7 +120,7 @@ export async function issueCardAction(input: {
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
   if (input.type === 'physical' && !caps.physicalCards) return { ok: false, error: t('actions.physicalCardsAreNotAvailable') };
 
-  const [{ data: acct, error: acctError }, { data: wallet, error: walletError }] = await Promise.all([
+  const [{ data: acct, error: acctError }, { data: wallet, error: walletError }] = await settleAll([
     svc.from('stripe_connected_accounts').select('stripe_account_id, card_issuing_enabled').eq('family_id', ctx.active.familyId).maybeSingle(),
     svc.from('child_wallets').select('id, member_id').eq('family_id', ctx.active.familyId).eq('id', input.childWalletId).maybeSingle(),
   ]);
@@ -254,7 +255,7 @@ export async function createCardRevealAction(input: {
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
   if (!input.nonce?.trim()) return { ok: false, error: t('actions.missingRevealSession') };
 
-  const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await Promise.all([
+  const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await settleAll([
     svc.from('stripe_issuing_cards').select('id, stripe_card_id')
       .eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle(),
     svc.from('stripe_connected_accounts').select('stripe_account_id')
@@ -306,7 +307,7 @@ export async function prepareCardRevealAction(cardId: string):
   const caps = await getMoneyCapabilities(svc);
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
 
-  const [{ data: card }, { data: acct }] = await Promise.all([
+  const [{ data: card }, { data: acct }] = await settleAll([
     svc.from('stripe_issuing_cards').select('stripe_card_id')
       .eq('family_id', ctx.active.familyId).eq('id', cardId).maybeSingle(),
     svc.from('stripe_connected_accounts').select('stripe_account_id')

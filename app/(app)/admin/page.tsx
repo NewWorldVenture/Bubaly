@@ -6,6 +6,7 @@ import {
   BarChart3, Plug, ArrowUpRight, Bell,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { adminNoteKindMeta, type AdminNotificationRow } from '@/lib/admin/notifications';
 import { checkDatabase, checkStorage, checkEmail, checkAI } from '@/lib/server/health';
 import { Card } from '@/components/ui/card';
@@ -43,6 +44,16 @@ export default async function AdminDashboardPage() {
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const thirtyDaysAgo = new Date(now - 30 * MS_DAY).toISOString();
 
+  // Lifted out of the settled batch because their SHAPE differs, not because
+  // they are fragile: both already resolve { ok, latencyMs, detail } and catch
+  // internally, and that is exactly what the status tiles render — a better
+  // fallback than settleAll's { data, error }. The .catch below is belt and
+  // braces for a client that fails to construct at all.
+  const [dbHealth, storageHealth] = await Promise.all([
+    checkDatabase(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
+    checkStorage(supabase).catch((cause) => ({ ok: false as const, detail: String(cause) })),
+  ]);
+
   const [
     familyCountResult,
     activeMemberCountResult,
@@ -56,9 +67,7 @@ export default async function AdminDashboardPage() {
     ticketsResult,
     adminNotesResult,
     unreadNoteCountResult,
-    dbHealth,
-    storageHealth,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
@@ -73,36 +82,39 @@ export default async function AdminDashboardPage() {
     supabase.from('admin_notifications').select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
-    checkDatabase(supabase),
-    checkStorage(supabase),
   ]);
 
-  const readError = [
-    familyCountResult.error,
-    activeMemberCountResult.error,
-    activeSubCountResult.error,
-    familiesResult.error,
-    activeMembersResult.error,
-    subscriptionsResult.error,
-    docsResult.error,
-    newMembersResult.error,
-    recentLogsResult.error,
-    ticketsResult.error,
-    adminNotesResult.error,
-    unreadNoteCountResult.error,
-  ].find(Boolean);
-  if (readError) {
-    console.error('[admin-dashboard] dashboard read failed', readError);
-    return (
-      <div className="module-page space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
-          <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
-        </div>
-        <ErrorState message={tr('admin.couldNotLoadTheAdmin')} />
-        <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
-      </div>
-    );
+  // Degrade per dataset rather than blanking the page.
+  //
+  // This bailed when ANY of the twelve reads errored, and every consumer below
+  // already defaults with `?? []` / `?? 0` — so the page was fully capable of
+  // rendering without any one of them and simply was not allowed to. On
+  // production that is not a rare case: the migration ledger stops at 0001-0003,
+  // so later tables (admin_notifications, support_tickets, documents) can be
+  // absent outright, and one absent table was costing an administrator the
+  // entire dashboard.
+  //
+  // Nothing here is load-bearing: every tile and list has an empty state. So
+  // there is no bail at all now — the failures are named in a banner instead,
+  // which is more useful than an error page because it says WHICH read failed.
+  const loadErrors = ([
+    ['families (count)', familyCountResult],
+    ['active members (count)', activeMemberCountResult],
+    ['active subscriptions (count)', activeSubCountResult],
+    ['families', familiesResult],
+    ['active members', activeMembersResult],
+    ['subscriptions', subscriptionsResult],
+    ['documents', docsResult],
+    ['new members', newMembersResult],
+    ['recent audit logs', recentLogsResult],
+    ['support tickets', ticketsResult],
+    ['admin notifications', adminNotesResult],
+    ['unread notifications (count)', unreadNoteCountResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  if (loadErrors.length > 0) {
+    console.error('[admin-dashboard] partial read — rendering degraded', loadErrors.join('; '));
   }
 
   const { count: familyCount } = familyCountResult;
@@ -212,19 +224,14 @@ export default async function AdminDashboardPage() {
   const actorsResult = actorIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
     : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+  // A failed actor lookup costs the NAMES beside audit-log entries, nothing
+  // more: actorById is consulted with `actorById.get(log.actor_id)` and the
+  // render already handles a miss. Returning an error page for it meant the
+  // dashboard vanished because it could not label a row.
   if ('error' in actorsResult && actorsResult.error) {
-    console.error('[admin-dashboard] actor profile read failed', actorsResult.error);
-    return (
-      <div className="module-page space-y-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
-          <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
-        </div>
-        <ErrorState message={tr('admin.couldNotLoadRecentActivity')} />
-        <a href="/admin" className="text-sm font-medium text-brand-text underline">{tr('admin.refreshAdminDashboard')}</a>
-      </div>
-    );
+    console.warn('[admin-dashboard] actor profile read failed — activity rows lose their names', actorsResult.error);
   }
+
   const { data: actors } = actorsResult;
   const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
 
@@ -234,6 +241,15 @@ export default async function AdminDashboardPage() {
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admin.adminDashboard')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('admin.manageAndMonitorYourBubalySystem')}</p>
       </div>
+
+      {loadErrors.length > 0 && (
+        <div className="rounded-xl border border-danger/30 bg-danger/10 p-4">
+          <p className="text-sm font-semibold text-danger">{tr('admin.someDataCouldNotBeLoaded')}</p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
+            {loadErrors.map((err) => <li key={err}>{err}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Main column */}

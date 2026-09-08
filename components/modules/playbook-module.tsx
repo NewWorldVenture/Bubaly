@@ -139,7 +139,8 @@ export function PlaybookModule() {
             return (
               <li
                 key={s.id}
-                className="rounded-2xl border border-border bg-card p-4 transition hover:border-border/80"
+                id={`suggestion-${s.id}`}
+                className="scroll-mt-24 rounded-2xl border border-border bg-card p-4 transition hover:border-border/80"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

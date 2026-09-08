@@ -26,12 +26,13 @@ import { editStepInput } from '@/lib/ai/runs/controls';
 import { kickRun } from '@/lib/ai/runs/continue';
 import type { StepState } from '@/lib/ai/runs/states';
 import { runPagePath } from '@/lib/ai/chat-request';
+import { toolDomain } from '@/lib/ai/tool-domains';
 import { editableFieldsFor } from '@/lib/approvals/card-data';
 import type { RunActionResult } from '@/app/(app)/dashboard/concierge/run-actions';
 import { ErrorState } from '@/components/ui/states';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { StatusBadge } from '@/components/concierge/status-badge';
-import { RunTimeline } from '@/components/concierge/run-timeline';
+import { RunTimeline, type StepSources } from '@/components/concierge/run-timeline';
 import { RunControls, type EditableStep, type FailedStep } from '@/components/concierge/run-controls';
 import { ClarificationCard } from '@/components/concierge/clarification-card';
 import { getTranslations } from '@/lib/i18n/server';
@@ -76,6 +77,14 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const requestId = detail.data.run.request_id;
   const canControl = manager || detail.data.run.requested_by_member_id === ctx.active.member.id;
   const view = toRunView(detail.data, familyId, manager);
+  // M6: which tool each step runs, from the persisted `tool_name` — the source
+  // shown beside the step. Passed apart from the view so the read boundary
+  // stays exactly what tests/run-detail-read-boundary.test.ts pins.
+  const stepSources: StepSources = Object.fromEntries(
+    detail.data.steps
+      .filter((s) => !!s.tool_name?.trim())
+      .map((s) => [s.id, { tool: (s.tool_name as string).trim(), domain: toolDomain(s.tool_name as string) }]),
+  );
 
   const failedSteps: FailedStep[] = view.steps
     .filter((s) => RERUNNABLE_STEP_STATES.includes(s.status))
@@ -185,7 +194,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       )}
 
       <section aria-label={t('dashboardConciergeRuns.progress')} className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
-        <RunTimeline view={view} showActivity={showActivity} />
+        <RunTimeline view={view} showActivity={showActivity} stepSources={stepSources} />
       </section>
     </div>
   );

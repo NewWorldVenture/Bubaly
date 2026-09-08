@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Radar, Search, Link2, ShieldAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import {
   rankKeywordOpportunities, keywordOpportunity, summarizeBacklinks, type BacklinkLike,
@@ -40,7 +41,7 @@ export default async function CompetitivePage() {
   const supabase = createServiceClient();
   let results;
   try {
-    results = await Promise.all([
+    results = await settleAll([
       supabase.from('competitors').select('*').order('ranking', { nullsFirst: false }).limit(200),
       supabase.from('keyword_intel').select('*').limit(500),
       supabase.from('backlinks').select('*').order('created_at', { ascending: false }).limit(500),

@@ -7,6 +7,7 @@ import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { listOpenMaintenance } from '@/lib/services/home';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import { memberName, type SliceDefinition } from '../policy';
 import { joinNatural, when } from '../render';
 
@@ -25,11 +26,11 @@ export const homeSlice: SliceDefinition = {
   title: 'Home, vehicles and pets',
   async load(scope, env) {
     const [homes, vehicles, pets, maintenance] = await Promise.all([
-      scope.db.from('homes').select('id, name, home_type, is_primary, address').eq('family_id', scope.familyId).is('deleted_at', null).order('is_primary', { ascending: false }).limit(MAX_ROWS),
-      scope.db.from('vehicles').select('id, nickname, make, model, year, primary_driver, mileage, status').eq('family_id', scope.familyId).is('deleted_at', null).limit(MAX_ROWS),
-      scope.db.from('pets').select('id, name, species, breed').eq('family_id', scope.familyId).eq('is_active', true).limit(MAX_ROWS),
+      settle(scope.db.from('homes').select('id, name, home_type, is_primary, address').eq('family_id', scope.familyId).is('deleted_at', null).order('is_primary', { ascending: false }).limit(MAX_ROWS)),
+      settle(scope.db.from('vehicles').select('id, nickname, make, model, year, primary_driver, mileage, status').eq('family_id', scope.familyId).is('deleted_at', null).limit(MAX_ROWS)),
+      settle(scope.db.from('pets').select('id, name, species, breed').eq('family_id', scope.familyId).eq('is_active', true).limit(MAX_ROWS)),
       listOpenMaintenance(scope, { limit: MAX_MAINTENANCE }),
-    ]);
+  ]);
     const readError = homes.error ?? vehicles.error ?? pets.error;
     if (readError) {
       console.error('[ai-context:home] household read failed', readError);

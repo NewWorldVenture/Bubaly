@@ -8,6 +8,7 @@ import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { budgetVsActual } from '@/lib/services/finances';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import type { SliceDefinition } from '../policy';
 import { dayKeyLabel, money, shiftDayKey } from '../render';
 
@@ -34,21 +35,21 @@ export const moneySlice: SliceDefinition = {
     const horizon = shiftDayKey(env.todayKey, BILL_HORIZON_DAYS, env.tz);
     const [budgets, goals, bills] = await Promise.all([
       budgetVsActual(scope, {}),
-      scope.db
+      settle(scope.db
         .from('savings_goals')
         .select('id, name, target_amount, current_amount, target_date')
         .eq('family_id', scope.familyId)
         .order('target_date', { ascending: true, nullsFirst: false })
-        .limit(MAX_GOALS),
-      scope.db
+        .limit(MAX_GOALS)),
+      settle(scope.db
         .from('bills')
         .select('id, name, amount, due_date, status, autopay')
         .eq('family_id', scope.familyId)
         .neq('status', 'paid')
         .lte('due_date', horizon)
         .order('due_date', { ascending: true })
-        .limit(MAX_BILLS),
-    ]);
+        .limit(MAX_BILLS)),
+  ]);
     if (!budgets.ok) return budgets;
     if (goals.error) {
       console.error('[ai-context:money] savings goals read failed', goals.error);

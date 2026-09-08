@@ -34,17 +34,18 @@ const GROUPS = [
   {
     titleKey: 'siteFooter.group.product',
     links: [
-      { href: '/features', labelKey: 'siteFooter.link.features' },
+      { href: '/features', labelKey: 'siteFooter.whatBubalyHandles' },
       { href: '/how-it-works', labelKey: 'siteFooter.link.howItWorks' },
       { href: '/pricing', labelKey: 'siteFooter.link.pricing' },
       { href: '/mobile', labelKey: 'siteFooter.link.mobileApp' },
-      { href: '/ai', labelKey: 'siteFooter.link.aiAssistant' },
+      { href: '/features#kitchen-mode', labelKey: 'siteFooter.kitchenMode' },
+      { href: '/ai', labelKey: 'siteFooter.handledForYou' },
     ],
   },
   {
     titleKey: 'siteFooter.group.company',
     links: [
-      { href: '/security', labelKey: 'siteFooter.link.security' },
+      { href: '/security', labelKey: 'siteFooter.trustCenter' },
       { href: '/blog', labelKey: 'siteFooter.link.blog' },
       { href: '/contact', labelKey: 'siteFooter.link.contact' },
       { href: '/faq', labelKey: 'siteFooter.link.faq' },
@@ -55,6 +56,7 @@ const GROUPS = [
     links: [
       { href: '/signup', labelKey: 'siteFooter.link.createAccount' },
       { href: '/login', labelKey: 'siteFooter.link.logIn' },
+      { href: '/dashboard/migrate', labelKey: 'siteFooter.switchToBubaly' },
     ],
   },
   {

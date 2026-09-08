@@ -40,6 +40,8 @@ import { makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
+import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
+import type { ScheduleInsight } from '@/lib/schedule/intelligence';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
 
 const PATH = '/dashboard/calendar';
@@ -291,5 +293,52 @@ export async function undoCalendarEventsAction(eventIds: string[]): Promise<Undo
   } catch (err) {
     console.error('[calendar-action] undo failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotUndoThoseEvents')) };
+  }
+}
+
+export type EventScheduleInsightsResult =
+  | { ok: true; insights: ScheduleInsight[]; leaveBy: { at: string; source: 'drive_time' | 'category_buffer'; travelMinutes: number } | null }
+  | { ok: false; error: string };
+
+/**
+ * The composed schedule model for ONE event (lib/schedule/intelligence): its
+ * leave-by, and every driver, car, dinner, care and double-booking constraint
+ * the rest of the family's day puts on it. Read-only.
+ *
+ * Fail-closed: a read failure is an error the modal shows with a retry, never
+ * an empty list — "no conflicts" is a claim, and one computed from missing
+ * rows would be false.
+ */
+export async function eventScheduleInsightsAction(eventId: string): Promise<EventScheduleInsightsResult> {
+  const t = await getTranslations();
+  if (!eventId) return { ok: false, error: t('actions.thatEventCouldNotBe') };
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+  try {
+    const { data: event, error } = await supabase
+      .from('calendar_events').select('id, starts_at, ends_at, all_day')
+      .eq('id', eventId).eq('family_id', familyId).maybeSingle();
+    if (error) {
+      console.error('[schedule] event read failed', error);
+      return { ok: false, error: t('actions.couldNotLoadScheduleInsights') };
+    }
+    if (!event) return { ok: false, error: t('actions.thatEventCouldNotBe') };
+    if (event.all_day) return { ok: true, insights: [], leaveBy: null };
+
+    const startMs = Date.parse(event.starts_at);
+    if (!Number.isFinite(startMs)) return { ok: true, insights: [], leaveBy: null };
+    // Everything that can constrain the event lives on the same family day,
+    // give or take: a day either side covers overnight rides and late dinners.
+    const result = await loadScheduleIntelligence(supabase, {
+      familyId, tz: ctx.active.family.timezone || 'UTC', now: new Date(),
+      fromMs: startMs - 86_400_000, toMs: startMs + 86_400_000,
+    });
+    if (!result.ok) return { ok: false, error: t('actions.couldNotLoadScheduleInsights') };
+    const sched = result.data.events.find((e) => e.eventId === eventId);
+    return { ok: true, insights: result.data.byEvent[eventId] ?? [], leaveBy: sched?.leaveBy ?? null };
+  } catch (err) {
+    console.error('[schedule] event insights read failed', err);
+    return { ok: false, error: describeActionError(err, t('actions.couldNotLoadScheduleInsights')) };
   }
 }

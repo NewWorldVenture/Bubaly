@@ -5,6 +5,7 @@
 // every AI agent / privileged action should call before executing.
 // ════════════════════════════════════════════════════════════════════════════
 import { createHash } from 'node:crypto';
+import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { ledgerWriter } from '@/lib/trust/ledger';
@@ -66,7 +67,7 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
   policies: Policy[]; grants: Grant[]; delegations: Delegation[]; emergencyDomains: string[];
 }> {
   const nowIso = new Date().toISOString();
-  const [{ data: policies }, { data: grants }, { data: dels }, { data: emergencies }] = await Promise.all([
+  const [{ data: policies }, { data: grants }, { data: dels }, { data: emergencies }] = await settleAll([
     supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true),
     supabase.from('permission_grants').select('member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('to_member_id, domains, starts_at, expires_at, revoked_at')

@@ -34,7 +34,7 @@ import { buildContext, type ContextBundle, type IntentKey } from '@/lib/ai/conte
 import type { AIMessage, AIProvider } from '@/lib/ai/provider';
 import { resolveProviderForTask } from '@/lib/ai/routing';
 import { appendEvent, createRun, ledgerClient, savePlan, updateRequest, updateRequestWhereStatus, updateRun, type PlanStepInput, type RequestRow, type RunRow, type StepRow } from '@/lib/ai/runs/store';
-import { legacyStatusFor } from '@/lib/ai/runs/states';
+import { legacyStatusFor, TERMINAL_STEP_STATES } from '@/lib/ai/runs/states';
 import { structured } from '@/lib/ai/structured';
 import { listTools } from '@/lib/ai/tools/registry';
 import { scopeNow } from '@/lib/services/scope';
@@ -45,7 +45,7 @@ import { getAISettings } from '@/lib/services/ai-settings';
 import type { AutonomyBehavior, TrustRole } from '@/lib/trust/engine';
 import { buildPlannerSystemPrompt, buildPlannerUserMessage, buildRepairMessage, PLANNER_PROMPT_VERSION, toolsForIntent } from './prompts';
 import { PLAN_SCHEMA_NAME, PlanSchema, type Plan } from './schema';
-import { instantiateTemplate, templateContextFrom, templateFor, type TemplateContext, type WorkflowTemplate } from './templates/index';
+import { instantiateTemplate, templateContextFrom, templateFor, templateSteps, type MoveContext, type TemplateContext, type WorkflowTemplate } from './templates/index';
 import { behaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
 
 export { PLANNER_PROMPT_VERSION } from './prompts';
@@ -100,11 +100,31 @@ export function plannerTrustRole(role: ServiceScope['role']): TrustRole {
 
 type PeopleSlice = { members?: { id: string; canManage?: boolean }[] } | undefined;
 type TravelSlice = { trips?: { id: string; title: string; startDate: string | null; daysUntil: number | null }[] } | undefined;
+type MovingSlice = {
+  move?: { id: string; title: string; moveDate: string; hasKids: boolean; hasPets: boolean; templateKeys?: string[] } | null;
+  subscriptions?: MoveContext['subscriptions'];
+  bills?: MoveContext['bills'];
+  schoolClasses?: MoveContext['schoolClasses'];
+  pets?: MoveContext['pets'];
+} | undefined;
+
+/** The move context from the `moving` slice — only loaded for plan_move, so every other intent sees null. */
+function moveContextFrom(moving: MovingSlice): MoveContext | null {
+  if (!moving) return null;
+  return {
+    move: moving.move ? {
+      id: moving.move.id, title: moving.move.title, moveDate: moving.move.moveDate, hasKids: moving.move.hasKids, hasPets: moving.move.hasPets,
+      templateKeys: moving.move.templateKeys ?? [],
+    } : null,
+    subscriptions: moving.subscriptions ?? [], bills: moving.bills ?? [], schoolClasses: moving.schoolClasses ?? [], pets: moving.pets ?? [],
+  };
+}
 
 /** The template context for a request, from the bundle the builder already resolved in the family's zone. */
 function templateContextFor(input: PlanRequestInput, scope: ServiceScope, now: Date): TemplateContext {
   const people = input.context.slices.people as PeopleSlice;
   const travel = input.context.slices.travel as TravelSlice;
+  const moving = input.context.slices.moving as MovingSlice;
   return templateContextFrom({
     tz: input.context.header.tz,
     nowIso: now.toISOString(),
@@ -115,6 +135,7 @@ function templateContextFor(input: PlanRequestInput, scope: ServiceScope, now: D
     viewerMemberId: scope.memberId,
     managerIds: (people?.members ?? []).filter((m) => m.canManage).map((m) => m.id),
     trips: (travel?.trips ?? []).map((t) => ({ id: t.id, title: t.title, startDate: t.startDate, daysUntil: t.daysUntil })),
+    move: moveContextFrom(moving),
   });
 }
 
@@ -252,7 +273,7 @@ export async function planRequest(
     requestText: input.requestText,
     contextText: input.context.text,
     skeleton,
-    skeletonHints: (template?.steps ?? []).filter((s) => s.modelFills).map((s) => ({ key: s.key, hint: s.modelFills as string })),
+    skeletonHints: (template ? templateSteps(template, ctx) : []).filter((s) => s.modelFills).map((s) => ({ key: s.key, hint: s.modelFills as string })),
     answers: input.answers ?? null,
     pageContext: input.pageContext ?? null,
   });
@@ -493,18 +514,39 @@ async function recordRecommendation(
 // ── Re-planning (the executor's `replan` port) ─────────────────────────────
 
 type RunLike = Pick<RunRow, 'id' | 'family_id' | 'plan_id' | 'request_id' | 'requested_by_member_id'>;
-type StepLike = Pick<StepRow, 'id' | 'step_type' | 'tool_name' | 'description' | 'input_json' | 'dependency_ids' | 'condition' | 'status' | 'approval_required' | 'approval_id' | 'risk_level' | 'result_json'>;
+type StepLike = Pick<StepRow, 'id' | 'step_type' | 'tool_name' | 'description' | 'input_json' | 'dependency_ids' | 'condition' | 'status' | 'approval_required' | 'approval_id' | 'risk_level' | 'result_json' | 'error'>;
+
+/** A carried step's line in the re-plan prompt: what it was and how it ended. */
+function describeOutcome(step: StepLike): string {
+  const label = step.description ?? step.tool_name ?? step.step_type;
+  const summary = step.result_json && typeof step.result_json === 'object' && !Array.isArray(step.result_json)
+    ? String((step.result_json as Record<string, unknown>).summary ?? '')
+    : '';
+  switch (step.status) {
+    case 'completed': return `- ${label}: ${summary || 'done'}`;
+    case 'skipped': return `- ${label}: skipped${summary ? ` (${summary})` : ''}`;
+    case 'partially_completed': return `- ${label}: done, but could not be confirmed${summary ? ` (${summary})` : ''}`;
+    case 'failed': return `- ${label}: FAILED${step.error ? ` (${step.error})` : ''}`;
+    case 'cancelled': return `- ${label}: DECLINED by a person${step.error ? ` (${step.error})` : ''}; do not plan it again`;
+    default: return `- ${label}: ${step.status}`;
+  }
+}
 
 /**
  * Plan the rest of a run with what it has learned so far — the implementation
- * behind a `replan` step. Matches `ExecutorPort['replan']` exactly so wiring it
- * is `replan: replanRun` in `createExecutorPort`; until that line lands in
- * lib/ai/runs/executor.ts a replan step blocks honestly, which is why
- * `PLAN_STEP_TYPES` does not offer `replan` to the model.
+ * behind a `replan` step. `replanPortFor` (./replan-port.ts) binds a ledger
+ * client to it so it is exactly `ExecutorPort['replan']`; lib/ai/runs/
+ * continue.ts and the cron hand that to `runGraph`, and a port built without
+ * it blocks a replan step honestly instead of pretending.
  *
- * Finished steps are carried into version N+1 with their status and results
- * (the same carry-over `editStepInput` performs), so nothing already done is
- * repeated; the new steps replace everything that had not run.
+ * Version N+1 carries every step that already RAN or was DECIDED — the
+ * terminal states (completed, skipped, partially_completed, failed,
+ * cancelled) — with its status, result and error, the way `editStepInput`
+ * carries finished work: nothing done is repeated, and nothing that went
+ * wrong disappears from the record the run reports on. The replan step itself
+ * is carried as completed, which is how the executor counts a run's re-plans
+ * (`MAX_REPLANS_PER_RUN`) without a second query. Steps that never ran —
+ * blocked behind a failure, or still queued — are what the new plan replaces.
  */
 export async function replanRun(
   scope: ServiceScope,
@@ -547,13 +589,7 @@ export async function replanRun(
     role: plannerTrustRole(scope.role), now, tz: context.data.header.tz, allowedTools: catalogueNames(tools),
   };
 
-  const finished = steps.filter((s) => s.id !== step.id && (s.status === 'completed' || s.status === 'skipped'));
-  const resultsSoFar = finished.map((s) => {
-    const summary = s.result_json && typeof s.result_json === 'object' && !Array.isArray(s.result_json)
-      ? String((s.result_json as Record<string, unknown>).summary ?? '')
-      : '';
-    return `- ${s.description ?? s.tool_name ?? s.step_type}: ${summary || s.status}`;
-  });
+  const settled = steps.filter((s) => s.id !== step.id && TERMINAL_STEP_STATES.includes(s.status));
   const stepPrompt = typeof (step.input_json as Record<string, unknown> | null)?.prompt === 'string'
     ? String((step.input_json as Record<string, unknown>).prompt)
     : (step.description ?? 'Plan the rest of this request.');
@@ -565,11 +601,11 @@ export async function replanRun(
   const user = [
     buildPlannerUserMessage({ requestText: row.request_text, contextText: context.data.text, skeleton: null, skeletonHints: [] }),
     '',
-    'This request is already under way. Done so far:',
-    ...(resultsSoFar.length ? resultsSoFar : ['- nothing yet']),
+    'This request is already under way. What has happened so far:',
+    ...(settled.length ? settled.map(describeOutcome) : ['- nothing yet']),
     '',
     `Now: ${stepPrompt}`,
-    'Plan ONLY the remaining work; do not repeat anything listed as done.',
+    'Plan ONLY the remaining work: do not repeat anything marked done, and do not plan again anything a person declined.',
   ].join('\n');
 
   let provider: AIProvider;
@@ -586,22 +622,41 @@ export async function replanRun(
     return fail(validation && !validation.ok ? validation.error : 'Bubaly had nothing more to plan for this request.', { code: SERVICE_CODES.invalidInput });
   }
 
-  // Carry finished work forward by its id (keys are planner-local, so an id
-  // is the one handle that cannot collide with the new steps' keys).
-  const carried: PlanStepInput[] = finished.map((s) => ({
+  // Carry settled work forward by its id (keys are planner-local, so an id is
+  // the one handle that cannot collide with the new steps' keys), then the
+  // replan step itself as the completed decision point it is.
+  const carriedIds = new Set(settled.map((s) => s.id));
+  carriedIds.add(step.id);
+  const carried: PlanStepInput[] = settled.map((s) => ({
     key: s.id,
     stepType: s.step_type,
     toolName: s.tool_name,
     description: s.description,
     input: s.input_json,
-    dependsOn: s.dependency_ids.filter((id) => finished.some((f) => f.id === id)),
+    dependsOn: s.dependency_ids.filter((id) => carriedIds.has(id)),
     condition: s.condition,
     approvalRequired: s.approval_required,
     riskLevel: s.risk_level,
     status: s.status,
     resultJson: s.result_json,
     approvalId: s.approval_id,
+    error: s.error,
   }));
+  carried.push({
+    key: step.id,
+    stepType: 'replan',
+    toolName: null,
+    description: step.description,
+    input: step.input_json,
+    dependsOn: step.dependency_ids.filter((id) => carriedIds.has(id)),
+    condition: step.condition,
+    approvalRequired: false,
+    riskLevel: step.risk_level,
+    status: 'completed',
+    resultJson: { summary: 'Re-planned the rest of this run.' },
+    approvalId: null,
+    error: null,
+  });
   const fresh = toStoreSteps(validation.steps);
 
   const saved = await savePlan(scope, row.id, {

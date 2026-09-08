@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gift, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
@@ -29,11 +30,11 @@ export default async function AdminReferralsPage() {
   const supabase = createServiceClient();
   const [configResult, referralsResult] = await Promise.all([
     getReferralConfigResult(supabase),
-    supabase
+    settle(supabase
       .from('referrals')
       .select('id, code, referrer_family_id, referred_email, status, referrer_reward_cents, created_at')
       .order('created_at', { ascending: false })
-      .limit(100),
+      .limit(100)),
   ]);
   if (configResult.error || referralsResult.error) {
     console.error('[admin-marketing-referrals] referral read failed', configResult.error ?? referralsResult.error);

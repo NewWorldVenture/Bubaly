@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, Users } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { FollowButton } from '@/components/marketplace/follow-button';
@@ -20,7 +21,7 @@ export default async function MarketplaceCreatorsPage() {
   const selfId = ctx.active.member.id;
   const dataWarnings: string[] = [];
 
-  const [{ data: stores, error: storesError }, { data: follows, error: followsError }, { data: reviews, error: reviewsError }, { data: listings, error: listingsError }] = await Promise.all([
+  const [{ data: stores, error: storesError }, { data: follows, error: followsError }, { data: reviews, error: reviewsError }, { data: listings, error: listingsError }] = await settleAll([
     sb.from('marketplace_stores').select('id, member_id, name, tagline, emoji, is_active').eq('family_id', familyId),
     sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000),
     sb.from('marketplace_reviews').select('reviewee_member, rating').eq('family_id', familyId).limit(1000),

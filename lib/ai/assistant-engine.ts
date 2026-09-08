@@ -34,6 +34,7 @@ import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-dat
 import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 type MessageInsert = Database['public']['Tables']['ai_messages']['Insert'];
@@ -226,7 +227,7 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   const [
     { data: history, error: historyError },
     { data: members, error: membersError },
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
     // `user_id` is selected so the acting member can be picked out of the roster
     // — the tool registry scopes writes by `family_members.id`, not by the auth

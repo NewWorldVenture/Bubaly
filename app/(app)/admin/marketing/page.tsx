@@ -5,6 +5,7 @@ import {
   Mail, Search, Sparkles, MessageSquareText, ArrowRight,
 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
@@ -27,7 +28,7 @@ export default async function MarketingDashboard() {
     leadsResult,
     seoPagesResult,
     aeoResult,
-  ] = await Promise.all([
+  ] = await settleAll([
     supabase.from('marketing_segments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('marketing_campaigns').select('id', { count: 'exact', head: true }).in('status', ['active', 'scheduled']),
     supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status'),

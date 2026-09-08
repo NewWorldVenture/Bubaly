@@ -1,17 +1,19 @@
 import type { Metadata } from 'next';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import Link from 'next/link';
 import {
   Gauge, AlertTriangle, CalendarClock, CheckCircle2, UtensilsCrossed,
   FileWarning, Users, ArrowRight,
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
-import { ErrorState } from '@/components/ui/states';
+
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Command Center' };
@@ -34,7 +36,7 @@ export default async function CommandCenterPage() {
   const weekEnd = new Date(start); weekEnd.setDate(weekEnd.getDate() + 7);
   const in30 = new Date(start); in30.setDate(in30.getDate() + 30);
 
-  const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await Promise.all([
+  const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
       .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
@@ -46,16 +48,22 @@ export default async function CommandCenterPage() {
       .not('expires_at', 'is', null).gte('expires_at', now.toISOString()).lte('expires_at', in30.toISOString()),
   ]);
 
-  const readError = [
-    membersResult.error,
-    eventsResult.error,
-    openChoresResult.error,
-    mealPlansResult.error,
-    expiringDocsResult.error,
-  ].find(Boolean);
+  const readFailures = ([
+    ['members', membersResult],
+    ['events', eventsResult],
+    ['open chores', openChoresResult],
+    ['meal plans', mealPlansResult],
+    ['expiring docs', expiringDocsResult],
+  ] as const)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error?.message ?? 'unknown error'}`);
+  const readError = readFailures.length > 0;
   if (readError) {
-    console.error('[dashboard/command-center] command center read failed', readError);
-    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
+    // Degraded, not fatal: every consumer below defaults an absent read to an
+    // empty list or zero, so one unavailable table costs its own tile rather
+    // than the page. Production's migration ledger stops at 0001-0003, so a
+    // later table being absent is the normal case there, not an anomaly.
+    console.warn('[dashboard/command-center] command center read failed', readError);
   }
 
   const { data: members } = membersResult;
@@ -72,8 +80,11 @@ export default async function CommandCenterPage() {
   try {
     ({ change } = await loadOperatingIndex(supabase, familyId, now));
   } catch (error) {
-    console.error('[dashboard/command-center] operating index read failed', error);
-    return <ErrorState message={t('commandCenter.couldNotLoadYourFamily')} />;
+    // The recap is ONE section of this page. ChangeRecap requires a real
+    // ChangeSummary, so rather than inventing an empty one that would render as
+    // "nothing changed" — a claim, not an absence — the section is omitted.
+    console.warn('[dashboard/command-center] operating index read failed — omitting the recap', error);
+    change = undefined;
   }
 
   // ── Schedule conflict detection (overlapping timed events) ──
@@ -121,13 +132,14 @@ export default async function CommandCenterPage() {
 
   return (
     <div className="space-y-5">
+      <PartialReadBanner title={"Some data could not be loaded:"} failures={readFailures} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardCommandCenter.familyCommandCenter')}</h1>
         <p className="mt-1 text-sm text-muted">{t('dashboardCommandCenter.aLiveReadinessViewOfYour')}</p>
       </div>
 
       {/* Since yesterday — the evening "what changed" recap (pillar #5) */}
-      <ChangeRecap change={change} />
+      {change && <ChangeRecap change={change} />}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Readiness score */}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sparkles, Star, BadgeCheck, Search } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { InstallButton } from '@/components/appstore/install-button';
@@ -20,7 +21,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const [{ data: apps }, { data: installs }] = await Promise.all([
+  const [{ data: apps }, { data: installs }] = await settleAll([
     sb.from('family_apps').select('id, slug, name, tagline, category, emoji, publisher, capabilities, is_official, rating, install_count, status')
       .neq('status', 'retired').order('sort_order', { ascending: true }).limit(1000),
     sb.from('family_app_installs').select('app_id').eq('family_id', ctx.active.familyId),

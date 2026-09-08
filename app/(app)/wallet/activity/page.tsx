@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { WalletActivityView } from '@/components/wallet/activity-view';
@@ -25,7 +26,7 @@ export default async function WalletActivityPage() {
   }
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
-  const [{ data: childWallets, error: childWalletsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await Promise.all([
+  const [{ data: childWallets, error: childWalletsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId),
     supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(2000),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),

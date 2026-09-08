@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -75,7 +76,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // At real scale this would move to a dedicated aggregating view or RPC — flagged
   // here rather than hidden, since this is the one place in the app doing that.
   const [profilesRes, membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes, superAdminsRes] =
-    await Promise.all([
+    await settleAll([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('family_members').select('*').eq('is_active', true).order('created_at'),
       supabase.from('families').select('*'),
@@ -96,9 +97,25 @@ export default async function AdminUsersPage({ searchParams }: Params) {
     if (res.error) loadErrors.push(`Could not load “${label}”: ${res.error.message}`);
   }
 
-  if (loadErrors.length > 0) {
+  // Only `family_members` is load-bearing here: `enriched` maps over it, so
+  // without it there is genuinely nothing to render. Every other dataset is
+  // enrichment and already carries a `?? []` / `?? null` / `?? 'free'` default
+  // at its use site, so losing one costs a column, not the page.
+  //
+  // Bailing on ANY error made the in-page banner below unreachable and blanked
+  // a working admin surface whenever a single optional table was unavailable.
+  // That is not a hypothetical: production's migration ledger stops at 0001,
+  // 0002, 0003, so `roles`, `permissions` and `super_admins` are exactly the
+  // kind of later table that can be absent there — and the database is
+  // currently reporting CONNECT_TIMEOUT, which makes any one of the eight fail
+  // intermittently. One flaky read should not cost an administrator the user
+  // list.
+  if (membersRes.error) {
     console.error('[admin-users] users read failed', loadErrors.join('; '));
     return <AdminUsersReadError />;
+  }
+  if (loadErrors.length > 0) {
+    console.warn('[admin-users] partial read — rendering degraded', loadErrors.join('; '));
   }
 
   const profiles = profilesRes.data;
@@ -472,7 +489,7 @@ async function AdminUsersReadError() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Users &amp; Families</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminUsers.usersFamilies')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('users.manageAllUsersFamiliesAnd')}</p>
       </div>
       <ErrorState message={tr('users.couldNotLoadUsersAnd')} />

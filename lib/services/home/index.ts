@@ -18,6 +18,7 @@ import type { Priority, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
@@ -26,6 +27,8 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 export type ContractorRow = Tables<'home_contractors'>;
 export type ServiceRecordRow = Tables<'home_service_records'>;
 export type MaintenanceTaskRow = Tables<'maintenance_tasks'>;
+export type HomeProjectRow = Tables<'home_projects'>;
+export type ProjectQuoteRow = Tables<'project_quotes'>;
 
 const DAY_MS = 86_400_000;
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -265,7 +268,7 @@ export async function lastServiceByTrade(scope: ServiceScope, tradeInput: string
   const trade = normalizeTrade(tradeInput);
   if (!trade) return fail(`"${tradeInput}" is not a trade Bubaly knows.`, { code: SERVICE_CODES.invalidInput });
 
-  const [records, contractors, assets] = await Promise.all([
+  const [records, contractors, assets] = await settleAll([
     scope.db.from('home_service_records').select('*').eq('family_id', scope.familyId).is('deleted_at', null)
       .order('service_date', { ascending: false }).limit(300),
     scope.db.from('home_contractors').select('*').eq('family_id', scope.familyId).is('deleted_at', null).limit(200),
@@ -539,4 +542,69 @@ export async function scheduleRecommendedTasks(scope: ServiceScope, assetId: str
   }
   await recordActivitySafely(scope, { action: 'create', agent: 'home', title: `Scheduled ${rows.length} recommended maintenance tasks for ${asset.name}`, href: '/dashboard/home' });
   return ok({ created: data ?? [], skipped });
+}
+
+// ── home projects + the quotes on file (migration 0246) ──────────────────────
+//
+// Read-only. `project_quotes` are typed in by a parent; nothing here solicits
+// one. These exist so `services.compareQuotes` (lib/ai/tools/providers.ts)
+// ranks the same rows the projects module shows, under the same family scope,
+// and fails closed the same way when the read does.
+
+/** A project by id, or the best title match. Null when nothing matches; an error only when the read failed. */
+export async function findHomeProject(scope: ServiceScope, input: { id?: string | null; title?: string | null }): Promise<ServiceResult<HomeProjectRow | null>> {
+  const id = input.id?.trim() || null;
+  const title = input.title?.trim() || null;
+  if (!id && !title) return fail('Say which project, by id or by title.', { code: SERVICE_CODES.invalidInput });
+  let query = scope.db.from('home_projects').select('*').eq('family_id', scope.familyId).limit(5);
+  if (id) query = query.eq('id', id);
+  else query = query.ilike('title', `%${escapeLike(title!)}%`).order('updated_at', { ascending: false });
+  const { data, error } = await query;
+  if (error) {
+    console.error('[service:home] project read failed', error);
+    return fail(describeDbError(error, 'Could not load that project.'), { code: SERVICE_CODES.db });
+  }
+  const rows = data ?? [];
+  if (rows.length === 0) return ok(null);
+  if (id) return ok(rows[0]);
+  const exact = rows.find((p) => p.title.trim().toLowerCase() === title!.toLowerCase());
+  return ok(exact ?? rows[0]);
+}
+
+/** The quotes on file, for one project or for the whole family. Cheapest first. */
+export async function listProjectQuotes(scope: ServiceScope, input: { projectId?: string | null; limit?: number } = {}): Promise<ServiceResult<ProjectQuoteRow[]>> {
+  let query = scope.db
+    .from('project_quotes')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .order('amount_cents', { ascending: true })
+    .limit(Math.min(Math.max(input.limit ?? 200, 1), 600));
+  if (input.projectId) query = query.eq('project_id', input.projectId);
+  const { data, error } = await query;
+  if (error) {
+    console.error('[service:home] project quotes read failed', error);
+    return fail(describeDbError(error, 'Could not load the quotes on file.'), { code: SERVICE_CODES.db });
+  }
+  return ok(data ?? []);
+}
+
+/** The projects that have at least one quote, with the count — so a caller can ask "which project?" honestly. */
+export async function listProjectsWithQuotes(scope: ServiceScope): Promise<ServiceResult<{ project: Pick<HomeProjectRow, 'id' | 'title' | 'status'>; quoteCount: number }[]>> {
+  const quotes = await listProjectQuotes(scope, { limit: 600 });
+  if (!quotes.ok) return quotes;
+  const counts = new Map<string, number>();
+  for (const q of quotes.data) counts.set(q.project_id, (counts.get(q.project_id) ?? 0) + 1);
+  if (counts.size === 0) return ok([]);
+  const { data, error } = await scope.db
+    .from('home_projects')
+    .select('id, title, status')
+    .eq('family_id', scope.familyId)
+    .in('id', [...counts.keys()]);
+  if (error) {
+    console.error('[service:home] projects read failed', error);
+    return fail(describeDbError(error, 'Could not load your projects.'), { code: SERVICE_CODES.db });
+  }
+  return ok((data ?? [])
+    .map((project) => ({ project, quoteCount: counts.get(project.id) ?? 0 }))
+    .sort((a, b) => b.quoteCount - a.quoteCount || a.project.title.localeCompare(b.project.title)));
 }

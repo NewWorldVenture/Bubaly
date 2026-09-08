@@ -4,6 +4,7 @@
 // and upserts plans + steps. Idempotent; preserves is_done on regeneration.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { generatePrepPlans, type HorizonSignal } from './prep';
 import { nextBirthdayDate } from '@/lib/moments/birthdays';
@@ -17,7 +18,7 @@ export async function runPrepGeneration(sb: DB, familyId: string, createdBy: str
   const in120 = new Date(now.getTime() + 120 * 86_400_000).toISOString().slice(0, 10);
   const in60 = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
 
-  const [trips, members, docs] = await Promise.all([
+  const [trips, members, docs] = await settleAll([
     sb.from('vacations').select('id, title, start_date').eq('family_id', familyId).gte('start_date', todayKey).lte('start_date', in120),
     sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).not('birthday', 'is', null),
     sb.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),

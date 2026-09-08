@@ -45,7 +45,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, describeDbError } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, riskToDecision,
+  HIGH_STAKES_AI_DOMAINS, riskToDecision, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -343,7 +343,10 @@ async function gate(
     payload: { name: tool.name, args: input as Record<string, unknown> },
     context: {
       confidence,
-      tags: [`op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`],
+      // The tool's own name first: a policy Autopilot learned from repeated
+      // approvals is scoped by `conditions.tags` to exactly one tool, and
+      // must not reach its neighbours in the same domain.
+      tags: [...toolTags(tool.name), `op:${tool.capability}`, `risk:${risk}`, `domain:${tool.domain}`],
     },
   });
 

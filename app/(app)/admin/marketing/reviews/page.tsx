@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Star, MessageSquareQuote, Settings2, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ratingStats, DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
@@ -22,7 +23,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   const active = (FILTERS as readonly string[]).includes(status ?? '') ? status! : 'all';
   const supabase = createServiceClient();
 
-  const [reviewsResult, settingsResult] = await Promise.all([
+  const [reviewsResult, settingsResult] = await settleAll([
     supabase.from('reviews').select('*').is('deleted_at', null).order('submitted_at', { ascending: false }).limit(500),
     supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle(),
   ]);

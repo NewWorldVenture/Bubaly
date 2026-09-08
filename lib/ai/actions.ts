@@ -36,6 +36,7 @@ import type { AITool } from './provider';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 import { executeTool } from './tools/execute';
 import { getTool } from './tools/registry';
 
@@ -74,7 +75,7 @@ async function resolveScope(ctx: Ctx): Promise<{ ok: true; scope: ServiceScope }
   let identity = byFamily?.get(cacheKey);
 
   if (!identity) {
-    const [{ data: member, error: memberError }, { data: family, error: familyError }] = await Promise.all([
+    const [{ data: member, error: memberError }, { data: family, error: familyError }] = await settleAll([
       ctx.supabase.from('family_members').select('id, role')
         .eq('family_id', ctx.familyId).eq('user_id', ctx.userId).eq('is_active', true).maybeSingle(),
       ctx.supabase.from('families').select('timezone').eq('id', ctx.familyId).maybeSingle(),

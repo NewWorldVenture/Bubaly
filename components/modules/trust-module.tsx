@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Scale, Inbox, Users, Share2, Siren, ScrollText, Plus, Check, X,
-  Trash2, Loader2, Lock, ChevronRight, Clock, Power,
+  Trash2, Loader2, Lock, ChevronRight, Clock, Power, Activity,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -15,6 +16,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { cn } from '@/lib/utils/cn';
 import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
+import { TrustActivityTab } from '@/components/modules/trust-activity-tab';
+import type { BasedOn, TrustActivity } from '@/lib/trust/activity';
 import {
   TRUST_DOMAINS, CAPABILITIES, DOMAIN_LABELS, CAPABILITY_LABELS,
   ROLE_DEFAULTS, type Capability, type TrustRole,
@@ -25,6 +28,7 @@ import {
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
@@ -32,16 +36,23 @@ type Policy = {
   subject_kind: string; subject_role: string | null; subject_member_id: string | null;
   effect: string; conditions: Record<string, unknown>; approval_model: string;
   required_approvals: number; priority: number; enabled: boolean; is_system: boolean;
+  created_at?: string | null;
 };
 type Grant = { id: string; member_id: string; domain: string; capability: string; effect: string };
 type Delegation = { id: string; from_member_id: string; to_member_id: string; domains: string[]; reason: string | null; starts_at: string; expires_at: string };
 type Approval = TrustApproval;
 type Emergency = { id: string; kind: string; reason: string | null; elevated_domains: string[]; activated_at: string; expires_at?: string | null };
-type Audit = { id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; confidence: number | null; created_at: string };
+type Audit = { id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; policy_id?: string | null; confidence: number | null; created_at: string };
 
 export type TrustData = {
   members: Member[]; policies: Policy[]; grants: Grant[]; delegations: Delegation[];
   approvals: Approval[]; emergencies: Emergency[]; audit: Audit[];
+  /** M24 — the Activity tab's ledger, dials and read/withheld list; null when its read failed. */
+  activity?: TrustActivity | null;
+  /** Already-translated copy for that failure, so the tab fails closed instead of showing an empty ledger. */
+  activityError?: string | null;
+  /** Context slice names per APPROVAL id, for the card's "Based on" expander. */
+  basedOn?: Record<string, BasedOn>;
 };
 
 const EFFECT_STYLES: Record<string, string> = {
@@ -59,7 +70,7 @@ const DECISION_STYLES: Record<string, string> = {
   require_approval: 'text-amber-400', emergency_override: 'text-rose-400',
 };
 
-type Tab = 'approvals' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
+type Tab = 'approvals' | 'activity' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
 
 function fmtAmount(cents: number | null) {
   if (cents == null) return null;
@@ -77,7 +88,7 @@ function timeLeft(iso: string) {
   return `${Math.round(h / 24)}d left`;
 }
 
-export function TrustModule({ data, canManage }: { data: TrustData; canManage: boolean }) {
+export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData; canManage: boolean; needsYouHref?: string }) {
   const tr = useTranslations();
   const [tab, setTab] = useState<Tab>('approvals');
   const pendingApprovals = data.approvals.filter(a => a.status === 'pending');
@@ -85,6 +96,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
 
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }[] = [
     { key: 'approvals', label: 'Approvals', icon: Inbox, badge: pendingApprovals.length || undefined },
+    { key: 'activity', label: tr('trustActivity.activity'), icon: Activity },
     { key: 'policies', label: 'Policies', icon: Scale },
     { key: 'permissions', label: 'Permissions', icon: Users },
     { key: 'delegations', label: 'Delegations', icon: Share2 },
@@ -139,18 +151,26 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
         ))}
       </div>
 
-      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} />}
+      {tab === 'approvals' && <ApprovalsTab approvals={data.approvals} members={data.members} canManage={canManage} needsYouHref={needsYouHref} basedOn={data.basedOn} />}
+      {tab === 'activity' && <TrustActivityTab activity={data.activity ?? null} error={data.activityError ?? null} policies={data.policies} />}
       {tab === 'policies' && <PoliciesTab policies={data.policies} members={data.members} canManage={canManage} />}
       {tab === 'permissions' && <PermissionsTab members={data.members} grants={data.grants} canManage={canManage} />}
       {tab === 'delegations' && <DelegationsTab delegations={data.delegations} members={data.members} canManage={canManage} />}
       {tab === 'emergency' && <EmergencyTab active={activeEmergency} canManage={canManage} />}
-      {tab === 'audit' && <AuditTab audit={data.audit} members={data.members} />}
+      {tab === 'audit' && <AuditTab audit={data.audit} members={data.members} policies={data.policies} />}
     </div>
   );
 }
 
 // ─── Approvals inbox ──────────────────────────────────────────────────────────
-function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]; members: Member[]; canManage: boolean }) {
+function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: {
+  approvals: Approval[];
+  members: Member[];
+  canManage: boolean;
+  needsYouHref?: string;
+  /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
+  basedOn?: Record<string, BasedOn>;
+}) {
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -165,6 +185,14 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
 
   return (
     <div className="space-y-4">
+      {needsYouHref && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5">
+          <p className="text-xs text-muted">{tr('trustModule.approvalsAreOnePartOf')}</p>
+          <Link href={needsYouHref} className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline focus-ring">
+            {tr('trustModule.seeEverythingThatNeedsYou')} <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+      )}
       {pending.length === 0 ? (
         <EmptyCard icon={Check} title={tr('trust.noApprovalsWaiting')} sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
       ) : (
@@ -172,7 +200,7 @@ function ApprovalsTab({ approvals, members, canManage }: { approvals: Approval[]
           {pending.map(a => (
             <ApprovalCard
               key={a.id}
-              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage, managerCount })}
+              approval={toApprovalCardData(a, { requestedBy: nameById.get(a.requested_by_member_id ?? '') ?? null, canEdit: canManage, managerCount, basedOn: basedOn?.[a.id] })}
               canDecide={canManage}
               onResult={(result) => {
                 if (result.decision !== 'pending') setGone((g) => new Set(g).add(a.id));
@@ -253,6 +281,9 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold">{p.name}</p>
                     <span className={cn('rounded-md border px-1.5 py-0.5 text-[10px] font-semibold', EFFECT_STYLES[p.effect])}>{EFFECT_LABELS[p.effect] ?? p.effect}</span>
+                    {isAcceptedPolicy(p.conditions) && (
+                      <span className="rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{tr('trustModule.acceptedFromAnAutopilotSuggestion')}</span>
+                    )}
                   </div>
                   {p.description && <p className="mt-0.5 text-xs text-muted">{p.description}</p>}
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted">
@@ -263,7 +294,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                     <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
-                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions)}</div>
+                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions, tr)}</div>
                   )}
                 </div>
                 {canManage && (
@@ -290,11 +321,14 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
   );
 }
 
-function conditionSummary(c: Record<string, unknown>): string {
+function conditionSummary(c: Record<string, unknown>, tr: (key: string, params?: Record<string, string | number>) => string): string {
   const parts: string[] = [];
   if (typeof c.maxAmountCents === 'number') parts.push(`under ${fmtAmount(c.maxAmountCents)}`);
   if (typeof c.minConfidence === 'number') parts.push(`AI ≥ ${Math.round((c.minConfidence as number) * 100)}% sure`);
   if (typeof c.timeStart === 'string' && typeof c.timeEnd === 'string') parts.push(`between ${c.timeStart}–${c.timeEnd}`);
+  // A tag-scoped policy — the narrow kind Autopilot learns — names the one tool it covers.
+  const tags = Array.isArray(c.tags) ? (c.tags as unknown[]).filter((t): t is string => typeof t === 'string') : [];
+  if (tags.length > 0) parts.push(tr('trustModule.onlyTool', { tool: tags.join(', ') }));
   return parts.join(', ') || 'always';
 }
 
@@ -725,17 +759,30 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 }
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
-function AuditTab({ audit, members }: { audit: Audit[]; members: Member[] }) {
+function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
+  const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);
   if (audit.length === 0) return <EmptyCard icon={ScrollText} title={tr('trust.noActivityYet')} sub="Every trust decision — allow, deny, approval, emergency override — is recorded here with its reasoning." />;
+  // A decision that cites a policy the family still holds is explained by that
+  // policy — for one accepted out of an Autopilot suggestion, by the day the
+  // family said yes — rather than by the engine's generic "allowed by a
+  // household policy" line.
+  const reasonFor = (a: Audit): string => {
+    const policy = a.policy_id ? policyById.get(a.policy_id) ?? null : null;
+    if (!policy) return a.reason ?? `${a.capability} · ${a.domain}`;
+    return explainTrustDecision({
+      decision: a.decision, reason: a.reason, domain: a.domain, capability: a.capability, confidence: a.confidence,
+      policy: { name: policy.name, created_at: policy.created_at ?? null, conditions: policy.conditions, effect: policy.effect },
+    }).reason;
+  };
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface/30 divide-y divide-border/50">
       {audit.map(a => (
         <div key={a.id} className="flex items-start gap-3 px-4 py-3">
           <span className={cn('mt-0.5 text-[11px] font-bold capitalize flex-shrink-0', DECISION_STYLES[a.decision] ?? 'text-muted')}>{a.decision.replace('_', ' ')}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-fg/90">{a.reason ?? `${a.capability} · ${a.domain}`}</p>
+            <p className="text-xs text-fg/90">{reasonFor(a)}</p>
             <p className="mt-0.5 text-[10px] text-muted">
               {a.actor_kind === 'ai_agent' ? `AI · ${a.actor_id}` : (nameById.get(a.actor_id ?? '') ?? 'Member')}
               {a.domain ? ` · ${DOMAIN_LABELS[a.domain] ?? a.domain}` : ''}
