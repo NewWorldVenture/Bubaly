@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import type { UserContext } from '@/lib/supabase/auth';
 import type { ServiceScope } from '@/lib/services/types';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 // Privacy Center › "Export my family's data".
 //
@@ -24,7 +25,13 @@ import { EXPORT_SECTIONS, buildFamilyExport, exportFilename, sectionsForRole, se
 import { GET } from '@/app/api/privacy/export/route';
 
 const FAMILY = 'fam-1';
-const today = new Date().toISOString().slice(0, 10);
+const FAMILY_TZ = 'America/New_York';
+// The family's own day, not the server's. The export filters finances on
+// `dayKey(scope, 0)`, which resolves today in FAMILY_TZ — so a fixture dated by
+// the UTC day sits AFTER that upper bound every night between 00:00 and 04:00
+// UTC, and the transaction silently dropped out of the export. The assertion
+// was right; the fixture was a few hours ahead of the family it belonged to.
+const today = dayKeyInTz(new Date(), FAMILY_TZ);
 
 type Aal = { currentLevel: string; nextLevel: string };
 
@@ -36,7 +43,7 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }) {
   // The guard reads the level from the session; the fake has no session.
   Object.assign(db.auth, { mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: aal, error: null }) } });
 
-  db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: 'America/New_York' }]);
+  db.seed('families', [{ id: FAMILY, name: 'The Riveras', timezone: FAMILY_TZ }]);
   db.seed('family_members', [
     { id: 'mem-parent', family_id: FAMILY, user_id: 'user-parent', display_name: 'Jordan', role: 'parent', is_active: true, birthday: null, color: 'teal', avatar_url: null },
     { id: 'mem-teen', family_id: FAMILY, user_id: 'user-teen', display_name: 'Sam', role: 'teen', is_active: true, birthday: '2011-04-02', color: 'amber', avatar_url: null },
