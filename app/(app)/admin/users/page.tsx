@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { UsersRound, UserCheck, UserPlus, UserX, ShieldCheck } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -213,8 +213,8 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
             <div>
               <p className="text-sm font-semibold text-danger">{tr('adminUsers.someDataCouldntBeLoadedFrom')}</p>
-              {credentialHint(loadErrors) ? (
-                <p className="mt-1.5 text-xs font-medium text-danger">{credentialHint(loadErrors)}</p>
+              {credentialHint(loadErrors, describeConfiguredServiceKey()) ? (
+                <p className="mt-1.5 text-xs font-medium text-danger">{credentialHint(loadErrors, describeConfiguredServiceKey())}</p>
               ) : null}
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
                 {loadErrors.map((err, i) => <li key={i}>{err}</li>)}

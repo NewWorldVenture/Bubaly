@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -145,7 +145,7 @@ export default async function AdminReportsPage() {
 
   return (
     <div className="module-page space-y-5">
-      <PartialReadBanner title={"This report is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures)} />
+      <PartialReadBanner title={"This report is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('adminReports.reportsAmpAnalytics')}</h1>
         <p className="mt-1 text-sm text-muted">{tr('adminReports.growthRevenueAndEngagementAcrossEvery')}</p>

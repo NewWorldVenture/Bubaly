@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { CheckCircle2, XCircle, Users, Home, DollarSign, FolderLock, Database, RefreshCw } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settle, describeReadError, credentialHint } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -95,7 +95,7 @@ export default async function AdminSystemPage() {
 
   return (
     <div className="module-page">
-      <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures)} />
+      <PartialReadBanner title={"System overview is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminSystem.systemOverview')}</h1>

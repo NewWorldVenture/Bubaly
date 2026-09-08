@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import Link from 'next/link';
 import { Wallet, ShieldCheck } from 'lucide-react';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
 
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
@@ -72,7 +72,7 @@ export default async function AdminWalletPage() {
 
   return (
     <div className="space-y-5">
-      <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures)} />
+      <PartialReadBanner title={"Wallet oversight is incomplete — some reads failed:"} failures={readFailures} hint={credentialHint(readFailures, describeConfiguredServiceKey())} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
