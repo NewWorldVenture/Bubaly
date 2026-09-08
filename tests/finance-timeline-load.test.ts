@@ -118,7 +118,9 @@ describe('loadMoneyTimelineInput read boundary', () => {
       'bills', 'savings_goals', 'financial_accounts', 'calendar_events',
       'subscriptions_tracked', 'vacations', 'vacation_budgets', 'vacation_expenses', 'moves', 'home_projects',
     ]));
-    expect(timeline.coverage.coveredCount).toBe(3);
+    expect(timeline.coverage.coveredCount).toBe(3);  // three rent payments…
+    expect(timeline.coverage.coveredBills).toBe(1);  // …from one covered bill
+    expect(timeline.coverage.totalBills).toBe(1);
     expect(timeline.planOutflow).toBe(1000);
     // Rent (Feb 10) shares the week of Feb 9 with the trip (Feb 14); the trip is the plan moment.
     const trip = timeline.weeks.find((w) => w.weekStart === '2026-02-09')!.moments.find((m) => m.kind === 'plan');

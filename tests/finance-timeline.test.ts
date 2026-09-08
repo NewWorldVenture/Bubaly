@@ -176,7 +176,10 @@ describe('plan-linked commitments', () => {
     const t = buildCashflowTimeline({ bills: [], goals: [], events: [], startingBalance: 100, now: NOW });
     expect(t.planOutflow).toBe(0);
     expect(t.scenarioOutflow).toBe(0);
-    expect(t.coverage).toEqual({ coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 0, openAmount: 0 });
+    expect(t.coverage).toEqual({
+      coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 0, openAmount: 0,
+      coveredBills: 0, paidBills: 0, openBills: 0, totalBills: 0,
+    });
   });
 });
 
@@ -192,12 +195,96 @@ describe('coverage', () => {
       ],
       goals: [], events: [], startingBalance: 10000, now: NOW,
     });
-    expect(t.coverage).toEqual({ coveredCount: 3, coveredAmount: 3000, paidCount: 1, paidAmount: 80, openCount: 1, openAmount: 500 });
+    expect(t.coverage).toEqual({
+      // Payments: rent lands three times inside the horizon.
+      coveredCount: 3, coveredAmount: 3000, paidCount: 1, paidAmount: 80, openCount: 1, openAmount: 500,
+      // Bills: three of them — rent, water, tuition. The old paid bill is outside the horizon.
+      coveredBills: 1, paidBills: 1, openBills: 1, totalBills: 3,
+    });
     // Paid money already left the account: it never hits the projection.
     expect(t.totalOutflow).toBe(3500);
     const moments = t.weeks.flatMap((w) => w.moments);
     expect(moments.filter((m) => m.label === 'Rent').every((m) => m.covered === true)).toBe(true);
     expect(moments.find((m) => m.label === 'Tuition')?.covered).toBeUndefined();
+  });
+
+  // The counters a surface writes "bills" next to must count BILLS. One monthly
+  // bill is three payments inside a 12-week horizon; rendering "3 of 4 bills"
+  // to a household that has two of them is a false statement about their money.
+  it('separates payment counts from distinct-bill counts', () => {
+    const t = buildCashflowTimeline({
+      bills: [
+        bill({ name: 'Rent', amount: 1000, due_date: '2026-01-10', is_recurring: true, recurrence: 'monthly', autopay: true }), // 3 payments
+        bill({ name: 'Tuition', amount: 500, due_date: '2026-01-20' }),                                                          // 1 payment
+      ],
+      goals: [], events: [], startingBalance: 10000, now: NOW,
+    });
+    expect(t.coverage.coveredCount).toBe(3);   // payments
+    expect(t.coverage.coveredBills).toBe(1);   // bills
+    expect(t.coverage.openCount).toBe(1);
+    expect(t.coverage.openBills).toBe(1);
+    expect(t.coverage.totalBills).toBe(2);
+    expect(t.coverage.coveredBills + t.coverage.paidBills + t.coverage.openBills).toBe(t.coverage.totalBills);
+  });
+
+  // A recurring bill with an open occurrence is NOT a covered bill, however
+  // many of its other occurrences are covered — otherwise the CFO page tells
+  // the family everything is handled while rent is still due next month.
+  it('counts a recurring bill as open when any occurrence still needs a hand', () => {
+    const t = buildCashflowTimeline({
+      bills: [bill({ name: 'Rent', amount: 1000, due_date: '2026-01-10', is_recurring: true, recurrence: 'monthly', status: 'paid' })],
+      goals: [], events: [], startingBalance: 3000, now: NOW,
+    });
+    expect(t.coverage.paidCount).toBe(1);
+    expect(t.coverage.openCount).toBe(2);
+    expect(t.coverage.coveredBills).toBe(0);
+    expect(t.coverage.paidBills).toBe(0);
+    expect(t.coverage.openBills).toBe(1);
+    expect(t.coverage.totalBills).toBe(1);
+  });
+});
+
+// ── A paid RECURRING bill still owes its later occurrences ───────────────────
+// Marking this month's rent paid must not delete next month's from the
+// forecast. It used to: the bill short-circuited on status 'paid', so a family
+// saw an unchanged balance, $0 due, and an "everything is covered" all-clear.
+describe('a recurring bill marked paid', () => {
+  it('keeps its remaining occurrences in the projection', () => {
+    const t = buildCashflowTimeline({
+      bills: [bill({ name: 'Rent', amount: 1000, due_date: '2026-01-10', is_recurring: true, recurrence: 'monthly', status: 'paid' })],
+      goals: [], events: [], startingBalance: 3000, now: NOW,
+    });
+    const dates = t.weeks.flatMap((w) => w.moments).map((m) => m.date);
+    expect(dates).toEqual(['2026-02-10', '2026-03-10']);   // January's is paid, February's and March's are not
+    expect(t.totalOutflow).toBe(2000);
+    expect(t.lowestBalance).toBe(1000);
+    expect(t.coverage.paidAmount).toBe(1000);
+    expect(t.coverage.openAmount).toBe(2000);
+    expect(t.monthlyRecurring).toBe(1000);                 // it is still a monthly commitment
+  });
+
+  it('carries an autopay one forward as covered, not open', () => {
+    const t = buildCashflowTimeline({
+      bills: [bill({ name: 'Rent', amount: 1000, due_date: '2026-01-10', is_recurring: true, recurrence: 'monthly', status: 'paid', autopay: true })],
+      goals: [], events: [], startingBalance: 3000, now: NOW,
+    });
+    expect(t.totalOutflow).toBe(2000);
+    expect(t.coverage.coveredCount).toBe(2);
+    expect(t.coverage.openCount).toBe(0);
+    expect(t.coverage.coveredBills).toBe(1);
+    expect(t.coverage.openBills).toBe(0);
+  });
+
+  it('still short-circuits a one-off bill — that money really has gone', () => {
+    const t = buildCashflowTimeline({
+      bills: [bill({ name: 'Water', amount: 80, due_date: '2026-01-12', status: 'paid' })],
+      goals: [], events: [], startingBalance: 3000, now: NOW,
+    });
+    expect(t.weeks.flatMap((w) => w.moments)).toEqual([]);
+    expect(t.totalOutflow).toBe(0);
+    expect(t.coverage.paidCount).toBe(1);
+    expect(t.coverage.paidBills).toBe(1);
+    expect(t.coverage.totalBills).toBe(1);
   });
 });
 
@@ -246,7 +333,10 @@ describe('horizon edges', () => {
     expect(t.weeks[t.weeks.length - 1].weekStart).toBe('2026-03-23');
     expect(t.weeks.flatMap((w) => w.moments).map((m) => m.label)).toEqual(['Last day in']);
     expect(t.totalOutflow).toBe(100);
-    expect(t.coverage).toEqual({ coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 1, openAmount: 100 });
+    expect(t.coverage).toEqual({
+      coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 1, openAmount: 100,
+      coveredBills: 0, paidBills: 0, openBills: 1, totalBills: 1,
+    });
     expect(t.planOutflow).toBe(0);
     expect(t.scenarioOutflow).toBe(0);
     expect(t.insights.find((i) => i.kind === 'goal_at_risk')).toBeUndefined();

@@ -93,7 +93,11 @@ export default async function FamilyCfoPage() {
   const budgetByCat = new Map((budgets ?? []).map((b) => [b.category, Number(b.amount)]));
 
   const { coverage } = forecast;
-  const billOccurrences = coverage.coveredCount + coverage.paidCount + coverage.openCount;
+  // Copy here says "bills" to a family, so it counts DISTINCT BILLS, never
+  // occurrences: one monthly bill is three payments inside a 12-week horizon,
+  // and "3 of 4 bills" for a household with two of them is a false statement
+  // about their money. coverage.*Bills are the distinct-bill counters.
+  const coveredBills = coverage.coveredBills + coverage.paidBills;
   const planMoments = forecast.weeks
     .flatMap((w) => w.moments.filter((m) => m.kind === 'plan').map((m) => ({ ...m, weekStart: w.weekStart })))
     .slice(0, 6);
@@ -143,16 +147,16 @@ export default async function FamilyCfoPage() {
             value={money(coverage.coveredAmount + coverage.paidAmount)}
             icon={ShieldCheck}
             accent="bg-emerald-600"
-            sublabel={tr('familyCfo.nOfMBills', { n: coverage.coveredCount + coverage.paidCount, m: billOccurrences })}
+            sublabel={tr('familyCfo.nOfMBills', { n: coveredBills, m: coverage.totalBills })}
           />
         </div>
 
         <p className="mt-4 text-sm text-muted">
-          {billOccurrences === 0
+          {coverage.totalBills === 0
             ? tr('familyCfo.noBillsFallInsideThe')
-            : coverage.openCount === 0
-              ? tr('familyCfo.everyBillInTheNext12', { n: billOccurrences })
-              : tr('familyCfo.nBillsAreCoveredAutopay', { covered: coverage.coveredCount + coverage.paidCount, open: coverage.openCount, amount: money(coverage.openAmount) })}
+            : coverage.openBills === 0
+              ? tr('familyCfo.everyBillInTheNext12', { n: coverage.totalBills })
+              : tr('familyCfo.nBillsAreCoveredAutopay', { covered: coveredBills, open: coverage.openBills, amount: money(coverage.openAmount) })}
         </p>
 
         <div className="mt-4">

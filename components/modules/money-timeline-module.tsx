@@ -110,10 +110,12 @@ export function MoneyTimelineModule({
           sub={timeline.planOutflow > 0 ? t('moneyTimelineModule.amountFromTripsMovesProjects', { amount: money(timeline.planOutflow) }) : undefined}
           tone="fg"
         />
+        {/* "covered by autopay" counts BILLS, not their occurrences — one
+            monthly autopay rent is one covered bill, not three. */}
         <Stat
           label={t('moneyTimeline.recurringMo')}
           value={money(timeline.monthlyRecurring)}
-          sub={timeline.coverage.coveredCount > 0 ? t('moneyTimelineModule.nBillsCoveredByAutopay', { n: timeline.coverage.coveredCount }) : undefined}
+          sub={timeline.coverage.coveredBills > 0 ? t('moneyTimelineModule.nBillsCoveredByAutopay', { n: timeline.coverage.coveredBills }) : undefined}
           tone="fg"
         />
       </section>

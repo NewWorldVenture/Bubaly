@@ -92,14 +92,31 @@ export interface WeekBucket {
  * Which of the horizon's bills are covered. "Covered" is a bill the family
  * does not have to touch: it leaves by autopay, or it is already marked paid.
  * Everything else is "open" — someone still has to pay it by hand.
+ *
+ * Two different things are counted here and they must not be confused:
+ * the *Count/*Amount fields count PAYMENTS (occurrences — one monthly bill
+ * contributes three inside a 12-week horizon), while the *Bills fields count
+ * DISTINCT BILLS. Copy that says "bills" to a family has to use the *Bills
+ * fields; using an occurrence count there tells a household with three bills
+ * that it has five. coveredBills + paidBills + openBills === totalBills, and a
+ * bill with any occurrence still to pay by hand is open, however many of its
+ * other occurrences are covered.
  */
 export interface CoverageSummary {
   coveredCount: number;          // autopay occurrences inside the horizon
   coveredAmount: number;
-  paidCount: number;             // bills marked paid whose due date is inside the horizon
+  paidCount: number;             // occurrences already marked paid whose date is inside the horizon
   paidAmount: number;
   openCount: number;
   openAmount: number;
+  /** Distinct bills whose horizon occurrences all leave by autopay. */
+  coveredBills: number;
+  /** Distinct bills settled by an already-paid occurrence, with nothing left open. */
+  paidBills: number;
+  /** Distinct bills with at least one occurrence someone still has to pay by hand. */
+  openBills: number;
+  /** Distinct bills with at least one occurrence inside the horizon. */
+  totalBills: number;
 }
 
 export type InsightKind =
@@ -299,30 +316,60 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
     return true;
   };
 
-  // 1) Bills (recurring expanded across the horizon; paid ones skipped) and
-  //    coverage: an autopay occurrence is covered, a paid bill was covered, and
-  //    the rest is what someone still has to pay by hand.
+  // 1) Bills (recurring expanded across the horizon; a paid occurrence skipped)
+  //    and coverage: an autopay occurrence is covered, a paid one already was,
+  //    and the rest is what someone still has to pay by hand — counted both as
+  //    payments and as distinct bills, which are not the same number.
   let monthlyRecurring = 0;
-  const coverage: CoverageSummary = { coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 0, openAmount: 0 };
+  const coverage: CoverageSummary = {
+    coveredCount: 0, coveredAmount: 0, paidCount: 0, paidAmount: 0, openCount: 0, openAmount: 0,
+    coveredBills: 0, paidBills: 0, openBills: 0, totalBills: 0,
+  };
   const recurringBillNames = new Set<string>();
   for (const bill of input.bills) {
     const amount = round2(bill.amount);
-    if (bill.status === 'paid') {
-      // Paid means the money already left, so it never hits the projection —
-      // but a bill paid ahead of its date is still a covered bill of this horizon.
+    const recurring = bill.is_recurring && Boolean(bill.recurrence);
+    // 'paid' means the money for THAT due date already left, so that one
+    // occurrence never hits the projection. For a one-off bill that is the
+    // whole bill and there is nothing left to forecast. A RECURRING bill still
+    // owes every later occurrence in the horizon: dropping them would hide the
+    // money (a paid monthly rent would take February's and March's rent out of
+    // the projection) and let the coverage copy claim an all-clear the data
+    // does not support. So only short-circuit for non-recurring bills.
+    const paidDate = bill.status === 'paid' ? ymd(parseDate(bill.due_date)) : null;
+    let autopayCovered = false;  // at least one occurrence inside the horizon leaves by autopay
+    let settledPaid = false;     // the paid occurrence falls inside the horizon
+    let open = false;            // at least one occurrence someone still has to pay by hand
+
+    if (paidDate) {
       const due = parseDate(bill.due_date);
-      if (due >= today && due <= horizonEnd) { coverage.paidCount += 1; coverage.paidAmount = round2(coverage.paidAmount + amount); }
-      continue;
+      if (due >= today && due <= horizonEnd) {
+        coverage.paidCount += 1;
+        coverage.paidAmount = round2(coverage.paidAmount + amount);
+        settledPaid = true;
+      }
+      if (!recurring) {
+        if (settledPaid) { coverage.totalBills += 1; coverage.paidBills += 1; }
+        continue;
+      }
     }
-    if (bill.is_recurring && bill.recurrence) recurringBillNames.add(normalizeName(bill.name));
+
+    if (recurring) recurringBillNames.add(normalizeName(bill.name));
     monthlyRecurring += monthlyEquivalent(bill);
     const covered = bill.autopay === true;
     for (const date of expandOccurrences(bill, now, horizonEnd)) {
+      if (date === paidDate) continue;  // already counted as paid above
       const landed = push({ date, label: bill.name, amount, kind: bill.is_recurring ? 'recurring' : 'bill', category: bill.category, ...(covered ? { covered: true } : {}) });
       if (!landed) continue;
-      if (covered) { coverage.coveredCount += 1; coverage.coveredAmount = round2(coverage.coveredAmount + amount); }
-      else { coverage.openCount += 1; coverage.openAmount = round2(coverage.openAmount + amount); }
+      if (covered) { coverage.coveredCount += 1; coverage.coveredAmount = round2(coverage.coveredAmount + amount); autopayCovered = true; }
+      else { coverage.openCount += 1; coverage.openAmount = round2(coverage.openAmount + amount); open = true; }
     }
+
+    // One bill, counted once — open wins, because a family whose rent is paid
+    // this month but due again next month still has rent to pay.
+    if (open) { coverage.totalBills += 1; coverage.openBills += 1; }
+    else if (autopayCovered) { coverage.totalBills += 1; coverage.coveredBills += 1; }
+    else if (settledPaid) { coverage.totalBills += 1; coverage.paidBills += 1; }
   }
 
   // 2) Plan-linked commitments. A subscription the family also entered as a
@@ -507,7 +554,13 @@ function weekIndex(order: string[], ws: string): number {
 
 // ── "Can we afford it?" ──────────────────────────────────────────────────────
 
-export type AffordabilityVerdict = 'ok' | 'tight' | 'breaches';
+/**
+ * 'not_assessed' is deliberately NOT a flavour of 'ok': the commitment landed
+ * outside the horizon, so the forecast never weighed it. Answering "yes" to a
+ * $50,000 question the model never evaluated is a verdict with no evidence
+ * behind it, so it gets its own value and its own neutral rendering.
+ */
+export type AffordabilityVerdict = 'not_assessed' | 'ok' | 'tight' | 'breaches';
 
 export interface AffordabilityResult {
   verdict: AffordabilityVerdict;
@@ -532,10 +585,11 @@ export interface AffordabilityResult {
  * Try a commitment against the whole forward forecast — every bill, goal
  * set-aside and plan-linked commitment, not one budget category — and answer
  * with the lowest balance before/after and a verdict:
- *   breaches — the lowest balance with it falls under the buffer;
- *   tight    — it stays above, but the headroom is under one buffer or a
- *              quarter of the commitment, whichever is larger;
- *   ok       — otherwise.
+ *   not_assessed — nothing landed inside the horizon, so there is no answer;
+ *   breaches     — the lowest balance with it falls under the buffer;
+ *   tight        — it stays above, but the headroom is under one buffer or a
+ *                  quarter of the commitment, whichever is larger;
+ *   ok           — otherwise.
  * Pure and deterministic given `now`.
  */
 export function assessAffordability(input: BuildTimelineInput, scenario: TimelineScenario): AffordabilityResult {
@@ -548,7 +602,7 @@ export function assessAffordability(input: BuildTimelineInput, scenario: Timelin
   const headroom = round2(tried.lowestBalance - buffer);
 
   let verdict: AffordabilityVerdict;
-  if (occurrences === 0) verdict = 'ok';
+  if (occurrences === 0) verdict = 'not_assessed';
   else if (tried.lowestBalance < buffer) verdict = 'breaches';
   else if (headroom < Math.max(buffer, total * 0.25)) verdict = 'tight';
   else verdict = 'ok';
