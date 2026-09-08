@@ -58,6 +58,15 @@ export type LifeEventHandoff = {
    * family's real, in-progress move.
    */
   created: boolean;
+  /**
+   * The date the row on file actually carries — which is the anchor this launch
+   * asked for ONLY when `created` is true. `createMove` returns a move already
+   * under way untouched, because shifting a move's date shifts every relative
+   * task with it: that is a reviewed change a parent makes in the Move Planner,
+   * not a side effect of tapping a playbook. So the caller that wants to say a
+   * date must say this one, never the one the Start dialog collected.
+   */
+  dateOnFile: string;
 };
 
 /** Which module owns which template. Templates not listed stay a checklist. */
@@ -299,28 +308,30 @@ async function createHandoff(
     if (!move.ok) return move;
     const tasks = await planTasks(scope, { moveId: move.data.move.id });
     if (!tasks.ok) return tasks;
-    return ok({ kind, id: move.data.move.id, href: HANDOFF_HREF.move, created: move.data.created });
+    return ok({ kind, id: move.data.move.id, href: HANDOFF_HREF.move, created: move.data.created, dateOnFile: move.data.move.move_date });
   }
   if (kind === 'project') {
     const { data, error } = await scope.db
       .from('home_projects')
       .insert({ family_id: scope.familyId, title, kind: 'renovation', status: 'planning', target_start: anchor, created_by: scope.userId })
-      .select('id')
+      .select('id, target_start')
       .single();
     if (error || !data) {
       console.error('[life-events] project handoff failed', error);
       return fail(describeDbError(error, 'Could not open a project for that playbook.'), { code: SERVICE_CODES.db });
     }
-    return ok({ kind, id: data.id, href: HANDOFF_HREF.project, created: true });
+    // Read back rather than echoing `anchor`: a project is always created here,
+    // so the two agree today, but the row is the thing the family will open.
+    return ok({ kind, id: data.id, href: HANDOFF_HREF.project, created: true, dateOnFile: data.target_start ?? anchor });
   }
   const { data, error } = await scope.db
     .from('vacations')
     .insert({ family_id: scope.familyId, title, start_date: anchor, created_by: scope.userId })
-    .select('id')
+    .select('id, start_date')
     .single();
   if (error || !data) {
     console.error('[life-events] vacation handoff failed', error);
     return fail(describeDbError(error, 'Could not open a trip for that playbook.'), { code: SERVICE_CODES.db });
   }
-  return ok({ kind, id: data.id, href: HANDOFF_HREF.vacation, created: true });
+  return ok({ kind, id: data.id, href: HANDOFF_HREF.vacation, created: true, dateOnFile: data.start_date ?? anchor });
 }

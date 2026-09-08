@@ -9,6 +9,10 @@
 // subscription, one per child's school, one per pet's vet — go through
 // `addTask` with their own stable `template_key` for the same reason.
 //
+// WHAT `getMove` READS. Tasks and boxes both, because the burn-down sentence
+// counts both — "3 days in · 2/14 boxes unpacked" is only sayable when the
+// boxes have actually been read, and the Move Planner page reads the same rows.
+//
 // WHY `setMoveDate` calls the RPC instead of updating `moves.move_date`:
 // migration 0271 guards that column (`moves_reviewed_date_write_guard`) so
 // only `move_recalculate_date` may change it, and every relative task's
@@ -31,8 +35,10 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 
 export type MoveRow = Tables<'moves'>;
 export type MoveTaskRow = Tables<'move_tasks'>;
+export type MoveBoxRow = Tables<'move_boxes'>;
 
 const MAX_TASKS = 600;
+const MAX_BOXES = 600;
 const OPEN_STATUSES = ['planning', 'packing', 'moving_day', 'settling'] as const;
 const KIND_VALUES = new Set<string>(MOVE_KINDS.map((k) => k.value));
 const CATEGORY_VALUES = new Set<string>(TASK_CATEGORIES.map((c) => c.value));
@@ -69,21 +75,43 @@ async function readTasks(scope: ServiceScope, moveId: string): Promise<ServiceRe
   return ok(data ?? []);
 }
 
-export type MoveDetail = { move: MoveRow; tasks: MoveTaskRow[]; summary: MoveSummary };
+// The burn-down sentence counts boxes ("4 days in · 3/12 boxes unpacked"), so
+// the boxes have to be read before that sentence may be said. A failed read is
+// a refusal, not an empty list — an empty list would report "0/0 unpacked" for
+// a family whose boxes simply could not be loaded.
+async function readBoxes(scope: ServiceScope, moveId: string): Promise<ServiceResult<MoveBoxRow[]>> {
+  const { data, error } = await scope.db
+    .from('move_boxes')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .eq('move_id', moveId)
+    .order('box_number', { ascending: true })
+    .limit(MAX_BOXES);
+  if (error) {
+    console.error('[service:moving] boxes read failed', error);
+    return fail(describeDbError(error, 'Could not load the move boxes.'), { code: SERVICE_CODES.db });
+  }
+  return ok(data ?? []);
+}
+
+export type MoveDetail = { move: MoveRow; tasks: MoveTaskRow[]; boxes: MoveBoxRow[]; summary: MoveSummary };
 
 /**
- * A move with its tasks and burn-down. Without an id: the family's soonest
- * open move. `null` data means the family has no move on file — a real
- * answer, distinct from a read that failed.
+ * A move with its tasks, its boxes and the burn-down over both. Without an id:
+ * the family's soonest open move. `null` data means the family has no move on
+ * file — a real answer, distinct from a read that failed. Both the tasks and
+ * the boxes are read here because `moveSummary` counts both, and the sentence
+ * it produces is what the assistant repeats to the family.
  */
 export async function getMove(scope: ServiceScope, input: { moveId?: string | null } = {}): Promise<ServiceResult<MoveDetail | null>> {
   const move = await readMove(scope, input.moveId ?? null);
   if (!move.ok) return move;
   if (!move.data) return ok(null);
-  const tasks = await readTasks(scope, move.data.id);
+  const [tasks, boxes] = await Promise.all([readTasks(scope, move.data.id), readBoxes(scope, move.data.id)]);
   if (!tasks.ok) return tasks;
+  if (!boxes.ok) return boxes;
   const today = new Date(`${dayKeyInTz(scopeNow(scope), scope.tz)}T12:00:00`);
-  return ok({ move: move.data, tasks: tasks.data, summary: moveSummary(move.data, tasks.data, [], today) });
+  return ok({ move: move.data, tasks: tasks.data, boxes: boxes.data, summary: moveSummary(move.data, tasks.data, boxes.data, today) });
 }
 
 // ── create ───────────────────────────────────────────────────────────────────

@@ -217,6 +217,26 @@ describe('the notifications list renders the mapping', () => {
     expect(source).toMatch(/decideApproval\(\{ id: action\.approvalId/);
   });
 
+  it('reports the status the chore write settled on, not the one it asked for', () => {
+    // `completeChoreAssignment` lands on 'done' only when the chore's
+    // `requires_approval` is false, and that column is `not null default true`
+    // (0002) — so the ordinary sign-off is written as 'submitted' and is still
+    // waiting for a parent. A fixed "Chore marked done." toast would claim a
+    // completion the row does not record; the chores board already branches on
+    // the settled status, and so must this.
+    const inline = source.slice(source.indexOf('async function runInline'), source.indexOf('const unread ='));
+    const signoff = inline.slice(inline.indexOf("action.kind === 'chore-signoff'"), inline.indexOf('} else {'));
+    expect(signoff).toMatch(/result\.status === 'done'/);
+    expect(signoff).toContain('notificationActions.choreMarkedDone');
+    expect(signoff).toContain('notificationActions.choreSubmittedForApproval');
+    // …and never announces completion without consulting that status.
+    expect(signoff).not.toMatch(/success\(\s*t\('notificationActions\.choreMarkedDone'\)\s*\)/);
+    // Both halves of the branch are real copy, not a key that renders raw.
+    const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
+    expect(en['notificationActions.choreMarkedDone']).toBeTruthy();
+    expect(en['notificationActions.choreSubmittedForApproval']).toBeTruthy();
+  });
+
   it('marks a row read only after the action succeeded', () => {
     // The failure branches return before `markRead`, so a chore that could not
     // be signed off stays unread and visible.

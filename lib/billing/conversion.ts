@@ -45,20 +45,51 @@ export function isChurn(prev: SubState, next: { plan: string; status: string }):
 // FIRST VALUE (they saw a real outcome Bubaly produced), how many paid, and how
 // long did it take them?
 //
-// The ordering is load-bearing. A subscription that existed BEFORE the family
-// ever saw an outcome did not convert because of it, and counting it would let
-// a marketing push flatter the product. Only subscriptions created at or after
-// the milestone count.
+// The ordering is load-bearing. A family that was already paying BEFORE it ever
+// saw an outcome did not convert because of it, and counting it would let a
+// marketing push flatter the product. Only families that started paying at or
+// after the milestone count.
+//
+// WHICH TIMESTAMP IS "STARTED PAYING" — and which one is NOT. This function
+// used to be handed `subscriptions.created_at`, and that column cannot answer
+// the question in this repository: `ensureFamily` and the onboarding action
+// insert exactly ONE `subscriptions` row per family at family creation, on plan
+// 'free' / status 'trialing', and the Stripe webhook, the change-plan route and
+// the admin action all UPDATE that same row in place. `created_at` is therefore
+// always the family's creation instant, always earlier than any activation
+// event, so the `paid >= reached` guard rejected every family and `converted`
+// was structurally 0 — a tile reading "0%" forever and presenting it as a
+// measurement.
+//
+// So the caller must supply the moment the family actually went paid, and say
+// where it got it. `lib/metric/strategy-server.ts` prefers the billing EVENT
+// (the `admin_notifications` row the webhook writes once, on the paid
+// transition) and falls back to the row's own `updated_at`, which the
+// `trg_set_updated_at` trigger moves on every write — an upper bound on the
+// conversion instant, not the instant itself. `basis` carries that distinction
+// out to the UI so an approximate median is never rendered as an exact one.
 
 /** A family that reached first value, and when. */
 export type ActivationReach = { familyId: string; reachedAt: string };
+
+/** How a `paidAt` was obtained — the two are not equally precise. */
+export type PaidAtBasis = 'event' | 'row_updated_at';
 
 /** A subscription row reduced to what X10 needs. */
 export type ConversionSubscription = {
   familyId: string;
   plan: string | null;
   status: string | null;
-  createdAt: string;
+  /**
+   * When this family started paying.
+   *
+   * NEVER `subscriptions.created_at` — see the note above; that column records
+   * family creation here. Pass the billing event's timestamp when one exists,
+   * or the paid row's `updated_at` as a documented approximation.
+   */
+  paidAt: string;
+  /** Where `paidAt` came from, so the result can say how exact it is. */
+  basis?: PaidAtBasis;
 };
 
 export type ConversionAfterValue = {
@@ -70,6 +101,12 @@ export type ConversionAfterValue = {
   rate: number | null;
   /** Median days from first value to the subscription. `null` when none converted. */
   medianDays: number | null;
+  /**
+   * True when at least one counted conversion was dated from a row's
+   * `updated_at` rather than from a billing event — so `medianDays` is an upper
+   * bound, and the surface must say so rather than print it as measured.
+   */
+  medianDaysApproximate: boolean;
 };
 
 const DAY_MS = 86_400_000;
@@ -100,22 +137,24 @@ export function conversionAfterValue(
     if (prev === undefined || at < prev) firstValueAt.set(a.familyId, at);
   }
 
-  const paidAt = new Map<string, number>();
+  const paidAt = new Map<string, { at: number; basis: PaidAtBasis }>();
   for (const s of subs) {
     if (!isPaidActive({ plan: s.plan, status: s.status })) continue;
-    const at = Date.parse(s.createdAt);
+    const at = Date.parse(s.paidAt);
     if (!Number.isFinite(at)) continue;
     const prev = paidAt.get(s.familyId);
-    if (prev === undefined || at < prev) paidAt.set(s.familyId, at);
+    if (prev === undefined || at < prev.at) paidAt.set(s.familyId, { at, basis: s.basis ?? 'event' });
   }
 
   const daysToPay: number[] = [];
   let converted = 0;
+  let approximate = false;
   for (const [familyId, reached] of firstValueAt) {
     const paid = paidAt.get(familyId);
-    if (paid === undefined || paid < reached) continue;
+    if (paid === undefined || paid.at < reached) continue;
     converted++;
-    daysToPay.push((paid - reached) / DAY_MS);
+    if (paid.basis === 'row_updated_at') approximate = true;
+    daysToPay.push((paid.at - reached) / DAY_MS);
   }
 
   const families = firstValueAt.size;
@@ -124,5 +163,6 @@ export function conversionAfterValue(
     converted,
     rate: families > 0 ? converted / families : null,
     medianDays: medianOf(daysToPay.map((d) => Math.round(d * 10) / 10)),
+    medianDaysApproximate: approximate,
   };
 }

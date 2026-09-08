@@ -23,11 +23,13 @@
 // builder only ranks what the reader (`lib/briefing/decisions.ts`) found.
 // When there is at least one, it leads the headline: a parent reading at 7am
 // should see "2 decisions need you" before "3 things today".
+//
 // AND `counts.handled` IS NOT `handled.length`. It used to be, and
 // `mergeCompletedByBubaly` caps its LIST at six — so a family that had eleven
 // things handled read "6 handled" in the brief and a different number on Home.
 // The count now comes from `countHandledThisWeek` (`lib/metric/time-saved-server.ts`),
 // the one accounting every surface shares; the list stays a list.
+//
 import { z } from 'zod';
 import type { MetricCount } from '@/lib/metric/count';
 import { buildConciergeDigest, type ConciergeDigest, type ConciergeSnapshot } from '@/lib/concierge/digest';

@@ -6,6 +6,7 @@
 // negative cases matter as much: a proposal with no evidence behind it is a
 // guess dressed up as intelligence, and a proposal for a plan the family is
 // already running is nagging.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   detectLifeEvents, daysBetweenKeys, launchDateFor,
@@ -140,6 +141,35 @@ describe('what the family is already running', () => {
     expect(keysOf(detectLifeEvents(signals)).sort()).toEqual(['camp', 'new_pet', 'school_start']);
     expect(keysOf(detectLifeEvents({ ...signals, activePlanKeys: ['school_start'] })).sort()).toEqual(['camp', 'new_pet']);
     expect(detectLifeEvents({ ...signals, activePlanKeys: ['school_start', 'new_pet', 'camp'] })).toEqual([]);
+  });
+
+  // The transitions this detector exists for come round every year. A family
+  // who ran "The Holidays" in 2026 and ticked it off has a `life_event_plans`
+  // row that never gets archived — so if a COMPLETED plan reached
+  // `activePlanKeys`, holidays, school_start and camp would be silenced for
+  // good, in the module and in the planner's proactive slice alike. Only a
+  // plan with status 'active' belongs in this set.
+  it('proposes the transition again next year once the last plan is finished', () => {
+    const lastYear = { todayKey: '2026-11-20', activePlanKeys: ['holidays'] };
+    expect(keysOf(detectLifeEvents(lastYear))).not.toContain('holidays');
+    // A year on, the 2026 plan is completed — it is history, not a live plan,
+    // so it is not in the set and the proposal comes back.
+    expect(keysOf(detectLifeEvents({ todayKey: '2027-11-20', activePlanKeys: [] }))).toContain('holidays');
+
+    const school = { termStarts: [{ label: 'Autumn term', startKey: '2027-09-02' }] };
+    expect(keysOf(detectLifeEvents({ todayKey: '2027-08-10', activePlanKeys: [], ...school }))).toContain('school_start');
+  });
+
+  // Pinning the callers, because the bug the case above describes lives in the
+  // QUERY, not in the detector: both reads must ask for active plans only.
+  it('is fed only active plans by the page and by the proactive slice', () => {
+    for (const file of ['app/(app)/dashboard/life-events/page.tsx', 'lib/ai/context/slices/proactive.ts']) {
+      const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+      const read = source.split('\n').find((line) => line.includes("from('life_event_plans')"));
+      expect(read, file).toBeDefined();
+      expect(read, file).toContain("eq('status', 'active')");
+      expect(read, file).not.toContain("neq('status'");
+    }
   });
 });
 

@@ -1,9 +1,11 @@
 // X3 — the rework rate. "How often does Bubaly get it right the first time?"
 import { describe, it, expect } from 'vitest';
+import * as activity from '@/lib/ai/activity';
 import {
-  REWORK_EVENT_TYPES, TERMINAL_RUN_STATES, summarizeRework,
+  REWORK_EVENT_TYPES, summarizeRework,
   type ReworkEventRow, type ReworkRunRow,
 } from '@/lib/ai/activity';
+import { TERMINAL_RUN_STATES } from '@/lib/ai/runs/states';
 
 const run = (id: string, state: string, requestId: string | null = null): ReworkRunRow =>
   ({ id, request_id: requestId, state });
@@ -44,15 +46,35 @@ describe('summarizeRework', () => {
     expect(summarizeRework([run('r1', 'completed')], {}, [{ run_id: 'r1', event_type: 'step_retried' }]).firstTimeRight).toBe(0);
   });
 
-  it('never counts a partial, failed, blocked or cancelled run as right the first time', () => {
+  it('never counts a partial, failed or cancelled run as right the first time', () => {
     const runs = [
-      run('a', 'partially_completed', 'q1'), run('b', 'failed', 'q2'),
-      run('c', 'blocked', 'q3'), run('d', 'cancelled', 'q4'),
+      run('a', 'partially_completed', 'q1'), run('b', 'failed', 'q2'), run('d', 'cancelled', 'q4'),
     ];
-    const s = summarizeRework(runs, { q1: 1, q2: 1, q3: 1, q4: 1 }, []);
-    expect(s.terminal).toBe(4);
+    const s = summarizeRework(runs, { q1: 1, q2: 1, q4: 1 }, []);
+    expect(s.terminal).toBe(3);
     expect(s.firstTimeRight).toBe(0);
     expect(s.reworkRate).toBe(1);
+  });
+
+  it('leaves a BLOCKED run out of the denominator entirely', () => {
+    // `blocked` is waiting on a person — the state machine says so, and a
+    // decision or an edit puts the run back in flight. Counting it made every
+    // unanswered question look like rework and pushed the rate up with the
+    // size of the human queue rather than with quality.
+    const s = summarizeRework([run('waiting', 'blocked', 'q1')], { q1: 1 }, []);
+    expect(s.terminal).toBe(0);
+    expect(s.reworked).toBe(0);
+    expect(s.reworkRate).toBeNull();
+  });
+
+  it('does not let a queue of blocked runs move a real rate', () => {
+    const runs = [
+      run('done', 'completed', 'q1'),
+      run('w1', 'blocked', 'q2'), run('w2', 'blocked', 'q3'), run('w3', 'blocked', 'q4'),
+    ];
+    const s = summarizeRework(runs, { q1: 1, q2: 1, q3: 1, q4: 1 }, []);
+    expect(s.terminal).toBe(1);
+    expect(s.reworkRate).toBe(0);
   });
 
   it('excludes runs still in flight from the denominator', () => {
@@ -85,8 +107,15 @@ describe('summarizeRework', () => {
 
 describe('the vocabulary', () => {
   it('names the terminal states and the rework events', () => {
-    expect([...TERMINAL_RUN_STATES]).toEqual(['completed', 'partially_completed', 'failed', 'blocked', 'cancelled']);
+    expect([...TERMINAL_RUN_STATES]).toEqual(['completed', 'partially_completed', 'failed', 'cancelled']);
+    expect(TERMINAL_RUN_STATES).not.toContain('blocked');
     expect([...REWORK_EVENT_TYPES]).toContain('step_retried');
     expect([...REWORK_EVENT_TYPES]).toContain('replanned');
+  });
+
+  it('has ONE definition of terminal — activity.ts does not redeclare it', () => {
+    // A second exported constant of this name, disagreeing about `blocked`, is
+    // how the rework rate came to count the human queue in the first place.
+    expect(Object.keys(activity)).not.toContain('TERMINAL_RUN_STATES');
   });
 });

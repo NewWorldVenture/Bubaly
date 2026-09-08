@@ -52,7 +52,11 @@ const PANTRY = { name: 'Milk', expires_at: '2026-09-08' };
 function queryResult(data: unknown[]) {
   const promise = Promise.resolve({ data, error: null });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not']) {
+  // `or` and `update` are here because the route really calls them: the shared
+  // handled count filters `family_automation_runs` with `.or(...)`, and the
+  // route marks the notification rows it rendered read. A method the fake does
+  // not offer reads as a 500 from the route rather than as a missing stub.
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
     query[method] = vi.fn(() => query);
   }
   return query;

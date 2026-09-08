@@ -14,7 +14,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiRunState, Database } from '@/lib/database.types';
-import { RUN_STATES } from '@/lib/ai/runs/states';
+import { RUN_STATES, TERMINAL_RUN_STATES } from '@/lib/ai/runs/states';
 
 export const AI_ACTIVITY_PAGE_SIZE = 25;
 
@@ -253,11 +253,15 @@ export async function recentAiFeatures(db: SupabaseClient<Database>, window = 50
 // The measure is deliberately over TERMINAL runs, not over all of them: a run
 // still executing is not yet evidence either way, and including it would make
 // the number drift with load rather than with quality.
-
-/** Lifecycle states that mean the run is over, however it ended. */
-export const TERMINAL_RUN_STATES: readonly string[] = [
-  'completed', 'partially_completed', 'failed', 'blocked', 'cancelled',
-] as const;
+//
+// "Terminal" is `TERMINAL_RUN_STATES` from `lib/ai/runs/states.ts`, imported
+// rather than restated. That file is the state machine's own definition and it
+// deliberately leaves `blocked` OUT: a blocked run is waiting on a person, and
+// a decision or an edit puts it back in flight. Counting those here would put
+// the whole in-flight human queue in the denominator and score every one of
+// them as reworked — the load-drift this metric exists to avoid — and a second
+// exported constant of the same name disagreeing with the first is exactly the
+// duplicate definition this work is meant to remove.
 
 /**
  * Run events that mean work had to be done twice.
@@ -307,7 +311,7 @@ export function summarizeRework(
   let terminal = 0;
   let firstTimeRight = 0;
   for (const run of runs) {
-    if (!TERMINAL_RUN_STATES.includes(run.state)) continue;
+    if (!(TERMINAL_RUN_STATES as readonly string[]).includes(run.state)) continue;
     terminal++;
     if (run.state !== 'completed') continue;
     if (reworkedRuns.has(run.id)) continue;

@@ -513,7 +513,7 @@ describe('the day the brief covers is the family’s day', () => {
       const data = table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }] : [];
       const promise = Promise.resolve({ data, error: null });
       const query: Record<string, unknown> = { then: promise.then.bind(promise) };
-      for (const method of ['select', 'eq', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not']) {
+      for (const method of ['select', 'eq', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
         query[method] = vi.fn(() => query);
       }
       for (const method of ['gte', 'lte']) {

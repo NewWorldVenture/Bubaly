@@ -18,6 +18,7 @@
 // vocabulary; everything else reads from here.
 
 import type { AiRunLifecycleState } from '@/lib/database.types';
+import { LEGACY_RUN_STATUS_TO_STATE } from '@/lib/ai/runs/states';
 
 /** What kind of handled action a count came from. */
 export type SavedKind = 'run' | 'autopilot' | 'assistant' | 'reminder';
@@ -29,15 +30,45 @@ export type SavedKind = 'run' | 'autopilot' | 'assistant' | 'reminder';
  * every step landed, and §29 says a partial is reported honestly rather than
  * hidden. Nothing in-flight counts, and `failed` / `blocked` / `cancelled`
  * never count — those are the states a claim would be a lie about.
- *
- * Deliberately the `state` column (the §10 lifecycle) and not the legacy
- * free-text `status`: `state` is the one every writer in the AI runtime sets.
  */
 export const HANDLED_RUN_STATES: readonly AiRunLifecycleState[] = ['completed', 'partially_completed'] as const;
 
-/** True when a run row is one the "handled" count may include. */
-export function isHandledRun(row: { state?: string | null }): boolean {
-  return (HANDLED_RUN_STATES as readonly string[]).includes(row.state ?? '');
+/**
+ * THE `state` COLUMN IS NOT ENOUGH, and assuming it was is what made this count
+ * wrong. `family_automation_runs` carries two vocabularies: the §10 `state`
+ * 0250 added, and the free-text `status` 0022 shipped, which the concierge
+ * surfaces still write. `executeQueuedRunAction`
+ * (app/(app)/dashboard/concierge/actions.ts) materialises the plan a manager
+ * tapped "Do it" on and stamps ONLY `status = 'executed'`, leaving the row at
+ * the `state = 'awaiting_approval'` it was inserted with; and 0250 documents
+ * that every row written before it keeps the default `state = 'queued'` with a
+ * meaningful `status`. A count filtered on `state` alone therefore reads zero
+ * for a panel that is, one line lower, listing the very plan it just ran.
+ *
+ * So "handled" is decided by the run's EFFECTIVE state — `state` when it says
+ * something, otherwise the legacy `status` translated through
+ * `LEGACY_RUN_STATUS_TO_STATE`, the repo's one mapping between the two columns.
+ * These are the legacy values that translate to a handled state (today:
+ * `executed` → `completed`); deriving them from the map rather than writing
+ * them out again means adding a status there is enough.
+ */
+export const HANDLED_LEGACY_RUN_STATUSES: readonly string[] = Object.entries(LEGACY_RUN_STATUS_TO_STATE)
+  .filter(([, state]) => (HANDLED_RUN_STATES as readonly string[]).includes(state))
+  .map(([status]) => status);
+
+/**
+ * The PostgREST `.or()` expression that selects exactly the rows `isHandledRun`
+ * accepts, so the SQL every surface runs and the predicate the tests exercise
+ * cannot drift apart. A row matching both halves is still ONE row, so a run
+ * carrying `state = 'completed'` and `status = 'executed'` is counted once.
+ */
+export const HANDLED_RUN_OR_FILTER =
+  `state.in.(${HANDLED_RUN_STATES.join(',')}),status.in.(${HANDLED_LEGACY_RUN_STATUSES.join(',')})`;
+
+/** True when a run row is one the "handled" count may include — either column. */
+export function isHandledRun(row: { state?: string | null; status?: string | null }): boolean {
+  if ((HANDLED_RUN_STATES as readonly string[]).includes(row.state ?? '')) return true;
+  return HANDLED_LEGACY_RUN_STATUSES.includes(row.status ?? '');
 }
 
 /** Minutes of family admin saved per handled action of each kind (conservative). */

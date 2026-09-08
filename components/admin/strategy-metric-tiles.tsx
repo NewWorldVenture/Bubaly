@@ -58,9 +58,14 @@ export async function StrategyMetricTiles({ metrics }: { metrics: StrategyMetric
       : {
         tone: 'value' as Tone,
         value: pct(conversion.rate),
+        // The median is an upper bound whenever a conversion had to be dated
+        // from the subscription row's `updated_at` instead of a billing event,
+        // and the tile says "about" rather than printing it as measured.
         detail: conversion.medianDays === null
           ? t('strategyMetrics.ofNFamiliesPastFirstValue', { count: conversion.families })
-          : t('strategyMetrics.ofNFamiliesPastFirstValueMedianDays', { count: conversion.families, days: conversion.medianDays }),
+          : conversion.medianDaysApproximate
+            ? t('strategyMetrics.ofNFamiliesPastFirstValueMedianDaysApprox', { count: conversion.families, days: conversion.medianDays })
+            : t('strategyMetrics.ofNFamiliesPastFirstValueMedianDays', { count: conversion.families, days: conversion.medianDays }),
       };
 
   const referrals = metrics.referrals;
@@ -71,7 +76,10 @@ export async function StrategyMetricTiles({ metrics }: { metrics: StrategyMetric
       : {
         tone: 'value' as Tone,
         value: referrals.coefficient.toFixed(2),
-        detail: t('strategyMetrics.nJoinedThroughReferralsAndInvites', { joined: referrals.joined, households: referrals.households }),
+        // Households only. Accepted invites add a member to a family that
+        // already exists, so they are shown beside the number rather than
+        // inside it — a coefficient above 1 has to mean new households.
+        detail: `${t('strategyMetrics.nOfNHouseholdsJoinedThroughAReferral', { joined: referrals.joined, households: referrals.households })} · ${t('strategyMetrics.nMembersInvitedIntoExistingHouseholds', { count: referrals.membersInvited })}`,
       };
 
   const tiles = [

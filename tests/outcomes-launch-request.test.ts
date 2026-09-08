@@ -10,9 +10,14 @@
 //      the bar files — carrying that request text and that interpreted intent,
 //      so the launch shows up on the run timeline and in the ledger rather
 //      than only in the browser.
+//
+// And a third, added after a review: what the card SAYS afterwards matches what
+// the server actually did. `submitRequest` answers with four different outcomes
+// and only one of them is work in flight, so the launcher's message is derived
+// from the real response rather than from "the POST returned 2xx".
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { OUTCOMES, OUTCOME_INTENT, buildOutcomeLaunchRequest } from '@/lib/outcomes/launcher';
+import { OUTCOMES, OUTCOME_INTENT, buildOutcomeLaunchRequest, describeOutcomeLaunch } from '@/lib/outcomes/launcher';
 import { classifyIntentFast, INTENT_KEYS } from '@/lib/ai/context/intents';
 import { templateFor } from '@/lib/ai/planner/templates/index';
 import type { ServiceScope } from '@/lib/services/types';
@@ -101,5 +106,71 @@ describe('the launch button files a request', () => {
     const result = await submitRequest(scope(), { text: '   ', context: null, conversationId: null, answers: null, clientRequestId: null }, { db: db as never, kick: vi.fn() });
     expect(result.ok).toBe(false);
     expect(db.table('ai_requests')).toHaveLength(0);
+  });
+});
+
+// A 2xx is not "Bubaly is working on it". `stay_healthy` asks a question the
+// planner answers inline; `celebrate` and the life-event launches are told to
+// ask rather than guess. Both come back 2xx with no work under way, and the
+// card used to claim there was — with no link to open, and the server's actual
+// reply thrown away. These cases run the REAL intake so the shape they assert
+// is the shape the server sends.
+describe('the card says what the server actually did', () => {
+  async function launch(id: Parameters<typeof buildOutcomeLaunchRequest>[0]) {
+    const request = buildOutcomeLaunchRequest(id);
+    const result = await submitRequest(
+      scope(),
+      { text: request.text, context: request.context, conversationId: null, answers: null, clientRequestId: null },
+      { db: db as never, kick: vi.fn() },
+    );
+    if (!result.ok) throw new Error(result.error);
+    return result.data;
+  }
+
+  it('a plan is the only outcome that reports work in flight, and it carries a run to open', async () => {
+    const data = await launch('prepare_unexpected');
+    expect(data.outcome).toBe('plan');
+    const report = describeOutcomeLaunch(data);
+    expect(report.kind).toBe('working');
+    if (report.kind !== 'working') throw new Error('unreachable');
+    expect(report.runHref).toContain('run-1');
+  });
+
+  it('an inline answer reports the answer, not work — there is no run row to follow', async () => {
+    planRequest.mockResolvedValue({ ok: true, data: { kind: 'answer', text: 'Two check-ups are due and nothing else is outstanding.' } });
+    const data = await launch('stay_healthy');
+    // The server closed the request without creating a run.
+    expect(data).toMatchObject({ outcome: 'answer', runId: null, planId: null, redirect: null });
+    expect(db.table('family_automation_runs')).toHaveLength(0);
+    expect(describeOutcomeLaunch(data)).toEqual({ kind: 'reply', reply: 'Two check-ups are due and nothing else is outstanding.' });
+  });
+
+  it('a recommendation reports the recommendation, not work', async () => {
+    planRequest.mockResolvedValue({ ok: true, data: { kind: 'recommendation', recommendationId: 'rec-1', summary: 'Book the dentist before half term.' } });
+    const data = await launch('stay_healthy');
+    expect(data).toMatchObject({ outcome: 'recommendation', runId: null, redirect: null });
+    expect(describeOutcomeLaunch(data)).toEqual({ kind: 'reply', reply: 'Book the dentist before half term.' });
+  });
+
+  it('a clarification reports the question and where to answer it — the run is parked, not working', async () => {
+    planRequest.mockImplementation((_scope: unknown, input: { requestId: string }) =>
+      Promise.resolve({ ok: true, data: { kind: 'clarification', question: 'Which holiday do you mean?', requestId: input.requestId } }));
+    const data = await launch('celebrate');
+    expect(data.outcome).toBe('clarification');
+    expect(data.runId).toBeTruthy();
+    const report = describeOutcomeLaunch(data);
+    expect(report.kind).toBe('question');
+    if (report.kind !== 'question') throw new Error('unreachable');
+    expect(report.question).toBe('Which holiday do you mean?');
+    expect(report.runHref).toBe(data.redirect);
+  });
+
+  it('never reports work in flight without a run to open', () => {
+    for (const outcome of ['plan', 'answer', 'recommendation', 'clarification'] as const) {
+      const report = describeOutcomeLaunch({ outcome, runId: null, redirect: null, summary: 'Something happened.' });
+      expect(report.kind, outcome).not.toBe('working');
+    }
+    // A replayed answer carries no text at all; the card still must not invent work.
+    expect(describeOutcomeLaunch({ outcome: 'answer', runId: null, redirect: null, summary: '' })).toEqual({ kind: 'reply', reply: '' });
   });
 });

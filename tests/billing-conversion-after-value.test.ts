@@ -1,15 +1,20 @@
 // X10 — conversion among families that reached first value, and how long it
-// took them. The ordering rule is the point: a subscription that predates the
+// took them. The ordering rule is the point: a family already paying before the
 // milestone did not convert because of it.
+//
+// The second column of this file is `paidAt`, NOT `subscriptions.created_at`:
+// this repo writes one subscriptions row per family at family creation and
+// updates it in place, so `created_at` is the family's birthday and using it
+// made `converted` structurally zero.
 import { describe, it, expect } from 'vitest';
 import { conversionAfterValue, type ActivationReach, type ConversionSubscription } from '@/lib/billing/conversion';
 
 const reach = (familyId: string, reachedAt: string): ActivationReach => ({ familyId, reachedAt });
 const sub = (
   familyId: string,
-  createdAt: string,
+  paidAt: string,
   over: Partial<ConversionSubscription> = {},
-): ConversionSubscription => ({ familyId, plan: 'family', status: 'active', createdAt, ...over });
+): ConversionSubscription => ({ familyId, plan: 'family', status: 'active', paidAt, ...over });
 
 describe('conversionAfterValue', () => {
   it('is null — not 0% — when nobody has reached first value', () => {
@@ -19,7 +24,7 @@ describe('conversionAfterValue', () => {
     expect(c.medianDays).toBeNull();
   });
 
-  it('counts a paid subscription created after the milestone', () => {
+  it('counts a family that went paid after the milestone', () => {
     const c = conversionAfterValue(
       [reach('f1', '2026-01-01T00:00:00.000Z')],
       [sub('f1', '2026-01-03T00:00:00.000Z')],
@@ -27,7 +32,7 @@ describe('conversionAfterValue', () => {
     expect(c).toMatchObject({ families: 1, converted: 1, rate: 1, medianDays: 2 });
   });
 
-  it('does NOT count a subscription that predates the milestone', () => {
+  it('does NOT count a family that was already paying before the milestone', () => {
     const c = conversionAfterValue(
       [reach('f1', '2026-02-01T00:00:00.000Z')],
       [sub('f1', '2026-01-01T00:00:00.000Z')],
@@ -63,7 +68,7 @@ describe('conversionAfterValue', () => {
     expect(c.medianDays).toBe(2);
   });
 
-  it('takes the earliest paid subscription when a family has several', () => {
+  it('takes the earliest paid moment when a family has several rows', () => {
     const c = conversionAfterValue(
       [reach('f1', '2026-01-01T00:00:00.000Z')],
       [sub('f1', '2026-01-11T00:00:00.000Z'), sub('f1', '2026-01-05T00:00:00.000Z')],
@@ -113,5 +118,22 @@ describe('conversionAfterValue', () => {
       [sub('f1', '2026-01-02T00:00:00.000Z')],
     );
     expect(c.rate).toBe(0.25);
+  });
+
+  it('marks the median approximate when a conversion was dated from the row, not an event', () => {
+    const c = conversionAfterValue(
+      [reach('f1', '2026-01-01T00:00:00.000Z')],
+      [sub('f1', '2026-01-03T00:00:00.000Z', { basis: 'row_updated_at' })],
+    );
+    expect(c.converted).toBe(1);
+    expect(c.medianDaysApproximate).toBe(true);
+  });
+
+  it('leaves the median exact when every conversion came from a billing event', () => {
+    const c = conversionAfterValue(
+      [reach('f1', '2026-01-01T00:00:00.000Z')],
+      [sub('f1', '2026-01-03T00:00:00.000Z', { basis: 'event' })],
+    );
+    expect(c.medianDaysApproximate).toBe(false);
   });
 });
