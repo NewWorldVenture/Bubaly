@@ -123,13 +123,13 @@ describe('public marketing claims', () => {
     it('badges the illustrative card and labels its estimate as one', () => {
       expect(block).toContain("t('handledProof.sampleBadge')");
       expect(block).toContain("t('pricingValue.estimateNote')");
-      expect(en['pricingValue.estimateNote']).toMatch(/^Estimated\./);
-      expect(en['pricingValue.estimateNote']).toMatch(/not a stopwatch/i);
+      expect(catalogue['pricingValue.estimateNote']).toMatch(/^Estimated\./);
+      expect(catalogue['pricingValue.estimateNote']).toMatch(/not a stopwatch/i);
     });
 
     it('says the family time-saved number is the family\'s own, not an average', () => {
-      expect(en['pricingValue.yourNumbersBody']).toMatch(/estimates? the time handed back/i);
-      expect(en['pricingValue.yourNumbersBody']).toMatch(/your (family|data)/i);
+      expect(catalogue['pricingValue.yourNumbersBody']).toMatch(/estimates? the time handed back/i);
+      expect(catalogue['pricingValue.yourNumbersBody']).toMatch(/your (family|data)/i);
     });
 
     it('never claims Bubaly finished work that no row backs', () => {
@@ -137,7 +137,7 @@ describe('public marketing claims', () => {
       // read from public_handled_stats().
       expect(block).toContain("t('handledProof.aggregateNote', { count: real.total })");
       expect(block).toContain("t('handledProof.aggregate30d', { count: real.last30d })");
-      expect(en['pricingValue.realFootnote']).toMatch(/finished state/i);
+      expect(catalogue['pricingValue.realFootnote']).toMatch(/finished state/i);
     });
 
     it('leaves no inert control on the page', () => {
