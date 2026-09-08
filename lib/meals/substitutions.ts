@@ -128,6 +128,12 @@ interface AllergenRule {
    * explanation. It also protects an item the family already spelled safely: a
    * plan that names "gluten-free bread" is left exactly as written rather than
    * becoming "gluten-free gluten-free bread".
+   *
+   * It is a test on the WHOLE name, so it only ever says "this line is not
+   * about my allergen". The inverse — a name whose modifier IS the allergen,
+   * "whole wheat bread" under a gluten allergy — is not its job and it does
+   * not handle it; `rewriteSafely` below does, by checking what the rewrite
+   * left standing.
    */
   exempt?: RegExp;
 }
@@ -168,7 +174,18 @@ const ALLERGEN_RULES: AllergenRule[] = [
     // are exempt HERE and still caught by the tree-nut rule, which is the
     // correct division: almond milk is safe for a dairy allergy and unsafe for
     // a nut one.
-    exempt: /\b(?:oat|almond|soy|soya|rice|coconut|cashew|hemp|flax|pea|plant[- ]based|vegan|non[- ]dairy|dairy[- ]free|lactose[- ]free)\b/i,
+    //
+    // The second and third alternatives are the word `butter` in the two
+    // places it is not dairy at all. `butter` has to stay in the swap table —
+    // a family that writes "butter" means the dairy one — but it is a
+    // whole-WORD test, so without these a dairy allergy rewrote peanut
+    // butter, apple butter, cocoa butter and butter lettuce into "peanut olive
+    // oil", "apple olive oil", "cocoa olive oil" and "olive oil lettuce", and
+    // wrote them to the family's list. The seed spellings matter twice over:
+    // "sunflower seed butter" is the peanut rule's OWN replacement, and a
+    // household allergic to both peanuts and dairy used to have it read as
+    // dairy and lose the line entirely.
+    exempt: /\b(?:oat|almond|soy|soya|rice|coconut|cashew|hemp|flax|pea|plant[- ]based|vegan|non[- ]dairy|dairy[- ]free|lactose[- ]free)\b|\b(?:peanut|apple|cocoa|shea|sunflower|pumpkin|nut|nuts|seed|seeds)[- ]?\s*butter\b|\bbutter\s+(?:lettuce|bean|beans|squash)\b/i,
     swaps: [
       { ingredient: 'heavy cream', replacement: 'coconut cream' },
       { ingredient: 'cream cheese', replacement: 'dairy-free cream cheese' },
@@ -331,10 +348,51 @@ function findAllergyHit(name: string, rules: AllergenRule[]): AllergyHit | null 
   return best;
 }
 
+function spanOf(ingredient: string): RegExp {
+  return new RegExp(`\\b${ingredient.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+}
+
 /** Rewrite the matched span, so "shredded cheddar cheese" keeps "shredded". */
 function rewrite(name: string, ingredient: string, replacement: string): string {
-  const pattern = new RegExp(`\\b${ingredient.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const pattern = spanOf(ingredient);
   return pattern.test(name) ? name.replace(pattern, replacement).replace(/\s+/g, ' ').trim() : replacement;
+}
+
+/** What the rewrite would leave standing: the name with the matched span gone. */
+function modifierOf(name: string, ingredient: string): string {
+  const pattern = spanOf(ingredient);
+  return pattern.test(name) ? name.replace(pattern, ' ').replace(/\s+/g, ' ').trim() : '';
+}
+
+/**
+ * Does this fragment name the allergen itself — the word the family wrote for
+ * it, or an ingredient this rule exists to swap away?
+ *
+ * Deliberately NOT `findAllergyHit`: that consults `exempt`, and by the time
+ * this is asked the replacement has already put a "gluten-free" into the
+ * string, which would exempt the whole line and hide the very thing being
+ * looked for.
+ */
+function namesAllergen(fragment: string, rule: AllergenRule): boolean {
+  if (!fragment.trim()) return false;
+  return rule.triggers.some((trigger) => mentions(fragment, trigger))
+    || rule.swaps.some((swap) => mentions(fragment, swap.ingredient));
+}
+
+/**
+ * The swap, with the modifier checked.
+ *
+ * Rewriting only the matched span keeps the useful half of a name — "shredded
+ * cheddar cheese" should still say "shredded". But when the modifier is itself
+ * the allergen, keeping it produces a line that contradicts its own reason:
+ * "whole wheat bread" became "whole wheat gluten-free bread", which was then
+ * WRITTEN to a coeliac household's list, telling the shopper to buy wheat
+ * bread that is also gluten-free. In that case the modifier goes and the
+ * replacement stands alone.
+ */
+function rewriteSafely(name: string, hit: AllergyHit, replacement: string): string {
+  if (namesAllergen(modifierOf(name, hit.ingredient), hit.rule)) return replacement;
+  return rewrite(name, hit.ingredient, replacement);
 }
 
 function isUnsafe(name: string, rules: AllergenRule[]): boolean {
@@ -399,7 +457,7 @@ export function applySubstitutions(
         });
         continue;
       }
-      const swapped = rewrite(original, hit.ingredient, hit.replacement);
+      const swapped = rewriteSafely(original, hit, hit.replacement);
       substitutions.push({
         from: original, to: swapped, kind: 'allergy', trigger, reasonKey: 'allergySwap',
         reason: `Swapped for ${swapped}: ${original} contains ${hit.ingredient}, and the family records a ${trigger} allergy.`,

@@ -432,6 +432,7 @@ export function ShoppingModule() {
       {boughtOpen && activeListId && (
         <BoughtModal listId={activeListId} items={checkedItems}
           onClose={() => setBoughtOpen(false)}
+          onRefresh={() => { void refreshItems(); }}
           onDone={() => { setBoughtOpen(false); void refreshItems(); }} />
       )}
 
@@ -597,10 +598,12 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
  * two halves separately, because "in the pantry" and "on the books" are
  * different facts and a shop can produce one without the other.
  */
-function BoughtModal({ listId, items, onClose, onDone }: {
+function BoughtModal({ listId, items, onClose, onRefresh, onDone }: {
   listId: string;
   items: GroceryItem[];
   onClose: () => void;
+  /** Re-read the list WITHOUT closing: a partial trip already changed it. */
+  onRefresh: () => void;
   onDone: () => void;
 }) {
   const t = useTranslations();
@@ -626,12 +629,27 @@ function BoughtModal({ listId, items, onClose, onDone }: {
         merchant: merchant.trim() || null,
       });
       if (!result.ok) { toastError(result.error); return; }
-      if (result.pantryFailed.length > 0) {
-        // The list is deliberately left alone when a pantry write fails, so
-        // the retry does the same thing rather than something new.
-        toastError(t('shoppingModule.couldNotPutTheseIn', {
-          names: result.pantryFailed.map((f) => f.name).join(', '),
-        }));
+      // A line is put away and taken off the list together, so what is left
+      // checked is exactly what did not land: tapping again retries those and
+      // cannot add the ones that did a second time. The modal stays open.
+      if (result.pantryFailed.length > 0 || result.clearFailed.length > 0) {
+        if (result.pantryFailed.length > 0) {
+          toastError(t('shoppingModule.couldNotPutTheseIn', {
+            names: result.pantryFailed.map((f) => f.name).join(', '),
+          }));
+        }
+        // Put away but still ticked — the one case where a second tap WOULD
+        // double it, so the family is told rather than left to find out.
+        if (result.clearFailed.length > 0) {
+          toastError(t('shoppingModule.theseAreInYourPantry', {
+            names: result.clearFailed.map((f) => f.name).join(', '),
+          }));
+        }
+        // What DID land is already off the list, so the list on screen — and
+        // this modal's own "what you bought" — must be re-read before the
+        // family taps again, or they would be ticking rows that no longer
+        // exist.
+        onRefresh();
         return;
       }
       const stocked = t('shoppingModule.putItemsInYourPantry', { count: result.pantryUpdated.length });
