@@ -213,8 +213,14 @@ export type ShoppingTripActionResult =
       ok: true;
       /** Names that reached the pantry. */
       pantryUpdated: string[];
-      /** Names the pantry write refused, with why. Non-empty means the list was left alone. */
+      /** Names the pantry write refused, with why. Those lines are still checked on the list. */
       pantryFailed: { name: string; error: string }[];
+      /**
+       * Names that reached the pantry and could not be taken off the list.
+       * Non-empty means tapping again WOULD double-count them, so the caller
+       * says so instead of showing a clean success.
+       */
+      clearFailed: { name: string; error: string }[];
       cleared: number;
       /**
        * TRUE ONLY WHEN A `transactions` ROW EXISTS. There is no optimistic
@@ -232,7 +238,9 @@ export type ShoppingTripActionResult =
  * a person typed an amount — the charge goes onto the household books.
  *
  * The two writes are ordered so that the failure modes are the harmless ones.
- * The pantry and the list move first, through the groceries service; the
+ * The pantry and the list move first, through the groceries service, line by
+ * line — each bought line is put away and taken off the list together, so a
+ * retry after a partial failure sees only the lines that never landed. The
  * purchase is last, through the finances service, which is also the one that
  * can refuse (a child cannot record a purchase). A refusal there therefore
  * leaves a correctly-stocked pantry and an honest message, and a retry finds
@@ -258,11 +266,13 @@ export async function recordShoppingTripAction(input: {
     let purchaseRecorded = false;
     let purchaseError: string | undefined;
     const amount = typeof input.amount === 'number' && Number.isFinite(input.amount) ? input.amount : null;
-    // Only a shop that completed gets a charge. When a pantry write failed
-    // nothing was cleared, so the family will do this again — and a purchase
-    // recorded now would be recorded twice. The caller shows the failed names
-    // and keeps the amount in the form.
-    if (amount !== null && amount > 0 && trip.data.pantryFailed.length === 0) {
+    // Only a shop that completed gets a charge. Anything still on the list —
+    // a line the pantry refused, or a line put away that would not clear —
+    // means the family will do this again, and a purchase recorded now would
+    // be recorded twice. The caller shows those names and keeps the amount in
+    // the form.
+    if (amount !== null && amount > 0
+      && trip.data.pantryFailed.length === 0 && trip.data.clearFailed.length === 0) {
       const merchant = input.merchant?.trim() || null;
       const purchase = await createTransaction(scope, {
         name: merchant ? `Groceries — ${merchant}` : 'Groceries',
@@ -283,6 +293,7 @@ export async function recordShoppingTripAction(input: {
       ok: true,
       pantryUpdated: trip.data.pantryUpdated,
       pantryFailed: trip.data.pantryFailed,
+      clearFailed: trip.data.clearFailed,
       cleared: trip.data.cleared,
       purchaseRecorded,
       ...(purchaseError ? { purchaseError } : {}),

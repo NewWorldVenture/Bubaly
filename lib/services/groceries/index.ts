@@ -828,7 +828,14 @@ export type ShoppingTripResult = {
    * did not save" is not something a person can act on.
    */
   pantryFailed: { name: string; error: string }[];
-  /** Bought lines removed from the list. Zero when a pantry write failed. */
+  /**
+   * Items whose quantity DID land in the pantry and whose line could not then
+   * be removed. The one window this loop cannot close by itself, and the one
+   * case where tapping again would count a purchase twice — so it is named
+   * rather than swallowed.
+   */
+  clearFailed: { name: string; error: string }[];
+  /** Bought lines removed from the list — one per line that reached the pantry. */
   cleared: number;
 };
 
@@ -838,12 +845,20 @@ export type ShoppingTripResult = {
  * The list could be ticked off and cleared, and the pantry never heard about
  * it: a family that bought milk on Saturday still had a pantry that said the
  * milk ran out on Thursday, so the next plan bought milk again. This walks the
- * CHECKED lines, adds each one's quantity to the pantry (creating the row when
- * the family has never had the thing before), and only then clears them.
+ * CHECKED lines and, for each one, adds its quantity to the pantry (creating
+ * the row when the family has never had the thing before) and then removes
+ * that line.
  *
- * ORDER MATTERS AND IS DELIBERATE. Clearing happens last and only when every
- * pantry write succeeded, so a failure leaves the list exactly as the family
- * left it and a retry does the same thing again rather than something new.
+ * THE UNIT OF WORK IS THE LINE, NOT THE TRIP, AND THAT IS THE WHOLE POINT.
+ * `pantryAdjust` is an additive read-modify-write: doing it twice for one
+ * purchase says the family owns two. Clearing the whole list at the end only
+ * when every line succeeded therefore did the opposite of what it promised —
+ * the milk write succeeded, the eggs write failed, nothing was cleared, the
+ * modal stayed open, and the second tap added the milk again. Clearing each
+ * line as soon as its own pantry write lands means a retry finds only the
+ * lines that never landed, and does to them exactly what the first attempt
+ * meant to.
+ *
  * The money half is NOT here: a purchase is the finances service's write, the
  * caller records it, and it is recorded only when a person typed an amount —
  * a bought list is not a receipt and this service will not invent one.
@@ -873,18 +888,32 @@ export async function recordShoppingTrip(
 
   const pantryUpdated: string[] = [];
   const pantryFailed: { name: string; error: string }[] = [];
+  const clearFailed: { name: string; error: string }[] = [];
+  const clearedNames: string[] = [];
   for (const item of items) {
     const { delta, unit } = parsePurchasedQuantity(item.quantity);
     const result = await pantryAdjust(scope, { name: item.name, delta, unit, createIfMissing: true });
-    if (result.ok) pantryUpdated.push(item.name);
-    else pantryFailed.push({ name: item.name, error: result.error });
-  }
+    if (!result.ok) {
+      // Never put away, so the line stays checked and the retry is its first
+      // real attempt.
+      pantryFailed.push({ name: item.name, error: result.error });
+      continue;
+    }
+    pantryUpdated.push(item.name);
 
-  let cleared = 0;
-  if (pantryFailed.length === 0) {
-    const removed = await clearChecked(scope, listId);
-    if (!removed.ok) return removed;
-    cleared = removed.data.removed;
+    // Immediately, and scoped to this row: whatever happens to the rest of the
+    // trip, this quantity is now in the pantry and must not be added twice.
+    const { error: clearError } = await scope.db
+      .from('grocery_items')
+      .delete()
+      .eq('family_id', scope.familyId)
+      .eq('id', item.id);
+    if (clearError) {
+      console.error('[service:groceries] bought line clear failed', clearError);
+      clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
+      continue;
+    }
+    clearedNames.push(item.name);
   }
 
   if (pantryUpdated.length) {
@@ -898,6 +927,19 @@ export async function recordShoppingTrip(
       href: '/dashboard/pantry',
     });
   }
+  // `clearChecked` writes its own trail line; these deletes are its equivalent
+  // done one row at a time, so they carry the same one.
+  if (clearedNames.length) {
+    await recordActivitySafely(scope, {
+      agent: 'groceries',
+      action: 'delete',
+      title: clearedNames.length === 1
+        ? `Cleared ${clearedNames[0]} from the shopping list`
+        : `Cleared ${clearedNames.length} bought items from the shopping list`,
+      detail: clearedNames.join(', ').slice(0, 500),
+      href: '/dashboard/grocery',
+    });
+  }
 
-  return ok({ listId, pantryUpdated, pantryFailed, cleared });
+  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, cleared: clearedNames.length });
 }
