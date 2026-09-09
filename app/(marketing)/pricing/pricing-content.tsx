@@ -440,7 +440,7 @@ export function PricingContent({
 }: {
   familiesCount?: number;
   featureMatrix?: FeatureMatrix;
-  /** Cross-family completed-run counts from public_handled_stats(); below the floor the REAL card is omitted. */
+  /** Recorded complete-or-partial runs from public_handled_stats(); below the floor the REAL card is omitted. */
   handledStats?: HandledStatsLike;
   /** The fictional family's brief numbers, computed on the server by lib/marketing/handled-sample.ts. */
   sampleNumbers?: PricingValueSample;

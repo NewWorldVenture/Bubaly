@@ -24,7 +24,7 @@
 // English, and both public surfaces that render it (/pricing and the in-app
 // upgrade modal) reach it from here.
 
-import { HANDLED_PUBLIC_MIN, formatHandled } from '@/lib/marketing/format';
+import { formatHandled, meetsHandledFloor } from '@/lib/marketing/format';
 
 export type BillingPeriod = 'monthly' | 'yearly';
 
@@ -51,10 +51,9 @@ export function formatPerDay(cents: number): string {
 
 export type HandledStatsLike = { handledCompleted: number; handled30d?: number };
 
-/** True only when the cross-family completed-run count is large enough to publish. */
+/** True only when the recorded complete-or-partial run count reaches the public floor. */
 export function shouldShowRealHandled(stats: HandledStatsLike | null | undefined): boolean {
-  const n = Number(stats?.handledCompleted ?? 0);
-  return Number.isFinite(n) && n >= HANDLED_PUBLIC_MIN;
+  return meetsHandledFloor(stats?.handledCompleted ?? 0);
 }
 
 /**
@@ -69,11 +68,11 @@ export function realHandledCounts(
   stats: HandledStatsLike | null | undefined,
 ): { total: string; last30d: string | null } | null {
   if (!shouldShowRealHandled(stats)) return null;
-  const total = Number(stats?.handledCompleted ?? 0);
-  const recent = Number(stats?.handled30d ?? 0);
+  const total = stats?.handledCompleted ?? 0;
+  const recent = stats?.handled30d ?? 0;
   return {
     total: formatHandled(total),
-    last30d: Number.isFinite(recent) && recent >= HANDLED_PUBLIC_MIN ? formatHandled(recent) : null,
+    last30d: meetsHandledFloor(recent) && recent <= total ? formatHandled(recent) : null,
   };
 }
 

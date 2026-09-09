@@ -152,10 +152,13 @@ export default async function SecurityPage() {
             <h1 className="mt-5 text-balance text-4xl font-black leading-[1.08] sm:text-5xl lg:text-6xl">{t('trustCenter.title')}</h1>
             <p className="mt-6 text-lg leading-8 text-white/65">{t('trustCenter.body')}</p>
             {handledLine && (
-              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
-                <Sparkles className="h-4 w-4 text-emerald-300" aria-hidden />
-                {handledLine}
-              </p>
+              <div>
+                <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
+                  <Sparkles className="h-4 w-4 text-emerald-300" aria-hidden />
+                  {handledLine}
+                </p>
+                <p className="mt-3 text-xs leading-5 text-white/60">{t('pricingValue.realFootnote')}</p>
+              </div>
             )}
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="#ai-trust" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold shadow-glow transition hover:-translate-y-0.5">
