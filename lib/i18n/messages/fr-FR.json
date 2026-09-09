@@ -6775,6 +6775,7 @@
   "licensesClient.state": "État",
   "licensesClient.storeEachDriverSLicense": "Enregistrez chaque permis avec sa date de renouvellement pour que personne ne roule avec un permis expiré.",
   "lifeEventActions.invalidPlan": "Formule invalide",
+  "lifeEventActions.rollbackIncomplete": "Le plan n’a pas pu démarrer et certains éléments créés au lancement n’ont pas pu être supprimés. Vérifiez vos plans, tâches, rappels et le déménagement, projet ou voyage associé avant de réessayer.",
   "lifeEventActions.unknownLifeEvent": "Événement de vie inconnu",
   "lifeEvents.aboutUs": "À propos",
   "lifeEvents.archive": "Archiver",

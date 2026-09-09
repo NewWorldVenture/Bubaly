@@ -23,8 +23,8 @@
 // ROLLBACK is the whole point of doing it here rather than in the action. Five
 // writes across four tables cannot be one transaction through PostgREST, so
 // every write pushes an undo, and the first failure unwinds them in reverse.
-// A family that sees "could not start the plan" must not then find half a plan,
-// three orphan to-dos and a move on file.
+// If a compensating delete also fails, the caller must say cleanup is
+// incomplete so the family can review what remains before launching again.
 import 'server-only';
 import { createMove, planTasks } from '@/lib/services/moving';
 import { createReminder, deleteReminder } from '@/lib/services/reminders';
@@ -45,6 +45,16 @@ const MAX_REMINDERS = 3;
 const REMINDER_HORIZON_DAYS = 45;
 /** The hour a reminder fires, family-local. */
 const REMINDER_HOUR = '09:00:00';
+
+export const LIFE_EVENT_ROLLBACK_INCOMPLETE = 'life_event_rollback_incomplete';
+
+type LaunchFailure = Extract<ServiceResult<never>, { ok: false }>;
+
+/** A resolved database error still means the compensating delete failed. */
+async function checkedDelete(query: PromiseLike<{ error: unknown }>): Promise<ServiceResult<void>> {
+  const { error } = await query;
+  return error ? fail(describeDbError(error, 'Could not remove an item created by the playbook.'), { code: SERVICE_CODES.db }) : ok(undefined);
+}
 
 /** Where a launched transition is handed off to, and the row it created there. */
 export type LifeEventHandoff = {
@@ -137,7 +147,7 @@ export function reminderItemsFor(items: MaterializedItem[], todayKey: string): M
 
 /**
  * Launch a playbook: the plan, the handoff, the checklist, the to-dos and the
- * reminders — or none of them.
+ * reminders. Compensate for a failed launch and report incomplete cleanup.
  */
 export async function launchLifeEvent(
   scope: ServiceScope,
@@ -151,142 +161,162 @@ export async function launchLifeEvent(
   const anchor = resolveAnchor(template.defaultLeadDays, input.eventDate, now);
 
   // Every write pushes its undo; the first failure runs them newest-first.
-  const undo: { what: string; run: () => Promise<void> }[] = [];
-  const rollback = async (): Promise<void> => {
+  const undo: { what: string; run: () => Promise<ServiceResult<unknown>> }[] = [];
+  const rollback = async (failure: LaunchFailure): Promise<ServiceResult<never>> => {
+    let incomplete = false;
     for (const step of [...undo].reverse()) {
       try {
-        await step.run();
+        const removed = await step.run();
+        if (!removed.ok) {
+          incomplete = true;
+          console.error(`[life-events] rollback of ${step.what} failed`, removed.error);
+        }
       } catch (error) {
-        // A failed rollback is worth shouting about — it is exactly the half-
-        // created state this function exists to prevent.
+        incomplete = true;
         console.error(`[life-events] rollback of ${step.what} failed`, error);
       }
     }
+    return incomplete
+      ? fail('The playbook could not start, and some items created during launch could not be removed. Review your plans, tasks, reminders and linked move, project or trip before trying again.', { code: LIFE_EVENT_ROLLBACK_INCOMPLETE, retryable: false })
+      : failure;
   };
 
-  // 1. The plan row.
-  const { data: plan, error: planErr } = await scope.db
-    .from('life_event_plans')
-    .insert({
-      family_id: scope.familyId,
-      template_key: template.key,
-      title: template.title,
-      event_date: anchor,
-      created_by: scope.userId,
-    })
-    .select('id')
-    .single();
-  if (planErr || !plan) {
-    console.error('[life-events] plan create failed', planErr);
-    return fail(describeDbError(planErr, 'Could not start that playbook.'), { code: SERVICE_CODES.db });
-  }
-  const planId = plan.id;
-  undo.push({
-    what: 'the plan',
-    run: async () => { await scope.db.from('life_event_plans').delete().eq('id', planId).eq('family_id', scope.familyId); },
-  });
-
-  // 2. The handoff, when another module owns this transition.
-  let handoff: LifeEventHandoff | null = null;
-  const handoffKind = HANDOFF_BY_TEMPLATE[template.key];
-  if (handoffKind) {
-    const created = await createHandoff(scope, handoffKind, template.title, anchor);
-    if (!created.ok) {
-      await rollback();
-      return created;
-    }
-    handoff = created.data;
-    undo.push({ what: `the ${handoffKind}`, run: () => deleteHandoff(scope, handoff as LifeEventHandoff) });
-    // The plan says where it is being run. `notes` is an existing column.
-    const { error: noteErr } = await scope.db
+  try {
+    // 1. The plan row.
+    const { data: plan, error: planErr } = await scope.db
       .from('life_event_plans')
-      .update({ notes: linkRef(handoffKind, created.data.id) })
-      .eq('id', planId)
-      .eq('family_id', scope.familyId);
-    if (noteErr) {
-      console.error('[life-events] could not record the handoff on the plan', noteErr);
-      await rollback();
-      return fail(describeDbError(noteErr, 'Could not start that playbook.'), { code: SERVICE_CODES.db });
+      .insert({
+        family_id: scope.familyId,
+        template_key: template.key,
+        title: template.title,
+        event_date: anchor,
+        created_by: scope.userId,
+      })
+      .select('id')
+      .single();
+    if (planErr || !plan) {
+      console.error('[life-events] plan create failed', planErr);
+      return fail(describeDbError(planErr, 'Could not start that playbook.'), { code: SERVICE_CODES.db });
     }
-  }
-
-  // 3. The real work: to-dos and reminders, through the services, so they are
-  //    ledgered and show up everywhere else household work shows up.
-  const items = buildPlanItems(template, anchor);
-  const refsByTitle = new Map<string, string[]>();
-  const addRef = (title: string, ref: string) => {
-    refsByTitle.set(title, [...(refsByTitle.get(title) ?? []), ref]);
-  };
-
-  const todoIds: string[] = [];
-  for (const item of todoItemsFor(items)) {
-    const created = await createTodo(scope, { title: item.title, dueDate: item.due_on, priority: item.category === 'notify' ? 'high' : 'medium' });
-    if (!created.ok) {
-      await rollback();
-      return created;
-    }
-    todoIds.push(created.data.id);
-    addRef(item.title, linkRef('todo', created.data.id));
-    const todoId = created.data.id;
-    undo.push({ what: 'a to-do', run: async () => { await deleteTodo(scope, todoId); } });
-  }
-
-  const reminderIds: string[] = [];
-  for (const item of reminderItemsFor(items, todayKey)) {
-    const created = await createReminder(scope, {
-      title: item.title,
-      remindAt: `${item.due_on}T${REMINDER_HOUR}`,
-      notes: `${template.title} — ${item.category}`,
-      priority: 'medium',
-      aiSuggested: false,
+    const planId = plan.id;
+    undo.push({
+      what: 'the plan',
+      run: () => checkedDelete(scope.db.from('life_event_plans').delete().eq('id', planId).eq('family_id', scope.familyId)),
     });
-    if (!created.ok) {
-      await rollback();
-      return created;
+
+    // 2. The handoff, when another module owns this transition.
+    let handoff: LifeEventHandoff | null = null;
+    const handoffKind = HANDOFF_BY_TEMPLATE[template.key];
+    if (handoffKind) {
+      const created = await createHandoff(scope, handoffKind, template.title, anchor);
+      if (!created.ok) {
+        return rollback(created);
+      }
+      handoff = created.data;
+      const linkedHandoff = handoff;
+      undo.push({ what: `the ${handoffKind}`, run: () => deleteHandoff(scope, linkedHandoff) });
+      // Register the move first: generating its timeline can itself fail. Track
+      // only inserted task IDs so an existing move keeps all its original work.
+      if (handoffKind === 'move') {
+        const tasks = await planTasks(scope, { moveId: handoff.id });
+        if (!tasks.ok) return rollback(tasks);
+        const taskIds = tasks.data.inserted.map((task) => task.id);
+        if (taskIds.length > 0) {
+          undo.push({
+            what: 'the new move tasks',
+            run: () => checkedDelete(scope.db.from('move_tasks').delete()
+              .in('id', taskIds).eq('move_id', linkedHandoff.id).eq('family_id', scope.familyId)),
+          });
+        }
+      }
+      // The plan says where it is being run. `notes` is an existing column.
+      const { error: noteErr } = await scope.db
+        .from('life_event_plans')
+        .update({ notes: linkRef(handoffKind, created.data.id) })
+        .eq('id', planId)
+        .eq('family_id', scope.familyId);
+      if (noteErr) {
+        console.error('[life-events] could not record the handoff on the plan', noteErr);
+        return rollback({ ok: false, error: describeDbError(noteErr, 'Could not start that playbook.'), code: SERVICE_CODES.db });
+      }
     }
-    reminderIds.push(created.data.id);
-    addRef(item.title, linkRef('reminder', created.data.id));
-    const reminderId = created.data.id;
-    undo.push({ what: 'a reminder', run: async () => { await deleteReminder(scope, reminderId); } });
-  }
 
-  // 4. The checklist itself, each item carrying what it produced.
-  const rows = items.map((it) => ({
-    family_id: scope.familyId,
-    plan_id: planId,
-    title: it.title,
-    category: it.category,
-    due_on: it.due_on,
-    sort: it.sort,
-    note: noteWithRef(it.note, (refsByTitle.get(it.title) ?? []).join(' ') || null),
-    created_by: scope.userId,
-  }));
-  const { error: itemsErr } = await scope.db.from('life_event_plan_items').insert(rows);
-  if (itemsErr) {
-    console.error('[life-events] checklist create failed', itemsErr);
-    await rollback();
-    return fail(describeDbError(itemsErr, 'Could not start that playbook.'), { code: SERVICE_CODES.db });
-  }
+    // 3. The real work: to-dos and reminders, through the services, so they are
+    //    ledgered and show up everywhere else household work shows up.
+    const items = buildPlanItems(template, anchor);
+    const refsByTitle = new Map<string, string[]>();
+    const addRef = (title: string, ref: string) => {
+      refsByTitle.set(title, [...(refsByTitle.get(title) ?? []), ref]);
+    };
 
-  return ok({ planId, eventDate: anchor, itemCount: rows.length, todoIds, reminderIds, handoff });
+    const todoIds: string[] = [];
+    for (const item of todoItemsFor(items)) {
+      const created = await createTodo(scope, { title: item.title, dueDate: item.due_on, priority: item.category === 'notify' ? 'high' : 'medium' });
+      if (!created.ok) {
+        return rollback(created);
+      }
+      todoIds.push(created.data.id);
+      addRef(item.title, linkRef('todo', created.data.id));
+      const todoId = created.data.id;
+      undo.push({ what: 'a to-do', run: () => deleteTodo(scope, todoId) });
+    }
+
+    const reminderIds: string[] = [];
+    for (const item of reminderItemsFor(items, todayKey)) {
+      const created = await createReminder(scope, {
+        title: item.title,
+        remindAt: `${item.due_on}T${REMINDER_HOUR}`,
+        notes: `${template.title} — ${item.category}`,
+        priority: 'medium',
+        aiSuggested: false,
+      });
+      if (!created.ok) {
+        return rollback(created);
+      }
+      reminderIds.push(created.data.id);
+      addRef(item.title, linkRef('reminder', created.data.id));
+      const reminderId = created.data.id;
+      undo.push({ what: 'a reminder', run: () => deleteReminder(scope, reminderId) });
+    }
+
+    // 4. The checklist itself, each item carrying what it produced.
+    const rows = items.map((it) => ({
+      family_id: scope.familyId,
+      plan_id: planId,
+      title: it.title,
+      category: it.category,
+      due_on: it.due_on,
+      sort: it.sort,
+      note: noteWithRef(it.note, (refsByTitle.get(it.title) ?? []).join(' ') || null),
+      created_by: scope.userId,
+    }));
+    const { error: itemsErr } = await scope.db.from('life_event_plan_items').insert(rows);
+    if (itemsErr) {
+      console.error('[life-events] checklist create failed', itemsErr);
+      return rollback({ ok: false, error: describeDbError(itemsErr, 'Could not start that playbook.'), code: SERVICE_CODES.db });
+    }
+
+    return ok({ planId, eventDate: anchor, itemCount: rows.length, todoIds, reminderIds, handoff });
+  } catch (error) {
+    console.error('[life-events] launch failed', error);
+    return rollback({ ok: false, error: describeDbError(error, 'Could not start that playbook.'), code: SERVICE_CODES.db });
+  }
 }
 
 /** Undo a handoff. Spelled out per kind so the table name stays a literal the types can check. */
-async function deleteHandoff(scope: ServiceScope, handoff: LifeEventHandoff): Promise<void> {
+async function deleteHandoff(scope: ServiceScope, handoff: LifeEventHandoff): Promise<ServiceResult<void>> {
   // A handoff this launch only FOUND is not this launch's to undo. The one
   // case today is a move already under way: createMove returned it rather
   // than opening a second, and deleting it here would take a family's real
   // move down with a playbook that failed for some unrelated reason.
-  if (!handoff.created) return;
+  if (!handoff.created) return ok(undefined);
   if (handoff.kind === 'move') {
-    await scope.db.from('moves').delete().eq('id', handoff.id).eq('family_id', scope.familyId);
-    return;
+    return checkedDelete(scope.db.from('moves').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
   }
   if (handoff.kind === 'project') {
-    await scope.db.from('home_projects').delete().eq('id', handoff.id).eq('family_id', scope.familyId);
-    return;
+    return checkedDelete(scope.db.from('home_projects').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
   }
-  await scope.db.from('vacations').delete().eq('id', handoff.id).eq('family_id', scope.familyId);
+  return checkedDelete(scope.db.from('vacations').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
 }
 
 /** Create the row in the module that owns this transition. */
@@ -297,17 +327,12 @@ async function createHandoff(
   anchor: string,
 ): Promise<ServiceResult<LifeEventHandoff>> {
   if (kind === 'move') {
-    // Through the moving service, not a direct insert — for two reasons the
-    // insert could not honour. createMove hands back the move already on file
+    // The moving service hands back the move already on file
     // when there is one, so a family mid-move does not get a second move
-    // opened underneath them; and planTasks lays out the ten-week timeline,
-    // idempotently, which is the half a bare `moves` row was missing. "Moving
-    // Home" is a handoff to the Move Planner, and a Move Planner with no tasks
-    // in it is not a handoff, it is an empty page.
+    // opened underneath them. The caller registers this handoff for rollback
+    // before planTasks lays out its timeline.
     const move = await createMove(scope, { title, moveDate: anchor });
     if (!move.ok) return move;
-    const tasks = await planTasks(scope, { moveId: move.data.move.id });
-    if (!tasks.ok) return tasks;
     return ok({ kind, id: move.data.move.id, href: HANDOFF_HREF.move, created: move.data.created, dateOnFile: move.data.move.move_date });
   }
   if (kind === 'project') {
