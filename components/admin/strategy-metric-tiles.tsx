@@ -1,5 +1,5 @@
 // The four platform metrics the strategy is actually judged on, on the admin
-// report: X3 rework, X5 decision compression, X10 conversion after value,
+// report: X3 rework, X5 decision compression, X10 recorded paid activations,
 // X12 referral coefficient.
 //
 // A tile shows one of three things and never confuses them:
@@ -45,27 +45,24 @@ export async function StrategyMetricTiles({ metrics }: { metrics: StrategyMetric
     : compression === null
       ? { tone: 'sparse' as Tone, value: notEnough, detail: t('strategyMetrics.noSignalsInThisWindow') }
       : {
-        tone: 'value' as Tone,
-        value: t('strategyMetrics.nSignalsPerDecision', { ratio: compression.ratio }),
-        detail: `${t(compression.labelKey)} · ${t('strategyMetrics.nSignalsNDecisions', { signals: compression.rawSignals, decisions: compression.humanDecisions })}`,
+        tone: (compression.humanDecisions === 0 ? 'sparse' : 'value') as Tone,
+        value: compression.humanDecisions === 0
+          ? t('strategyMetrics.noRecordedDecisions')
+          : t('strategyMetrics.nSignalsPerDecision', { ratio: compression.ratio }),
+        detail: t('strategyMetrics.nSignalsNDecisions', { signals: compression.rawSignals, decisions: compression.humanDecisions }),
       };
 
   const conversion = metrics.conversion;
   const conversionTile = conversion === null
-    ? { tone: 'unavailable' as Tone, value: unavailable, detail: t('strategyMetrics.theActivationLedgerDidNotAnswer') }
+    ? { tone: 'unavailable' as Tone, value: unavailable, detail: t('strategyMetrics.paidActivationReadFailed') }
     : conversion.rate === null
       ? { tone: 'sparse' as Tone, value: notEnough, detail: t('strategyMetrics.noFamilyHasReachedFirstValueYet') }
       : {
         tone: 'value' as Tone,
         value: pct(conversion.rate),
-        // The median is an upper bound whenever a conversion had to be dated
-        // from the subscription row's `updated_at` instead of a billing event,
-        // and the tile says "about" rather than printing it as measured.
         detail: conversion.medianDays === null
-          ? t('strategyMetrics.ofNFamiliesPastFirstValue', { count: conversion.families })
-          : conversion.medianDaysApproximate
-            ? t('strategyMetrics.ofNFamiliesPastFirstValueMedianDaysApprox', { count: conversion.families, days: conversion.medianDays })
-            : t('strategyMetrics.ofNFamiliesPastFirstValueMedianDays', { count: conversion.families, days: conversion.medianDays }),
+          ? t('strategyMetrics.recordedPaidActivationCount', { recorded: conversion.recordedPaidActivations, families: conversion.families })
+          : t('strategyMetrics.recordedPaidActivationMedian', { recorded: conversion.recordedPaidActivations, families: conversion.families, days: conversion.medianDays }),
       };
 
   const referrals = metrics.referrals;
@@ -85,7 +82,7 @@ export async function StrategyMetricTiles({ metrics }: { metrics: StrategyMetric
   const tiles = [
     { key: 'rework', icon: GitBranch, label: t('strategyMetrics.reworkRate'), tint: 'text-amber-400 bg-amber-500/15', ...reworkTile },
     { key: 'compression', icon: Layers, label: t('strategyMetrics.decisionCompression'), tint: 'text-violet-400 bg-violet-500/15', ...compressionTile },
-    { key: 'conversion', icon: TrendingUp, label: t('strategyMetrics.conversionAfterValue'), tint: 'text-emerald-400 bg-emerald-500/15', ...conversionTile },
+    { key: 'conversion', icon: TrendingUp, label: t('strategyMetrics.recordedPaidActivationsAfterValue'), tint: 'text-emerald-400 bg-emerald-500/15', ...conversionTile },
     { key: 'referrals', icon: Users, label: t('strategyMetrics.referralCoefficient'), tint: 'text-blue-400 bg-blue-500/15', ...referralTile },
   ];
 
@@ -105,10 +102,28 @@ export async function StrategyMetricTiles({ metrics }: { metrics: StrategyMetric
               <p className={toneClass(tile.tone)}>{tile.value}</p>
               <p className="mt-1 text-xs font-medium">{tile.label}</p>
               <p className="mt-0.5 text-xs text-muted">{tile.detail}</p>
+              {tile.tone === 'unavailable' && (
+                <a className="mt-1 inline-block text-xs underline" href="/admin/reports">{t('timeSaved.tryAgain')}</a>
+              )}
+              {tile.key === 'compression' && (
+                <p className="mt-1 text-xs text-muted">{t('strategyMetrics.compressionEvidenceMethodology')}</p>
+              )}
+              {tile.key === 'conversion' && (
+                <>
+                  {conversion !== null && conversion.families > 0 && (
+                    <p className="mt-1 text-xs text-muted">{t('strategyMetrics.paidActivationEvidence', { prior: conversion.priorOnly, missing: conversion.missingEvidence })}</p>
+                  )}
+                  {conversion !== null && conversion.ambiguousStatus > 0 && (
+                    <p className="mt-1 text-xs text-muted">{t('strategyMetrics.paidActivationAmbiguousStatus', { count: conversion.ambiguousStatus })}</p>
+                  )}
+                  <p className="mt-1 text-xs text-muted">{t('strategyMetrics.paidActivationMethodology')}</p>
+                </>
+              )}
             </div>
           </Card>
         ))}
       </div>
+      <p className="text-xs text-muted">{t('strategyMetrics.liveReadMethodology')}</p>
     </section>
   );
 }
