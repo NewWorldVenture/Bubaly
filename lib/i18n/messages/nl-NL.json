@@ -3686,6 +3686,8 @@
   "crm.manageLeadsProspectsAndCustomer": "Beheer leads, prospects en klantcontacten.",
   "crm.refreshCrm": "CRM verversen",
   "cta.startYourFreeTrial": "Start je gratis proefperiode",
+  "customerStories.bodyLabel": "Volledig klantverhaal",
+  "customerStories.unavailable": "Dit klantverhaal kon niet worden geladen.",
   "customers.adjustTheFilterOrSearch": "Pas het filter of de zoekopdracht aan om klanten te zien.",
   "customers.couldNotLoadMarketingCustomers": "Kon de marketingklanten uit Supabase niet laden. Ververs en probeer het opnieuw.",
   "customers.marketingCustomers": "Marketingklanten",

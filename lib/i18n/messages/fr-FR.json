@@ -3686,6 +3686,8 @@
   "crm.manageLeadsProspectsAndCustomer": "Gérer les leads, prospects et contacts clients.",
   "crm.refreshCrm": "Actualiser le CRM",
   "cta.startYourFreeTrial": "Commencer l’essai gratuit",
+  "customerStories.bodyLabel": "Témoignage client complet",
+  "customerStories.unavailable": "Impossible de charger ce témoignage client.",
   "customers.adjustTheFilterOrSearch": "Ajustez le filtre ou la recherche pour voir des clients.",
   "customers.couldNotLoadMarketingCustomers": "Impossible de charger les clients marketing depuis Supabase. Actualisez et réessayez.",
   "customers.marketingCustomers": "Clients marketing",

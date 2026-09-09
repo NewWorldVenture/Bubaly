@@ -3686,6 +3686,8 @@
   "crm.manageLeadsProspectsAndCustomer": "Manage leads, prospects, and customer contacts.",
   "crm.refreshCrm": "Refresh CRM",
   "cta.startYourFreeTrial": "Start your free trial",
+  "customerStories.bodyLabel": "Full customer story",
+  "customerStories.unavailable": "Could not load this customer story.",
   "customers.adjustTheFilterOrSearch": "Adjust the filter or search to see customers.",
   "customers.couldNotLoadMarketingCustomers": "Could not load marketing customers from Supabase. Refresh and try again.",
   "customers.marketingCustomers": "Marketing Customers",

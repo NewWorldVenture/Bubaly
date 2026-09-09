@@ -23,6 +23,8 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/s',
   // Public reviews wall + submission page — no login required.
   '/reviews',
+  // Customer story pages enforce publication on the server before rendering.
+  '/customers',
   // Public Family Wallet gift pages — relatives gift via an unguessable token.
   '/gift',
   // Public exit-intent offer resolve + metric beacon (anonymous visitors).
