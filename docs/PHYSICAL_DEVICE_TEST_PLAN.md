@@ -158,6 +158,47 @@ Legend: **P**/**F**/**N/A**. Evidence = what to capture.
    and above the keyboard-less bar on iPad widths. (M-033)
    Evidence: recordings of 1–3.
 
+## S14 — Wall display / Kitchen Mode (verifies M18, M37, W6)
+**Devices:** D3 (iPad), D5 (Android tablet). **Precondition:** signed in on the
+tablet, Family Basic or above, a charger and a stand.
+1. **Install.** `/display` → Share → **Add to Home Screen**; launch from the home
+   screen. Expect: no browser bars, the tiles fill the screen, landscape.
+   Evidence: photo of the tablet in its stand.
+2. **First-run card.** The **"Set up this tablet"** card is at the top on first
+   load. Read its wake-lock line and record which of the four it says (keeping
+   awake / declined / no screen lock / asking). Tap **Got it** → the card goes.
+   **Reload the page and reopen the display on a SECOND device** — the card must
+   stay gone on both (the dismissal is stored per family in
+   `display_layouts.settings`, not per browser). If the write fails, the card
+   must come back with an error toast — it must never look dismissed while
+   nothing was saved.
+3. **Self-check.** Header → the monitor button → `/display/setup` → **Run the
+   checks**. Expect four rows, each flipping from "Not tested yet" to its own
+   answer, and NOTHING claimed beyond those four. Record all four answers.
+   Evidence: screenshot of the results.
+4. **Fullscreen.** Back on `/display`, tap the full-screen control. Expect: the
+   grid fills the panel edge to edge, no page scroll on the kiosk fit.
+5. **Wake lock (the one only a device can prove).** Leave the display in the
+   foreground, untouched, for **30 minutes** with the tablet's own auto-lock at
+   its default. Expect: the screen is still on. If it slept, that is the honest
+   result — set auto-lock to Never and record that this device needs it.
+6. **Rotate.** Turn the tablet to portrait and back. Expect: no clipped tile, no
+   horizontal page scroll, the timers keep counting.
+7. **Ask tile.** Add an **Ask Bubaly** tile (pencil → Section → Ask Bubaly →
+   Save). Type a request; then tap the mic and speak one. Expect: both land on
+   the run page or answer inline, and **nothing is executed without an approval**
+   — a request that would act shows a plan first. Evidence: recording.
+8. **Handled today tile.** Add the **Handled today** tile. With the tablet
+   offline (airplane mode) reload: the tile must read **"Bubaly could not read
+   what it finished"** with a **Try again** — **a zero here is a FAIL.** Back
+   online, the count must match the completed runs in Home → Handled.
+9. **24-hour soak.** Leave the display running overnight, plugged in, on the home
+   screen. The next morning check: the screen is on (or the auto-lock note from
+   step 5 applies), the date/greeting rolled over, today's events are today's,
+   and no error screen. **Deploy a new version during the soak** if possible: the
+   tab must pick it up on its own within ~12h, not sit on a dead bundle.
+   Evidence: photo the next morning + the browser's page-load time.
+
 ---
 
 ## Results log
@@ -178,6 +219,7 @@ Copy this table per test session (date / build SHA / tester):
 | S11 |  |  |  |  |  |  |  |
 | S12 |  |  |  |  |  |  |  |
 | S13 |  |  |  |  |  |  |  |
+| S14 | N/A | N/A |  | N/A |  | N/A |  |
 
 **External dependencies to unblock device testing:** LB-015 (CI runners) for the
 automated matrix; real push credentials (S10); App Store Connect / Play Console for
