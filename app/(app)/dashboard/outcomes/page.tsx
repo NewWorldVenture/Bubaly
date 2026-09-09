@@ -20,7 +20,7 @@ import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
 export const dynamic = 'force-dynamic';
 
-export default async function OutcomesPage({ searchParams }: { searchParams?: Promise<{ outcome?: string }> } = {}) {
+export default async function OutcomesPage({ searchParams }: { searchParams?: Promise<{ outcome?: string }> }) {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;

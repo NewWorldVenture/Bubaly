@@ -52,7 +52,7 @@ describe('Outcomes reasoning read boundary and selected launch destination', () 
       if (table === 'grocery_items') Object.defineProperty(query, 'then', { value: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, count: null, error: { message: 'Grocery read failed' } }).then(resolve) });
       return query;
     });
-    const html = renderToStaticMarkup(await Page());
+    const html = renderToStaticMarkup(await Page({}));
     expect(html).toContain('Some household counts are unavailable');
     expect(html).toContain('Refresh this page');
     expect(html).toContain('Have Bubaly do it');
