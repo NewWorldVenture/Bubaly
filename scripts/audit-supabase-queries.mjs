@@ -24,7 +24,7 @@
 // Usage: node scripts/audit-supabase-queries.mjs   (exit 1 on any finding)
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -160,7 +160,7 @@ function readApiRoutes() {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) walk(path);
       else if (/^route\.(ts|tsx|js)$/.test(entry)) {
-        routes.push(`/${relative(join(ROOT, 'app'), dir).split('/').join('/')}`);
+        routes.push(`/${relative(join(ROOT, 'app'), dir).split(sep).join('/')}`);
       }
     }
   })(join(ROOT, 'app', 'api'));
@@ -324,7 +324,7 @@ export function auditSupabaseQueries() {
 
   for (const file of listSourceFiles()) {
     const src = readFileSync(file, 'utf8');
-    const rel = relative(ROOT, file);
+    const rel = relative(ROOT, file).split(sep).join('/');
     const lineAt = (index) => src.slice(0, index).split('\n').length;
 
     const fromCall = /\.from\(\s*'([a-z0-9_]+)'\s*\)/g;

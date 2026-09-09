@@ -8,7 +8,7 @@
 // lands in both trails — lives alongside it once the service records them.
 import { readFileSync } from 'node:fs';
 import { globSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { describeTrail, describeTrailRow, type TrailRow } from '@/lib/activity/trail';
 import { trailActionFor } from '@/lib/ai/tools/execute';
@@ -134,7 +134,8 @@ describe('the trail has exactly one writer', () => {
 
   it('routes every household-trail write through lib/services/activity', () => {
     const writers = globSync('lib/services/**/index.ts')
-      .filter((f) => /from\('audit_logs'\)\s*\.insert/.test(code(repo(f))));
+      .filter((f) => /from\('audit_logs'\)\s*\.insert/.test(code(repo(f))))
+      .map((f) => f.split(sep).join('/'));
     expect(writers).toEqual(['lib/services/activity/index.ts']);
   });
 
