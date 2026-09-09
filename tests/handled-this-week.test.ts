@@ -141,6 +141,24 @@ describe('countHandledThisWeek', () => {
     expect(parts.run).toBe(1);       // the readable parts are still readable
     expect(spy).toHaveBeenCalled();
   });
+
+  it.each(['reject', 'throw'])('keeps readable parts when a source fails to %s', async (mode) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    db.seed('family_automation_runs', [run('r1', 'completed')]);
+    const original = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      if (table === 'agent_activity') {
+        if (mode === 'throw') throw new Error('client failed');
+        return { select: () => ({ eq: () => ({ eq: () => ({ gte: () => Promise.reject(new Error('transport failed')) }) }) }) };
+      }
+      return original(table as never);
+    }) as typeof db.from);
+
+    const result = await countHandledThisWeek(db, FAMILY, NOW);
+    expect(result.total).toBeNull();
+    expect(result.parts).toEqual({ run: 1, autopilot: 0, assistant: null, reminder: 0 });
+    expect(spy).toHaveBeenCalled();
+  });
 });
 
 describe('loadTimeSaved', () => {

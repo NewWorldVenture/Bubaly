@@ -11,12 +11,9 @@
 // runs with `trigger_type = 'plan_accepted'` and the legacy `status =
 // 'executed'`, which is a third definition of "handled" that disagreed with the
 // brief and with time-saved. It now counts exactly what
-// `lib/metric/time-saved.ts` says counts — `HANDLED_RUN_OR_FILTER`, any
-// trigger — so the same week reads the same number wherever the family looks.
-// That filter reads BOTH state columns on purpose: `executeQueuedRunAction`,
-// the action the "Do it" button below calls, stamps only the legacy `status`,
-// so a run this panel lists under "Done for you" has to be a run the header
-// counts. It used to be neither, and the panel contradicted itself.
+// `countHandledThisWeek` says counts: runs, executed autopilot suggestions,
+// completed specialist activity and delivered reminders. The brief and
+// time-saved surfaces consume that same total, including every source's errors.
 //
 // And a read that fails says so. The panel used to swallow every error and
 // render an empty feed, which is the same lie as a zero: "Bubaly did nothing"
@@ -25,11 +22,11 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { AlertTriangle, Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { settle, settleAll } from '@/lib/supabase/settle';
+import { settleAll } from '@/lib/supabase/settle';
 import { isManager } from '@/lib/constants/roles';
 import { AUTOPILOT_POLICY_NAME, dialLevel, type AutopilotLevel } from '@/lib/autonomy/loop';
-import { countOrNull, type MetricCount } from '@/lib/metric/count';
-import { HANDLED_RUN_OR_FILTER } from '@/lib/metric/time-saved';
+import type { MetricCount } from '@/lib/metric/count';
+import { countHandledThisWeek } from '@/lib/metric/handled-this-week';
 import {
   dismissQueuedRunAction, executeQueuedRunAction, setConciergeAutopilotAction,
 } from '@/app/(app)/dashboard/concierge/actions';
@@ -41,8 +38,6 @@ type Run = {
   id: string; status: string; trigger_type: string | null; summary: string | null;
   created_at: string; metadata: unknown;
 };
-
-const WEEK_MS = 7 * 86_400_000;
 
 const LEVELS: { key: AutopilotLevel; label: string; labelKey: string; hint: string; hintKey: string; icon: typeof Zap }[] = [
   { key: 'auto', label: 'Auto-pilot', labelKey: 'autopilotPanel.autoPilot', hint: 'Accepted plans execute on their own', hintKey: 'autopilotPanel.acceptedPlansExecuteOnTheirOwn', icon: Zap },
@@ -67,7 +62,6 @@ export function AutopilotPanel({ className }: { className?: string }) {
   const load = useCallback(async () => {
     setLoaded(false);
     const supabase = createClient();
-    const sinceIso = new Date(Date.now() - WEEK_MS).toISOString();
     try {
       // `settleAll` for the two feeds so an unreachable table degrades one of
       // them rather than both; the count runs alongside and answers `null` when
@@ -81,14 +75,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
             .eq('family_id', familyId).eq('trigger_type', 'plan_accepted')
             .order('created_at', { ascending: false }).limit(30),
         ]),
-        // The ONE handled-this-week definition, counted in PostgreSQL.
-        countOrNull(
-          settle(
-            supabase.from('family_automation_runs').select('id', { count: 'exact', head: true })
-              .eq('family_id', familyId).or(HANDLED_RUN_OR_FILTER).gte('created_at', sinceIso),
-          ),
-          'autopilot handled runs',
-        ),
+        countHandledThisWeek(supabase, familyId),
       ]);
       // A failed queue read must not render as an empty queue: "nothing is
       // waiting for you" is a claim, and we cannot make it.
@@ -100,7 +87,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
         setRuns((runRows.data ?? []) as Run[]);
       }
       setLevel(dialLevel(policy.data?.effect));
-      setHandled(handledCount);
+      setHandled(handledCount.total);
     } catch (error) {
       console.error('[autopilot-panel] autopilot read failed', error);
       setReadFailed(true);
