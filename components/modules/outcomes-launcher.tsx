@@ -48,9 +48,9 @@ type LaunchState =
   | { status: 'filed'; outcomeId: OutcomeId; outcome: AIRequestOutcomeKind; runId: string | null; redirect: string | null; summary: string }
   | { status: 'failed'; outcomeId: OutcomeId; error: string };
 
-export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
+export function OutcomesLauncher({ plans, initialOutcomeId }: { plans: OutcomePlan[]; initialOutcomeId?: OutcomeId | null }) {
   const t = useTranslations();
-  const [selectedId, setSelectedId] = useState<OutcomeId>(plans[0]?.outcome.id ?? 'run_today');
+  const [selectedId, setSelectedId] = useState<OutcomeId>(initialOutcomeId && plans.some((plan) => plan.outcome.id === initialOutcomeId) ? initialOutcomeId : plans[0]?.outcome.id ?? 'run_today');
   const selected = plans.find((p) => p.outcome.id === selectedId) ?? plans[0];
   const [launch, setLaunch] = useState<LaunchState>({ status: 'idle' });
   const launchForSelected = launch.status !== 'idle' && launch.outcomeId === selectedId ? launch : null;
@@ -98,6 +98,7 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
             return (
               <button
                 key={outcome.id}
+                aria-pressed={active}
                 onClick={() => setSelectedId(outcome.id)}
                 className={cn('relative flex flex-col gap-2 rounded-2xl border p-4 text-left transition',
                   active ? 'border-brand bg-brand/5 ring-1 ring-brand/40' : 'border-border bg-surface/50 hover:bg-elevated')}
@@ -105,7 +106,7 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
                 <span className={cn('grid h-10 w-10 place-items-center rounded-xl border', ACCENT[outcome.id])}>
                   <Icon className="h-5 w-5" />
                 </span>
-                <span className="text-sm font-semibold text-fg">{outcome.title}</span>
+                <span className="text-sm font-semibold text-fg">{t(outcome.titleKey)}</span>
                 <span className="line-clamp-2 text-xs text-muted">{outcome.tagline}</span>
                 {urgency > 0 && (
                   <span className="absolute right-2 top-2 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
@@ -125,7 +126,7 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
                 <span className={cn('grid h-9 w-9 place-items-center rounded-xl border', ACCENT[selected.outcome.id])}><Icon className="h-5 w-5" /></span>
               ); })()}
               <div>
-                <h2 className="text-lg font-bold text-fg">{selected.outcome.title}</h2>
+                <h2 className="text-lg font-bold text-fg">{t(selected.outcome.titleKey)}</h2>
                 <p className="text-xs text-muted">{selected.outcome.tagline}</p>
               </div>
             </div>

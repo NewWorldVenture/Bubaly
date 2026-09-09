@@ -63,20 +63,24 @@ export function NavigationChoices() {
     return {};
   });
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
-    loadSidebarPrefs().then(({ nav, children }) => {
+    loadSidebarPrefs().then(({ nav, children, error }) => {
       if (!active) return;
+      if (error) { setLoadError(error); setLoaded(false); return; }
+      setLoadError(null);
       setKeys(resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS));
       setChildMap(sanitizeChildMap(children ?? {}, NAV_CHILD_KEYS_BY_PARENT));
       setLoaded(true);
-    });
+    }).catch(() => { if (active) { setLoadError('unavailable'); setLoaded(false); } });
     return () => { active = false; };
-  }, []);
+  }, [reload]);
 
   const items = useMemo(
     () => keys.map((href) => NAV_CATALOG_BY_HREF.get(href)).filter((i): i is NavItem => Boolean(i)),
@@ -91,6 +95,7 @@ export function NavigationChoices() {
 
   // Persist a full layout: optimistic state + cache + broadcast, then Supabase.
   async function persist(nextKeys: string[], nextChildren: NavChildMap) {
+    if (!loaded || saving) return false;
     const cleanKeys = sanitizeNavKeys(nextKeys, NAV_CATALOG_KEYS);
     const cleanChildren = sanitizeChildMap(nextChildren, NAV_CHILD_KEYS_BY_PARENT);
     const prevKeys = keys;
@@ -100,18 +105,46 @@ export function NavigationChoices() {
     cacheAll(cleanKeys, cleanChildren);
     window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: cleanKeys, children: cleanChildren } }));
     setSaving(true);
-    const res = await saveSidebarNavAction({ keys: cleanKeys, children: cleanChildren });
-    setSaving(false);
-    if (!res.ok) {
+    function restorePreviousLayout() {
       setKeys(prevKeys);
       setChildMap(prevChildren);
       cacheAll(prevKeys, prevChildren);
       window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: prevKeys, children: prevChildren } }));
-      toastError(res.error ?? 'Could not save your navigation');
     }
+    try {
+      const res = await saveSidebarNavAction({ keys: cleanKeys, children: cleanChildren });
+      if (!res.ok) {
+        restorePreviousLayout();
+        toastError(res.error ?? t('outcomeDiscovery.navigationUnavailable'));
+        return false;
+      }
+      return true;
+    } catch {
+      restorePreviousLayout();
+      toastError(t('outcomeDiscovery.navigationUnavailable'));
+      return false;
+    } finally { setSaving(false); }
   }
 
   // ── Top-level ops ──────────────────────────────────────────────────────────
+  async function applyOutcomePreset() {
+    if (!loaded || saving) return;
+    setSaving(true);
+    try {
+      // Read the full saved layout, including higher-tier pins not listed in
+      // this settings picker, and preserve its child map.
+      const result = await saveSidebarNavAction({ preset: 'outcomes' });
+      if (!result.ok || !result.nav) { toastError(result.error ?? t('outcomeDiscovery.navigationUnavailable')); return; }
+      const children = result.children ?? {};
+      setKeys(result.nav);
+      setChildMap(children);
+      cacheAll(result.nav, children);
+      window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: result.nav, children } }));
+      success(t('outcomeDiscovery.navigationSaved'));
+    } catch {
+      toastError(t('outcomeDiscovery.navigationUnavailable'));
+    } finally { setSaving(false); }
+  }
   function move(index: number, dir: -1 | 1) {
     const target = index + dir;
     if (target < 0 || target >= keys.length) return;
@@ -129,10 +162,9 @@ export function NavigationChoices() {
     if (keys.length >= MAX_SIDEBAR_NAV) { toastError(`You can pin up to ${MAX_SIDEBAR_NAV} destinations.`); return; }
     void persist([...keys, href], childMap);
   }
-  function reset() {
+  async function reset() {
     if (isDefault) return;
-    void persist([...DEFAULT_SIDEBAR_NAV_KEYS], {});
-    success(t('navigationChoices.sidebarResetToTheDefault'));
+    if (await persist([...DEFAULT_SIDEBAR_NAV_KEYS], {})) success(t('navigationChoices.sidebarResetToTheDefault'));
   }
 
   // ── Sub-page (child) ops ─────────────────────────────────────────────────────
@@ -190,6 +222,11 @@ export function NavigationChoices() {
       </p>
 
       {/* Current layout */}
+      <div className="mb-4 rounded-xl border border-brand/25 bg-brand/5 p-3">
+        <p className="mb-2 text-sm text-muted">{t('outcomeDiscovery.navigationDescription')}</p>
+        <Button size="sm" variant="secondary" onClick={() => void applyOutcomePreset()} disabled={!loaded || saving}>{t('outcomeDiscovery.navigationPreset')}</Button>
+        {loadError && <p role="alert" className="mt-2 text-sm text-danger">{t('outcomeDiscovery.navigationUnavailable')}{' '}<button type="button" className="underline" onClick={() => setReload((value) => value + 1)}>{t('outcomeDiscovery.refresh')}</button></p>}
+      </div>
       <ul className="space-y-1.5">
         {items.map((item, index) => {
           const catalog = NAV_CHILD_CATALOG_BY_PARENT.get(item.href);

@@ -9,56 +9,27 @@
 // already use there), scoped to the signed-in user by that table's own-row RLS.
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import {
-  sanitizeNavKeys, sanitizeChildMap, MAX_SIDEBAR_NAV,
-  SIDEBAR_NAV_PREF_KEY, SIDEBAR_NAV_CHILDREN_PREF_KEY, type NavChildMap,
-} from '@/lib/navigation/customize';
+import { scopeFromUserContext } from '@/lib/services/scope';
+import { loadSidebarNavigation, saveSidebarNavigation, type NavigationInput, type SidebarPrefs } from '@/lib/services/navigation';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string; nav?: string[] | null; children?: SidebarPrefs['children'] };
 
-export type SidebarPrefs = { nav: string[] | null; children: NavChildMap | null };
+export type { SidebarPrefs } from '@/lib/services/navigation';
 
 /** The signed-in user's saved sidebar layout (raw — client resolves vs its catalog). */
-export async function loadSidebarPrefs(): Promise<SidebarPrefs> {
+export async function loadSidebarPrefs(): Promise<SidebarPrefs & { error?: string }> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data } = await supabase.from('user_preferences')
-    .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
-  const prefs = (data?.notification_prefs as Record<string, unknown> | null) ?? null;
-
-  const rawNav = prefs?.[SIDEBAR_NAV_PREF_KEY];
-  const nav = Array.isArray(rawNav)
-    ? (rawNav as unknown[]).filter((v): v is string => typeof v === 'string')
-    : null;
-
-  const rawChildren = prefs?.[SIDEBAR_NAV_CHILDREN_PREF_KEY];
-  const children = rawChildren && typeof rawChildren === 'object' && !Array.isArray(rawChildren)
-    ? sanitizeChildMap(rawChildren)
-    : null;
-
-  return { nav, children };
+  const result = await loadSidebarNavigation(scopeFromUserContext(ctx, supabase));
+  return result.ok ? result.data : { nav: null, children: null, error: result.error };
 }
 
 /** Persist the member's chosen sidebar layout (merged into notification_prefs).
  *  `children` is optional so top-level-only saves stay lean. */
-export async function saveSidebarNavAction(input: { keys: string[]; children?: NavChildMap }): Promise<Result> {
+export async function saveSidebarNavAction(input: NavigationInput): Promise<Result> {
   const ctx = await requireUserContext();
-  // No catalog on the server, so just guard shape: strings, deduped, chrome
-  // routes stripped, capped. The client validates against the real catalog.
-  const keys = sanitizeNavKeys(input.keys, undefined, MAX_SIDEBAR_NAV);
   const supabase = await createServer();
 
-  // Read-merge-write so we never clobber other notification_prefs keys.
-  const { data: existing } = await supabase.from('user_preferences')
-    .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
-  const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const merged: Record<string, unknown> = { ...prefs, [SIDEBAR_NAV_PREF_KEY]: keys };
-  if (input.children !== undefined) {
-    merged[SIDEBAR_NAV_CHILDREN_PREF_KEY] = sanitizeChildMap(input.children);
-  }
-
-  const { error } = await supabase.from('user_preferences')
-    .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  const result = await saveSidebarNavigation(scopeFromUserContext(ctx, supabase), input);
+  return result.ok ? { ok: true, ...result.data } : { ok: false, error: result.error };
 }

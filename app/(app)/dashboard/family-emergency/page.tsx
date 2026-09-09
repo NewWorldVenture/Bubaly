@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
 import { Phone, ShieldAlert, MapPin, UserCheck, HeartPulse, FileText } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
@@ -51,6 +52,7 @@ export default async function FamilyEmergencyPage() {
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
 
   return (
+    <><RelatedOutcomes href="/dashboard/family-emergency" />
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardFamilyEmergency.familyEmergencyHub')}
@@ -139,6 +141,6 @@ export default async function FamilyEmergencyPage() {
           </SectionCard>
         )}
       </div>
-    </div>
+    </div></>
   );
 }
