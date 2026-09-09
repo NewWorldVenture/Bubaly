@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, isThemePreference, nextTheme, resolveTheme } from '@/mobile/src/theme/theme-core';
 import { DEFAULT_THEME as WEB_DEFAULT_THEME, THEME_KEY as WEB_THEME_KEY, resolveTheme as webResolveTheme } from '@/components/theme/theme-core';
-import { SECURE_CHUNK_SIZE, chunkKey, createChunkedStore, splitChunks, type KeyValueStore } from '@/mobile/src/lib/chunked-storage';
+import { SECURE_CHUNK_SIZE, createChunkedStore, splitChunks, type KeyValueStore } from '@/mobile/src/lib/chunked-storage';
 import { pickActiveFamily } from '@/mobile/src/lib/family';
 import { dayKey, dayLabel, dueLabel, formatTime, greeting, groupByDay, shiftDays } from '@/mobile/src/lib/format';
 import { completionPatch, isOpenChore, statusLabel } from '@/mobile/src/lib/chores-core';
@@ -55,8 +55,8 @@ describe('chunked secure storage', () => {
 
     const big = 'x'.repeat(25) + 'y'.repeat(7);
     await store.setItem('k', big);
-    expect(backing.map.get('k')).toBe('chunks:4');
-    expect(backing.map.get(chunkKey('k', 3))).toBe('yy');
+    const parts = [...backing.map].filter(([key]) => key !== 'k').map(([, value]) => value);
+    expect(parts).toEqual(['xxxxxxxxxx', 'xxxxxxxxxx', 'xxxxxyyyyy', 'yy']);
     expect(await store.getItem('k')).toBe(big);
     expect(splitChunks(big, 10)).toHaveLength(4);
   });
@@ -65,9 +65,12 @@ describe('chunked secure storage', () => {
     const backing = memoryStore();
     const store = createChunkedStore(backing, 10);
     await store.setItem('k', 'a'.repeat(35));
-    expect([...backing.map.keys()].sort()).toEqual(['k', 'k.0', 'k.1', 'k.2', 'k.3']);
+    expect(backing.map.size).toBe(5);
+    const previous = [...backing.map.keys()].filter(key => key !== 'k');
     await store.setItem('k', 'b'.repeat(15));
-    expect([...backing.map.keys()].sort()).toEqual(['k', 'k.0', 'k.1']);
+    expect(backing.map.size).toBe(3);
+    expect(previous.every(key => !backing.map.has(key))).toBe(true);
+    expect(await store.getItem('k')).toBe('b'.repeat(15));
     await store.setItem('k', 'tiny');
     expect([...backing.map.keys()]).toEqual(['k']);
     await store.setItem('k', 'c'.repeat(22));
@@ -75,12 +78,13 @@ describe('chunked secure storage', () => {
     expect(backing.map.size).toBe(0);
   });
 
-  it('reads a torn write as no value and defaults to a keychain-safe chunk size', async () => {
+  it('reports damaged storage as unavailable, distinct from signed out', async () => {
     const backing = memoryStore();
     const store = createChunkedStore(backing, 10);
     await store.setItem('k', 'z'.repeat(30));
-    backing.map.delete('k.1');
-    expect(await store.getItem('k')).toBeNull();
+    const part = [...backing.map.keys()].find(key => key !== 'k')!;
+    backing.map.delete(part);
+    await expect(store.getItem('k')).rejects.toMatchObject({ code: 'session_storage_unavailable' });
     expect(await store.getItem('missing')).toBeNull();
     expect(SECURE_CHUNK_SIZE).toBeLessThan(2048);
     expect(splitChunks('', 10)).toEqual(['']);

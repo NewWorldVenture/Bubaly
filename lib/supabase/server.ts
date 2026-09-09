@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createAdmin } from '@supabase/supabase-js';
 import { durableCookieOptions, isSecureOrigin } from '../auth/session';
+import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import type { Database } from '../database.types';
 
 export async function createServer() {
@@ -21,6 +22,7 @@ export async function createServer() {
       // on the server keeps the cookie the browser already has instead of
       // shadowing it with a differently-scoped one.
       cookieOptions: durableCookieOptions(secure),
+      global: { fetch: createSessionRefreshFetch(cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL)) },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {

@@ -6,6 +6,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
+import { isRetryableAuthError } from '@/lib/auth/session';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -49,6 +50,7 @@ export async function getUser() {
   const supabase = await createServer();
   const { data, error } = await supabase.auth.getUser();
   if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);
+  if (isRetryableAuthError(error)) throw new Error('Account context is temporarily unavailable.');
   return data.user;
 }
 
@@ -62,6 +64,7 @@ export async function isSuperAdmin(): Promise<boolean> {
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) {
     if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);
+    if (isRetryableAuthError(authError)) throw new Error('Account context is temporarily unavailable.');
     return false;
   }
   if (!auth.user) return false;

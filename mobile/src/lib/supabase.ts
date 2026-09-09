@@ -6,6 +6,7 @@ import type { Database } from '../../../lib/database.types';
 import type { Db } from './db';
 import { config } from './config';
 import { createChunkedStore } from './chunked-storage';
+import { createSessionRefreshFetch } from '../../../shared/auth/refresh-fetch';
 
 export type Supabase = Db;
 
@@ -22,6 +23,7 @@ export const supabase: Supabase = createClient<Database>(
   config.supabaseUrl || 'https://placeholder.supabase.co',
   config.supabaseAnonKey || 'public-anon-key',
   {
+    global: { fetch: createSessionRefreshFetch(config.supabaseUrl || 'https://placeholder.supabase.co') },
     auth: {
       storage: secureSessionStore,
       autoRefreshToken: true,

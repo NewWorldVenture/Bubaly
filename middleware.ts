@@ -1,6 +1,7 @@
 // middleware.ts — refreshes the Supabase session and guards protected routes.
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
 } from '@/lib/auth/session';
@@ -110,16 +111,18 @@ export async function middleware(req: NextRequest) {
     supabaseUrl,
     supabaseAnonKey,
     {
+      global: { fetch: createSessionRefreshFetch(supabaseUrl) },
       cookieOptions: durableCookieOptions(isSecureRequest({
         forwardedProto: req.headers.get('x-forwarded-proto'),
         url: req.nextUrl.origin,
       })),
       cookies: {
         getAll: () => req.cookies.getAll(),
-        setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {
+        setAll: (toSet: { name: string; value: string; options: CookieOptions }[], headers: Record<string, string> = {}) => {
           toSet.forEach(({ name, value }) => req.cookies.set(name, value));
           res = NextResponse.next({ request: req });
           toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+          Object.entries(headers).forEach(([name, value]) => res.headers.set(name, value));
         },
       },
     },
@@ -154,6 +157,10 @@ export async function middleware(req: NextRequest) {
 /** Copy every cookie `source` set onto `target` (redirects start out empty). */
 function withCookies(target: NextResponse, source: NextResponse): NextResponse {
   source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie));
+  for (const name of ['cache-control', 'expires', 'pragma']) {
+    const value = source.headers.get(name);
+    if (value) target.headers.set(name, value);
+  }
   return target;
 }
 
