@@ -270,7 +270,7 @@ export default async function BlogPostPage({ params }: Params) {
 
             {!aeo.available && (
               <p className="mb-10 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200" role="status">
-                The related Knowledge Center answers are temporarily unavailable. This article is complete; please refresh later for the latest FAQs.
+                {tr('blog.theRelatedKnowledgeCenterAnswers')}
               </p>
             )}
 

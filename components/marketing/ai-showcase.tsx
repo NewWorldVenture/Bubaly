@@ -25,7 +25,7 @@ type Demo = {
 const DEMOS: Demo[] = [
   {
     icon: Calendar,
-    prompt: 'Add soccer practice every Tuesday and Thursday at 5pm.',
+    prompt: 'aiShowcase.addSoccerPracticeEveryTuesday',
     reply: 'aiShowcase.doneIAddedARepeating',
     actions: [
       { icon: Calendar, title: 'aiShowcase.soccerPractice', meta: 'aiShowcase.repeatsTueThu500', tone: 'brand' },
@@ -34,7 +34,7 @@ const DEMOS: Demo[] = [
   },
   {
     icon: UtensilsCrossed,
-    prompt: 'Plan dinners for this week — nothing too heavy.',
+    prompt: 'aiShowcase.planDinnersForThisWeek',
     reply: 'aiShowcase.hereSALightBalanced',
     actions: [
       { icon: UtensilsCrossed, title: 'aiShowcase.fiveDinnersPlanned', meta: 'aiShowcase.honeyGarlicChickenTacoBowls', tone: 'brand' },
@@ -42,7 +42,7 @@ const DEMOS: Demo[] = [
   },
   {
     icon: ShoppingCart,
-    prompt: 'Build a grocery list from our meal plan.',
+    prompt: 'aiShowcase.buildAGroceryListFrom',
     reply: 'aiShowcase.added23ItemsGroupedBy',
     actions: [
       { icon: ShoppingCart, title: 'aiShowcase.groceryList23Items', meta: 'aiShowcase.produce8Meat4Dairy', tone: 'green' },
@@ -50,7 +50,7 @@ const DEMOS: Demo[] = [
   },
   {
     icon: CheckSquare,
-    prompt: 'Give the kids age-appropriate chores for the weekend.',
+    prompt: 'aiShowcase.giveTheKidsAgeAppropriate',
     reply: 'aiShowcase.assignedAndSplitThemFairly',
     actions: [
       { icon: CheckSquare, title: 'aiShowcase.makeYourBedEmma', meta: 'aiShowcase.satMorning10Pts', tone: 'brand' },
@@ -59,7 +59,7 @@ const DEMOS: Demo[] = [
   },
   {
     icon: Bell,
-    prompt: 'Remind us to change the HVAC filter in 90 days.',
+    prompt: 'aiShowcase.remindUsToChangeThe',
     reply: 'aiShowcase.setForYouAndI',
     actions: [
       { icon: Bell, title: 'aiShowcase.changeHvacFilter', meta: 'aiShowcase.dueIn90DaysNotifies', tone: 'accent' },
@@ -67,7 +67,7 @@ const DEMOS: Demo[] = [
   },
   {
     icon: PiggyBank,
-    prompt: 'How are we doing on the summer vacation fund?',
+    prompt: 'aiShowcase.howAreWeDoingOn',
     reply: 'aiShowcase.youRe68ThereAnd',
     actions: [
       { icon: PiggyBank, title: 'aiShowcase.vacationFund20403', meta: 'aiShowcase.onTrackForJuly60', tone: 'green' },

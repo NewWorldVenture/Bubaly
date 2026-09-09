@@ -58,7 +58,7 @@ const FREE_FEATURES = [
   { section: 'pricingContent.familyMembers',      items: ['pricingContent.upTo5FamilyMembers'] },
   { section: 'pricingContent.platforms',           items: ['Web', 'iPhone', 'pricingContent.android', 'iPad'] },
   { section: 'pricingContent.basicFeatures',      items: ['pricingContent.calendarSync', 'pricingContent.basicReminders', 'pricingContent.sharedNotes', 'pricingContent.sharedPhotos', 'pricingContent.sharedDocuments'] },
-  { section: 'AI',                  items: ['10 AI requests/month'] },
+  { section: 'AI',                  items: ['pricingContent.tenAiRequestsMonth'] },
 ];
 
 const BASIC_FEATURES = [
@@ -101,6 +101,11 @@ const HI_BADGE: Record<HiTier, string> = {
 // bodies are the heroOutcomes.* keys the homepage rail renders, so a copy fix
 // lands on both pages at once. Every tile string is a key.
 type Highlight = { key: string; icon: LucideIcon; titleKey: string; descKey: string; tier: HiTier };
+// The tier an outcome falls back to when OUTCOME_TIERS does not name one.
+// Named rather than repeated inline: a bare `?? 'Family Basic'` is a plan
+// IDENTIFIER sitting loose in an array, indistinguishable to the i18n scanner
+// from copy a reader would see — and its visible label is HI_TIER_LABEL.
+const DEFAULT_HI_TIER: HiTier = 'Family Basic';
 const OUTCOME_TIERS: { titleKey: string; tier: HiTier }[] = [
   { titleKey: 'heroOutcomes.runToday', tier: 'Family Basic' },
   { titleKey: 'heroOutcomes.chores', tier: 'Family Basic' },
@@ -115,7 +120,7 @@ const SWITCH_HIGHLIGHTS: Highlight[] = [
     icon: outcome.icon,
     titleKey: outcome.titleKey,
     descKey: outcome.bodyKey,
-    tier: OUTCOME_TIERS.find((entry) => entry.titleKey === outcome.titleKey)?.tier ?? 'Family Basic',
+    tier: OUTCOME_TIERS.find((entry) => entry.titleKey === outcome.titleKey)?.tier ?? DEFAULT_HI_TIER,
   })),
   { key: 'kitchenMode', icon: MonitorSmartphone, titleKey: 'pricingContent.kitchenMode', descKey: 'pricingContent.turnAnyTabletOrSmart', tier: 'Family Basic' },
 ];

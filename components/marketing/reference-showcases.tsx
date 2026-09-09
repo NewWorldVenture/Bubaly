@@ -341,11 +341,12 @@ async function MiniCalendar() {
   );
 }
 
-function TaskList() {
-  const rows = [['Take out the trash', 'Liam'], ['Water plants', 'Emma'], ['Set the table', 'Olivia'], ['Load dishwasher', 'Noah']];
+async function TaskList() {
+  const t = await getTranslations();
+  const rows = [[t('referenceShowcases.takeOutTheTrash'), t('referenceShowcases.liam')], [t('referenceShowcases.waterPlants'), 'Emma'], [t('referenceShowcases.setTheTable'), t('referenceShowcases.olivia')], [t('referenceShowcases.loadDishwasher'), t('referenceShowcases.noah')]];
   return (
     <div>
-      <p className="mb-2.5 text-[10px] font-semibold">Today&apos;s Chores</p>
+      <p className="mb-2.5 text-[10px] font-semibold">{t('referenceShowcases.todaysChores')}</p>
       <div className="space-y-2.5">
         {rows.map(([task, name], index) => (
           <div key={task} className="flex items-center gap-2">
@@ -361,10 +362,10 @@ function TaskList() {
 
 async function MealPlan() {
   const t = await getTranslations();
-  const meals = [['Mon', 'Garlic Butter Salmon', 'with Asparagus'], ['Tue', 'Chicken Tacos', 'with Rice'], ['Wed', 'Spaghetti Bolognese', 'with Salad'], ['Thu', 'Teriyaki Chicken', 'with Veggies']];
+  const meals = [['Mon', t('referenceShowcases.garlicButterSalmon'), t('referenceShowcases.withAsparagus')], ['Tue', t('referenceShowcases.chickenTacos'), t('referenceShowcases.withRice')], ['Wed', t('referenceShowcases.spaghettiBolognese'), t('referenceShowcases.withSalad')], ['Thu', t('referenceShowcases.teriyakiChicken'), t('referenceShowcases.withVeggies')]];
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col">
-      <p className="px-3 pt-3 text-[10px] font-semibold">This Week&apos;s Plan</p>
+      <p className="px-3 pt-3 text-[10px] font-semibold">{t('referenceShowcases.thisWeeksPlan')}</p>
       <div className="flex-1 space-y-4 px-3 pt-3">
         {meals.map(([day, meal, side]) => <div key={day} className="grid grid-cols-[27px_1fr] text-[9px] leading-[12px]"><span className="text-white/55">{day}</span><span>{meal}<br /><span className="text-white/72">{side}</span></span></div>)}
       </div>
@@ -375,7 +376,7 @@ async function MealPlan() {
 
 async function GroceryList() {
   const t = await getTranslations();
-  const items = ['Milk', 'Eggs', 'Chicken Breast', 'Broccoli', 'Avocados', 'Whole Wheat Bread'];
+  const items = [t('referenceShowcases.milk'), t('referenceShowcases.eggs'), t('referenceShowcases.chickenBreast'), t('referenceShowcases.broccoli'), t('referenceShowcases.avocados'), t('referenceShowcases.wholeWheatBread')];
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
       <p className="mb-2.5 text-[10px] font-semibold">{t('referenceShowcases.myGroceryList')}</p>
@@ -387,19 +388,19 @@ async function GroceryList() {
 
 async function SchoolList() {
   const t = await getTranslations();
-  const items = [['Math Homework', 'Due Tomorrow'], ['Science Project', 'Due May 10'], ['Field Trip', 'May 16']];
+  const items = [[t('referenceShowcases.mathHomework'), t('referenceShowcases.dueTomorrow')], [t('referenceShowcases.scienceProject'), t('referenceShowcases.dueMay10')], [t('referenceShowcases.fieldTrip'), t('referenceShowcases.may16')]];
   return <ListPanel title={t('referenceShowcases.upcoming')} footer={t('referenceShowcases.viewAllAssignments')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className={cn('grid h-6 w-6 place-items-center rounded-md', ['bg-pink-500/55', 'bg-indigo-500/55', 'bg-blue-500/55'][i])}><FileText className="h-3.5 w-3.5" /></span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 async function HealthList() {
   const t = await getTranslations();
-  const items = [['Liam – Allergy Medication', '8:00 AM'], ['Olivia – Vitamin D', '12:00 PM'], ['Dentist Appointment', '3:30 PM']];
+  const items = [[t('referenceShowcases.liamAllergyMedication'), '8:00 AM'], [t('referenceShowcases.oliviaVitaminD'), '12:00 PM'], [t('referenceShowcases.dentistAppointment'), '3:30 PM']];
   return <ListPanel title={t('referenceShowcases.todaysReminders')} footer={t('referenceShowcases.viewAll')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><TinyAvatar index={i + 1} className="h-6 w-6" /><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
 async function HomeList() {
   const t = await getTranslations();
-  const items = [['HVAC Filter Change', 'May 5'], ['Garage Door Service', 'May 20'], ['Water Heater Flush', 'June 2']];
+  const items = [[t('referenceShowcases.hvacFilterChange'), t('referenceShowcases.may5')], [t('referenceShowcases.garageDoorService'), t('referenceShowcases.may20')], [t('referenceShowcases.waterHeaterFlush'), t('referenceShowcases.june2')]];
   return <ListPanel title={t('referenceShowcases.upcoming')} footer={t('referenceShowcases.viewAll')}>{items.map(([item, date], i) => <div key={item} className="flex items-center gap-2.5"><span className="grid h-6 w-6 place-items-center rounded-md bg-white/[0.045]">{i === 0 ? <Wrench className="h-3.5 w-3.5 text-white/60" /> : <HousePlus className="h-3.5 w-3.5 text-white/60" />}</span><div><p className="text-[9px]">{item}</p><p className="text-[7px] text-white/45">{date}</p></div></div>)}</ListPanel>;
 }
 
@@ -487,10 +488,10 @@ async function AssistantChat() {
   const t = await getTranslations();
   return (
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3 text-[8px] leading-[11px]">
-      <div className="ml-auto rounded-lg bg-violet-600 px-2.5 py-2">What&apos;s happening this week?</div>
-      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">{t('referenceShowcases.youHave6EventsThis')}<br />2 chores due, and 1 appointment.</div>
+      <div className="ml-auto rounded-lg bg-violet-600 px-2.5 py-2">{t('referenceShowcases.whatsHappeningThisWeek')}</div>
+      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">{t('referenceShowcases.youHave6EventsThis')}<br />{t('referenceShowcases.twoChoresDueAnd1Appointment')}</div>
       <div className="mt-2 ml-auto rounded-lg bg-violet-600 px-2.5 py-2">{t('referenceShowcases.planDinnersForTheWeek')}</div>
-      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">Here&apos;s your meal plan<br />{t('referenceShowcases.basedOnYourPreferences')}</div>
+      <div className="mt-2 mr-3 rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2">{t('referenceShowcases.heresYourMealPlan')}<br />{t('referenceShowcases.basedOnYourPreferences')}</div>
       <span className="mx-auto mt-auto h-8 w-8 shrink-0 rounded-full border border-blue-300 bg-[radial-gradient(circle,#fff_0,#48baf7_12%,#8a45e8_42%,#07101b_72%)] shadow-[0_0_15px_rgba(114,80,255,.75)]" />
     </div>
   );
@@ -515,11 +516,15 @@ async function TrustStrip() {
   );
 }
 
+// Keys, not copy. The `\n` line breaks these bodies used to carry were
+// measured against English word lengths and are gone with the copy, the same
+// way WORK_STEPS below dropped its own — German and Dutch compounds break in
+// different places, so the text wraps on its own.
 const FLOW_CARDS = [
-  [Mail, 'School Email Arrives', 'Bubaly scans and\nunderstands the details.'],
-  [Sparkles, 'AI Extracts & Organizes', 'Events, deadlines, and\naction items are added\nto the right places.'],
-  [CalendarDays, 'Everyone Stays In Sync', 'Your whole family is\nupdated automatically.'],
-  [CheckCircle2, 'You Stay Ahead', 'AI reminds, suggests, and\nhelps you plan better.'],
+  [Mail, 'referenceShowcases.schoolEmailArrives', 'referenceShowcases.bubalyScansAndNunderstandsThe'],
+  [Sparkles, 'referenceShowcases.aiExtractsOrganizes', 'referenceShowcases.eventsDeadlinesAndNactionItems'],
+  [CalendarDays, 'referenceShowcases.everyoneStaysInSync', 'referenceShowcases.yourWholeFamilyIsNupdated'],
+  [CheckCircle2, 'referenceShowcases.youStayAhead', 'referenceShowcases.aiRemindsSuggestsAndNhelps'],
 ] as const;
 
 // Keys, not copy — and the hand-placed `\n` line breaks are gone with them.
@@ -569,14 +574,14 @@ export async function HowItWorksReferencePage() {
             {FLOW_CARDS.map(([Icon, title, body], index) => (
               <article key={title} className={cn('flex gap-3 rounded-[14px] border border-white/[0.10] bg-white/[0.045] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_16px_38px_rgba(0,0,0,.18)]', index === 1 ? 'min-h-[101px]' : 'min-h-[80px]')}>
                 <Icon className="mt-0.5 h-6 w-6 shrink-0 text-violet-400" />
-                <div><h2 className="text-[11px] font-semibold">{title}</h2><p className="mt-1.5 whitespace-pre-line text-[10px] leading-[15px] text-white/62">{body}</p></div>
+                <div><h2 className="text-[11px] font-semibold">{t(title)}</h2><p className="mt-1.5 text-[10px] leading-[15px] text-white/62">{t(body)}</p></div>
               </article>
             ))}
           </div>
 
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:hidden">
             <div className="mx-auto sm:col-span-2"><DetailedPhone /></div>
-            {FLOW_CARDS.map(([Icon, title, body]) => <article key={title} className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4"><Icon className="h-6 w-6 text-violet-400" /><div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 whitespace-pre-line text-xs leading-5 text-white/65">{body}</p></div></article>)}
+            {FLOW_CARDS.map(([Icon, title, body]) => <article key={title} className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4"><Icon className="h-6 w-6 text-violet-400" /><div><h2 className="text-sm font-semibold">{t(title)}</h2><p className="mt-1 text-xs leading-5 text-white/65">{t(body)}</p></div></article>)}
           </div>
         </section>
 
@@ -607,11 +612,11 @@ async function DetailedPhone() {
       <div className="h-full overflow-hidden rounded-[27px] bg-[#07101a] px-[10px] pb-[10px] pt-[14px]">
         <div className="flex items-center justify-between px-1 text-[8px] font-semibold"><span>9:41</span><span>⌁ ▴ ▰</span></div>
         <div className="mt-[22px] flex items-start justify-between px-1"><h3 className="text-[13px] font-semibold leading-4">{t('referenceShowcases.goodMorning')}<br />{t('referenceShowcases.theJohnsonFamily')}</h3><Bell className="h-4 w-4" /></div>
-        <PhonePanel title="Today&apos;s Snapshot" className="mt-3">
-          {[['3 Events Today','orange'],['2 Tasks Due','amber'],['1 Medication Reminder','blue'],['No Conflicts','green']].map(([item, color], i) => <div key={item} className="flex items-center gap-2 py-1 text-[7px]"><span className={cn('grid h-3.5 w-3.5 place-items-center rounded-full', color === 'orange' && 'bg-orange-500/20 text-orange-400', color === 'amber' && 'bg-amber-500/20 text-amber-400', color === 'blue' && 'bg-blue-500/20 text-blue-400', color === 'green' && 'bg-emerald-500/20 text-emerald-400')}>{i < 3 ? <CalendarDays className="h-2.5 w-2.5" /> : <Check className="h-2.5 w-2.5" />}</span>{item}</div>)}
+        <PhonePanel title={t('referenceShowcases.todaysSnapshot')} className="mt-3">
+          {[[t('referenceShowcases.threeEventsToday'),'orange'],[t('referenceShowcases.twoTasksDue'),'amber'],[t('referenceShowcases.oneMedicationReminder'),'blue'],[t('referenceShowcases.noConflicts'),'green']].map(([item, color], i) => <div key={item} className="flex items-center gap-2 py-1 text-[7px]"><span className={cn('grid h-3.5 w-3.5 place-items-center rounded-full', color === 'orange' && 'bg-orange-500/20 text-orange-400', color === 'amber' && 'bg-amber-500/20 text-amber-400', color === 'blue' && 'bg-blue-500/20 text-blue-400', color === 'green' && 'bg-emerald-500/20 text-emerald-400')}>{i < 3 ? <CalendarDays className="h-2.5 w-2.5" /> : <Check className="h-2.5 w-2.5" />}</span>{item}</div>)}
         </PhonePanel>
         <PhonePanel title={t('referenceShowcases.upcoming')} className="mt-2">
-          {[[t('referenceShowcases.soccerPractice'),'Today · 5:00 PM'],['Math Test','Tomorrow · 9:00 AM'],[t('referenceShowcases.familyDinner'),'Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/55">{date}</p></div></div>)}
+          {[[t('referenceShowcases.soccerPractice'),'Today · 5:00 PM'],[t('referenceShowcases.mathTest'),t('referenceShowcases.tomorrow900Am')],[t('referenceShowcases.familyDinner'),'Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/55">{date}</p></div></div>)}
         </PhonePanel>
         <div className="mt-2 flex items-center justify-between border-t border-white/[0.06] px-1 pt-2 text-[6px] text-white/50"><Home className="h-3.5 w-3.5 text-violet-400" /><CalendarDays className="h-3.5 w-3.5" /><span className="grid h-8 w-8 place-items-center rounded-full bg-violet-600 text-lg text-white">+</span><CheckSquare2 className="h-3.5 w-3.5" /><span className="text-sm leading-none">•••</span></div>
       </div>
@@ -651,7 +656,7 @@ async function StepsPanel() {
 
 async function MagicPanel() {
   const t = await getTranslations();
-  const bullets = ['Snap a photo of a school flyer', 'AI extracts events, dates & details', 'Automatically adds to your calendar', 'Creates tasks, reminders & lists', 'Notifies the right people', 'Saves you hours every week'];
+  const bullets = [t('referenceShowcases.snapAPhotoOfA'), t('referenceShowcases.aiExtractsEventsDatesDetails'), t('referenceShowcases.automaticallyAddsToYourCalendar'), t('referenceShowcases.createsTasksRemindersLists'), t('referenceShowcases.notifiesTheRightPeople'), t('referenceShowcases.savesYouHoursEveryWeek')];
   return (
     <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
@@ -670,9 +675,10 @@ async function MagicPanel() {
   );
 }
 
-function MagicCapture() {
+async function MagicCapture() {
+  const t = await getTranslations();
   return (
-    <div><p className="mb-2 text-center text-[11px] font-semibold">1. You capture it</p><div className="relative h-[271px] overflow-hidden rounded-[11px] bg-[radial-gradient(circle_at_70%_25%,#dac6a6,transparent_24%),radial-gradient(circle_at_25%_35%,#747966,transparent_35%),linear-gradient(135deg,#a9a18a,#4b5147)]">
+    <div><p className="mb-2 text-center text-[11px] font-semibold">{t('referenceShowcases.oneYouCaptureIt')}</p><div className="relative h-[271px] overflow-hidden rounded-[11px] bg-[radial-gradient(circle_at_70%_25%,#dac6a6,transparent_24%),radial-gradient(circle_at_25%_35%,#747966,transparent_35%),linear-gradient(135deg,#a9a18a,#4b5147)]">
       <div className="absolute -bottom-16 -left-6 h-[205px] w-[92px] rotate-[18deg] rounded-[45%] bg-gradient-to-r from-[#bb7655] to-[#e3a77f] shadow-xl" />
       <div className="absolute left-[35px] top-[18px] h-[245px] w-[101px] rounded-[17px] border-[5px] border-[#16181a] bg-[#202327] shadow-[0_10px_25px_rgba(0,0,0,.38)]"><div className="mx-auto mt-1 h-1 w-8 rounded-full bg-black" /></div>
       <Flyer className="absolute left-[39px] top-[42px] h-[190px] w-[93px]" />
@@ -686,23 +692,23 @@ function Flyer({ className }: { className?: string }) {
 
 async function MagicDetails() {
   const t = await getTranslations();
-  const rows: [LucideIcon, string][] = [[CalendarDays, t('referenceShowcases.springSoccerTournament')], [CalendarDays, 'May 18–19, 2024'], [Bell, 'Check in: 8:30 AM'], [Bell, 'Games start: 9:00 AM'], [MapPin, t('referenceShowcases.riversidePark')], [CheckSquare2, 'Bring: Water bottle, shin\nguards, team jersey']];
-  return <div><p className="mb-2 text-center text-[11px] font-semibold">2. AI understands it</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-4"><Sparkles className="h-6 w-6 text-violet-400" /><h3 className="mt-3 text-[10px] font-semibold">{t('referenceShowcases.aiExtractedDetails')}</h3><div className="mt-3 space-y-3">{rows.map(([Icon, text]) => <p key={text} className="flex gap-2 whitespace-pre-line text-[9px] leading-[12px] text-white/76"><Icon className="h-3 w-3 shrink-0 text-violet-400" />{text}</p>)}</div></div></div>;
+  const rows: [LucideIcon, string][] = [[CalendarDays, t('referenceShowcases.springSoccerTournament')], [CalendarDays, t('referenceShowcases.may18192024')], [Bell, t('referenceShowcases.checkIn830Am')], [Bell, t('referenceShowcases.gamesStart900Am')], [MapPin, t('referenceShowcases.riversidePark')], [CheckSquare2, t('referenceShowcases.bringWaterBottleShinNguards')]];
+  return <div><p className="mb-2 text-center text-[11px] font-semibold">{t('referenceShowcases.twoAiUnderstandsIt')}</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-4"><Sparkles className="h-6 w-6 text-violet-400" /><h3 className="mt-3 text-[10px] font-semibold">{t('referenceShowcases.aiExtractedDetails')}</h3><div className="mt-3 space-y-3">{rows.map(([Icon, text]) => <p key={text} className="flex gap-2 whitespace-pre-line text-[9px] leading-[12px] text-white/76"><Icon className="h-3 w-3 shrink-0 text-violet-400" />{text}</p>)}</div></div></div>;
 }
 
 async function MagicCalendar() {
   const t = await getTranslations();
-  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">3. It&apos;s organized for your family</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>{t('referenceShowcases.may2024')}</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">{t('referenceShowcases.springSoccerTournament')}</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">{t('referenceShowcases.may18May19')}<br />8:30 AM – 12:00 PM<br />{t('referenceShowcases.riversidePark')}</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">{t('referenceShowcases.tasksCreated')}</p>{['Pack soccer gear','Bring snacks','Team jersey'].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
+  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">{t('referenceShowcases.threeItsOrganizedForYourFamily')}</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>{t('referenceShowcases.may2024')}</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">{t('referenceShowcases.springSoccerTournament')}</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">{t('referenceShowcases.may18May19')}<br />8:30 AM – 12:00 PM<br />{t('referenceShowcases.riversidePark')}</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">{t('referenceShowcases.tasksCreated')}</p>{[t('referenceShowcases.packSoccerGear'),t('referenceShowcases.bringSnacks'),t('referenceShowcases.teamJersey')].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
 }
 
 async function FamilyWorkflowPanel() {
   const t = await getTranslations();
   const workflows = [
-    ['Morning ready', 'Schedules, reminders, and handoffs in one calm view.'],
-    ['School paperwork', 'Turn forms and messages into clear next actions.'],
-    ['Dinner planned', 'Coordinate meals, groceries, and family preferences.'],
-    ['Everyone aligned', 'Keep shared plans current without extra group texts.'],
-    ['Weekends protected', 'See commitments early and make room for family time.'],
+    [t('referenceShowcases.morningReady'), t('referenceShowcases.schedulesRemindersAndHandoffsIn')],
+    [t('referenceShowcases.schoolPaperwork'), t('referenceShowcases.turnFormsAndMessagesInto')],
+    [t('referenceShowcases.dinnerPlanned'), t('referenceShowcases.coordinateMealsGroceriesAndFamily')],
+    [t('referenceShowcases.everyoneAligned'), t('referenceShowcases.keepSharedPlansCurrentWithout')],
+    [t('referenceShowcases.weekendsProtected'), t('referenceShowcases.seeCommitmentsEarlyAndMake')],
   ];
   return (
     <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
