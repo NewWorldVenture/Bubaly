@@ -25,7 +25,8 @@ describe('onboarding finalization idempotency', () => {
     expect(source).toContain("onboarding_key: onboardingItemKey(runKey, 'member'");
     expect(source).toContain("onConflict: 'family_id,onboarding_key'");
     expect(source).toContain("onboarding_key: onboardingItemKey(runKey, 'calendar-event'");
-    expect(source).toContain("onboarding_key: onboardingItemKey(runKey, 'calendar-import'");
+    expect(source).toContain("onboardingItemKey(runKey, 'calendar-import'");
+    expect(source).toContain("onboardingItemKey(connectedReceipt.accountId, 'connected-calendar-import'");
     expect(source).toContain("admin.rpc('onboarding_claim_family'");
     expect(source).not.toContain(".from('family_members').insert({");
     expect(source).not.toContain(".from('calendar_events').insert(chunk)");

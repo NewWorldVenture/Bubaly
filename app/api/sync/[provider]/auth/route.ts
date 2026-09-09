@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getAdapter } from '@/lib/sync/registry';
 import { createSyncOAuthState, syncOAuthStateCookie, syncOAuthStatePath } from '@/lib/sync/oauth-state';
 import type { SyncProviderEnum } from '@/lib/database.types';
+import { startOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
+import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
 
 // Provider-generic OAuth start (R9): resolves the adapter from the registry and
 // redirects to its consent screen — Microsoft works today, future adapters plug
@@ -10,9 +12,10 @@ import type { SyncProviderEnum } from '@/lib/database.types';
 // prefers static segments, so /api/sync/google/auth is unaffected.)
 // Register "<origin>/api/sync/<provider>/callback" in the provider's console.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
-  await requireUserContext();
   const origin = req.nextUrl.origin;
   const { provider: raw } = await params;
+  if (raw === 'microsoft' && req.nextUrl.searchParams.get('onboarding') === '1') return startOnboardingCalendarOAuth(req, 'microsoft');
+  await requireUserContext();
   const provider = raw as SyncProviderEnum;
 
   const adapter = getAdapter(provider);
@@ -31,6 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   // callback session rather than from a caller-controlled query parameter.
   const state = createSyncOAuthState();
   const response = NextResponse.redirect(adapter.authUrl(redirectUri, state));
+  response.cookies.set(calendarContinuationCookie(provider), '', { path: syncOAuthStatePath(provider), maxAge: 0 });
   response.cookies.set(syncOAuthStateCookie(provider), state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

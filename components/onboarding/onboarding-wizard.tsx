@@ -1,8 +1,8 @@
 'use client';
 
-// Onboarding — a guided, six-step journey that sets up the whole family space in
-// ONE atomic write at the very end (finalizeOnboardingAction). Nothing is written
-// to Supabase until "Finish", so abandoning midway leaves no half-created account.
+// Onboarding keeps form details in a resumable draft until Finish. Optional
+// calendar Connect first claims an owned family and stores a dormant connection
+// so OAuth can return to the unfinished wizard. Finish imports the reviewed data.
 //   1) Profile   — avatar, name, age, colour
 //   2) Family    — name your shared space (timezone auto-detected)
 //   3) About     — household makeup, goals, how they found us
@@ -40,12 +40,15 @@ import { pickFirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { ConnectedCalendar, type CalendarProvider } from '@/components/onboarding/connected-calendar';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
 const isLikelyEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
 
-export function OnboardingWizard({ initialName = '', initialLastName = '' }: { initialName?: string; initialLastName?: string }) {
+export function OnboardingWizard({ initialName = '', initialLastName = '', calendarProviders = [], calendarAccountId, calendarStatus }: {
+  initialName?: string; initialLastName?: string; calendarProviders?: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+}) {
   const tr = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
@@ -65,18 +68,18 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
   // persist over (or race with) the restore on first paint.
   const [hydrated, setHydrated] = useState(false);
 
-  // Resume an in-progress wizard after a refresh/navigation (nothing is written
-  // to the DB until Finish, so the draft lives only in sessionStorage — minus
-  // the PIN). Runs once, before the sync effects below matter.
+  // Resume form details after navigation. PINs, calendar contents and the signed
+  // preview receipt are excluded from sessionStorage. OAuth returns re-preview.
   useEffect(() => {
     const restored = parseDraftState(typeof window !== 'undefined' ? sessionStorage.getItem(DRAFT_STORAGE_KEY) : null);
     if (restored) {
-      setStep(restored.step);
+      setStep(calendarAccountId || calendarStatus ? 'value' : restored.step);
       setDraft(restored.draft);
       setFamilyNameTouched(restored.familyNameTouched);
     }
+    else if (calendarAccountId || calendarStatus) setStep('value');
     setHydrated(true);
-  }, []);
+  }, [calendarAccountId, calendarStatus]);
 
   // Persist the resumable state whenever it changes (after the restore attempt).
   useEffect(() => {
@@ -123,13 +126,15 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 
   async function finish() {
     setSaving(true);
+    try {
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
-    setSaving(false);
-    if (!res.ok) { toastError(res.error ?? 'Something went wrong finishing setup'); return; }
+    if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
     setDoneBrief(res.data?.brief ?? null);
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
+    } catch { toastError(tr('actions.couldNotFinishSettingUp2')); }
+    finally { setSaving(false); }
   }
 
   function advance() {
@@ -178,7 +183,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
           <FamilyPanel draft={draft} firstName={firstName} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
-        {step === 'value' && <ValuePanel draft={draft} update={update} />}
+        {step === 'value' && <ValuePanel draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} />}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
@@ -301,14 +306,23 @@ function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string;
 }
 
 // ─── Step 3: Value — import a calendar, see the instant payoff ─────────────────
-function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus }: {
+  draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; calendarProviders: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+}) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [ics, setIcs] = useState('');
   const [loading, setLoading] = useState<null | 'paste' | 'demo'>(null);
   // Recompute the brief locally when returning to the step (events live in the draft).
   const [brief, setBrief] = useState<FirstBrief | null>(() =>
-    draft.importedEvents.length ? buildFirstBrief(draft.importedEvents, new Date()) : null);
+    draft.importedEvents.length || draft.calendarReceipt ? buildFirstBrief(draft.importedEvents, new Date(), [], draft.timezone) : null);
+  const [ignoreConnected, setIgnoreConnected] = useState(false);
+  const [calendarName, setCalendarName] = useState('');
+  const onConnectedPreview = useCallback((preview: { events: import('@/lib/onboarding/first-brief').BriefEvent[]; receipt: string; calendarName: string; brief: FirstBrief }) => {
+    setBrief(preview.brief); setCalendarName(preview.calendarName);
+    update({ importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt });
+    trackOnboarding('value', 'step');
+  }, [update]);
 
   async function run(source: 'paste' | 'demo') {
     setLoading(source);
@@ -317,18 +331,20 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
     if (!res.ok) { toastError(res.error); return; }
     if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }
     setBrief(res.data.brief);
-    update({ importedEvents: res.data.events, importSource: res.data.source });
+    update({ importedEvents: res.data.events, importSource: res.data.source, calendarReceipt: undefined });
     trackOnboarding('value', 'step');
   }
 
   function reset() {
     setBrief(null); setIcs('');
-    update({ importedEvents: [], importSource: '' });
+    setIgnoreConnected(true);
+    update({ importedEvents: [], importSource: '', calendarReceipt: undefined });
   }
 
   if (brief) {
     return (
       <div className="space-y-4">
+        {draft.calendarReceipt && <p className="rounded-xl border border-border p-3 text-sm text-muted">{tr('connectedCalendar.previewReady', { calendar: calendarName || tr('connectedCalendar.primary') })}</p>}
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 text-center">
           <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand-text">
             <Sparkles className="h-5 w-5" />
@@ -414,6 +430,8 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
   return (
     <div className="space-y-4">
+      <ConnectedCalendar providers={calendarProviders} accountId={ignoreConnected ? undefined : calendarAccountId}
+        status={ignoreConnected ? undefined : calendarStatus} family={{ name: draft.familyName, timezone: draft.timezone }} displayName={draft.name} onPreview={onConnectedPreview} />
       <div className="rounded-2xl border border-border p-4">
         <label htmlFor="ics-paste" className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Clipboard className="h-4 w-4 text-brand-text" /> {tr('onboardingWizard.pasteYourCalendarExportIcs')}

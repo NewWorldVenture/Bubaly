@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   const { data: accounts, error } = await admin
     .from('sync_accounts')
     .select('id, user_id, family_id, external_id, provider')
+    .in('sync_direction', ['import', 'export', 'two_way'])
     .order('last_synced_at', { ascending: true, nullsFirst: true })
     .limit(BATCH);
   if (error) {

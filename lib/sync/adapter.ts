@@ -122,6 +122,8 @@ export interface SyncProviderAdapter {
   // ── calendar API ──────────────────────────────────────────────────────────
   listCalendars(accessToken: string): Promise<NormalizedCalendar[]>;
   pullEvents(accessToken: string, calendarExternalId: string, cursor: string | null): Promise<EventPullResult>;
+  /** Complete bounded view with recurring occurrences expanded. Used by onboarding. */
+  pullCalendarWindow?(accessToken: string, calendarExternalId: string, from: string, to: string): Promise<NormalizedEvent[]>;
   insertEvent(accessToken: string, calendarExternalId: string, body: Record<string, unknown>): Promise<{ id: string; etag: string | null }>;
   patchEvent(accessToken: string, calendarExternalId: string, eventExternalId: string, body: Record<string, unknown>): Promise<{ id: string; etag: string | null }>;
   deleteEvent(accessToken: string, calendarExternalId: string, eventExternalId: string): Promise<void>;

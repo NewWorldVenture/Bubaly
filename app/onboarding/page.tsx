@@ -2,10 +2,17 @@ import type { Metadata } from 'next';
 import { createServer } from '@/lib/supabase/server';
 import { splitFullName } from '@/lib/onboarding/profile';
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard';
+import { configuredAdapters } from '@/lib/sync/registry';
+import { hasEncryptionKey } from '@/lib/sync/crypto';
+import { z } from 'zod';
 
 export const metadata: Metadata = { title: 'Create your profile' };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = await searchParams ?? {};
+  const account = z.string().uuid().safeParse(query.calendarAccount);
+  const status = typeof query.calendarStatus === 'string' && ['connected', 'cancelled', 'unavailable'].includes(query.calendarStatus) ? query.calendarStatus : undefined;
+  const providers = hasEncryptionKey() ? configuredAdapters().map((adapter) => adapter.provider).filter((provider): provider is 'google' | 'microsoft' => provider === 'google' || provider === 'microsoft') : [];
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
 
@@ -23,5 +30,6 @@ export default async function OnboardingPage() {
     initialLastName = lastName;
   }
 
-  return <OnboardingWizard initialName={initialName} initialLastName={initialLastName} />;
+  return <OnboardingWizard initialName={initialName} initialLastName={initialLastName} calendarProviders={providers}
+    calendarAccountId={account.success ? account.data : undefined} calendarStatus={status} />;
 }
