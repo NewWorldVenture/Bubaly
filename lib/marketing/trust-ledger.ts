@@ -106,7 +106,7 @@ export const TRUST_LEDGER: TrustLedgerRow[] = [
 
 /** The catalogue key for a status pill's label ('trustCenter.statusVerified', …). */
 export function statusLabelKey(status: TrustLedgerStatus): string {
-  return `trustCenter.status${STATUS_SUFFIX[status]}`;
+  return STATUS_LABEL_KEY[status];
 }
 
 /** The catalogue key for a status pill's one-line explanation. */
@@ -114,11 +114,14 @@ export function statusHelpKey(status: TrustLedgerStatus): string {
   return `${statusLabelKey(status)}Help`;
 }
 
-const STATUS_SUFFIX: Record<TrustLedgerStatus, string> = {
-  verified: 'Verified',
-  in_place: 'InPlace',
-  provider: 'Provider',
-  planned: 'Planned',
+// Whole keys, not the suffix half of a template. `trustCenter.status${suffix}`
+// built a key no grep could find, and its halves — 'Verified', 'Planned' —
+// read as copy to anything that scans for untranslated English.
+const STATUS_LABEL_KEY: Record<TrustLedgerStatus, string> = {
+  verified: 'trustCenter.statusVerified',
+  in_place: 'trustCenter.statusInPlace',
+  provider: 'trustCenter.statusProvider',
+  planned: 'trustCenter.statusPlanned',
 };
 
 export function isEvidenceUrl(evidence: string): boolean {

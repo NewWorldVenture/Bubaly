@@ -67,6 +67,14 @@ function namespaceFor(path) {
   return name.replace(/[-_](.)/g, (_, c) => c.toUpperCase()).replace(/^(.)/, (_, c) => c.toLowerCase());
 }
 
+/**
+ * A leading numeral, spelled. `"3 Events Today"` slugged to `3EventsToday`,
+ * which reads as an array index and cannot be typed as an identifier — the
+ * catalogue has no other key that starts on a digit. Only the FIRST word is
+ * spelled: `"Due May 10"` keeps its 10.
+ */
+const NUMBER_WORD = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+
 /** "Privacy by Design" → "privacyByDesign"; long strings keep their first words. */
 function slugFor(text) {
   const words = text
@@ -75,6 +83,7 @@ function slugFor(text) {
     .filter(Boolean)
     .slice(0, 5);
   if (!words.length) return 'text';
+  if (/^\d+$/.test(words[0])) words[0] = NUMBER_WORD[Number(words[0])] ?? `n${words[0]}`;
   return words
     .map((w, i) => (i === 0 ? w.toLowerCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
     .join('');

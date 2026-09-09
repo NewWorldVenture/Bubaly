@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { landingCta, safeHref, normalizeSlug, bodyParagraphs } from '@/lib/marketing/landing';
+import { DEFAULT_CTA_LABEL_KEY, landingCta, safeHref, normalizeSlug, bodyParagraphs } from '@/lib/marketing/landing';
+import enUS from '@/lib/i18n/messages/en-US.json';
 
 describe('landingCta', () => {
-  it('falls back to signup when metadata is empty', () => {
-    expect(landingCta(null)).toEqual({ label: 'Get started free', href: '/signup' });
-    expect(landingCta({})).toEqual({ label: 'Get started free', href: '/signup' });
+  // `label` is null when the page authored none, and the CALLER renders
+  // DEFAULT_CTA_LABEL_KEY through the catalogue. It used to be the English
+  // string 'Get started free', which is how every /lp page shipped its call to
+  // action in English in all seven languages.
+  it('leaves the label to the catalogue when metadata is empty', () => {
+    expect(landingCta(null)).toEqual({ label: null, href: '/signup' });
+    expect(landingCta({})).toEqual({ label: null, href: '/signup' });
+  });
+  it('names a key the catalogue actually has', () => {
+    expect((enUS as Record<string, string>)[DEFAULT_CTA_LABEL_KEY]).toBe('Get started free');
   });
   it('uses provided label + href', () => {
     expect(landingCta({ cta_label: 'Try it', cta_href: '/pricing' })).toEqual({ label: 'Try it', href: '/pricing' });

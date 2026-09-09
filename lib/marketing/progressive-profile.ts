@@ -9,64 +9,73 @@ export type ProfileField = 'role' | 'top_priority' | 'household_size' | 'child_a
 export type ProfileQuestion = {
   field: ProfileField;
   kind: 'choice' | 'multi';
-  prompt: string;
-  help?: string;
-  options: { value: string; label: string }[];
+  /** Catalogue keys, not copy. `value` is the stored identifier and stays
+   *  English; everything a person reads goes through the catalogue, which is
+   *  what the public profile nudge renders. */
+  promptKey: string;
+  helpKey?: string;
+  options: { value: string; labelKey: string }[];
 };
 
 // Ordered — earlier questions are the highest-signal for tailoring the product.
 export const PROFILE_QUESTIONS: ProfileQuestion[] = [
   {
     field: 'role', kind: 'choice',
-    prompt: 'Who are you organizing for?',
+    promptKey: 'profileQuestions.rolePrompt',
     options: [
-      { value: 'parent', label: 'Parent' },
-      { value: 'grandparent', label: 'Grandparent' },
-      { value: 'caregiver', label: 'Caregiver' },
-      { value: 'other', label: 'Someone else' },
+      { value: 'parent', labelKey: 'profileQuestions.roleParent' },
+      { value: 'grandparent', labelKey: 'profileQuestions.roleGrandparent' },
+      { value: 'caregiver', labelKey: 'profileQuestions.roleCaregiver' },
+      { value: 'other', labelKey: 'profileQuestions.roleOther' },
     ],
   },
   {
     field: 'top_priority', kind: 'choice',
-    prompt: 'What would help your family most right now?',
+    promptKey: 'profileQuestions.priorityPrompt',
     options: [
-      { value: 'calendar', label: 'Calendar & schedules' },
-      { value: 'meals', label: 'Meals & groceries' },
-      { value: 'chores', label: 'Chores & kids' },
-      { value: 'money', label: 'Money & allowance' },
-      { value: 'paperwork', label: 'Paperwork & forms' },
-      { value: 'other', label: 'Something else' },
+      { value: 'calendar', labelKey: 'profileQuestions.priorityCalendar' },
+      { value: 'meals', labelKey: 'profileQuestions.priorityMeals' },
+      { value: 'chores', labelKey: 'profileQuestions.priorityChores' },
+      { value: 'money', labelKey: 'profileQuestions.priorityMoney' },
+      { value: 'paperwork', labelKey: 'profileQuestions.priorityPaperwork' },
+      { value: 'other', labelKey: 'profileQuestions.priorityOther' },
     ],
   },
   {
     field: 'household_size', kind: 'choice',
-    prompt: 'How big is your household?',
+    promptKey: 'profileQuestions.householdPrompt',
     options: [
-      { value: '2', label: 'Just 2' }, { value: '3', label: '3' },
-      { value: '4', label: '4' }, { value: '5', label: '5' }, { value: '6', label: '6+' },
+      { value: '2', labelKey: 'profileQuestions.householdTwo' },
+      { value: '3', labelKey: 'profileQuestions.householdThree' },
+      { value: '4', labelKey: 'profileQuestions.householdFour' },
+      { value: '5', labelKey: 'profileQuestions.householdFive' },
+      { value: '6', labelKey: 'profileQuestions.householdSixPlus' },
     ],
   },
   {
     field: 'child_ages', kind: 'choice',
-    prompt: 'Any kids at home?',
-    help: 'Helps us tailor tips and reminders.',
+    promptKey: 'profileQuestions.childAgesPrompt',
+    helpKey: 'profileQuestions.childAgesHelp',
     options: [
-      { value: 'none', label: 'No kids' },
-      { value: 'little', label: 'Little ones' },
-      { value: 'school', label: 'School-age' },
-      { value: 'teen', label: 'Teens' },
-      { value: 'mixed', label: 'A mix' },
+      { value: 'none', labelKey: 'profileQuestions.childAgesNone' },
+      { value: 'little', labelKey: 'profileQuestions.childAgesLittle' },
+      { value: 'school', labelKey: 'profileQuestions.childAgesSchool' },
+      { value: 'teen', labelKey: 'profileQuestions.childAgesTeen' },
+      { value: 'mixed', labelKey: 'profileQuestions.childAgesMixed' },
     ],
   },
   {
     field: 'interests', kind: 'multi',
-    prompt: 'Which should Bubaly focus on for you?',
-    help: 'Pick any that fit.',
+    promptKey: 'profileQuestions.interestsPrompt',
+    helpKey: 'profileQuestions.interestsHelp',
     options: [
-      { value: 'calendar', label: 'Calendar' }, { value: 'meals', label: 'Meals' },
-      { value: 'chores', label: 'Chores' }, { value: 'money', label: 'Money' },
-      { value: 'paperwork', label: 'Paperwork' }, { value: 'health', label: 'Health' },
-      { value: 'activities', label: 'Activities' },
+      { value: 'calendar', labelKey: 'profileQuestions.interestCalendar' },
+      { value: 'meals', labelKey: 'profileQuestions.interestMeals' },
+      { value: 'chores', labelKey: 'profileQuestions.interestChores' },
+      { value: 'money', labelKey: 'profileQuestions.interestMoney' },
+      { value: 'paperwork', labelKey: 'profileQuestions.interestPaperwork' },
+      { value: 'health', labelKey: 'profileQuestions.interestHealth' },
+      { value: 'activities', labelKey: 'profileQuestions.interestActivities' },
     ],
   },
 ];

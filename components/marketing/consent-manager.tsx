@@ -173,16 +173,16 @@ function PreferenceCenter({
               <div key={c.key} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-bg/40 p-3">
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-sm font-semibold">
-                    {c.label}
+                    {t(c.labelKey)}
                     {c.locked && <Lock className="h-3 w-3 text-muted" />}
                   </p>
-                  <p className="mt-0.5 text-xs leading-5 text-muted">{c.description}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted">{t(c.descriptionKey)}</p>
                 </div>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={on}
-                  aria-label={c.label}
+                  aria-label={t(c.labelKey)}
                   disabled={c.locked}
                   onClick={() => !c.locked && toggle(c.key)}
                   className={
