@@ -44,7 +44,10 @@ beforeEach(() => {
   // the fake exactly as it is in Postgres — an `undefined` would let a missing
   // stamp pass for an unstamped row.
   db = createInMemorySupabase<SupabaseClient<Database>>({
-    defaults: { family_inbox_messages: { ai_handled: false, status: 'new', direction: 'inbound' } },
+    defaults: {
+      family_inbox_messages: { ai_handled: false, status: 'new', direction: 'inbound' },
+      paperwork_items: { updated_at: NOW.toISOString() },
+    },
   });
   db.seed('families', [{ id: FAMILY, name: 'The Hughens', timezone: 'America/Chicago' }]);
 });
