@@ -66,12 +66,15 @@ export async function loadInboxMessage(scope: ServiceScope, messageId: string): 
 }
 
 /**
- * Mark a message handled. Called ONLY after something durable exists — a
- * persisted `ai_requests` row — because `ai_handled` is what the inbox renders
- * as "Handled", and a flag set before the work was filed would be a claim the
- * database cannot back.
+ * Mark a message handled after durable work exists: a persisted intake request
+ * or an executed, approved tool. School proposals archive the source in this
+ * same write; ordinary inbox filing keeps the existing read status.
  */
-export async function markInboxMessageHandled(scope: ServiceScope, messageId: string): Promise<ServiceResult<InboxMessage>> {
+export async function markInboxMessageHandled(
+  scope: ServiceScope,
+  messageId: string,
+  status: 'read' | 'archived' = 'read',
+): Promise<ServiceResult<InboxMessage>> {
   const id = messageId?.trim();
   if (!id) return fail('Which message?', { code: SERVICE_CODES.invalidInput });
   if (!mayFile(scope)) {
@@ -79,7 +82,7 @@ export async function markInboxMessageHandled(scope: ServiceScope, messageId: st
   }
   const { data, error } = await scope.db
     .from('family_inbox_messages')
-    .update({ ai_handled: true, status: 'read' })
+    .update({ ai_handled: true, status })
     .eq('id', id)
     .eq('family_id', scope.familyId)
     .select('*')

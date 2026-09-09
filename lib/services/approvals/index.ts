@@ -48,6 +48,7 @@ import { isManager, MANAGER_ROLES } from '@/lib/constants/roles';
 import { thresholdFor, type Threshold } from '@/lib/approvals/threshold';
 import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
+import { markApprovedSchoolSource } from '@/lib/front-desk/school-approval';
 import { getTool } from '@/lib/ai/tools/registry';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { isTerminalRunState, legacyStatusFor, type RunState, type StepState } from '@/lib/ai/runs/states';
@@ -715,8 +716,9 @@ async function performApproved(
       );
 
       if (outcome.status === 'ok') {
+        const sourceHandled = await markApprovedSchoolSource(scope, row, outcome);
         await stampExecution(scope, row.id, outcome.summary);
-        await auditDecision(scope, row, 'approved_execution', outcome.summary, { tool: classified.name, tool_call_id: outcome.toolCallId, verified: outcome.verified ?? null });
+        await auditDecision(scope, row, 'approved_execution', outcome.summary, { tool: classified.name, tool_call_id: outcome.toolCallId, verified: outcome.verified ?? null, ...(sourceHandled === null ? {} : { inbox_source_handled: sourceHandled }) });
         return ok({ status: decisionLabel, executed: true, resumedRunId: null, summary: outcome.summary });
       }
       const reason = outcome.status === 'denied'
