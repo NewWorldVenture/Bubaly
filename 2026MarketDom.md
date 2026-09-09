@@ -305,7 +305,13 @@ dairy, a proposed swap never keeps the allergen it was meant to remove, and a
 bought line is put away and cleared together so a trip that fails half way
 leaves the pantry and the list agreeing.
 
-**Still open:** M9 (school + sports front desk).
+**Landed in batch 3:** M9 — a deterministic classifier reads an inbound
+school or sports message as a form, a fee, a gear list, a transport ask or a
+schedule change, wired into both the webhooks and the paste-in importer, with
+a desk card whose one-tap Propose goes through the approval spine and whose
+Handled comes from `ai_handled` and nowhere else.
+
+**Still open:** nothing in this phase without a migration.
 
 ### Phase 3 — Deepen
 Family CFO, home twin, inventory, travel, moving, care.
@@ -335,7 +341,12 @@ counted, a recurring bill paid this month stays in later months, and the
 affordability scenario refuses to answer for a month the forecast never
 weighed.
 
-**Still open:** M12 (home twin history).
+**Landed in batch 3:** M12's no-migration half — manuals and warranty
+documents on the asset card, and one asset detail view showing warranty,
+documents, service history, open maintenance and the related project, each
+read failing closed rather than rendering an empty panel.
+
+**Still open:** the replacement lineage, which needs §6 item 9.
 
 ### Phase 4 — Expand
 Front-desk identity, marketplace, partner API, network effects, hardware.
@@ -356,7 +367,12 @@ writes once at family creation), the referral coefficient counts households
 only (accepted invites are members, reported beside it), and "terminal" has
 one definition, without `blocked`.
 
-**Still open:** M27, M32, M37 — each needs a migration in §6.
+**Landed in batch 3:** M37's no-migration half — the certified-devices
+catalog and the in-app setup path ship as content and a guided checklist; no
+device is described as certified by anyone, and no competitor is priced.
+
+**Still open:** M27 and M32, each needing a migration in §6; M37's kiosk
+pairing needs §6 item 13.
 
 ### Public site
 **Landed in #421 (stage 1):** an outcome-first homepage — the Bubaly-Handled
@@ -375,7 +391,14 @@ price buys: a per-day framing, the outcomes each tier hands back, and a value
 block whose three number sources (real aggregate, badged illustrative sample,
 published case studies) stay visibly apart; 51 new keys in seven locales.
 
-**Still open:** W6, W7. And a translation pass: the six non-English catalogues
+**Landed in batch 3:** W6 — the display now asks and reports (an Ask tile on
+the same request path, and a "handled today" tile counting COMPLETED runs that
+renders an error rather than a zero when it cannot read), keeps the tablet
+awake, explains its own setup, and has a public /family-display page that is a
+compatibility list rather than a partnership claim.
+
+**Still open:** W7's second half, which needs the `public_stats()` change in
+§6 item 18. And a translation pass: the six non-English catalogues
 are missing 304 keys en-US has (mostly `pricingContent.*`, the older
 `security.*`, `visualMocks.*`, `ai.*`, `aiShowcase.*`) — those strings fall
 back to English for every other locale. That is a translation job, not code,
@@ -471,8 +494,11 @@ exactly which DDL is missing and what is therefore not claimed.
 - **PR #428** — the review fixes those sections still lacked: dd9-13 (M13/M14),
   323-13 (M21), de4-12 (S-15 metrics core), dd9-16 (M25/M34), and the migrate
   import's part-way failure copy.
-- **The PR after #428 (batch 2b)** — S-19 (W4 Trust Center), S-20 (W3 pricing
-  value), the M10 meals-loop review fixes, and the M14 Family CFO review fixes.
+- **PR #429** — S-19 (W4 Trust Center), S-20 (W3 pricing value), the M10
+  meals-loop review fixes, and the M14 Family CFO review fixes.
+- **Batch 3** — S-06 (M9), S-04 (M12's no-migration half), S-07 (M18 + M37 +
+  W6), plus a clock fix for two suites whose result depended on the day they
+  ran.
 
 Do not re-land any of them; the audit in `docs/MARKET_DOMINATION_AUDIT.md`
 predates them and still says `partial` for several.
@@ -485,20 +511,36 @@ the reviewed sibling that landed), and `358-11` (a *parallel implementation* of
 S-14 whose three review fixes main already had or does not need — its one
 missing finding, the migrate copy, landed in #428).
 
-**Genuinely unclaimed — build these from the queue's spec:** S-06 · M9 (school
-and sports front desk), S-04 · M12 (home twin history), W6, W7, the 304-key
-translation pass named in §5, and everything in §6 that waits on a migration.
+**What is genuinely left, and it is short:**
 
-**Two lessons the integrator paid for, so you do not have to.** First: when a
+1. **The translation pass.** 291 keys en-US has that the six other locales
+   lack — `pricingContent` (113), `security` (85), `visualMocks` (37), `ai`
+   (20), `aiShowcase` (15), `blog` (10). Roughly two thirds look like orphans
+   from copy that has since been retired: 106 of 115 `pricingContent.*` and
+   179 of 236 `security.*` keys have no literal `t('…')` reference. But this
+   repository does use dynamic `t(\`prefix.${x}\`)`, so prune by searching for
+   the key SEGMENT, never by literal match alone — deleting a key a template
+   builds at runtime renders the raw key to a family. Prune first, then
+   translate what survives.
+2. **Everything in §6.** Every remaining item — M12's lineage, M27, M32,
+   W7's second half, the twelve metric weeks — is blocked on DDL that only the
+   owner may apply.
+
+**Three lessons the integrator paid for, so you do not have to.** First: when a
 review returns fixes, they are usually on a *different* branch than the one
-first merged — the harness placed reviewing agents in fresh worktrees. Before
-merging any section, check that the branch you are holding is the one carrying
-the review's fix commits. Second: a branch that touches the same files as a
-landed section is not necessarily a fix stack on it. Measure how much of the
-branch's *own delta* (versus its merge-base) already lives on main before you
-merge: ≥97% means superseded; ~85% with a few hundred lines missing means a
-fix stack worth porting; ~10% on files main also rewrote means a parallel
-implementation, and merging it would land the section twice.
+first merged — the harness placed reviewing agents in fresh worktrees, and the
+labels in a workflow journal are ordered by completion, not by section. Read
+the report's own `branch` and `sha` fields. Second: a branch that touches the
+same files as a landed section is not necessarily a fix stack on it. Measure
+how much of the branch's *own delta* already lives on main before merging:
+≥97% means superseded; ~85% with a few hundred lines missing means a fix stack
+worth porting; ~10% on files main also rewrote means a parallel implementation,
+and merging it would land the section twice. Third: run the FULL suite, not the
+changed files. Two suites here built plans against a frozen `NOW` but let the
+executor judge them against `Date.now()`; they passed for as long as wall time
+stayed behind the fixture date and then turned main red with no commit behind
+it. A test whose result depends on the day it runs is not a flake, and
+re-running it never clears it.
 
 ---
 

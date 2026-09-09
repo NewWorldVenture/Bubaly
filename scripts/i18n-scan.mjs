@@ -37,6 +37,9 @@ export const GATED_SURFACES = {
   // features, the four legal documents, the FAQ, the blog chrome and the footer.
   'marketing-pages': ['app/(marketing)'],
   'marketing-components': ['components/marketing'],
+  // The two pure catalogs the public family-display page renders. Copy parked
+  // in a data structure under lib/ is the blind spot this gate exists for.
+  'marketing-display-catalogs': ['lib/marketing/certified-devices.ts', 'lib/marketing/display-compare.ts'],
 };
 
 // NOT gated: `everything` — ['app', 'components'].

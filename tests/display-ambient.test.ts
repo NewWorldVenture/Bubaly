@@ -65,7 +65,7 @@ describe('normalizeSettings', () => {
   });
   it('keeps valid fields and drops invalid ones', () => {
     const s = normalizeSettings({ clock24: true, tempUnit: 'C', theme: 'aurora', ambient: false, seconds: true, screensaver: false, background: 'photos', idleMinutes: 10, bogus: 1 });
-    expect(s).toEqual({ clock24: true, seconds: true, tempUnit: 'C', theme: 'aurora', ambient: false, screensaver: false, background: 'photos', idleMinutes: 10 });
+    expect(s).toEqual({ clock24: true, seconds: true, tempUnit: 'C', theme: 'aurora', ambient: false, screensaver: false, background: 'photos', idleMinutes: 10, setupDismissed: false });
   });
   it('coerces invalid enums to defaults', () => {
     const s = normalizeSettings({ tempUnit: 'K', theme: 'rainbow', background: 'video', idleMinutes: 7 });

@@ -94,6 +94,33 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
   return ok(data ?? []);
 }
 
+/**
+ * Every class row, with NO week-parity filtering — the roster the school and
+ * sports front desk matches inbound mail against.
+ *
+ * `listClasses` is the timetable: it drops a class that does not occur in the
+ * requested week, which is right for a planner and wrong here. A teacher's name
+ * identifies the child who is in her class whether or not this is an A week,
+ * and a message filed against half the roster would link a child on alternate
+ * Mondays and no one on the others.
+ *
+ * Read-only and family-scoped like the rest of this file; the caller gets a
+ * `ServiceResult`, so a failed read is a failure and never an empty roster.
+ */
+export async function listClassRoster(scope: ServiceScope, input: { limit?: number } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
+  const { data, error } = await scope.db
+    .from('school_classes')
+    .select('*')
+    .eq('family_id', scope.familyId)
+    .order('subject', { ascending: true })
+    .limit(Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS));
+  if (error) {
+    console.error('[service:school] class roster read failed', error);
+    return fail(describeDbError(error, 'Could not load the class roster.'), { code: SERVICE_CODES.db });
+  }
+  return ok(data ?? []);
+}
+
 export type ListClassesInput = {
   memberId?: string | null;
   /** 0 = Sunday … 6 = Saturday. Classes with no day are treated as daily and always included. */

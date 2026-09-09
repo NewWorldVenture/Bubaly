@@ -109,7 +109,18 @@ beforeAll(() => {
   }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterAll(() => { vi.restoreAllMocks(); });
+// THE CLOCK IS FROZEN, and it has to be. These scenarios build a plan against
+// `NOW` and then execute it, but the executor decides whether a scheduled
+// follow-up is still in the future with its own `port.now()`, which is
+// `Date.now()` (lib/ai/runs/executor.ts). With a real clock the two disagree
+// the moment wall time passes the date the plan was written against: a
+// follow-up three days after NOW became "scheduled for a time that has already
+// passed", the step failed, and the run settled `partially_completed`. That is
+// not a flake — it is a test whose result depends on the day it is run, and it
+// turned main red on its own. Only `Date` is faked, so timers and the port's
+// `sleep` still behave normally.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); });
+afterAll(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('Ask Bubaly → plan → run → household rows → run page (scripted provider)', () => {
   let requestId = '';

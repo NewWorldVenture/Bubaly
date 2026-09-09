@@ -7,6 +7,9 @@ import {
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
+  // The public family-display page (device compatibility + setup). Deliberately
+  // NOT '/display': that path is the signed-in kiosk and must stay protected.
+  '/family-display',
   // Both are sign-in entry points, not authenticated family data. The header's
   // Get started link and a child's PIN sign-in must work before a session exists.
   '/welcome', '/kid-login',

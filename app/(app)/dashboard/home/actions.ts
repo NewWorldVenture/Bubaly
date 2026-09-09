@@ -23,6 +23,15 @@ function num(fd: FormData, k: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The per-asset detail view (/dashboard/home/assets/[id]) composes warranties,
+ *  service history and open maintenance, so anything that writes one of those
+ *  for a known asset has to drop that page's cache too — otherwise the family
+ *  saves a service record and the asset page still shows the old history. */
+function revalidateAsset(assetId: string | null) {
+  if (!assetId) return;
+  revalidatePath(`/dashboard/home/assets/${assetId}`);
+}
+
 // ── Warranties ──────────────────────────────────────────────────────────────
 export async function saveWarrantyAction(fd: FormData) {
   const tr = await getTranslations();
@@ -52,6 +61,7 @@ export async function saveWarrantyAction(fd: FormData) {
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatWarranty')));
   revalidatePath('/dashboard/home/warranties');
   revalidatePath('/dashboard/home');
+  revalidateAsset(row.asset_id);
 }
 
 export async function deleteWarrantyAction(id: string) {
@@ -121,6 +131,7 @@ export async function saveServiceRecordAction(fd: FormData) {
   }
   revalidatePath('/dashboard/home/service');
   revalidatePath('/dashboard/home');
+  revalidateAsset(assetId);
 }
 
 export async function deleteServiceRecordAction(id: string) {
@@ -171,5 +182,6 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
   const { error } = await supabase.from('maintenance_tasks').insert(rows);
   if (error) return { ok: false, created: 0, error: error.message };
   revalidatePath('/dashboard/home');
+  revalidateAsset(assetId);
   return { ok: true, created: rows.length };
 }

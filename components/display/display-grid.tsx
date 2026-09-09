@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, Bell, StickyNote,
   Users, CloudSun, Clock, Sparkles, Pencil, Plus, Trash2, ArrowUp, ArrowDown, Check, X,
-  Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon,
+  Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon, MonitorCog,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -20,6 +20,10 @@ import {
 import { DEFAULT_TILES, resolveTiles, tileListLimit, SERVICE_WIDGET, type Tile, type TileSize, type WidgetKey } from '@/lib/display/tiles';
 import { ALL_SERVICES_CATALOG, ALL_SERVICES_BY_HREF } from '@/lib/constants/navigation';
 import { recipeImage, mealImage, AMBIENT_FALLBACK_PHOTOS } from '@/lib/display/imagery';
+import { AskTile } from './ask-tile';
+import { HandledTodayTile, type HandledToday } from './handled-today-tile';
+import { DisplaySetupCard } from './setup-card';
+import { useWakeLock } from './use-wake-lock';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 import { KitchenTimers } from './kitchen-timers';
@@ -45,6 +49,13 @@ export type DisplayData = {
   featured: FeaturedItem[];
   photos: string[];
   calendar: { year: number; month: number; today: number; eventDays: number[] };
+  /**
+   * What Bubaly finished today, read server-side and failing CLOSED
+   * ({ status: 'error' }). Optional because a caller that never asked for it is
+   * a different thing from a read that came back empty — and the tile renders
+   * the error state for BOTH rather than inventing a zero.
+   */
+  handled?: HandledToday;
 };
 
 // The tile model + layout normalization live in lib/display/tiles (pure,
@@ -54,7 +65,10 @@ export type DisplayData = {
 export { DEFAULT_TILES, resolveTiles } from '@/lib/display/tiles';
 export type { Tile, WidgetKey } from '@/lib/display/tiles';
 
-export const WIDGETS: { key: WidgetKey; label: string; icon: typeof Calendar }[] = [
+// `labelKey` is the catalogue key for the tile's header and its entry in the
+// editor's dropdown. The older widgets still carry their English `label` and
+// are translated elsewhere; every widget added from here on names a key.
+export const WIDGETS: { key: WidgetKey; label: string; labelKey?: string; icon: typeof Calendar }[] = [
   { key: 'featured', label: 'Featured', icon: Sparkles },
   { key: 'timers', label: 'Kitchen Timers', icon: TimerIcon },
   { key: 'schedule', label: "Today's Schedule", icon: Calendar },
@@ -69,8 +83,18 @@ export const WIDGETS: { key: WidgetKey; label: string; icon: typeof Calendar }[]
   { key: 'reminders', label: 'Reminders', icon: Bell },
   { key: 'birthdays', label: 'Birthdays', icon: Cake },
   { key: 'notes', label: 'Notes', icon: StickyNote },
+  { key: 'ask', label: 'Ask Bubaly', labelKey: 'displayGrid.widgetAsk', icon: Sparkles },
+  { key: 'handled_today', label: 'Handled today', labelKey: 'displayGrid.widgetHandledToday', icon: CheckCircle2 },
 ];
-const widgetLabel = (k: WidgetKey) => WIDGETS.find((w) => w.key === k)?.label ?? k;
+
+/** A widget's name in the reader's language, falling back to its English label. */
+function useWidgetLabel(): (k: WidgetKey) => string {
+  const tr = useTranslations();
+  return (k) => {
+    const widget = WIDGETS.find((w) => w.key === k);
+    return widget?.labelKey ? tr(widget.labelKey) : widget?.label ?? k;
+  };
+}
 
 const SIZES: { key: TileSize; label: string; cls: string }[] = [
   { key: 'sm', label: 'Small', cls: 'lg:col-span-2 lg:row-span-1' },
@@ -166,6 +190,11 @@ function WidgetBody({ widget, size, data, memberById, now }: {
     case 'weather': return <WeatherTile size={size} />;
     case 'timers': return <KitchenTimers />;
     case 'featured': return <FeaturedWidget list={data.featured} familyName={data.familyName} />;
+    // Ask goes through the shared component: same POST /api/ai/requests, same
+    // mic, same approval spine — the wall files a request, it never acts.
+    case 'ask': return <AskTile />;
+    // Fails closed on a failed read; never a reassuring zero (see the tile).
+    case 'handled_today': return <HandledTodayTile handled={data.handled} />;
 
     case 'schedule': {
       const { current, next } = nowAndNext(data.events, now);
@@ -483,7 +512,14 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
   const [isFull, setIsFull] = useState(false);
+  const [setupDismissed, setSetupDismissed] = useState<boolean>(() => initialSettings.setupDismissed);
+  const [dismissing, setDismissing] = useState(false);
   const memberById = useMemo(() => new Map(data.members.map((m) => [m.id, m])), [data.members]);
+  const labelOf = useWidgetLabel();
+  // Keep the panel awake for as long as the wall is mounted. Feature-detected
+  // and re-acquired on visibilitychange inside the helper; on a browser without
+  // the API this is `'unsupported'` and nothing was attempted or promised.
+  const wakeLock = useWakeLock();
 
   // Minute-granularity tick drives greeting, ambient theme, and now/next.
   useEffect(() => {
@@ -546,6 +582,31 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
     success(tr('displayGrid.displaySaved')); setEditing(false);
   }
 
+  /**
+   * Dismiss the first-run card — and only claim it if the row was written.
+   *
+   * The flag rides in the SAME `display_layouts.settings` blob as the rest of
+   * the display preferences (normalized by `normalizeSettings`), so it is per
+   * family and survives the tablet being wiped. A failed write leaves the card
+   * on screen with the error toast: an optimistic hide would silently come back
+   * on the next load and look like a bug in the product rather than an outage.
+   */
+  async function dismissSetup() {
+    setDismissing(true);
+    const nextSettings: DisplaySettings = { ...settings, setupDismissed: true };
+    const supabase = createClient();
+    const { error } = await supabase.from('display_layouts')
+      .upsert({ family_id: familyId, tiles: tiles as never, settings: nextSettings as never, updated_by: userId }, { onConflict: 'family_id' });
+    setDismissing(false);
+    if (error) {
+      console.error('[display] setup card dismissal write failed', error);
+      toastError(error.message);
+      return;
+    }
+    setSettings(nextSettings);
+    setSetupDismissed(true);
+  }
+
   const dayIcon = part === 'night' || part === 'evening' ? Moon : Sun;
   const DayIcon = dayIcon;
 
@@ -593,6 +654,10 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                 className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
                 {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
+              <Link href="/display/setup" title={tr('displayGrid.setUpThisDisplay')}
+                className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
+                <MonitorCog className="h-4 w-4" />
+              </Link>
               <button onClick={() => setEditing((v) => !v)} title={tr('displayGrid.editDisplay')}
                 className={cn('grid h-10 w-10 place-items-center rounded-full transition', editing ? 'bg-brand text-white' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
                 <Pencil className="h-4 w-4" />
@@ -611,6 +676,14 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
             <NowNextStrip events={data.events} memberById={memberById} now={now} />
           </WidgetBoundary>
         </div>
+
+        {/* First run: how to make this tablet behave like a wall display. Hidden
+            while editing so the settings panel owns the screen. */}
+        {!editing && !setupDismissed && (
+          <WidgetBoundary label="setup-card">
+            <DisplaySetupCard wakeLock={wakeLock} onDismiss={() => void dismissSetup()} dismissing={dismissing} />
+          </WidgetBoundary>
+        )}
 
         {/* Editor toolbar */}
         {editing && (
@@ -643,7 +716,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
               {tile.widget !== 'featured' && tile.widget !== 'clock' && tile.widget !== 'service' && (
                 <div className="mb-3 flex shrink-0 items-center gap-2 text-sm font-bold text-white/60">
                   {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4 shrink-0" />; })()}
-                  <span className="truncate">{widgetLabel(tile.widget as WidgetKey)}</span>
+                  <span className="truncate">{labelOf(tile.widget as WidgetKey)}</span>
                 </div>
               )}
               {/* Body flexes to fill the tile; list widgets scroll (scrollbar
@@ -681,7 +754,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                         className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white"
                       >
                         <optgroup label={t('displayGrid.displayWidgets')}>
-                          {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                          {WIDGETS.map((w) => <option key={w.key} value={w.key}>{labelOf(w.key)}</option>)}
                         </optgroup>
                         <optgroup label={t('displayGrid.allServicesFeatures')}>
                           {ALL_SERVICES_CATALOG.map((s) => (

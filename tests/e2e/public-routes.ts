@@ -7,6 +7,7 @@ export const PUBLIC_ROUTES = [
   '/faq',
   '/ai',
   '/mobile',
+  '/family-display',
   '/blog',
   '/contact',
   '/login',

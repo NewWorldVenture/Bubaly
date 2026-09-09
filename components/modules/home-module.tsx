@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { Home, Plus, Trash2, Wrench, Package, Check, Shield, FileText, Upload, ExternalLink, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { ArrowRight, Home, Plus, Trash2, Wrench, Package, Check, Shield, FileText, Upload, ExternalLink, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -18,6 +19,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
+import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -28,6 +30,26 @@ type WarrantyDoc = Tables<'documents'>;
 
 const PRIORITY_TONE = { low: 'neutral', medium: 'brand', high: 'danger' } as const;
 
+/** The two kinds of paperwork an asset carries. `documents.category` is plain
+ *  text with no CHECK (0002), so 'manual' needs no migration — see
+ *  lib/home/asset-detail.ts. */
+const DOC_KINDS = [
+  { value: MANUAL_CATEGORY, labelKey: 'homeAsset.manual' },
+  { value: WARRANTY_CATEGORY, labelKey: 'homeAsset.warranty' },
+] as const;
+
+function docCategory(doc: WarrantyDoc): string {
+  return (doc.category ?? '').trim().toLowerCase();
+}
+
+function isManualDoc(doc: WarrantyDoc): boolean {
+  return docCategory(doc) === MANUAL_CATEGORY;
+}
+
+function isWarrantyDoc(doc: WarrantyDoc): boolean {
+  return docCategory(doc) === WARRANTY_CATEGORY;
+}
+
 function fmtBytes(bytes: number | null): string {
   if (!bytes) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -35,13 +57,18 @@ function fmtBytes(bytes: number | null): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-/** Expiry status for a warranty date — drives the badge tone everywhere it's shown. */
-function expiryStatus(dateStr: string | null): { tone: 'danger' | 'warning' | 'success' | 'neutral'; label: string } {
-  if (!dateStr) return { tone: 'neutral', label: 'No expiration set' };
+/** Expiry status for a warranty date — drives the badge tone everywhere it's
+ *  shown. Returns a catalogue key rather than a sentence so the badge reads in
+ *  the visitor's language; the caller has the translator, this does not. */
+function expiryStatus(dateStr: string | null): {
+  tone: 'danger' | 'warning' | 'success' | 'neutral'; labelKey: string; when: string;
+} {
+  if (!dateStr) return { tone: 'neutral', labelKey: 'homeAsset.noExpirationSet', when: '' };
   const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
-  if (days < 0) return { tone: 'danger', label: `Expired ${fmtRelative(dateStr)}` };
-  if (days <= 30) return { tone: 'warning', label: `Expires ${fmtRelative(dateStr)}` };
-  return { tone: 'success', label: `Expires ${fmtRelative(dateStr)}` };
+  const when = fmtRelative(dateStr);
+  if (days < 0) return { tone: 'danger', labelKey: 'homeAsset.expiredWhen', when };
+  if (days <= 30) return { tone: 'warning', labelKey: 'homeAsset.expiresWhen', when };
+  return { tone: 'success', labelKey: 'homeAsset.expiresWhen', when };
 }
 
 export function HomeModule() {
@@ -94,12 +121,31 @@ export function HomeModule() {
     void refreshDocs();
   }
 
+  // Deep link from the asset detail page: /dashboard/home?asset=<id> opens that
+  // asset's files. Read from window rather than useSearchParams so this module
+  // needs no Suspense boundary on a page it does not own.
+  const [pendingAssetId, setPendingAssetId] = useState<string | null>(null);
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('asset');
+    if (wanted) setPendingAssetId(wanted);
+  }, []);
+  useEffect(() => {
+    if (!pendingAssetId) return;
+    const match = assets.find((a) => a.id === pendingAssetId);
+    if (match) {
+      setWarrantyAsset(match);
+      setPendingAssetId(null);
+    }
+  }, [pendingAssetId, assets]);
+
   // Every asset with a tracked expiration date and/or an attached warranty file,
   // soonest-expiring first — this powers the "All Warranties" rollup below.
+  // Manuals are excluded here on purpose: a manual has no expiry, so counting it
+  // would list an asset under "warranties" that has none.
   const warrantyRows = useMemo(() => {
     return assets
       .map((asset) => {
-        const files = docsByAsset.get(asset.id) ?? [];
+        const files = (docsByAsset.get(asset.id) ?? []).filter(isWarrantyDoc);
         const earliestDocExpiry = files
           .map((f) => f.expires_at)
           .filter((d): d is string => !!d)
@@ -187,7 +233,7 @@ export function HomeModule() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{asset.name}</p>
-                    <Badge tone={status.tone}>{status.label}</Badge>
+                    <Badge tone={status.tone}>{tr(status.labelKey, { when: status.when })}</Badge>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {files.map((f) => (
@@ -258,7 +304,9 @@ export function HomeModule() {
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {assets.map((a) => {
               const files = docsByAsset.get(a.id) ?? [];
-              const status = expiryStatus(files.map((f) => f.expires_at).filter((d): d is string => !!d).sort()[0] ?? a.warranty_until);
+              const manualCount = files.filter(isManualDoc).length;
+              const warrantyCount = files.filter(isWarrantyDoc).length;
+              const status = expiryStatus(files.filter(isWarrantyDoc).map((f) => f.expires_at).filter((d): d is string => !!d).sort()[0] ?? a.warranty_until);
               return (
                 <div key={a.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
@@ -271,15 +319,24 @@ export function HomeModule() {
                       {a.model && <span>{a.model}</span>}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <Badge tone={status.tone}>{status.label}</Badge>
-                      {files.length > 0 && <Badge tone="neutral">{files.length} file{files.length > 1 ? 's' : ''}</Badge>}
+                      <Badge tone={status.tone}>{tr(status.labelKey, { when: status.when })}</Badge>
+                      {manualCount > 0 && <Badge tone="brand">{tr('homeAsset.manualsCount', { count: manualCount })}</Badge>}
+                      {warrantyCount > 0 && <Badge tone="neutral">{tr('homeAsset.warrantyFilesCount', { count: warrantyCount })}</Badge>}
                     </div>
-                    <button
-                      onClick={() => setWarrantyAsset(a)}
-                      className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-elevated"
-                    >
-                      <Shield className="h-3.5 w-3.5" /> {tr('home.manageWarranty')}
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <button
+                        onClick={() => setWarrantyAsset(a)}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-elevated"
+                      >
+                        <FileText className="h-3.5 w-3.5" /> {tr('homeAsset.manualsAndWarranty')}
+                      </button>
+                      <Link
+                        href={`/dashboard/home/assets/${a.id}`}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-elevated"
+                      >
+                        {tr('homeAsset.viewDetails')} <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
                   </div>
                   {manager && (
                     <button onClick={() => removeAsset(a.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label={tr('home.remove')}>
@@ -326,6 +383,10 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   const [savingDate, setSavingDate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // Which kind of paperwork the next upload is. A manual carries no expiry: the
+  // warranty date belongs to the warranty card, and stamping it on a manual
+  // would make the asset look covered because a PDF was attached.
+  const [docKind, setDocKind] = useState<string>(MANUAL_CATEGORY);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function saveDate() {
@@ -345,24 +406,26 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     if (!file) return;
     setUploading(true);
     const supabase = createClient();
+    const manual = docKind === MANUAL_CATEGORY;
     const { path, error: uploadError } = await uploadFamilyDocument(supabase, {
-      familyId, folder: `warranties/${asset.id}`, file,
+      familyId, folder: `${manual ? 'manuals' : 'warranties'}/${asset.id}`, file,
     });
     if (uploadError || !path) {
       setUploading(false);
-      return toastError(uploadError ?? 'Upload failed');
+      return toastError(uploadError ?? tr('homeModule.uploadFailed'));
     }
     const { error: insertError } = await supabase.from('documents').insert({
       family_id: familyId, created_by: userId, asset_id: asset.id,
-      title: file.name, category: 'warranty', storage_path: path,
-      mime_type: file.type || null, size_bytes: file.size, expires_at: warrantyUntil || null,
+      title: file.name, category: manual ? MANUAL_CATEGORY : WARRANTY_CATEGORY, storage_path: path,
+      mime_type: file.type || null, size_bytes: file.size,
+      expires_at: manual ? null : warrantyUntil || null,
     });
     setUploading(false);
     if (insertError) {
       await removeFamilyDocument(supabase, path);
       return toastError(describeDbError(insertError));
     }
-    success(tr('homeModule.warrantyDocumentSaved'));
+    success(manual ? tr('homeModule.manualSaved') : tr('homeModule.warrantyDocumentSaved'));
     onChanged();
   }
 
@@ -386,7 +449,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   }
 
   return (
-    <Modal open onClose={onClose} title={`Warranty — ${asset.name}`} description={tr('homeModule.keepTheExpirationDateAnd')}>
+    <Modal open onClose={onClose} title={tr('homeAsset.filesAndManualsFor', { name: asset.name })} description={tr('homeModule.keepTheManualTheWarrantyCard')}>
       <div className="space-y-5">
         <Field label={tr('home.warrantyExpires')}>
           {(id) => (
@@ -398,7 +461,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
         </Field>
 
         <div>
-          <p className="mb-2 text-sm font-medium">{tr('home.warrantyDocuments')}</p>
+          <p className="mb-2 text-sm font-medium">{tr('homeAsset.manualsAndPaperwork')}</p>
           {files.length === 0 ? (
             <p className="text-sm text-muted">{tr('home.noFileUploadedYet')}</p>
           ) : (
@@ -410,6 +473,9 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
                     <p className="truncate text-sm">{f.title}</p>
                     <p className="text-xs text-muted">{fmtBytes(f.size_bytes)} {tr('home.added')} {fmtDate(f.created_at, 'MMM d, yyyy')}</p>
                   </div>
+                  <Badge tone={isManualDoc(f) ? 'brand' : 'neutral'}>
+                    {isManualDoc(f) ? tr('homeAsset.manual') : isWarrantyDoc(f) ? tr('homeAsset.warranty') : tr('homeAsset.file')}
+                  </Badge>
                   <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label={tr('home.viewFile')}>
                     <ExternalLink className="h-4 w-4" />
                   </button>
@@ -425,15 +491,28 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
 
           {manager && (
             <>
+              <Field label={tr('homeAsset.fileType')}>
+                {(id) => (
+                  <Select id={id} value={docKind} onChange={(e) => setDocKind(e.target.value)}>
+                    {DOC_KINDS.map((kind) => (
+                      <option key={kind.value} value={kind.value}>{tr(kind.labelKey)}</option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
               <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx" onChange={handleFile} />
               <Button type="button" variant="secondary" className="mt-3 w-full" loading={uploading} onClick={() => fileInputRef.current?.click()}>
-                <Upload className="h-4 w-4" /> {tr('home.uploadWarrantyCardOrReceipt')}
+                <Upload className="h-4 w-4" />{' '}
+                {docKind === MANUAL_CATEGORY ? tr('homeAsset.uploadAManual') : tr('home.uploadWarrantyCardOrReceipt')}
               </Button>
             </>
           )}
         </div>
 
-        <div className="flex justify-end pt-1">
+        <div className="flex items-center justify-between pt-1">
+          <Link href={`/dashboard/home/assets/${asset.id}`} className="text-sm font-medium text-brand-text underline">
+            {tr('homeAsset.viewDetails')}
+          </Link>
           <Button type="button" variant="ghost" onClick={onClose}>{tr('home.close')}</Button>
         </div>
       </div>

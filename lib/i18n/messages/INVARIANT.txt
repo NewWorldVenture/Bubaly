@@ -38,6 +38,8 @@ Telegram
 34 Maple Street
 AI Call Guardian™
 Acme Heating
+Amazon Fire HD 10
+Android 13
 Austin, TX
 Blog
 Bosch
@@ -45,6 +47,8 @@ Bubaly
 Chase
 Chase Ultimate Rewards
 ChatGPT (OpenAI)
+Chrome
+Chrome 84 / Edge 84 / Safari 16.4
 Creative Commons BY
 Demo
 Dr. Patel
@@ -53,6 +57,8 @@ Dr. Smith's office
 Emma
 Emma & Liam
 Est. —
+Fire OS 8
+Google Pixel Tablet
 Grandma's lasagna
 Jamie Rivera
 Jane Smith
@@ -75,8 +81,11 @@ Room 204
 Rx BIN
 Rx Group
 Rx PCN
+Safari
 Sam's Club
+Samsung Galaxy Tab A9+ / Tab S
 Sarah's mom
+Silk
 State Farm
 TTFV (median)
 TTFV (p90)
@@ -86,7 +95,10 @@ band =
 d under
 h (
 h to
+iPad Air / iPad Pro
 iPad, Switch, TV…
+iPadOS 15
+iPadOS 16.4
 min ·
 new ·
 of 6
