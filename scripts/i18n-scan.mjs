@@ -92,9 +92,16 @@ const NOT_COPY = [
   /^[^a-zA-Z]*$/,               // no letters at all
   /^&[a-z]+;$/i,                // bare entities
   // Source code that happens to sit between a `>` and a `<`. Widening the text
-  // pattern to span newlines pulled in fragments like `); return locked ? (`;
-  // prose does not contain these, so excluding them costs no real findings.
-  /[;{}]/,
+  // pattern to span newlines pulled in fragments like `); return locked ? (`.
+  //
+  // Braces stay excluded — a `{` in a string is a template or an object, never
+  // prose. The SEMICOLON does not: it is ordinary punctuation, and excluding it
+  // hid a whole English paragraph on /faq ("Parents manage everything; adults
+  // manage shared household data; teens manage their own items…") from a gate
+  // that reported the file clean. The fragment the comment cites is caught by
+  // the two rules below it — `=>` and the statement keywords — which is what
+  // was really doing the work here.
+  /[{}]/,
   /=>/,
   /\b(?:return|const|let|var|function|import|export|typeof|null|undefined)\b/,
   // Bracket punctuation at either end means we sliced through an expression,
@@ -233,11 +240,29 @@ const DATA_PATTERN = /(?:^|[\s,{[])([A-Za-z_$][\w$]*)\s*:\s*'([^'\\\n]{3,})'/gm;
  * body containing an apostrophe or a nested list still reads to its real end.
  */
 const ARRAY_PROP_PATTERN = /\b([A-Za-z_$][\w$]*)\s*:\s*\[/g;
+/**
+ * The same copy, bound to a NAME instead of a property:
+ *
+ *   const workflows = [
+ *     ['Morning ready', 'Schedules, reminders, and handoffs in one calm view.'],
+ *   ];
+ *
+ * This is the fourth blind spot, and it hid a card strip rendered on
+ * /how-it-works in English under a translated heading — on the gated
+ * marketing surface, with the gate reporting clean. `prop: [` and `const x = [`
+ * are the same mistake to a reader; only the binding differs, and the scanner
+ * was matching the binding rather than the copy.
+ *
+ * The name is captured so NOT_COPY_PROPS still exempts the identifier lists
+ * (route tables, class-name maps) that legitimately hold short lowercase
+ * tokens.
+ */
+const ARRAY_VAR_PATTERN = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;]+?)?=\s*\[/g;
 const STRING_IN_ARRAY = /'((?:[^'\\\n]|\\.){3,})'/g;
 
 function arrayFindings(source) {
   const out = [];
-  for (const m of source.matchAll(ARRAY_PROP_PATTERN)) {
+  for (const m of [...source.matchAll(ARRAY_PROP_PATTERN), ...source.matchAll(ARRAY_VAR_PATTERN)]) {
     if (NOT_COPY_PROPS.has(m[1])) continue;
     const open = (m.index ?? 0) + m[0].length - 1;
     let depth = 0;
