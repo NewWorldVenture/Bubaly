@@ -9,8 +9,11 @@ import {
 
 export type ConsentCategoryMeta = {
   key: ConsentCategory;
-  label: string;
-  description: string;
+  /** Catalogue keys, not copy: this module is imported at build time, long
+   *  before a request has a locale, and the consent banner is the first thing
+   *  a visitor sees on every page — it shipped in English in all seven. */
+  labelKey: string;
+  descriptionKey: string;
   /** `necessary` is always on and cannot be toggled off. */
   locked: boolean;
 };
@@ -18,20 +21,20 @@ export type ConsentCategoryMeta = {
 // Presentation for each category. Order = display order.
 export const CONSENT_UI: ConsentCategoryMeta[] = [
   { key: 'necessary', locked: true,
-    label: 'Strictly necessary',
-    description: 'Required to run the site — sign-in, security, and remembering your privacy choices. Always on.' },
+    labelKey: 'consentUi.necessaryLabel',
+    descriptionKey: 'consentUi.necessaryDescription' },
   { key: 'analytics', locked: false,
-    label: 'Analytics',
-    description: 'First-party, privacy-respecting usage measurement so we can improve Bubaly. No ad trackers, no fingerprinting.' },
+    labelKey: 'consentUi.analyticsLabel',
+    descriptionKey: 'consentUi.analyticsDescription' },
   { key: 'personalization', locked: false,
-    label: 'Personalization',
-    description: 'Tailors what you see (examples, tips, content) to be more relevant. Off unless you turn it on.' },
+    labelKey: 'consentUi.personalizationLabel',
+    descriptionKey: 'consentUi.personalizationDescription' },
   { key: 'marketing_email', locked: false,
-    label: 'Email updates',
-    description: 'Lets us follow up by email with product news and helpful tips. Off unless you opt in.' },
+    labelKey: 'consentUi.emailLabel',
+    descriptionKey: 'consentUi.emailDescription' },
   { key: 'marketing_sms', locked: false,
-    label: 'Text updates',
-    description: 'Lets us text you occasional updates. Off unless you opt in.' },
+    labelKey: 'consentUi.smsLabel',
+    descriptionKey: 'consentUi.smsDescription' },
 ];
 
 /** Accept everything (all categories granted). */

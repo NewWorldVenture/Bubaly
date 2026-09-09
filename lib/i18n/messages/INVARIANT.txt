@@ -109,3 +109,7 @@ to it.
 · next
 · seen
 × made
+
+# The sixth network in SOCIAL_PLATFORMS; the other five already read as
+# brands to the scanner and this one does not.
+Instagram
