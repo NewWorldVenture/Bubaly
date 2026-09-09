@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { landingCta, bodyParagraphs, normalizeSlug } from '@/lib/marketing/landing';
+import { DEFAULT_CTA_LABEL_KEY, landingCta, bodyParagraphs, normalizeSlug } from '@/lib/marketing/landing';
 import { LandingTracker } from './tracker';
 import { getPublishedMarketingPage, MarketingPageView, marketingPageMetadata } from '@/lib/marketing/public-pages';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
@@ -64,6 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 export default async function LandingPage({ params }: { params: Promise<{ slug: string }> }) {
+  const t = await getTranslations();
   const { slug } = await params;
   const page = await getPage(slug);
   if (!page) {
@@ -93,7 +94,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             data-lp-cta
             className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-3 text-base font-semibold text-brand-fg transition hover:bg-brand/90"
           >
-            {cta.label} <ArrowRight className="h-4 w-4" />
+            {cta.label ?? t(DEFAULT_CTA_LABEL_KEY)} <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
