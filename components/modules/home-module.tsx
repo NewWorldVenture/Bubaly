@@ -57,13 +57,18 @@ function fmtBytes(bytes: number | null): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-/** Expiry status for a warranty date — drives the badge tone everywhere it's shown. */
-function expiryStatus(dateStr: string | null): { tone: 'danger' | 'warning' | 'success' | 'neutral'; label: string } {
-  if (!dateStr) return { tone: 'neutral', label: 'No expiration set' };
+/** Expiry status for a warranty date — drives the badge tone everywhere it's
+ *  shown. Returns a catalogue key rather than a sentence so the badge reads in
+ *  the visitor's language; the caller has the translator, this does not. */
+function expiryStatus(dateStr: string | null): {
+  tone: 'danger' | 'warning' | 'success' | 'neutral'; labelKey: string; when: string;
+} {
+  if (!dateStr) return { tone: 'neutral', labelKey: 'homeAsset.noExpirationSet', when: '' };
   const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
-  if (days < 0) return { tone: 'danger', label: `Expired ${fmtRelative(dateStr)}` };
-  if (days <= 30) return { tone: 'warning', label: `Expires ${fmtRelative(dateStr)}` };
-  return { tone: 'success', label: `Expires ${fmtRelative(dateStr)}` };
+  const when = fmtRelative(dateStr);
+  if (days < 0) return { tone: 'danger', labelKey: 'homeAsset.expiredWhen', when };
+  if (days <= 30) return { tone: 'warning', labelKey: 'homeAsset.expiresWhen', when };
+  return { tone: 'success', labelKey: 'homeAsset.expiresWhen', when };
 }
 
 export function HomeModule() {
@@ -228,7 +233,7 @@ export function HomeModule() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{asset.name}</p>
-                    <Badge tone={status.tone}>{status.label}</Badge>
+                    <Badge tone={status.tone}>{tr(status.labelKey, { when: status.when })}</Badge>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {files.map((f) => (
@@ -314,7 +319,7 @@ export function HomeModule() {
                       {a.model && <span>{a.model}</span>}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <Badge tone={status.tone}>{tr(status.labelKey, { when: status.when })}</Badge>
                       {manualCount > 0 && <Badge tone="brand">{tr('homeAsset.manualsCount', { count: manualCount })}</Badge>}
                       {warrantyCount > 0 && <Badge tone="neutral">{tr('homeAsset.warrantyFilesCount', { count: warrantyCount })}</Badge>}
                     </div>
