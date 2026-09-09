@@ -58,6 +58,7 @@ const KNOWN_FORKS: Record<string, string> = {
   family_conversations: 'not yet converted',
   family_messages: 'not yet converted',
   family_recipes: 'not yet converted',
+  ai_conversations: 'components/modules/assistant-module.tsx still renames and deletes the current user’s chats under owner RLS; the S12 private-result service adds conversation creation for purchase reports, not a conversion of those existing controls',
   home_assets: 'not yet converted',
   // M13/M14 gave these four a service so the ASSISTANT could reach them
   // (inventory.find / inventory.recordMove / moving.planTasks / moving.setMoveDate).
@@ -103,6 +104,11 @@ describe('the service layer owns its tables', () => {
     // work remaining, and hide the fact that the conversion is finished.
     const stale = Object.keys(KNOWN_FORKS).filter((t) => !clientWrites.has(t));
     expect(stale, 'no component writes these any more — delete them from KNOWN_FORKS').toEqual([]);
+  });
+
+  it('confines the legacy conversation controls to their existing component', () => {
+    expect((clientWrites.get('ai_conversations') ?? []).map((path) => path.replace(/\\/g, '/')))
+      .toEqual(['components/modules/assistant-module.tsx']);
   });
 
   it('keeps the tables the §7 tranches closed at zero', () => {

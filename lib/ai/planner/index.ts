@@ -47,6 +47,7 @@ import { buildPlannerSystemPrompt, buildPlannerUserMessage, buildRepairMessage, 
 import { PLAN_SCHEMA_NAME, PlanSchema, type Plan } from './schema';
 import { instantiateTemplate, templateContextFrom, templateFor, templateSteps, type MoveContext, type TemplateContext, type WorkflowTemplate } from './templates/index';
 import { behaviorFor, catalogueNames, dominantBehavior, validatePlan, type PlanIssue, type ValidatedStep, type ValidationInputs, type ValidationResult } from './validate';
+import { answerPurchaseRequest } from './purchase-advice';
 
 export { PLANNER_PROMPT_VERSION } from './prompts';
 export { PlanSchema, type Plan, type PlanStep } from './schema';
@@ -56,7 +57,7 @@ export type PlanOutcome =
   | { kind: 'plan'; planId: string; runId: string; stepCount: number; riskLevel: 'low' | 'medium' | 'high'; requiresApproval: boolean; summary: string }
   | { kind: 'recommendation'; recommendationId: string; summary: string }
   | { kind: 'clarification'; question: string; requestId: string }
-  | { kind: 'answer'; text: string; card?: unknown };
+  | { kind: 'answer'; text: string; card?: unknown; href?: string };
 
 export type PlanRequestInput = {
   requestId: string;
@@ -231,6 +232,17 @@ export async function planRequest(
     // Bookkeeping, not the plan: the request row is what the family watches,
     // so a failure here is loud but does not stop the planning itself.
     console.error('[planner] could not mark the request as planning', { requestId, error: marked.error });
+  }
+
+  if (intent === 'purchase_advice') {
+    const answer = await answerPurchaseRequest(scope, input);
+    const completed = await updateRequest(scope, requestId, {
+      status: answer.ok ? 'completed' : 'failed',
+      completed_at: now.toISOString(),
+      error: answer.ok ? null : answer.error,
+    }, { db: ledger });
+    if (!completed.ok) return completed;
+    return answer;
   }
 
   let trust: Awaited<ReturnType<typeof loadTrustInputs>>;
