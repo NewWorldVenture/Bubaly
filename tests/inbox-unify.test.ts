@@ -169,10 +169,13 @@ describe('unifyInbox', () => {
   it('offers "Handle it" only for an inbound contact-center row that is not already handled', () => {
     const [inbound] = unifyInbox({ messages: [message()], now: NOW });
     expect(inbound.canHandle).toBe(true);
+    expect(inbound.canImportDocument).toBe(true);
     const [outbound] = unifyInbox({ messages: [message({ direction: 'outbound' })], now: NOW });
     expect(outbound.canHandle).toBe(false);
+    expect(outbound.canImportDocument).toBe(false);
     const [handled] = unifyInbox({ messages: [message({ ai_handled: true })], now: NOW });
     expect(handled.canHandle).toBe(false);
+    expect(handled.canImportDocument).toBe(true);
     // Paperwork and log rows have their own surfaces; the intake is not their door.
     const [paper] = unifyInbox({ paperwork: [paperwork()], now: NOW });
     expect(paper.canHandle).toBe(false);

@@ -138,6 +138,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       {/* Composer */}
       {composerOpen && <div className="mt-4 space-y-4">
         <DocumentCapture onSaved={() => { setFilter('needs_action'); router.refresh(); }} />
+        <a className="my-3 block text-sm text-brand-text underline" href="/capture/link">{t('documentLink.title')}</a>
         <Composer onDone={() => setComposerOpen(false)} />
       </div>}
 
