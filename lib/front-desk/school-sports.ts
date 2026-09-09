@@ -384,6 +384,46 @@ function nameMatch(haystack: string, name: string): number {
 }
 
 /**
+ * The spellings of a PERSON on the roster that a message might use: the name
+ * the family typed, and its last word on its own.
+ *
+ * Schools and clubs write "a note from Delgado", not "a note from Coach
+ * Delgado", so a whole-string match finds nothing on the one line that would
+ * have identified the child. The surname is only taken from fields that hold a
+ * person — `teams.coach` and `school_classes.teacher` — and only when it is
+ * four characters or more, because a two-letter fragment matches everything.
+ */
+function personAliases(name: string | null | undefined): string[] {
+  const full = (name ?? '').trim();
+  if (full.length < 3) return [];
+  const parts = full.split(/\s+/);
+  const last = parts[parts.length - 1];
+  return parts.length > 1 && last.length >= 4 ? [full, last] : [full];
+}
+
+/**
+ * The spellings of a PLACE or a TEAM: only the whole thing.
+ *
+ * "Lincoln Elementary" must not also match "Elementary", and "Riverside
+ * Rovers" must not match "Rovers" — those are words half the county's schools
+ * and clubs share, and matching them would tie a stranger's mail to a child.
+ */
+function placeAliases(name: string | null | undefined): string[] {
+  const full = (name ?? '').trim();
+  return full.length >= 3 ? [full] : [];
+}
+
+/** The earliest index at which any spelling matches, or -1. */
+function matchAny(haystack: string, aliases: string[]): number {
+  let best = -1;
+  for (const alias of aliases) {
+    const at = nameMatch(haystack, alias);
+    if (at >= 0 && (best === -1 || at < best)) best = at;
+  }
+  return best;
+}
+
+/**
  * Which child this is about.
  *
  * Three ways to know, strongest first: the child's full name in the text, a
@@ -415,16 +455,16 @@ function pickChild(
     if (firstAt >= 0) candidates.push({ member_id: member.id, name: full, weight: 1, at: firstAt });
   }
 
-  const rosterHints: { memberId: string | null | undefined; values: (string | null | undefined)[] }[] = [
-    ...teams.map((t) => ({ memberId: t.member_id, values: [t.team_name, t.coach] })),
-    ...classes.map((c) => ({ memberId: c.member_id, values: [c.teacher, c.school_name] })),
+  const rosterHints: { memberId: string | null | undefined; groups: string[][] }[] = [
+    ...teams.map((t) => ({ memberId: t.member_id, groups: [placeAliases(t.team_name), personAliases(t.coach)] })),
+    ...classes.map((c) => ({ memberId: c.member_id, groups: [personAliases(c.teacher), placeAliases(c.school_name)] })),
   ];
   for (const hint of rosterHints) {
     if (!hint.memberId) continue;
     const name = byId.get(hint.memberId);
     if (name === undefined || name === '') continue;
-    for (const value of hint.values) {
-      const at = value ? nameMatch(haystack, value) : -1;
+    for (const group of hint.groups) {
+      const at = matchAny(haystack, group);
       if (at >= 0) candidates.push({ member_id: hint.memberId, name, weight: 2, at });
     }
   }
@@ -442,13 +482,18 @@ function pickChild(
 
 type DomainVerdict = { domain: FrontDeskDomain | null; score: number };
 
-function rosterStrings(teams: RosterTeam[], classes: RosterClass[]): { school: string[]; sports: string[] } {
+/**
+ * The roster as groups of spellings — one group per field, so a coach whose
+ * full name AND surname both appear counts once rather than twice and cannot
+ * inflate a domain past a message that says more.
+ */
+function rosterGroups(teams: RosterTeam[], classes: RosterClass[]): { school: string[][]; sports: string[][] } {
   const sports = teams
-    .flatMap((t) => [t.team_name, t.coach, t.sport])
-    .filter((v): v is string => typeof v === 'string' && v.trim().length >= 3);
+    .flatMap((t) => [placeAliases(t.team_name), personAliases(t.coach), placeAliases(t.sport)])
+    .filter((group) => group.length > 0);
   const school = classes
-    .flatMap((c) => [c.teacher, c.school_name])
-    .filter((v): v is string => typeof v === 'string' && v.trim().length >= 3);
+    .flatMap((c) => [personAliases(c.teacher), placeAliases(c.school_name)])
+    .filter((group) => group.length > 0);
   return { school, sports };
 }
 
@@ -458,9 +503,9 @@ function scoreDomains(
   teams: RosterTeam[],
   classes: RosterClass[],
 ): DomainVerdict {
-  const roster = rosterStrings(teams, classes);
-  const rosterSchool = roster.school.filter((v) => nameMatch(haystack, v) >= 0).length;
-  const rosterSports = roster.sports.filter((v) => nameMatch(haystack, v) >= 0).length;
+  const roster = rosterGroups(teams, classes);
+  const rosterSchool = roster.school.filter((group) => matchAny(haystack, group) >= 0).length;
+  const rosterSports = roster.sports.filter((group) => matchAny(haystack, group) >= 0).length;
 
   const school = countSignals(haystack, SCHOOL_SIGNALS);
   const sports = countSignals(haystack, SPORTS_SIGNALS);
