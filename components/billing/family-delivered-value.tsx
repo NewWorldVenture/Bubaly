@@ -5,6 +5,7 @@ import { useApp } from '@/components/app/app-context';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { loadFamilyDeliveredValueAction, type FamilyDeliveredValue as ValueSnapshot } from '@/app/(app)/dashboard/billing/value-actions';
 import type { TimeSavedResult } from '@/lib/metric/time-saved';
+import { MODELED_MINUTES_PER_COMPLETED_PLAN } from '@/lib/metric/completed-plans-model';
 
 /** Shared by purchase surfaces; estimates never become measured time or cash savings. */
 export function DeliveredValueSummary({ result, onRetry }: { result: TimeSavedResult | null; onRetry: () => void }) {
@@ -36,7 +37,8 @@ export function DeliveredValueSummary({ result, onRetry }: { result: TimeSavedRe
             </div>
           </dl>
           {result.data.actions === 0 && <p className="mt-2 text-xs text-muted">{t('billingValue.noHandledYet')}</p>}
-          <p className="mt-2 text-xs text-muted">{t('billingValue.estimateNote')}</p>
+          <p className="mt-2 text-xs text-muted">{t('billingValue.estimateNote', { minutes: MODELED_MINUTES_PER_COMPLETED_PLAN })}</p>
+          <p className="mt-1 text-xs text-muted">{t('timeSaved.undatedCompletedPlans', { count: result.data.undatedCompletedRuns })}</p>
         </>
       )}
     </section>

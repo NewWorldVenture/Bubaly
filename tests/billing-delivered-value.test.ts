@@ -60,7 +60,12 @@ beforeEach(() => {
   db = createInMemorySupabase();
   mocks.requireUserContext.mockResolvedValue({ active: { familyId: 'ours' } });
   mocks.createServer.mockResolvedValue(db);
-  db.seed('family_automation_runs', [{ id: 'run', family_id: 'ours', state: 'completed', status: 'executed', created_at: IN_WEEK }]);
+  db.seed('family_automation_runs', [
+    { id: 'run', family_id: 'ours', state: 'completed', status: 'executed', created_at: '2026-08-01T12:00:00Z', completed_at: IN_WEEK },
+    { id: 'foreign-run', family_id: 'theirs', state: 'completed', status: 'executed', created_at: IN_WEEK, completed_at: IN_WEEK },
+    { id: 'old-run', family_id: 'ours', state: 'completed', status: 'executed', created_at: '2026-08-01T12:00:00Z', completed_at: '2026-08-01T12:00:00Z' },
+    { id: 'partial-run', family_id: 'ours', state: 'partially_completed', status: 'executed', created_at: IN_WEEK, completed_at: IN_WEEK },
+  ]);
   db.seed('autopilot_suggestions', [{ id: 'auto', family_id: 'ours', status: 'auto_executed', created_at: IN_WEEK }]);
   db.seed('agent_activity', [
     { id: 'done', family_id: 'ours', status: 'done', created_at: IN_WEEK },
@@ -73,9 +78,9 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('personal delivered value read boundary', () => {
-  it('derives the family from the session and counts only its handled work in the last seven days', async () => {
+  it('derives the family from the session and counts its dated recorded completions, excluding other activity', async () => {
     const snapshot = await loadFamilyDeliveredValueAction();
-    expect(snapshot).toMatchObject({ familyId: 'ours', result: { available: true, data: { actions: 4, minutes: 23 } } });
+    expect(snapshot).toMatchObject({ familyId: 'ours', result: { available: true, data: { actions: 1, minutes: 12, undatedCompletedRuns: 0 } } });
     expect(mocks.requireUserContext).toHaveBeenCalledOnce();
     expect(mocks.createServer).toHaveBeenCalledOnce();
   });
@@ -88,15 +93,16 @@ describe('personal delivered value read boundary', () => {
     expect(db.log).toHaveLength(0);
   });
 
-  it.each(['family_automation_runs', 'autopilot_suggestions', 'agent_activity', 'family_reminders'])('keeps a failed %s count distinct from zero', async (table) => {
+  it.each([0, 1])('keeps a failed required count distinct from zero (read %s)', async (failedRead) => {
     const from = db.from.bind(db);
+    let calls = 0;
     vi.spyOn(db, 'from').mockImplementation(((name: string) => {
-      if (name !== table) return from(name);
-      const failed = {
-        select: () => failed, eq: () => failed, or: () => failed,
-        gte: () => Promise.resolve({ count: null, error: { message: 'unavailable' } }),
-      };
-      return failed;
+      const query = from(name);
+      if (calls++ !== failedRead) return query;
+      query.then = ((fulfilled: (value: unknown) => unknown) => Promise.resolve(fulfilled({
+        count: null, error: { message: 'unavailable' }, data: null,
+      }))) as typeof query.then;
+      return query;
     }) as typeof db.from);
     expect(await loadFamilyDeliveredValueAction()).toEqual({ familyId: 'ours', result: { available: false } });
     expect(console.error).toHaveBeenCalled();
@@ -105,18 +111,17 @@ describe('personal delivered value read boundary', () => {
   it('handles a transport/client failure without inventing a zero', async () => {
     vi.spyOn(db, 'from').mockImplementation(() => { throw new Error('offline'); });
     expect(await loadFamilyDeliveredValueAction()).toEqual({ familyId: 'ours', result: { available: false } });
-    expect(console.error).toHaveBeenCalledWith('[billing-value] handled work read failed', expect.any(Error));
+    expect(console.error).toHaveBeenCalled();
   });
 
   it('renders unavailable when an otherwise successful exact count is missing', async () => {
     const from = db.from.bind(db);
     vi.spyOn(db, 'from').mockImplementation(((name: string) => {
-      if (name !== 'family_reminders') return from(name);
-      const incomplete = {
-        select: () => incomplete, eq: () => incomplete,
-        gte: () => Promise.resolve({ count: null, error: null }),
-      };
-      return incomplete;
+      const query = from(name);
+      const then = query.then.bind(query);
+      query.then = ((fulfilled: (value: unknown) => unknown, rejected: (error: unknown) => unknown) =>
+        then((reply) => fulfilled({ ...reply, count: null }), rejected)) as typeof query.then;
+      return query;
     }) as typeof db.from);
     const snapshot = await loadFamilyDeliveredValueAction();
     expect(snapshot).toEqual({ familyId: 'ours', result: { available: false } });
@@ -124,22 +129,34 @@ describe('personal delivered value read boundary', () => {
     harness.mount!();
     await vi.waitFor(() => expect(renderValue()).toContain('could not read'));
     expect(renderValue()).toContain('Try again');
-    expect(renderValue()).not.toContain('Things handled');
+    expect(renderValue()).not.toContain('Recorded completed plans');
     expect(renderValue()).not.toContain('0 min');
-    expect(renderValue()).not.toContain('No work recorded as handled');
+    expect(renderValue()).not.toContain('No plans with a recorded completion date');
+  });
+
+  it('does not require or count standalone activity, autopilot, or reminder records', async () => {
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((name: string) => {
+      if (name !== 'family_automation_runs') throw new Error('unrelated source unavailable');
+      return from(name);
+    }) as typeof db.from);
+    expect(await loadFamilyDeliveredValueAction()).toMatchObject({ result: { available: true, data: { actions: 1, minutes: 12 } } });
+    expect(db.from).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('upgrade and billing value presentation', () => {
-  it('shows actual work and an explicitly estimated duration through the real action', async () => {
+  it('shows recorded completion and an explicit planning-time model through the real action', async () => {
     expect(renderValue()).toContain('Loading');
     harness.mount!();
-    await vi.waitFor(() => expect(renderValue()).toContain('23 min'));
+    await vi.waitFor(() => expect(renderValue()).toContain('12 min'));
     const text = renderValue();
-    expect(text).toContain('Things handled 4');
+    expect(text).toContain('Recorded completed plans 1');
     expect(text).toContain('last 7 days');
-    expect(text).toContain('Estimated time saved');
-    expect(text).toContain('Estimated from recorded work');
+    expect(text).toContain('Modeled planning time');
+    expect(text).toContain('Assumes 12 minutes per dated completed plan');
+    expect(text).toContain('not measured time saved');
+    expect(text).toContain('0 completed plans have no completion date');
     expect(text).not.toMatch(/\$|ROI|this month|verified savings/i);
   });
 
@@ -147,26 +164,38 @@ describe('upgrade and billing value presentation', () => {
     for (const table of ['family_automation_runs', 'autopilot_suggestions', 'agent_activity', 'family_reminders']) db.replace(table, []);
     const snapshot = await loadFamilyDeliveredValueAction();
     const zero = textOf(DeliveredValueSummary({ result: snapshot.result, onRetry: vi.fn() }));
-    expect(zero).toContain('Things handled 0');
-    expect(zero).toContain('No work recorded as handled');
+    expect(zero).toContain('Recorded completed plans 0');
+    expect(zero).toContain('No plans with a recorded completion date');
     expect(zero).toContain('0 min');
     const unavailable = textOf(DeliveredValueSummary({ result: { available: false }, onRetry: vi.fn() }));
     expect(unavailable).toContain('could not read');
     expect(unavailable).toContain('Try again');
-    expect(unavailable).not.toContain('Things handled 0');
+    expect(unavailable).not.toContain('Recorded completed plans 0');
+  });
+
+  it('shows undated completion coverage even when no completion belongs to this week', async () => {
+    db.replace('family_automation_runs', [{
+      id: 'undated', family_id: 'ours', state: 'completed', status: 'executed',
+      created_at: '2026-08-01T12:00:00Z', completed_at: null,
+    }]);
+    const snapshot = await loadFamilyDeliveredValueAction();
+    const text = textOf(DeliveredValueSummary({ result: snapshot.result, onRetry: vi.fn() }));
+    expect(text).toContain('Recorded completed plans 0');
+    expect(text).toContain('0 min');
+    expect(text).toContain('1 completed plans have no completion date and are excluded; their week is unknown.');
   });
 
   it('drops prior household data immediately and rejects a response for a different active household', async () => {
     renderValue();
     const cleanup = harness.mount!();
-    await vi.waitFor(() => expect(renderValue()).toContain('23 min'));
+    await vi.waitFor(() => expect(renderValue()).toContain('12 min'));
     if (typeof cleanup === 'function') cleanup();
     harness.familyId = 'theirs';
     expect(renderValue()).toContain('Loading');
-    expect(renderValue()).not.toContain('23 min');
+    expect(renderValue()).not.toContain('12 min');
     harness.mount!();
     await vi.waitFor(() => expect(renderValue()).toContain('could not read'));
-    expect(renderValue()).not.toContain('23 min');
+    expect(renderValue()).not.toContain('12 min');
   });
 
   it('does not mount the value loader inside a closed upgrade modal', () => {

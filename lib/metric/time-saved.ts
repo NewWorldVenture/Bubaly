@@ -1,27 +1,12 @@
-// lib/metric/time-saved.ts — R11: the category metric (pure, unit-tested).
-//
-// The whole thesis rests on ONE number: not daily active users, but *time /
-// mental load removed*. This turns the family's system-handled actions this
-// week — plans Bubaly ran end to end, tasks Autopilot executed, items the
-// assistants handled, reminders delivered — into a real "I saved you ~N hours
-// this week" figure with a transparent breakdown. Pure so it's testable; the
-// loader (`lib/metric/time-saved-server.ts`) supplies the live counts.
-//
-// THIS FILE IS THE ONE DEFINITION of "handled". Three surfaces used to hold
-// three different answers — the Autopilot panel counted `family_automation_runs`
-// with `trigger_type = 'plan_accepted'` and the legacy `status = 'executed'`,
-// the Daily Brief counted the LENGTH OF A LIST that `mergeCompletedByBubaly`
-// caps at six, and time-saved counted three other tables and no runs at all. A
-// family could therefore read "3 handled" and "7 handled" on two screens of the
-// same product, both true to their own arithmetic and neither true to the
-// household. `HANDLED_RUN_STATES` and `SAVED_KINDS` are now the single
-// vocabulary; everything else reads from here.
-
+// Modeled planning time for recorded completed plans. The historical handled
+// vocabulary below remains available to history readers; the live metric uses
+// the stricter completed-plans loader and never sums activity or reminders.
 import type { AiRunLifecycleState } from '@/lib/database.types';
 import { LEGACY_RUN_STATUS_TO_STATE } from '@/lib/ai/runs/states';
+import { MODELED_MINUTES_PER_COMPLETED_PLAN } from './completed-plans-model';
 
 /** What kind of handled action a count came from. */
-export type SavedKind = 'run' | 'autopilot' | 'assistant' | 'reminder';
+export type SavedKind = 'run';
 
 /**
  * The run lifecycle states that mean Bubaly actually finished something.
@@ -71,24 +56,18 @@ export function isHandledRun(row: { state?: string | null; status?: string | nul
   return HANDLED_LEGACY_RUN_STATUSES.includes(row.status ?? '');
 }
 
-/** Minutes of family admin saved per handled action of each kind (conservative). */
-const MINUTES: Record<SavedKind, number> = { run: 12, autopilot: 5, assistant: 4, reminder: 2 };
+/** Modeling assumption, not measured time saved. */
+const MINUTES: Record<SavedKind, number> = { run: MODELED_MINUTES_PER_COMPLETED_PLAN };
 const LABEL: Record<SavedKind, string> = {
-  run: 'plans Bubaly ran end to end',
-  autopilot: 'tasks auto-handled',
-  assistant: 'items your assistants handled',
-  reminder: 'reminders delivered',
+  run: 'recorded completed plans',
 };
 /** Catalogue keys for the same labels — the UI renders these, never `LABEL`. */
 const LABEL_KEY: Record<SavedKind, string> = {
   run: 'timeSaved.plansBubalyRanEndToEnd',
-  autopilot: 'timeSaved.tasksAutoHandled',
-  assistant: 'timeSaved.itemsYourAssistantsHandled',
-  reminder: 'timeSaved.remindersDelivered',
 };
 
 /** Every kind, in the order a breakdown reads best. */
-export const SAVED_KINDS: readonly SavedKind[] = ['run', 'autopilot', 'assistant', 'reminder'] as const;
+export const SAVED_KINDS: readonly SavedKind[] = ['run'] as const;
 
 export interface SavedInput { kind: SavedKind; count: number }
 export interface TimeSavedRow { kind: SavedKind; count: number; minutes: number; label: string; labelKey: string }
@@ -96,8 +75,10 @@ export interface TimeSaved {
   minutes: number;
   /** minutes rendered as hours to 1 decimal (e.g. 3.2). */
   hours: number;
-  /** total actions handled for the family — the ONE handled-this-week number. */
+  /** Dated recorded completed plans in the trailing week. */
   actions: number;
+  /** All recorded completed plans with no completion date; excluded from this week. */
+  undatedCompletedRuns: number;
   rows: TimeSavedRow[];
   headline: string;
   /** false when nothing was handled — the surface can hide. */
@@ -120,10 +101,10 @@ export function humanizeSaved(minutes: number): string {
   return `about ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
 }
 
-/** Compute time saved from this week's system-handled action counts. */
-export function computeTimeSaved(inputs: SavedInput[]): TimeSaved {
+/** Model planning time for the measured subset; no other activity is added. */
+export function computeTimeSaved(inputs: SavedInput[], undatedCompletedRuns = 0): TimeSaved {
   const rows: TimeSavedRow[] = inputs
-    .filter((i) => i.count > 0)
+    .filter((i) => i.kind === 'run' && i.count > 0)
     .map((i) => ({
       kind: i.kind, count: i.count, minutes: i.count * MINUTES[i.kind],
       label: LABEL[i.kind], labelKey: LABEL_KEY[i.kind],
@@ -131,9 +112,7 @@ export function computeTimeSaved(inputs: SavedInput[]): TimeSaved {
   const minutes = rows.reduce((s, r) => s + r.minutes, 0);
   const actions = rows.reduce((s, r) => s + r.count, 0);
   const hours = Math.round(minutes / 6) / 10;
-  const show = actions > 0;
-  const headline = show
-    ? `I saved you ${humanizeSaved(minutes)} this week — ${actions} ${actions === 1 ? 'thing' : 'things'} handled for you.`
-    : "I'll start saving you time as your family leans on Bubaly.";
-  return { minutes, hours, actions, rows, headline, show };
+  const show = actions > 0 || undatedCompletedRuns > 0;
+  const headline = `${actions} recorded completed plans in the last 7 days — ${humanizeSaved(minutes)} modeled planning time.`;
+  return { minutes, hours, actions, undatedCompletedRuns, rows, headline, show };
 }

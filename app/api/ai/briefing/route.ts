@@ -433,11 +433,9 @@ ${UNTRUSTED_CONTENT_RULE}
       }
     }
 
-    // The ONE handled accounting (S-15). `counts.handled` used to be the length
-    // of a list capped at six; it is now the same number Home and the Autopilot
-    // panel show. `null` when the read failed — the brief then falls back to its
-    // own list rather than to a zero.
-    const { total: handledThisWeek } = await countHandledThisWeek(supabase, familyId, now);
+    // Recorded completed plans share the Home/Autopilot metric. A failed read
+    // stays unavailable; a broader history list cannot replace that subset.
+    const { total: handledThisWeek, undatedCompletedRuns } = await countHandledThisWeek(supabase, familyId, now);
 
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
@@ -449,6 +447,7 @@ ${UNTRUSTED_CONTENT_RULE}
       decisions: decisions.items,
       notifications: notices,
       handledThisWeek,
+      undatedCompletedRuns,
     }, tz);
 
     // Read only because it was RENDERED. `foldAlsoToday` drops duplicates and

@@ -16,7 +16,7 @@ export async function loadFamilyDeliveredValueAction(): Promise<FamilyDeliveredV
     const db = await createServer();
     return { familyId, result: await loadTimeSaved(db, familyId) };
   } catch (error) {
-    console.error('[billing-value] handled work read failed', error);
+    console.error('[billing-value] recorded completed plans read failed', error);
     return { familyId, result: { available: false } };
   }
 }
