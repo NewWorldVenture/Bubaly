@@ -12,7 +12,7 @@ import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'marketing.marketing', robots: { index: false } };
+export const metadata: Metadata = { title: 'Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketingDashboard() {

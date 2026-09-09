@@ -10,7 +10,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'audit.auditLogs', robots: { index: false } };
+export const metadata: Metadata = { title: 'Audit Logs', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 40;

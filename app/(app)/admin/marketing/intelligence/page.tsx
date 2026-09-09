@@ -9,7 +9,7 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'intelligence.customerIntelligence', robots: { index: false } };
+export const metadata: Metadata = { title: 'Customer Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

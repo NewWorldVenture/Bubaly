@@ -12,7 +12,7 @@ import { ContactTimelineModule } from '@/components/modules/contact-timeline-mod
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'contacts.contactTimeline' };
+export const metadata: Metadata = { title: 'Contact Timeline' };
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

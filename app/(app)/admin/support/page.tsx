@@ -9,7 +9,7 @@ import { fmtDate } from '@/lib/utils/format';
 import type { TicketStatus } from '@/app/(app)/admin/actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'support.supportTickets', robots: { index: false } };
+export const metadata: Metadata = { title: 'Support Tickets', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Params = { searchParams: Promise<{ q?: string; status?: string }> };

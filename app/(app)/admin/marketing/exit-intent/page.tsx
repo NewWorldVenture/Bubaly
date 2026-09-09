@@ -11,7 +11,7 @@ import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/mar
 import { createExitIntentAction, toggleExitIntentAction, deleteExitIntentAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'exitIntent.exitIntentPopups', robots: { index: false } };
+export const metadata: Metadata = { title: 'Exit-Intent Popups', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Offer = Tables<'marketing_exit_intent'>;

@@ -12,7 +12,7 @@ import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'system.systemOverview', robots: { index: false } };
+export const metadata: Metadata = { title: 'System Overview', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 function fmtBytes(bytes: number): string {

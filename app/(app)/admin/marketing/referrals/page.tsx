@@ -11,7 +11,7 @@ import { ReferralSettingsForm } from './settings-form';
 import { saveReferralConfigAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'referrals.referrals', robots: { index: false } };
+export const metadata: Metadata = { title: 'Referrals', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

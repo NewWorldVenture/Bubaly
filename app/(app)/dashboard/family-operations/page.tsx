@@ -11,7 +11,7 @@ import { StatTile, SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/compo
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'familyOperations.familyOperations' };
+export const metadata: Metadata = { title: 'Family Operations' };
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = {

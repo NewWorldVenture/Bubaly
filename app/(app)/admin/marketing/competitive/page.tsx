@@ -15,7 +15,7 @@ import {
 } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'competitive.competitiveIntelligence', robots: { index: false } };
+export const metadata: Metadata = { title: 'Competitive Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Competitor = Tables<'competitors'>;

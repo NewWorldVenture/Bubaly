@@ -6,7 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { FamilySignalsModule, type SignalView } from '@/components/modules/family-signals-module';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'familySignals.familyIntelligence' };
+export const metadata: Metadata = { title: 'Family Intelligence' };
 
 async function ReadFailure() {
   const t = await getTranslations();

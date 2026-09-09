@@ -11,7 +11,7 @@ import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } fro
 import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'video.videoMarketing', robots: { index: false } };
+export const metadata: Metadata = { title: 'Video Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 type Video = Tables<'marketing_videos'>;
