@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { parseISO } from 'date-fns';
 import {
   Upload, Search, Download, Trash2, Star, Lock, LockOpen, Cloud, Share2,
   FileText, FileImage, FileSpreadsheet, FileVideo, FileAudio, FileArchive, File as FileIcon,
@@ -11,7 +12,6 @@ import { isManager } from '@/lib/constants/roles';
 import { performUpload } from '@/lib/documents/upload';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
@@ -19,17 +19,22 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { fmtDate } from '@/lib/utils/format';
-import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_MB, DOCUMENT_MAX_BYTES } from '@/lib/storage/documents';
 import {
   VIEW_META, filterByView, searchDocs, sortDocs, groupByCategory, storageSummary, formatBytes, fileKind,
   type FileView, type SortKey, type DocLike,
 } from '@/lib/files/overview';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Document = Tables<'documents'>;
+
+function displayDate(value: string, locale: string) {
+  const parsed = parseISO(value);
+  const date = Number.isFinite(parsed.getTime()) ? parsed : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+}
 
 const KIND_ICON: Record<string, typeof FileIcon> = {
   image: FileImage, pdf: FileText, doc: FileText, sheet: FileSpreadsheet,
@@ -50,6 +55,8 @@ const toDocLike = (d: Document): DocLike => ({
 
 export function FilesHubModule({ view }: { view: FileView }) {
   const t = useTranslations();
+  const locale = useLocale().code;
+  const number = new Intl.NumberFormat(locale);
   const { familyId, userId, role } = useApp();
   // 0266 made the Secure Vault a database boundary rather than a folder label:
   // a non-manager no longer reads, moves or deletes a sensitive file. The check
@@ -58,6 +65,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const manager = isManager(role);
   const { success, error: toastError } = useToast();
   const meta = VIEW_META[view];
+  const viewTitle = t(meta.titleKey);
   const ViewIcon = VIEW_ICON[view];
 
   const [query, setQuery] = useState('');
@@ -88,20 +96,20 @@ export function FilesHubModule({ view }: { view: FileView }) {
     setBusy(id);
     const { url, error: err } = await getDocumentSignedUrl(createClient(), d.storage_path);
     setBusy(null);
-    if (err || !url) { tab.cancel(); return toastError(err ?? 'Could not open the file'); }
+    if (err || !url) { tab.cancel(); return toastError(t('filesHubModule.openFailed')); }
     tab.navigate(url);
   }
 
   async function remove(id: string) {
     const d = byId.get(id); if (!d) return;
     if (d.is_secure && !manager) return toastError(t('filesHubModule.onlyAParentOrAnother'));
-    if (typeof window !== 'undefined' && !window.confirm(`Delete "${d.title}"? This can't be undone.`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
     if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
     const { error: err } = await sb.from('documents').delete().eq('id', id);
     setBusy(null);
-    if (err) return toastError(describeDbError(err));
+    if (err) return toastError(t('filesHubModule.deleteFailed'));
     success(t('filesHubModule.fileDeleted')); refresh();
   }
 
@@ -111,14 +119,14 @@ export function FilesHubModule({ view }: { view: FileView }) {
     setBusy(id);
     const { error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id);
     setBusy(null);
-    if (err) return toastError(describeDbError(err));
-    success(d.is_secure ? 'Moved to Shared Files' : 'Moved to Secure Vault'); refresh();
+    if (err) return toastError(t('filesHubModule.moveFailed'));
+    success(t(d.is_secure ? 'filesHubModule.movedShared' : 'filesHubModule.movedVault')); refresh();
   }
 
   async function toggleFavorite(id: string) {
     const d = byId.get(id); if (!d) return;
     const { error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id);
-    if (err) return toastError(describeDbError(err));
+    if (err) return toastError(t('filesHubModule.updateFailed'));
     refresh();
   }
 
@@ -141,7 +149,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       {
         store: async (folder) => {
           const { path, error } = await uploadFamilyDocument(sb, { familyId, folder, file });
-          return { path: path ?? null, error: error ?? null };
+          return { path: path ?? null, error: error ? (file.size > DOCUMENT_MAX_BYTES ? t('filesHubModule.tooLarge', { limit: DOCUMENT_MAX_MB }) : t('avatarPicker.uploadFailed')) : null };
         },
         record: async ({ storagePath, isSecure }) => {
           const { error } = await sb.from('documents').insert({
@@ -150,10 +158,11 @@ export function FilesHubModule({ view }: { view: FileView }) {
             // The requested destination, honoured as asked.
             is_secure: isSecure, created_by: userId,
           });
-          return { error: error ? describeDbError(error) : null };
+          return { error: error ? t('avatarPicker.uploadFailed') : null };
         },
         discard: async (path) => { await removeFamilyDocument(sb, path); },
       },
+      t,
     );
     setSaving(false);
     if (!outcome.ok) return toastError(outcome.reason);
@@ -162,23 +171,23 @@ export function FilesHubModule({ view }: { view: FileView }) {
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load files'} onRetry={refresh} />;
+  if (error) return <ErrorState message={t('filesHubModule.loadFailed')} onRetry={refresh} />;
 
   return (
     <div className="module-page">
       <PageHeader
-        title={meta.title}
-        description={meta.description}
+        title={viewTitle}
+        description={t(meta.descriptionKey)}
         action={<Button onClick={() => { setTitle(''); setCategory(''); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button>}
       />
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Files', value: String(summary.files), icon: ViewIcon },
-          { label: 'Storage used', value: formatBytes(summary.bytes), icon: Cloud },
-          { label: 'Secure', value: String(summary.secure), icon: Lock },
-          { label: 'Shared', value: String(summary.shared), icon: Share2 },
+          { label: t('documents.files'), value: number.format(summary.files), icon: ViewIcon },
+          { label: t('adminContent.storageUsed'), value: formatBytes(summary.bytes, locale), icon: Cloud },
+          { label: t('filesHub.secure'), value: number.format(summary.secure), icon: Lock },
+          { label: t('documents.shared'), value: number.format(summary.shared), icon: Share2 },
         ].map((s) => (
           <div key={s.label} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand-text"><s.icon className="h-5 w-5" /></span>
@@ -193,8 +202,8 @@ export function FilesHubModule({ view }: { view: FileView }) {
           {folders.map((f) => (
             <button key={f.name} onClick={() => setQuery(f.name)}
               className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-1.5 text-sm transition hover:bg-elevated/40">
-              <span className="font-medium">{f.name}</span>
-              <span className="text-xs text-muted">{f.count}</span>
+              <span className="font-medium">{f.defaultLabel ? t('socialFeed.general') : f.name}</span>
+              <span className="text-xs text-muted">{number.format(f.count)}</span>
             </button>
           ))}
         </div>
@@ -204,7 +213,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${meta.title.toLowerCase()}`} className="pl-9" aria-label={t('filesHub.searchFiles')} />
+          <Input value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={t('filesHubModule.searchPlaceholder', { view: viewTitle })} className="pl-9" aria-label={t('filesHub.searchFiles')} />
         </div>
         <div className="relative">
           <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>{t('filesHub.sort')} <ChevronDown className="h-3.5 w-3.5" /></Button>
@@ -212,9 +221,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
-                {([['recent', 'Most recent'], ['name', 'Name (A–Z)'], ['size', 'Largest']] as const).map(([k, l]) => (
+                {([['recent', 'filesHubModule.sortRecent'], ['name', 'filesHubModule.sortName'], ['size', 'filesHubModule.sortLargest']] as const).map(([k, labelKey]) => (
                   <button key={k} onClick={() => { setSort(k); setSortOpen(false); }}
-                    className={cn('block w-full px-3 py-2 text-left text-xs hover:bg-surface', sort === k && 'text-brand-text font-semibold')}>{l}</button>
+                    className={cn('block w-full px-3 py-2 text-left text-xs hover:bg-surface', sort === k && 'text-brand-text font-semibold')}>{t(labelKey)}</button>
                 ))}
               </div>
             </>
@@ -224,8 +233,8 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
       {/* File grid */}
       {visible.length === 0 ? (
-        <EmptyState icon={ViewIcon} title={query ? 'No matching files' : `No files in ${meta.title} yet`}
-          description={query ? 'Try a different search.' : 'Upload a file to get started.'}
+        <EmptyState icon={ViewIcon} title={query ? t('filesHubModule.noMatches') : t('filesHubModule.emptyView', { view: viewTitle })}
+          description={query ? t('filesHubModule.searchHint') : t('filesHubModule.uploadHint')}
           action={!query ? <Button onClick={() => setOpen(true)}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -238,12 +247,12 @@ export function FilesHubModule({ view }: { view: FileView }) {
                 <div className="flex items-start justify-between">
                   <span className={cn('grid h-11 w-11 place-items-center rounded-xl', KIND_TONE[kind])}><Icon className="h-5 w-5" /></span>
                   <div className="flex items-center gap-0.5">
-                    <button onClick={() => toggleFavorite(d.id)} aria-label={d.is_favorite ? 'Unfavorite' : 'Favorite'}
+                    <button onClick={() => toggleFavorite(d.id)} aria-label={t(d.is_favorite ? 'filesHubModule.removeFavorite' : 'filesHubModule.addFavorite')}
                       className={cn('rounded-lg p-1.5 transition hover:bg-elevated', d.is_favorite ? 'text-amber-400' : 'text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100')}>
                       <Star className={cn('h-4 w-4', d.is_favorite && 'fill-amber-400')} />
                     </button>
                     {manager && (
-                      <button onClick={() => toggleSecure(d.id)} aria-label={d.is_secure ? 'Move to shared' : 'Move to vault'}
+                      <button onClick={() => toggleSecure(d.id)} aria-label={t(d.is_secure ? 'filesHubModule.moveShared' : 'filesHubModule.moveVault')}
                         className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-elevated hover:text-fg group-hover:opacity-100">
                         {d.is_secure ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                       </button>
@@ -252,17 +261,17 @@ export function FilesHubModule({ view }: { view: FileView }) {
                 </div>
                 <div className="mt-3 min-w-0">
                   <p className="truncate text-sm font-semibold" title={d.title}>{d.title}</p>
-                  <p className="text-xs text-muted">{d.category?.trim() || 'General'} · {formatBytes(d.size_bytes)}</p>
+                  <p className="text-xs text-muted">{d.category?.trim() || t('socialFeed.general')} · {formatBytes(d.size_bytes, locale)}</p>
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
                   {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> {t('filesHub.secure')}</span>}
-                  <span>{fmtDate(full.created_at)}</span>
+                  <span>{displayDate(full.created_at, locale)}</span>
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
                   <Button size="sm" variant="outline" className="flex-1" onClick={() => download(d.id)} loading={busy === d.id}>
                     <Download className="h-3.5 w-3.5" /> {t('filesHub.open')}
                   </Button>
-                  <button onClick={() => remove(d.id)} disabled={busy === d.id} aria-label={`Delete ${d.title}`}
+                  <button onClick={() => remove(d.id)} disabled={busy === d.id} aria-label={t('filesHubModule.deleteFile', { name: d.title })}
                     className="rounded-lg p-2 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
                     {busy === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
@@ -274,7 +283,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
       )}
 
       {/* Upload modal */}
-      <Modal open={open} title={`Upload to ${meta.title}`} onClose={() => { setOpen(false); setFile(null); }}>
+      <Modal open={open} title={t('filesHubModule.uploadTitle', { view: viewTitle })} onClose={() => { setOpen(false); setFile(null); }}>
         <form onSubmit={upload} className="space-y-4">
           <Field label={t('filesHub.file')} required>
             {(id) => (
@@ -284,17 +293,17 @@ export function FilesHubModule({ view }: { view: FileView }) {
                 <button type="button" onClick={() => fileRef.current?.click()}
                   className="flex w-full items-center gap-3 rounded-xl border border-dashed border-border px-4 py-3 text-left text-sm text-muted hover:border-brand/50 hover:text-fg">
                   <Upload className="h-4 w-4" />
-                  {file ? `${file.name} · ${formatBytes(file.size)}` : 'Choose a file (max 25 MB)'}
+                  {file ? `${file.name} · ${formatBytes(file.size, locale)}` : t('filesHubModule.chooseFile', { limit: DOCUMENT_MAX_MB })}
                 </button>
               </div>
             )}
           </Field>
-          <Field label={t('filesHub.name')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Passport.pdf" />}</Field>
+          <Field label={t('filesHub.name')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('documents.eGPassportEmmaPdf')} />}</Field>
           <Field label={t('filesHub.folder')}>{(id) => <Input id={id} value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('filesHub.eGTravelSchoolFinances')} />}</Field>
           {view === 'vault' && <p className="flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('filesHub.uploadedHereThisFileIsAdded')}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => { setOpen(false); setFile(null); }}>{t('filesHub.cancel')}</Button>
-            <Button type="submit" loading={saving}>{saving ? 'Uploading…' : 'Upload'}</Button>
+            <Button type="submit" loading={saving}>{saving ? t('filesHubModule.uploading') : t('filesHub.upload')}</Button>
           </div>
         </form>
       </Modal>

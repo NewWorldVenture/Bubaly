@@ -38,6 +38,10 @@ describe('sortDocs', () => {
 });
 
 describe('groupByCategory', () => {
+  it('distinguishes a generated label from an authored General without changing the bucket identity', () => {
+    expect(groupByCategory([doc({ category: null })])[0]).toMatchObject({ name: 'General', defaultLabel: true });
+    expect(groupByCategory([doc({ category: null }), doc({ category: 'General' })])[0]).toMatchObject({ name: 'General', count: 2, defaultLabel: false });
+  });
   it('buckets by category with counts + bytes, default General', () => {
     const folders = groupByCategory([
       doc({ category: 'Travel', size_bytes: 100 }),
@@ -50,6 +54,10 @@ describe('groupByCategory', () => {
 });
 
 describe('formatBytes', () => {
+  it('localizes the number while retaining the same byte units and precision', () => {
+    expect(formatBytes(2_517_000, 'de-DE')).toBe('2,4 MB');
+    expect(formatBytes(3 * 1024 ** 3, 'fr-FR')).toBe('3,0 GB');
+  });
   it('formats 1024-based sizes', () => {
     expect(formatBytes(0)).toBe('0 B');
     expect(formatBytes(512)).toBe('512 B');
