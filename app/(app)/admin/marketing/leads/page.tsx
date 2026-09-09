@@ -10,7 +10,7 @@ import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { scoreLead, summarizeLeads, LEAD_BAND_LABEL, type LeadBand } from '@/lib/marketing/lead-score';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'leads.leadScoring', robots: { index: false } };
+export const metadata: Metadata = { title: 'Lead Scoring', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const BAND_STYLE: Record<LeadBand, string> = {

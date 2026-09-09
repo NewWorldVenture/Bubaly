@@ -21,7 +21,7 @@ const FILTERS: { key: ReportFilter; label: string }[] = [
   { key: 'dismissed', label: 'Dismissed' },
 ];
 
-export const metadata: Metadata = { title: 'reports.marketplaceReports', robots: { index: false } };
+export const metadata: Metadata = { title: 'Marketplace reports', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const STATUS_CHIP: Record<string, string> = {

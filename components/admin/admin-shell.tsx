@@ -48,6 +48,7 @@ export function AdminShell({
   pendingInviteCount,
   notifications = [],
   dataWarnings = [],
+  credentialFault = null,
 }: {
   children: React.ReactNode;
   adminName: string;
@@ -55,6 +56,7 @@ export function AdminShell({
   pendingInviteCount: number;
   notifications?: AdminNotificationRow[];
   dataWarnings?: string[];
+  credentialFault?: string | null;
 }) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -164,6 +166,21 @@ export function AdminShell({
         </div>
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          {/* Above the content, not below it: when the service-role key is
+              rejected most admin pages render nothing but their own generic
+              "could not load" state, so an explanation placed underneath sits
+              below an empty page and reads as unrelated. This is the cause of
+              every one of those, and it is the only thing on screen worth
+              acting on. */}
+          {credentialFault && (
+            <div
+              role="alert"
+              className="mx-auto mb-5 max-w-6xl rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+            >
+              <p className="font-semibold">Admin data is unavailable: Supabase rejected this deployment’s service-role key.</p>
+              <p className="mt-1 text-xs leading-relaxed text-danger/90">{credentialFault}</p>
+            </div>
+          )}
           <div className="mx-auto max-w-6xl">{children}</div>
           {dataWarnings.length > 0 && (
             <div

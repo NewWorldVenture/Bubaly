@@ -6,7 +6,7 @@ import { FamilyDashboard } from '@/components/dashboard/family-dashboard';
 import { PersonalDashboard } from '@/components/dashboard/personal-dashboard';
 import { AiHomeDashboard } from '@/components/dashboard/ai-home-dashboard';
 
-export const metadata: Metadata = { title: 'dashboard.home' };
+export const metadata: Metadata = { title: 'Home' };
 
 export default async function DashboardPage({
   searchParams,

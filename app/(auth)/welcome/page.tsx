@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { Sparkles, ArrowRight } from 'lucide-react';
 
-export const metadata: Metadata = { title: 'welcome.welcomeToBubaly' };
+export const metadata: Metadata = { title: 'Welcome to Bubaly' };
 
 // Screen 1 of the onboarding mockups: a dedicated welcome / get-started card that
 // greets people before the sign-up chooser. t('welcome.getStarted') → create an account;

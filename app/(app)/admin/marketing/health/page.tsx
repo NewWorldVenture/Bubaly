@@ -8,7 +8,7 @@ import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
 import { customerHealth, summarizeHealth, HEALTH_BAND_LABEL, type Health } from '@/lib/marketing/health';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'health.customerHealth', robots: { index: false } };
+export const metadata: Metadata = { title: 'Customer Health', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const BAND_STYLE = {

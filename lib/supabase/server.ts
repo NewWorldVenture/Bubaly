@@ -97,3 +97,21 @@ export function describeConfiguredServiceKey(): string | null {
     ? 'The configured key matches no known Supabase key format. This project uses sb_secret_… service keys.'
     : 'The configured key matches no known Supabase key format.';
 }
+
+/**
+ * What to do about a rejected service key, naming THIS project.
+ *
+ * The project ref comes from NEXT_PUBLIC_SUPABASE_URL — already public, and in
+ * the browser bundle — so naming it here leaks nothing. It earns its place
+ * because "use this project's key" is the whole difficulty when the configured
+ * key is a valid secret key for some OTHER project: the operator needs to know
+ * which of their projects to open, and a dashboard link removes the guess.
+ */
+export function serviceKeyRemedy(): string {
+  const url = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const ref = /^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(url)?.[1] ?? null;
+  const where = ref
+    ? `Copy the secret key for project ${ref} from https://supabase.com/dashboard/project/${ref}/settings/api-keys`
+    : 'Copy this project’s secret key from Supabase → Project Settings → API → Secret keys';
+  return `${where}, set it as SUPABASE_SERVICE_ROLE_KEY under Vercel → Settings → Environment Variables (Production), then redeploy.`;
+}

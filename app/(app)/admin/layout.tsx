@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
-import { createServiceClient } from '@/lib/supabase/server';
+import { settleAll, isCredentialError } from '@/lib/supabase/settle';
+import { createServiceClient, describeConfiguredServiceKey, serviceKeyRemedy } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/admin-shell';
 
 // Deliberately NOT nested under dashboard/layout.tsx — the site admin console
@@ -21,6 +21,15 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
       .order('created_at', { ascending: false })
       .limit(20),
   ]);
+
+  // A rejected service-role key is not a per-page fault: it fails every read in
+  // the console identically. 69 of the 79 admin pages bail to their own generic
+  // "could not load X" state, so without this the operator sees 69 different
+  // dead ends and no cause. Detecting it once, here, explains all of them —
+  // including the pages that render nothing else at all.
+  const credentialFault = [profileRes, invitesRes, notificationsRes].some((r) => isCredentialError(r.error))
+    ? [describeConfiguredServiceKey(), serviceKeyRemedy()].filter(Boolean).join(' ')
+    : null;
 
   const dataWarnings: string[] = [];
   if (profileRes.error) {
@@ -45,6 +54,7 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
       pendingInviteCount={invitesRes.count ?? 0}
       notifications={notificationsRes.data ?? []}
       dataWarnings={dataWarnings}
+      credentialFault={credentialFault}
     >
       {children}
     </AdminShell>

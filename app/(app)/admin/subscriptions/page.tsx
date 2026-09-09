@@ -12,7 +12,7 @@ import { GrowthChart } from '@/components/admin/growth-chart';
 import { describeDbError } from '@/lib/supabase/errors';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'subscriptions.subscriptions', robots: { index: false } };
+export const metadata: Metadata = { title: 'Subscriptions', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const TABS = [
