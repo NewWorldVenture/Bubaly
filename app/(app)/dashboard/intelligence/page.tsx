@@ -12,6 +12,8 @@ import { cohortKey, aggregatesToInsights, type NetworkAggregate } from '@/lib/ne
 import { CHILD_ROLES, OPEN_CHORE_STATUSES, SPEND_WINDOW_DAYS } from '@/lib/network/aggregate-server';
 import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server';
 import type { ConsentScope } from '@/lib/network/insights';
+import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server';
+import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
 
 export const metadata: Metadata = { title: 'Intelligence Network | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -96,14 +98,19 @@ export default async function IntelligencePage() {
   // admin publication flag is on, and marketing_settings is admin-only, so the
   // answer has to come from the service role here rather than from the module.
   // False on any failure — the card is omitted rather than linking to a 404.
+  const capturePromise = loadAutomaticCaptureShare(supabase, familyId, now);
   const benchmarksPublished = await benchmarksPageIsPublished();
+  const automaticCapture = await capturePromise;
 
   return (
-    <IntelligenceModule
-      contribution={computeContribution(input, now)}
-      candidates={candidates}
-      benchmarksPublished={benchmarksPublished}
-    />
+    <div className="space-y-6">
+      <AutomaticCaptureCard result={automaticCapture} />
+      <IntelligenceModule
+        contribution={computeContribution(input, now)}
+        candidates={candidates}
+        benchmarksPublished={benchmarksPublished}
+      />
+    </div>
   );
 }
 

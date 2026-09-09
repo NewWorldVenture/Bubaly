@@ -1,4 +1,11 @@
 {
+  "automaticCapture.title": "Anteil nachweislich automatisch erfasster Einträge",
+  "automaticCapture.minimumShare": "Mindestens {percent}%",
+  "automaticCapture.counts": "Bei {automatic} von {total} unterstützten Einträgen ist die automatische Erfassung nachgewiesen.",
+  "automaticCapture.unknown": "Bei {unknown} Einträgen ist die Erfassungsquelle unbekannt; sie gelten nicht automatisch als manuell erfasst.",
+  "automaticCapture.noData": "In den letzten sieben Tagen wurden keine unterstützten Einträge erstellt.",
+  "automaticCapture.unavailable": "Der Erfassungsanteil ist nicht verfügbar. Lade die Seite neu, um es erneut zu versuchen.",
+  "automaticCapture.methodology": "Berücksichtigt werden Kalendertermine, Aufgaben, Rechnungen und Familienerinnerungen, auf die du zugreifen kannst und die in den letzten sieben Tagen erstellt wurden. Nachgewiesene KI-Erstellung (einschließlich genehmigter Anfragen) und verknüpfte Kalenderfeeds zählen als automatisch. Ursprüngliche Nachrichten und Unterlagen sind ausgeschlossen, damit dieselbe Arbeit nicht doppelt zählt.",
   "App.couldNotSetTheDefaultDashboard": "Das Standard-Dashboard konnte nicht festgelegt werden.",
   "App.couldNotSwitchActiveFamily": "Die aktive Familie konnte nicht gewechselt werden.",
   "App.couldNotVerifyFamilyMembership": "Die Familienmitgliedschaft konnte nicht überprüft werden.",
