@@ -7,6 +7,7 @@
 // every T-item optimizes; this turns raw activation_events into it. DOM/DB-free.
 
 import { median } from '@/lib/analytics/onboarding';
+import { THIRTY_MINUTES_SEC } from '@/lib/onboarding/ttv-audit';
 
 export type ActivationMilestone =
   | 'signup'
@@ -54,6 +55,10 @@ export type ActivationSummary = {
   activationRate: number;          // activatedCohorts / cohorts, 0..1
   ttfvMedianMs: number | null;     // median sign-up → first outcome viewed
   ttfvP90Ms: number | null;        // 90th percentile (the slow tail)
+  timedValueCohorts: number;
+  untimedValueCohorts: number;
+  under30MinCohorts: number;
+  under30MinRate: number | null;  // 0..1 among cohorts with valid first-value timing
   session1: {
     calendarImportRate: number;    // share of cohorts importing a calendar in session 1
     firstBriefRate: number;        // share seeing a first briefing in session 1
@@ -90,7 +95,7 @@ export function summarizeActivation(events: ActivationEventLike[]): ActivationSu
     cohortSet.add(e.session_id);
     add(reachByMilestone, e.milestone, e.session_id);
     if (e.session_index <= 1) add(session1ByMilestone, e.milestone, e.session_id);
-    if (e.milestone === FIRST_VALUE_MILESTONE && typeof e.ms_since_signup === 'number' && e.ms_since_signup >= 0) {
+    if (e.milestone === FIRST_VALUE_MILESTONE && typeof e.ms_since_signup === 'number' && Number.isFinite(e.ms_since_signup) && e.ms_since_signup >= 0) {
       const prev = ttfvByCohort.get(e.session_id);
       if (prev === undefined || e.ms_since_signup < prev) ttfvByCohort.set(e.session_id, e.ms_since_signup);
     }
@@ -100,6 +105,7 @@ export function summarizeActivation(events: ActivationEventLike[]): ActivationSu
   const rate = (n: number) => (cohorts > 0 ? n / cohorts : 0);
   const activated = reachByMilestone.get(FIRST_VALUE_MILESTONE)?.size ?? 0;
   const ttfvs = [...ttfvByCohort.values()];
+  const under30MinCohorts = ttfvs.filter((ms) => ms <= THIRTY_MINUTES_SEC * 1000).length;
 
   const milestoneReach: MilestoneReach[] = ACTIVATION_MILESTONES.map((m) => {
     const c = reachByMilestone.get(m.key)?.size ?? 0;
@@ -112,6 +118,10 @@ export function summarizeActivation(events: ActivationEventLike[]): ActivationSu
     activationRate: rate(activated),
     ttfvMedianMs: median(ttfvs),
     ttfvP90Ms: percentile(ttfvs, 0.9),
+    timedValueCohorts: ttfvs.length,
+    untimedValueCohorts: activated - ttfvs.length,
+    under30MinCohorts,
+    under30MinRate: ttfvs.length ? under30MinCohorts / ttfvs.length : null,
     session1: {
       calendarImportRate: rate(session1ByMilestone.get('calendar_imported')?.size ?? 0),
       firstBriefRate: rate(session1ByMilestone.get('first_brief_viewed')?.size ?? 0),

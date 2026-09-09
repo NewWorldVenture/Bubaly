@@ -8,8 +8,15 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { isSuperAdmin } from '@/lib/supabase/auth';
+import { notFound } from 'next/navigation';
+import { loadOnboardingProgress } from '@/lib/analytics/onboarding-server';
+import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 
-export const metadata: Metadata = { title: 'onboarding.onboardingAudit', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('onboarding.onboardingAudit'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {
@@ -24,19 +31,11 @@ async function ReadFailure() {
 }
 
 export default async function OnboardingAuditPage() {
+  if (!(await isSuperAdmin())) notFound();
   const t = await getTranslations();
   const supabase = createServiceClient();
 
-  let progressResult;
-  try {
-    progressResult = await supabase
-      .from('onboarding_progress')
-      .select('created_at, completed_at, status, value_engaged, steps_completed')
-      .order('created_at', { ascending: false })
-      .limit(5000);
-  } catch {
-    return <ReadFailure />;
-  }
+  const progressResult = await loadOnboardingProgress(supabase);
   if (progressResult.error) return <ReadFailure />;
   const rows = (progressResult.data ?? []) as OnboardingRow[];
 
@@ -45,10 +44,10 @@ export default async function OnboardingAuditPage() {
   const maxStall = Math.max(1, ...a.stalls.map((s) => s.count));
 
   const stats = [
-    { label: 'Median TTV', value: formatDuration(a.medianTtvSec), icon: Timer, tint: 'text-violet-400 bg-violet-500/15' },
-    { label: `Reached value ≤ ${TTV_GOAL_SEC}s`, value: a.under90Rate == null ? '—' : `${a.under90Rate}%`, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
-    { label: 'Completion rate', value: `${a.completionRate}%`, icon: CheckCircle2, tint: 'text-blue-400 bg-blue-500/15' },
-    { label: 'Activated (value)', value: `${a.valueEngagedRate}%`, icon: Sparkles, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: t('thirtyMinute.setupMedian'), value: formatDuration(a.medianTtvSec), icon: Timer, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: t('thirtyMinute.setupGoal', { seconds: TTV_GOAL_SEC }), value: a.under90Rate == null ? '—' : `${a.under90Rate}%`, icon: Target, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: t('dashboardOnboardingFunnel.completion'), value: `${a.completionRate}%`, icon: CheckCircle2, tint: 'text-blue-400 bg-blue-500/15' },
+    { label: t('thirtyMinute.valueEngaged'), value: `${a.valueEngagedRate}%`, icon: Sparkles, tint: 'text-amber-400 bg-amber-500/15' },
   ];
 
   const goalMet = a.under90Rate != null && a.under90Rate >= 50;
@@ -58,7 +57,7 @@ export default async function OnboardingAuditPage() {
       <header>
         <h1 className="text-xl font-black sm:text-2xl">{t('adminOnboarding.onboardingAudit')}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          {t('adminOnboarding.theFirstRunFunnelAndTime')} {a.total.toLocaleString()} {t('adminOnboarding.onboardingRunsTheGoalIs')} <span className="font-semibold text-fg">{t('adminOnboarding.firstValueInUnder')} {TTV_GOAL_SEC}s</span> {t('adminOnboarding.measureItFindWherePeopleStall')}
+          {t('thirtyMinute.setupDescription', { count: a.total })}
         </p>
       </header>
 
@@ -76,12 +75,16 @@ export default async function OnboardingAuditPage() {
         ))}
       </div>
 
+      <ThirtyMinuteSummary kind="setup" rate={a.under30MinRate} within={a.under30MinCount}
+        timed={a.timedCompletions} untimed={a.untimedCompletions} t={t} />
+
       {a.total > 0 && (
         <Card className={cn('p-4', goalMet ? 'border-emerald-400/30' : 'border-amber-400/30')}>
           <p className="text-sm">
-            {goalMet
-              ? <><span className="font-bold text-emerald-400">{t('adminOnboarding.onTarget')}</span> {t('adminOnboarding.mostCompletedRunsReachValueWithin')} {TTV_GOAL_SEC}{t('adminOnboarding.sP90')} {formatDuration(a.p90TtvSec)}).</>
-              : <><span className="font-bold text-amber-400">{t('adminOnboarding.belowTarget')}</span> {a.under90Rate == null ? 'No completed runs yet.' : `Only ${a.under90Rate}% of completed runs reach value within ${TTV_GOAL_SEC}s`} {t('adminOnboarding.p90Is')} {formatDuration(a.p90TtvSec)}{t('adminOnboarding.trimTheStepsWithTheBiggest')}</>}
+            {a.under90Rate === null ? t('thirtyMinute.noTiming') : <>
+              <span className={cn('font-bold', goalMet ? 'text-emerald-400' : 'text-amber-400')}>{t(goalMet ? 'adminOnboarding.onTarget' : 'adminOnboarding.belowTarget')}</span>{' '}
+              {t('thirtyMinute.setupGoalResult', { rate: a.under90Rate, seconds: TTV_GOAL_SEC, p90: formatDuration(a.p90TtvSec) })}
+            </>}
           </p>
         </Card>
       )}

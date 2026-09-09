@@ -114,7 +114,7 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
 }
 
 /** `a.eq.1,b.is.null,c.in.(x,y)` — the flat form `.or()` is called with in this repository. */
-function parseOr(expression: string): Predicate {
+function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
@@ -127,6 +127,8 @@ function parseOr(expression: string): Predicate {
   if (current) parts.push(current);
   const predicates = parts.map((part) => {
     const trimmed = part.trim();
+    if (trimmed.startsWith('and(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(4, -1), 'and');
+    if (trimmed.startsWith('or(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(3, -1));
     const negated = trimmed.startsWith('not.');
     const body = negated ? trimmed.slice(4) : trimmed;
     const first = body.indexOf('.');
@@ -139,7 +141,7 @@ function parseOr(expression: string): Predicate {
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
-  return (row) => predicates.some((p) => p(row));
+  return (row) => mode === 'and' ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
 }
 
 /** Split a select list on top-level commas; `a, b:c, d(e,f)` → three parts. */

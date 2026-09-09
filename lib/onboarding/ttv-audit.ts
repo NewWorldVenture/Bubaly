@@ -17,6 +17,7 @@ export const ONBOARDING_STEPS = [
 export type StepKey = (typeof ONBOARDING_STEPS)[number]['key'];
 
 export const TTV_GOAL_SEC = 90;
+export const THIRTY_MINUTES_SEC = 30 * 60;
 
 export type OnboardingRow = {
   created_at: string;
@@ -36,7 +37,11 @@ export type OnboardingAudit = {
   valueEngagedRate: number;    // 0..100
   medianTtvSec: number | null;
   p90TtvSec: number | null;
-  under90Rate: number | null;  // 0..100, share of COMPLETED reaching value ≤ goal
+  under90Rate: number | null;  // 0..100, share of timed setups completed within goal
+  timedCompletions: number;
+  untimedCompletions: number;
+  under30MinCount: number;
+  under30MinRate: number | null; // 0..100 among completions with valid timestamps
   stepFunnel: StepStat[];
   stalls: StallStat[];         // where incomplete runs stopped (most common first)
 };
@@ -48,8 +53,8 @@ export function ttvSeconds(row: OnboardingRow): number | null {
   if (!row.completed_at) return null;
   const start = new Date(row.created_at).getTime();
   const end = new Date(row.completed_at).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
-  return Math.max(0, Math.round((end - start) / 1000));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return (end - start) / 1000;
 }
 
 /** Nearest-rank percentile of a numeric list (returns null when empty). */
@@ -77,6 +82,7 @@ export function analyzeOnboarding(rows: OnboardingRow[]): OnboardingAudit {
 
   const ttvs = completedRows.map(ttvSeconds).filter((n): n is number => n != null);
   const under90 = ttvs.filter((s) => s <= TTV_GOAL_SEC).length;
+  const under30MinCount = ttvs.filter((s) => s <= THIRTY_MINUTES_SEC).length;
 
   const stepFunnel: StepStat[] = ONBOARDING_STEPS.map((s) => {
     const count = rows.filter((r) => (r.steps_completed ?? []).includes(s.key)).length;
@@ -104,6 +110,10 @@ export function analyzeOnboarding(rows: OnboardingRow[]): OnboardingAudit {
     medianTtvSec: percentile(ttvs, 50),
     p90TtvSec: percentile(ttvs, 90),
     under90Rate: ttvs.length ? round1((under90 / ttvs.length) * 100) : null,
+    timedCompletions: ttvs.length,
+    untimedCompletions: completed - ttvs.length,
+    under30MinCount,
+    under30MinRate: ttvs.length ? round1((under30MinCount / ttvs.length) * 100) : null,
     stepFunnel,
     stalls,
   };
@@ -112,6 +122,7 @@ export function analyzeOnboarding(rows: OnboardingRow[]): OnboardingAudit {
 /** Seconds → compact "1m 12s" / "48s". */
 export function formatDuration(sec: number | null): string {
   if (sec == null) return '—';
+  sec = Math.round(sec);
   if (sec < 60) return `${sec}s`;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
