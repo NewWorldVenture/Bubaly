@@ -14,7 +14,6 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({ auth: { getUser } }),
 }));
 
-// eslint-disable-next-line import/first
 import { middleware } from '../middleware';
 
 const ROUTE = '/family-display';

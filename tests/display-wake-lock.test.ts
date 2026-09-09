@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createWakeLock, isWakeLockSupported,
@@ -206,6 +207,29 @@ describe('re-acquiring across visibilitychange (the reason this module exists)',
     doc.fire('visibilitychange');
     await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the wall actually uses it', () => {
+  const read = (path: string) => readFileSync(path, 'utf8');
+
+  it('display-grid holds the lock for as long as the display is mounted', () => {
+    const grid = read('components/display/display-grid.tsx');
+    expect(grid).toContain("from './use-wake-lock'");
+    expect(grid).toContain('useWakeLock()');
+    expect(grid).toContain('wakeLock={wakeLock}');
+  });
+
+  it('the hook is a thin wrapper over the tested controller, released on unmount', () => {
+    const hook = read('components/display/use-wake-lock.ts');
+    expect(hook).toContain("from '@/lib/display/wake-lock'");
+    expect(hook).toContain('createWakeLock({ onChange: setState })');
+    expect(hook).toContain('lock.acquire()');
+    expect(hook).toContain('lock.stop()');
+  });
+
+  it('is not a client module, so server code may import it safely', () => {
+    expect(read('lib/display/wake-lock.ts').slice(0, 200)).not.toMatch(/^\s*['"]use client['"]/);
   });
 });
 

@@ -24,7 +24,7 @@ export function AskTile() {
       {/* `compact` is the single-row form: input, mic, submit. The hero form's
           heading and prompt chips do not fit a tile and would push the input
           off a small one. */}
-      <AskBubaly variant="compact" className="display-ask" />
+      <AskBubaly variant="compact" />
       <p className="mt-2 text-[11px] text-white/40">{t('displayAsk.everythingIsPreviewed')}</p>
     </div>
   );
