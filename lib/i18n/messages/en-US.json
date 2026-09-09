@@ -9609,7 +9609,7 @@
   "school.viewFullSchedule": "View full schedule →",
   "school.viewGradeDetails": "View grade details",
   "schoolDesk.alreadyHandled": "Bubaly has already handled this message.",
-  "schoolDesk.approvalNote": "{count} waiting. Nothing happens until a parent approves it.",
+  "schoolDesk.approvalNote": "{count} waiting. Every proposal goes through your approval rules.",
   "schoolDesk.couldNotPropose": "Bubaly could not propose anything for this message.",
   "schoolDesk.domainSchool": "School",
   "schoolDesk.domainSports": "Sports",

@@ -261,9 +261,17 @@ const MONTHS: Record<string, number> = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
 
+/**
+ * Month names, spelled out in full or in the usual abbreviation, and NOTHING
+ * else. An earlier version accepted a three-letter prefix followed by any
+ * letters, which read "Junior 5" as the fifth of June and "Marching band 12"
+ * as the twelfth of March.
+ */
+const MONTH_WORD = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+
 const ISO_DATE = /\b(\d{4})-(\d{2})-(\d{2})\b/;
-const MONTH_FIRST = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/i;
-const DAY_FIRST = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s*(\d{4}))?\b/i;
+const MONTH_FIRST = new RegExp(`\\b(${MONTH_WORD})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?\\b`, 'i');
+const DAY_FIRST = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTH_WORD})\\.?(?:,?\\s*(\\d{4}))?\\b`, 'i');
 const NUMERIC_DATE = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
 
 /** How far into the past a year-less date may fall before it is read as next year. */
@@ -314,7 +322,7 @@ function extractDate(haystack: string, nowMs: number | null): string | null {
 
   const monthFirst = MONTH_FIRST.exec(haystack);
   if (monthFirst) {
-    const month = MONTHS[monthFirst[1].toLowerCase()];
+    const month = MONTHS[monthFirst[1].slice(0, 3).toLowerCase()];
     const day = Number.parseInt(monthFirst[2], 10);
     if (monthFirst[3]) {
       const year = fullYear(monthFirst[3]);
@@ -326,7 +334,7 @@ function extractDate(haystack: string, nowMs: number | null): string | null {
   const dayFirst = DAY_FIRST.exec(haystack);
   if (dayFirst) {
     const day = Number.parseInt(dayFirst[1], 10);
-    const month = MONTHS[dayFirst[2].toLowerCase()];
+    const month = MONTHS[dayFirst[2].slice(0, 3).toLowerCase()];
     if (dayFirst[3]) {
       const year = fullYear(dayFirst[3]);
       return isRealDate(year, month, day) ? isoDate(year, month, day) : null;

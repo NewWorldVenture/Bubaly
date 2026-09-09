@@ -222,6 +222,18 @@ describe('dates and times', () => {
     expect(classify({ body: 'School notice dated 2026-02-30.' }, [], [], [], OPTS).date).toBeUndefined();
   });
 
+  it('reads a month spelled in full', () => {
+    expect(classify({ body: 'School trip on December 3, 2026.' }, [], [], [], OPTS).date).toBe('2026-12-03');
+    expect(classify({ body: 'School trip on 3 December 2026.' }, [], [], [], OPTS).date).toBe('2026-12-03');
+  });
+
+  it('does not read a word that merely starts like a month', () => {
+    // "Junior 5" is not the fifth of June, and "Marching band 12" is not March.
+    expect(classify({ body: 'School: Junior 5 assembly.' }, [], [], [], OPTS).date).toBeUndefined();
+    expect(classify({ body: 'School: Marching band 12 meets weekly.' }, [], [], [], OPTS).date).toBeUndefined();
+    expect(classify({ body: 'School: Augmented reality club 4 starts.' }, [], [], [], OPTS).date).toBeUndefined();
+  });
+
   it('reads a time only when the message states one', () => {
     expect(classify({ body: 'Practice moved to 6pm.' }, [], [], [], OPTS).time).toBe('18:00');
     expect(classify({ body: 'Practice moved to 6:30 p.m.' }, [], [], [], OPTS).time).toBe('18:30');

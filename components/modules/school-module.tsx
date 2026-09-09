@@ -183,6 +183,11 @@ export function SchoolModule() {
 
   const loadDesk = useCallback(async () => {
     setDeskLoading(true);
+    // Clear the previous failure so a retry shows that it is trying, rather
+    // than leaving the error banner up while the read is in flight. The rows
+    // are NOT cleared: if this attempt also fails, the branch below puts the
+    // banner straight back, and it never falls through to an empty desk.
+    setDeskError(false);
     const sb = createClient();
     // `settleAll`, so a transport failure on either read arrives as
     // { data: null, error } rather than rejecting and taking the page to the

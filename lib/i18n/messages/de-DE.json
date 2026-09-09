@@ -9443,7 +9443,7 @@
   "school.viewFullSchedule": "Vollständigen Zeitplan ansehen →",
   "school.viewGradeDetails": "Notendetails ansehen",
   "schoolDesk.alreadyHandled": "Bubaly hat diese Nachricht bereits erledigt.",
-  "schoolDesk.approvalNote": "{count} offen. Nichts geschieht, bevor ein Elternteil zustimmt.",
+  "schoolDesk.approvalNote": "{count} offen. Jeder Vorschlag durchläuft Ihre Freigaberegeln.",
   "schoolDesk.couldNotPropose": "Bubaly konnte zu dieser Nachricht nichts vorschlagen.",
   "schoolDesk.domainSchool": "Schule",
   "schoolDesk.domainSports": "Sport",

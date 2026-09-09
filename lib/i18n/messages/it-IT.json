@@ -9443,7 +9443,7 @@
   "school.viewFullSchedule": "Vedi l'orario completo →",
   "school.viewGradeDetails": "Vedi i dettagli del voto",
   "schoolDesk.alreadyHandled": "Bubaly ha già gestito questo messaggio.",
-  "schoolDesk.approvalNote": "{count} in attesa. Non succede nulla finché un genitore non approva.",
+  "schoolDesk.approvalNote": "{count} in attesa. Ogni proposta passa dalle tue regole di approvazione.",
   "schoolDesk.couldNotPropose": "Bubaly non ha potuto proporre nulla per questo messaggio.",
   "schoolDesk.domainSchool": "Scuola",
   "schoolDesk.domainSports": "Sport",

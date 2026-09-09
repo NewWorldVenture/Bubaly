@@ -9443,7 +9443,7 @@
   "school.viewFullSchedule": "Volledig rooster bekijken →",
   "school.viewGradeDetails": "Cijferdetails bekijken",
   "schoolDesk.alreadyHandled": "Bubaly heeft dit bericht al afgehandeld.",
-  "schoolDesk.approvalNote": "{count} in de wacht. Er gebeurt niets tot een ouder het goedkeurt.",
+  "schoolDesk.approvalNote": "{count} in de wacht. Elk voorstel gaat door je goedkeuringsregels.",
   "schoolDesk.couldNotPropose": "Bubaly kon niets voorstellen voor dit bericht.",
   "schoolDesk.domainSchool": "School",
   "schoolDesk.domainSports": "Sport",
