@@ -24,7 +24,7 @@
       "expo-secure-store",
       [
         "expo-audio",
-        { "microphonePermission": "Bubaly uses the microphone only while you hold the mic button, to turn what you say into a request.", "enableBackgroundPlayback": false }
+        { "enableBackgroundPlayback": false }
       ],
       [
         "expo-splash-screen",

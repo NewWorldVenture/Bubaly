@@ -7,6 +7,8 @@
 // every kind as a simple section — a title, a subtitle, and a few lines —
 // which is all a card needs to read as an outcome rather than a chat bubble.
 
+import { englishMobile, type MobileTranslator } from './mobile-i18n';
+
 export type AssistantAction = { name: string; ok: boolean; summary: string };
 /** A card as the phone sees it: a kind, a title, and whatever else the kind carries. */
 export type AssistantCard = { kind: string; title: string } & Record<string, unknown>;
@@ -24,7 +26,7 @@ export type AssistantReply = {
 export type AssistantFailure = { ok: false; error: string; code?: string; status: number };
 export type AssistantParse = { ok: true; reply: AssistantReply } | AssistantFailure;
 
-export function buildAssistantRequest(args: { apiUrl: string; token: string; conversationId: string; message: string }): { url: string; init: RequestInit } {
+export function buildAssistantRequest(args: { apiUrl: string; token: string; conversationId: string; message: string; expectedFamilyId?: string; locale?: string; signal?: AbortSignal }): { url: string; init: RequestInit } {
   return {
     url: `${args.apiUrl.replace(/\/+$/, '')}/api/ai?mode=json`,
     init: {
@@ -33,18 +35,20 @@ export function buildAssistantRequest(args: { apiUrl: string; token: string; con
         'Content-Type': 'application/json',
         Accept: 'application/json',
         Authorization: `Bearer ${args.token}`,
+        ...(args.expectedFamilyId !== undefined ? { 'X-Bubaly-Family-Id': args.expectedFamilyId } : {}),
+        ...(args.locale ? { 'Accept-Language': args.locale } : {}),
       },
       body: JSON.stringify({ conversationId: args.conversationId, message: args.message, stream: false }),
+      ...(args.signal ? { signal: args.signal } : {}),
     },
   };
 }
 
 const FRIENDLY: Record<string, string> = {
-  invalid_token: 'Your session expired. Sign in again to keep chatting.',
-  signed_out: 'Sign in to use the assistant.',
-  needs_family: 'Finish setting up your family on the web app first.',
-  not_configured: 'The assistant isn’t switched on for this workspace yet.',
-  message_too_long: 'That message is a little long — try a shorter one.',
+  invalid_token: 'mobileAssistant.sessionExpired', signed_out: 'mobileAssistant.signedOut',
+  needs_family: 'mobileAssistant.needsFamily', not_configured: 'mobileAssistant.notConfigured',
+  message_too_long: 'mobileAssistant.messageTooLong', unavailable: 'mobileAssistant.familyUnavailable',
+  family_changed: 'mobileAssistant.contextChanged', invalid_family: 'mobileAssistant.contextChanged',
 };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
@@ -55,7 +59,7 @@ export function parseCards(value: unknown): AssistantCard[] {
   return value.filter((c): c is AssistantCard => isRecord(c) && typeof c.kind === 'string' && c.kind.length > 0 && typeof c.title === 'string' && c.title.length > 0);
 }
 
-export function parseAssistantResponse(status: number, body: unknown): AssistantParse {
+export function parseAssistantResponse(status: number, body: unknown, t: MobileTranslator = englishMobile): AssistantParse {
   const obj = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (status >= 200 && status < 300 && typeof obj.content === 'string') {
     const actions = Array.isArray(obj.actions)
@@ -80,8 +84,8 @@ export function parseAssistantResponse(status: number, body: unknown): Assistant
   }
   const code = typeof obj.code === 'string' ? obj.code : undefined;
   const serverError = typeof obj.error === 'string' ? obj.error : undefined;
-  if (status === 429) return { ok: false, status, code: 'rate_limited', error: 'You’re sending messages quickly — give it a moment.' };
-  const error = (code && FRIENDLY[code]) ?? serverError ?? (status >= 500 ? 'Bubaly hit a snag. Try again in a moment.' : 'Something went wrong.');
+  if (status === 429) return { ok: false, status, code: 'rate_limited', error: t('mobileAssistant.rateLimited') };
+  const error = code && FRIENDLY[code] ? t(FRIENDLY[code]) : serverError ?? t('mobileAssistant.failed');
   return { ok: false, status, error, ...(code ? { code } : {}) };
 }
 
@@ -109,9 +113,9 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const list = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isRecord) : []);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
 
-function money(dollars: number, currency: string): string {
+function money(dollars: number, currency: string, locale: string): string {
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: Number.isInteger(dollars) ? 0 : 2 }).format(dollars);
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: Number.isInteger(dollars) ? 0 : 2 }).format(dollars);
   } catch {
     return `$${dollars.toFixed(2)}`;
   }
@@ -126,51 +130,51 @@ function cap(lines: string[]): { lines: string[]; more: number } {
  * on a phone; an unknown kind still renders its title and any string facts,
  * so a card the app predates is never a blank.
  */
-export function cardSections(card: AssistantCard): CardSection {
+export function cardSections(card: AssistantCard, t: MobileTranslator = englishMobile, locale = 'en-US'): CardSection {
   const base = { kind: card.kind, title: card.title, subtitle: str(card.subtitle), href: str(card.href) };
   switch (card.kind) {
     case 'meal_plan': {
       const lines = list(card.days).map((d) => {
-        const meals = list(d.meals).map((m) => str(m.name) ?? 'open');
+        const meals = list(d.meals).map((m) => str(m.name) ?? t('mobileAssistant.openMeal'));
         return `${str(d.label) ?? str(d.date) ?? ''}: ${meals.join(', ')}`;
       });
       return { ...base, ...cap(lines), tone: 'brand' };
     }
     case 'calendar_conflict': {
       const conflicts = list(card.conflicts);
-      const lines = conflicts.map((c) => `${strings(c.titles).join(' and ')} overlap ${str(c.when) ?? ''}${str(c.member) ? ` · ${str(c.member)}` : ''}`.trim());
-      return { ...base, subtitle: base.subtitle ?? (conflicts.length ? null : 'No overlaps found'), ...cap(lines.length ? lines : ['Nobody is double-booked.']), tone: conflicts.length ? 'warning' : 'success' };
+      const lines = conflicts.map((c) => t('mobileAssistant.overlap', { titles: strings(c.titles).join(t('mobileAssistant.and')), when: str(c.when) ?? '', member: str(c.member) ? ` · ${str(c.member)}` : '' }).trim());
+      return { ...base, subtitle: base.subtitle ?? (conflicts.length ? null : t('mobileAssistant.noOverlap')), ...cap(lines.length ? lines : [t('mobileAssistant.nobodyDoubleBooked')]), tone: conflicts.length ? 'warning' : 'success' };
     }
     case 'budget_analysis': {
       const currency = str(card.currency) ?? 'USD';
       const total = num(card.total_spent);
       const limit = num(card.total_limit);
-      const head = total !== null ? `${money(total, currency)}${limit !== null ? ` of ${money(limit, currency)}` : ''}` : null;
+      const head = total !== null ? limit !== null ? t('mobileAssistant.amountOf', { amount: money(total, currency, locale), limit: money(limit, currency, locale) }) : money(total, currency, locale) : null;
       const rows = list(card.rows).map((r) => {
         const spent = num(r.spent);
         const rowLimit = num(r.limit);
-        return `${str(r.label) ?? ''}: ${spent !== null ? money(spent, currency) : ''}${rowLimit !== null ? ` / ${money(rowLimit, currency)}` : ''}${r.over === true ? ' · over' : ''}`;
+        return `${str(r.label) ?? ''}: ${spent !== null ? money(spent, currency, locale) : ''}${rowLimit !== null ? ` / ${money(rowLimit, currency, locale)}` : ''}${r.over === true ? ` · ${t('mobileAssistant.over')}` : ''}`;
       });
       const lines = [...(head ? [head] : []), ...rows, ...(str(card.insight) ? [str(card.insight) as string] : [])];
       return { ...base, subtitle: base.subtitle ?? str(card.period), ...cap(lines), tone: limit !== null && total !== null && total > limit ? 'danger' : 'brand' };
     }
     case 'vacation_prep': {
       const items = list(card.items).map((i) => `${i.done === true ? '✓' : '○'} ${str(i.label) ?? ''}${str(i.detail) ? ` — ${str(i.detail)}` : ''}`);
-      const next = strings(card.next_steps).map((s) => `Next: ${s}`);
+      const next = strings(card.next_steps).map((s) => t('mobileAssistant.next', { text: s }));
       return { ...base, subtitle: base.subtitle ?? ([str(card.destination), str(card.dates)].filter(Boolean).join(' · ') || null), ...cap([...items, ...next]), tone: 'brand' };
     }
     case 'task_group': {
       const tasks = list(card.tasks);
       const lines = tasks.map((t) => `${t.done === true ? '✓' : '○'} ${str(t.title) ?? ''}${[str(t.assignee), str(t.due)].filter(Boolean).length ? ` · ${[str(t.assignee), str(t.due)].filter(Boolean).join(' · ')}` : ''}`);
       const done = tasks.filter((t) => t.done === true).length;
-      return { ...base, subtitle: base.subtitle ?? (tasks.length ? `${done} of ${tasks.length} done` : null), ...cap(lines), tone: 'brand' };
+      return { ...base, subtitle: base.subtitle ?? (tasks.length ? t('mobileAssistant.doneCount', { done, total: tasks.length }) : null), ...cap(lines), tone: 'brand' };
     }
     case 'grocery_list': {
       const items = list(card.items).map((i) => `${i.checked === true ? '✓' : '○'} ${str(i.name) ?? ''}${str(i.quantity) ? ` · ${str(i.quantity)}` : ''}`);
       const skipped = strings(card.skipped).length;
       const pantry = strings(card.in_pantry).length;
-      const notes = [skipped ? `${skipped} already on the list` : null, pantry ? `${pantry} in the pantry` : null].filter((n): n is string => n !== null);
-      return { ...base, subtitle: base.subtitle ?? (items.length ? `${items.length} ${items.length === 1 ? 'item' : 'items'}` : null), ...cap([...items, ...notes]), tone: 'brand' };
+      const notes = [skipped ? t('mobileAssistant.alreadyListed', { count: skipped }) : null, pantry ? t('mobileAssistant.inPantry', { count: pantry }) : null].filter((n): n is string => n !== null);
+      return { ...base, subtitle: base.subtitle ?? (items.length ? t(items.length === 1 ? 'mobileAssistant.singleItem' : 'mobileAssistant.itemCount', { count: items.length }) : null), ...cap([...items, ...notes]), tone: 'brand' };
     }
     case 'readiness': {
       const score = num(card.score) ?? 0;
@@ -182,7 +186,7 @@ export function cardSections(card: AssistantCard): CardSection {
       return {
         ...base,
         title: `${card.title} · ${Math.round(score)}/100`,
-        subtitle: base.subtitle ?? ([str(card.level), days !== null ? `${days} ${days === 1 ? 'day' : 'days'} to go` : null].filter(Boolean).join(' · ') || null),
+        subtitle: base.subtitle ?? ([str(card.level), days !== null ? t(days === 1 ? 'mobileAssistant.dayToGo' : 'mobileAssistant.daysToGo', { count: days }) : null].filter(Boolean).join(' · ') || null),
         ...cap(lines),
         tone: score >= 80 ? 'success' : score >= 50 ? 'warning' : 'danger',
       };
@@ -196,13 +200,13 @@ export function cardSections(card: AssistantCard): CardSection {
     case 'approval': {
       const approval = isRecord(card.approval) ? card.approval : {};
       const lines = [...(str(approval.summary) ? [str(approval.summary) as string] : []), ...strings(approval.consequences)];
-      return { ...base, subtitle: base.subtitle ?? 'Approve it on the web app or in Home', ...cap(lines.length ? lines : ['Bubaly is waiting for a parent to say yes.']), tone: 'warning' };
+      return { ...base, subtitle: base.subtitle ?? t('mobileAssistant.approveWeb'), ...cap(lines.length ? lines : [t('mobileAssistant.waitingParent')]), tone: 'warning' };
     }
     case 'run_status': {
       const status = str(card.status) ?? 'queued';
       const done = num(card.steps_done);
       const total = num(card.steps_total);
-      const lines = [...(str(card.summary) ? [str(card.summary) as string] : []), ...(total ? [`${done ?? 0} of ${total} steps`] : [])];
+      const lines = [...(str(card.summary) ? [str(card.summary) as string] : []), ...(total ? [t('mobileAssistant.steps', { done: done ?? 0, total })] : [])];
       const tone: SectionTone = status === 'completed' ? 'success' : status === 'failed' || status === 'cancelled' ? 'danger'
         : ['awaiting_approval', 'awaiting_context', 'blocked', 'paused', 'partially_completed'].includes(status) ? 'warning' : 'brand';
       return { ...base, subtitle: base.subtitle ?? status.replace(/_/g, ' '), ...cap(lines), tone, href: str(card.href) };

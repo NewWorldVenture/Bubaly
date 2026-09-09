@@ -9,7 +9,7 @@
 // The assistant executes the shared toolbox plus every lib/ai/actions.ts
 // action (see lib/ai/assistant-engine.ts).
 import { NextRequest, NextResponse } from 'next/server';
-import { getTranslations } from '@/lib/i18n/server';
+import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServer } from '@/lib/supabase/server';
@@ -42,7 +42,7 @@ function unauthorized(message: string, code: string) {
 
 /** Resolve the caller from a bearer token (mobile) or the cookie session (web). */
 async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
-  const tr = await getTranslations();
+  const tr = await getAIRequestTranslations(req);
   const token = extractBearerToken(req.headers.get('authorization'));
   if (token) {
     const bearer = await getBearerUserContext(token);
@@ -73,6 +73,8 @@ export async function GET(req: NextRequest) {
     const authed = await authenticate(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
+    const familyError = assertAIRequestFamily(req, ctx.active.familyId, await getAIRequestTranslations(req));
+    if (familyError) return familyError;
     const scope = { familyId: ctx.active.familyId, userId: ctx.user.id };
     const tools = mergeToolSets(
       // Listing only: this GET reports tool names and descriptions and never
@@ -95,11 +97,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tr = await getTranslations();
+  const tr = await getAIRequestTranslations(req);
   try {
     const authed = await authenticate(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
+    const familyError = assertAIRequestFamily(req, ctx.active.familyId, tr);
+    if (familyError) return familyError;
     const familyId = ctx.active.familyId;
     const tz = ctx.active.family.timezone || 'America/New_York';
 

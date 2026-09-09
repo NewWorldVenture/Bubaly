@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTranslations } from '@/lib/i18n/server';
+import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import { authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
@@ -22,11 +22,13 @@ const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
 // the same place, and an anonymous caller gets a 401 in JSON rather than a
 // redirect the phone cannot follow.
 export async function POST(req: NextRequest) {
-  const t = await getTranslations();
+  const t = await getAIRequestTranslations(req);
   try {
     const authed = await authenticateAI(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
+    const familyError = assertAIRequestFamily(req, ctx.active.familyId, t);
+    if (familyError) return familyError;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('transcribe.tooManyVoiceRequestsPlease') },
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
-        { error: t('transcribe.voiceIsnTConfiguredAdd') },
+        { error: t('transcribe.voiceIsnTConfiguredAdd'), code: 'not_configured' },
         { status: 503 },
       );
     }

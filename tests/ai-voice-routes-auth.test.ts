@@ -114,7 +114,9 @@ describe('POST /api/ai/voice/transcribe', () => {
     const { POST } = await import('@/app/api/ai/voice/transcribe/route');
     const res = await POST(transcribeRequest({ authorization: 'Bearer token-abc' }));
     expect(res.status).toBe(503);
-    expect((await res.json()).text).toBeUndefined();
+    const body = await res.json();
+    expect(body.code).toBe('not_configured');
+    expect(body.text).toBeUndefined();
     expect(fetchExternal).not.toHaveBeenCalled();
   });
 
@@ -153,6 +155,70 @@ describe('POST /api/ai/voice/speak', () => {
     const res = await POST(speakRequest());
     expect(res.status).toBe(503);
     expect(res.headers.get('Content-Type')).toContain('application/json');
+    expect((await res.json()).code).toBe('not_configured');
+    expect(fetchExternal).not.toHaveBeenCalled();
+  });
+});
+
+describe.each([
+  ['transcribe', transcribeRequest, () => import('@/app/api/ai/voice/transcribe/route')],
+  ['speak', speakRequest, () => import('@/app/api/ai/voice/speak/route')],
+] as const)('%s household assertions', (_name, request, route) => {
+  const FAMILY = 'aaaaaaaa-1111-4111-8111-111111111111';
+  const OTHER_FAMILY = 'bbbbbbbb-2222-4222-8222-222222222222';
+  const scoped = { ...ctx, active: { ...ctx.active, familyId: FAMILY } };
+
+  it.each([
+    ['', 400, 'invalid_family'],
+    ['not-a-family', 400, 'invalid_family'],
+    [FAMILY + ', ' + OTHER_FAMILY, 400, 'invalid_family'],
+    [OTHER_FAMILY, 409, 'family_changed'],
+  ])('rejects header %s before reading configuration or sending audio/text', async (expected, status, code) => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped, user: ctx.user });
+    const { POST } = await route();
+    const response = await POST(request({ authorization: 'Bearer tok', 'X-Bubaly-Family-Id': expected }));
+    expect(response.status).toBe(status);
+    expect((await response.json()).code).toBe(code);
+    expect(enforceAIRateLimit).not.toHaveBeenCalled();
+    expect(getOpenAIKey).not.toHaveBeenCalled();
+    expect(fetchExternal).not.toHaveBeenCalled();
+  });
+
+  it('accepts a matching family UUID', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped, user: ctx.user });
+    const { POST } = await route();
+    const response = await POST(request({ authorization: 'Bearer tok', 'X-Bubaly-Family-Id': FAMILY.toUpperCase() }));
+    expect(response.status).toBe(200);
+    expect(fetchExternal).toHaveBeenCalledOnce();
+  });
+
+  it('also checks cookie clients', async () => {
+    getUserContext.mockResolvedValue(scoped);
+    const { POST } = await route();
+    const response = await POST(request({ 'X-Bubaly-Family-Id': OTHER_FAMILY }));
+    expect(response.status).toBe(409);
+    expect(fetchExternal).not.toHaveBeenCalled();
+  });
+
+  it('uses the bearer-selected language despite the geo header', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped, user: ctx.user });
+    const { POST } = await route();
+    const response = await POST(request({
+      authorization: 'Bearer tok', 'X-Bubaly-Family-Id': OTHER_FAMILY,
+      'Accept-Language': 'fr-FR', 'x-vercel-ip-country': 'US',
+    }));
+    expect(await response.json()).toEqual({
+      code: 'family_changed', error: 'Votre foyer actif a changé. Revenez à l’assistant et réessayez.',
+    });
+  });
+
+  it('preserves unavailable authentication rather than treating it as missing voice configuration', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: false, reason: 'unavailable' });
+    const { POST } = await route();
+    const response = await POST(request({ authorization: 'Bearer tok', 'X-Bubaly-Family-Id': FAMILY }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('unavailable');
+    expect(getOpenAIKey).not.toHaveBeenCalled();
     expect(fetchExternal).not.toHaveBeenCalled();
   });
 });

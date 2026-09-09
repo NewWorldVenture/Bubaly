@@ -181,7 +181,7 @@ describe('/api/ai JSON transport contract', () => {
   });
 
   it('maps failures to friendly copy by code, status, or server message', () => {
-    expect(parseAssistantResponse(401, { error: 'x', code: 'invalid_token' })).toMatchObject({ ok: false, code: 'invalid_token', error: 'Your session expired. Sign in again to keep chatting.' });
+    expect(parseAssistantResponse(401, { error: 'x', code: 'invalid_token' })).toMatchObject({ ok: false, code: 'invalid_token', error: 'Your session expired. Sign in again to continue.' });
     expect(parseAssistantResponse(403, { code: 'needs_family' })).toMatchObject({ ok: false, error: 'Finish setting up your family on the web app first.' });
     expect(parseAssistantResponse(429, {})).toMatchObject({ ok: false, code: 'rate_limited' });
     expect(parseAssistantResponse(400, { error: 'Message is required' })).toMatchObject({ ok: false, error: 'Message is required' });
