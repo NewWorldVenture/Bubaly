@@ -15,7 +15,10 @@ import {
 } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Competitive Intelligence', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('competitive.competitiveIntelligence'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Competitor = Tables<'competitors'>;

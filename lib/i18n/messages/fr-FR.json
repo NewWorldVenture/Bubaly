@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Espace de travail de l'assistant",
   "workspace.context": "Contexte",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan et résultats"
+  "workspace.planAndResults": "Plan et résultats",
+  "adminCredential.heading": "Les données d’administration sont indisponibles : Supabase a rejeté la clé de rôle de service de ce déploiement.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY est vide dans ce déploiement.",
+  "adminCredential.publishable": "La clé configurée est une clé PUBLISHABLE (sb_publishable_…), donc publique. Utilisez une clé secrète de serveur à la place.",
+  "adminCredential.legacy": "La clé configurée est un ancien JWT (eyJ…). Les nouvelles et les anciennes clés API peuvent coexister. Vérifiez que cette clé appartient à ce projet et qu’elle est toujours activée.",
+  "adminCredential.secret": "La clé configurée a le bon format (sb_secret_…). Vérifiez si elle appartient à un autre projet ou si elle a été révoquée.",
+  "adminCredential.unknown": "La clé configurée ne correspond à aucun format de clé Supabase connu.",
+  "adminCredential.remedyProject": "Copiez une clé secrète actuelle du projet {project} depuis {url}, définissez-la comme SUPABASE_SERVICE_ROLE_KEY dans l’environnement de ce déploiement, puis redéployez.",
+  "adminCredential.remedyGeneric": "Copiez la clé secrète actuelle de ce projet dans Supabase → Paramètres du projet → Clés API, définissez-la comme SUPABASE_SERVICE_ROLE_KEY dans l’environnement de ce déploiement, puis redéployez.",
+  "adminCredential.profileUnavailable": "Votre profil d’administration n’a pas pu être chargé ; l’adresse e-mail de votre compte est affichée à la place.",
+  "adminCredential.invitesUnavailable": "Le nombre d’invitations en attente est indisponible.",
+  "adminCredential.notificationsUnavailable": "Les notifications d’administration sont indisponibles."
 }

@@ -9,7 +9,10 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Onboarding Audit', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('onboarding.onboardingAudit'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

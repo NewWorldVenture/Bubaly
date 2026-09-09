@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Espaço de trabalho do assistente",
   "workspace.context": "Contexto",
   "workspace.conversation": "Conversa",
-  "workspace.planAndResults": "Plano e resultados"
+  "workspace.planAndResults": "Plano e resultados",
+  "adminCredential.heading": "Os dados de administração estão indisponíveis: o Supabase rejeitou a chave de função de serviço desta implementação.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY está vazia nesta implementação.",
+  "adminCredential.publishable": "A chave configurada é uma chave PUBLISHABLE (sb_publishable_…), ou seja, pública. Usa uma chave secreta de servidor.",
+  "adminCredential.legacy": "A chave configurada é um JWT antigo (eyJ…). As chaves API novas e antigas podem coexistir. Confirma que esta chave pertence a este projeto e continua ativada.",
+  "adminCredential.secret": "A chave configurada tem o formato correto (sb_secret_…). Verifica se pertence a outro projeto ou se foi revogada.",
+  "adminCredential.unknown": "A chave configurada não corresponde a nenhum formato de chave Supabase conhecido.",
+  "adminCredential.remedyProject": "Copia uma chave secreta atual do projeto {project} de {url}, define-a como SUPABASE_SERVICE_ROLE_KEY no ambiente desta implementação e volta a implementar.",
+  "adminCredential.remedyGeneric": "Copia a chave secreta atual deste projeto em Supabase → Definições do projeto → Chaves API, define-a como SUPABASE_SERVICE_ROLE_KEY no ambiente desta implementação e volta a implementar.",
+  "adminCredential.profileUnavailable": "Não foi possível carregar o teu perfil de administração; é apresentado o e-mail da tua conta.",
+  "adminCredential.invitesUnavailable": "O número de convites pendentes está indisponível.",
+  "adminCredential.notificationsUnavailable": "As notificações de administração estão indisponíveis."
 }

@@ -14,7 +14,10 @@ import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Support Tickets', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('supportTickets.supportTickets'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;

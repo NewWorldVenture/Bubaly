@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Espacio de trabajo del asistente",
   "workspace.context": "Contexto",
   "workspace.conversation": "Conversación",
-  "workspace.planAndResults": "Plan y resultados"
+  "workspace.planAndResults": "Plan y resultados",
+  "adminCredential.heading": "Los datos de administración no están disponibles: Supabase ha rechazado la clave de rol de servicio de este despliegue.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY está vacía en este despliegue.",
+  "adminCredential.publishable": "La clave configurada es una clave PUBLISHABLE (sb_publishable_…), es decir, pública. Usa una clave secreta de servidor.",
+  "adminCredential.legacy": "La clave configurada es un JWT heredado (eyJ…). Las claves API nuevas y heredadas pueden coexistir. Comprueba que esta clave pertenece a este proyecto y sigue habilitada.",
+  "adminCredential.secret": "La clave configurada tiene el formato correcto (sb_secret_…). Comprueba si pertenece a otro proyecto o ha sido revocada.",
+  "adminCredential.unknown": "La clave configurada no coincide con ningún formato de clave conocido de Supabase.",
+  "adminCredential.remedyProject": "Copia una clave secreta vigente del proyecto {project} desde {url}, configúrala como SUPABASE_SERVICE_ROLE_KEY en el entorno de este despliegue y vuelve a desplegar.",
+  "adminCredential.remedyGeneric": "Copia la clave secreta vigente de este proyecto en Supabase → Configuración del proyecto → Claves API, configúrala como SUPABASE_SERVICE_ROLE_KEY en el entorno de este despliegue y vuelve a desplegar.",
+  "adminCredential.profileUnavailable": "No se pudo cargar tu perfil de administración; se muestra el correo de tu cuenta.",
+  "adminCredential.invitesUnavailable": "El número de invitaciones pendientes no está disponible.",
+  "adminCredential.notificationsUnavailable": "Las notificaciones de administración no están disponibles."
 }

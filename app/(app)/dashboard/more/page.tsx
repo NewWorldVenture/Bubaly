@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { Lock, ShieldCheck, HelpCircle, Mail, Info, FileText, ChevronRight, LayoutGrid } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-export const metadata: Metadata = { title: 'More' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('more.more') };
+}
 
 // Screen 11 of the mockups: the t('more.more') menu — a hub for account security and the
 // info/legal pages. Manage PIN jumps to the App Lock card in Settings; the rest

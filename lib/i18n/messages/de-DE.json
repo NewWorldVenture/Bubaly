@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Arbeitsbereich des Assistenten",
   "workspace.context": "Kontext",
   "workspace.conversation": "Unterhaltung",
-  "workspace.planAndResults": "Plan und Ergebnisse"
+  "workspace.planAndResults": "Plan und Ergebnisse",
+  "adminCredential.heading": "Admindaten sind nicht verfügbar: Supabase hat den Service-Role-Schlüssel dieser Bereitstellung abgelehnt.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY ist in dieser Bereitstellung leer.",
+  "adminCredential.publishable": "Der konfigurierte Schlüssel ist ein PUBLISHABLE-Schlüssel (sb_publishable_…) und damit öffentlich. Verwende stattdessen einen geheimen Serverschlüssel.",
+  "adminCredential.legacy": "Der konfigurierte Schlüssel ist ein älterer JWT (eyJ…). Neue und ältere API-Schlüssel können gleichzeitig gültig sein. Prüfe, ob dieser Schlüssel zu diesem Projekt gehört und weiterhin aktiviert ist.",
+  "adminCredential.secret": "Der konfigurierte Schlüssel hat das richtige Format (sb_secret_…). Prüfe, ob er zu einem anderen Projekt gehört oder widerrufen wurde.",
+  "adminCredential.unknown": "Der konfigurierte Schlüssel entspricht keinem bekannten Supabase-Schlüsselformat.",
+  "adminCredential.remedyProject": "Kopiere einen aktuellen geheimen Schlüssel für Projekt {project} von {url}, trage ihn in der Umgebung dieser Bereitstellung als SUPABASE_SERVICE_ROLE_KEY ein und stelle erneut bereit.",
+  "adminCredential.remedyGeneric": "Kopiere den aktuellen geheimen Schlüssel dieses Projekts unter Supabase → Projekteinstellungen → API-Schlüssel, trage ihn in der Umgebung dieser Bereitstellung als SUPABASE_SERVICE_ROLE_KEY ein und stelle erneut bereit.",
+  "adminCredential.profileUnavailable": "Dein Adminprofil konnte nicht geladen werden; stattdessen wird die E-Mail-Adresse deines Kontos angezeigt.",
+  "adminCredential.invitesUnavailable": "Die Anzahl ausstehender Einladungen ist nicht verfügbar.",
+  "adminCredential.notificationsUnavailable": "Die Adminbenachrichtigungen sind nicht verfügbar."
 }

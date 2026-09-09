@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Werkruimte van de assistent",
   "workspace.context": "Context",
   "workspace.conversation": "Gesprek",
-  "workspace.planAndResults": "Plan en resultaten"
+  "workspace.planAndResults": "Plan en resultaten",
+  "adminCredential.heading": "Beheergegevens zijn niet beschikbaar: Supabase heeft de servicerolsleutel van deze implementatie geweigerd.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY is leeg in deze implementatie.",
+  "adminCredential.publishable": "De ingestelde sleutel is een PUBLISHABLE-sleutel (sb_publishable_…), dus openbaar. Gebruik in plaats daarvan een geheime serversleutel.",
+  "adminCredential.legacy": "De ingestelde sleutel is een oudere JWT (eyJ…). Nieuwe en oudere API-sleutels kunnen naast elkaar werken. Controleer of deze sleutel bij dit project hoort en nog is ingeschakeld.",
+  "adminCredential.secret": "De ingestelde sleutel heeft het juiste formaat (sb_secret_…). Controleer of deze bij een ander project hoort of is ingetrokken.",
+  "adminCredential.unknown": "De ingestelde sleutel komt niet overeen met een bekend Supabase-sleutelformaat.",
+  "adminCredential.remedyProject": "Kopieer een huidige geheime sleutel voor project {project} van {url}, stel deze in als SUPABASE_SERVICE_ROLE_KEY in de omgeving van deze implementatie en implementeer opnieuw.",
+  "adminCredential.remedyGeneric": "Kopieer de huidige geheime sleutel van dit project via Supabase → Projectinstellingen → API-sleutels, stel deze in als SUPABASE_SERVICE_ROLE_KEY in de omgeving van deze implementatie en implementeer opnieuw.",
+  "adminCredential.profileUnavailable": "Je beheerprofiel kon niet worden geladen; in plaats daarvan wordt het e-mailadres van je account getoond.",
+  "adminCredential.invitesUnavailable": "Het aantal openstaande uitnodigingen is niet beschikbaar.",
+  "adminCredential.notificationsUnavailable": "De beheerberichten zijn niet beschikbaar."
 }

@@ -12,7 +12,10 @@ import {
 import { uploadAssetAction, updateAssetAction, deleteAssetAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Asset Library', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('assets.assetLibrary'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Asset = Tables<'marketing_assets'>;

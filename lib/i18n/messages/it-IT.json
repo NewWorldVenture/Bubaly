@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Spazio di lavoro dell'assistente",
   "workspace.context": "Contesto",
   "workspace.conversation": "Conversazione",
-  "workspace.planAndResults": "Piano e risultati"
+  "workspace.planAndResults": "Piano e risultati",
+  "adminCredential.heading": "I dati di amministrazione non sono disponibili: Supabase ha rifiutato la chiave del ruolo di servizio di questa distribuzione.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY è vuota in questa distribuzione.",
+  "adminCredential.publishable": "La chiave configurata è una chiave PUBLISHABLE (sb_publishable_…), quindi pubblica. Usa invece una chiave segreta del server.",
+  "adminCredential.legacy": "La chiave configurata è un JWT precedente (eyJ…). Le chiavi API nuove e precedenti possono coesistere. Verifica che questa chiave appartenga a questo progetto e sia ancora abilitata.",
+  "adminCredential.secret": "La chiave configurata ha il formato corretto (sb_secret_…). Verifica se appartiene a un altro progetto o è stata revocata.",
+  "adminCredential.unknown": "La chiave configurata non corrisponde a nessun formato di chiave Supabase conosciuto.",
+  "adminCredential.remedyProject": "Copia una chiave segreta attuale del progetto {project} da {url}, impostala come SUPABASE_SERVICE_ROLE_KEY nell’ambiente di questa distribuzione, poi ridistribuisci.",
+  "adminCredential.remedyGeneric": "Copia la chiave segreta attuale di questo progetto in Supabase → Impostazioni progetto → Chiavi API, impostala come SUPABASE_SERVICE_ROLE_KEY nell’ambiente di questa distribuzione, poi ridistribuisci.",
+  "adminCredential.profileUnavailable": "Impossibile caricare il tuo profilo amministrativo; viene mostrata l’e-mail del tuo account.",
+  "adminCredential.invitesUnavailable": "Il numero di inviti in sospeso non è disponibile.",
+  "adminCredential.notificationsUnavailable": "Le notifiche di amministrazione non sono disponibili."
 }

@@ -3,6 +3,7 @@ import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { settleAll, isCredentialError } from '@/lib/supabase/settle';
 import { createServiceClient, describeConfiguredServiceKey, serviceKeyRemedy } from '@/lib/supabase/server';
 import { AdminShell } from '@/components/admin/admin-shell';
+import { getTranslations } from '@/lib/i18n/server';
 
 // Deliberately NOT nested under dashboard/layout.tsx — the site admin console
 // oversees every family, so it must never require the viewer to belong to one.
@@ -11,6 +12,7 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   if (!user) redirect('/login?redirect=/admin');
   const superAdmin = await isSuperAdmin();
   if (!superAdmin) redirect('/dashboard');
+  const t = await getTranslations();
 
   const supabase = createServiceClient();
   const [profileRes, invitesRes, notificationsRes] = await settleAll([
@@ -28,21 +30,21 @@ export default async function SiteAdminLayout({ children }: { children: React.Re
   // dead ends and no cause. Detecting it once, here, explains all of them —
   // including the pages that render nothing else at all.
   const credentialFault = [profileRes, invitesRes, notificationsRes].some((r) => isCredentialError(r.error))
-    ? [describeConfiguredServiceKey(), serviceKeyRemedy()].filter(Boolean).join(' ')
+    ? [describeConfiguredServiceKey(t), serviceKeyRemedy(t)].filter(Boolean).join(' ')
     : null;
 
   const dataWarnings: string[] = [];
   if (profileRes.error) {
     console.error('[admin-shell] profile read failed:', profileRes.error);
-    dataWarnings.push('Your admin profile could not be loaded; your account email is shown instead.');
+    dataWarnings.push(t('adminCredential.profileUnavailable'));
   }
   if (invitesRes.error) {
     console.error('[admin-shell] pending invite count read failed:', invitesRes.error);
-    dataWarnings.push('The pending invitation count is unavailable.');
+    dataWarnings.push(t('adminCredential.invitesUnavailable'));
   }
   if (notificationsRes.error) {
     console.error('[admin-shell] notification feed read failed:', notificationsRes.error);
-    dataWarnings.push('The admin notification feed is unavailable.');
+    dataWarnings.push(t('adminCredential.notificationsUnavailable'));
   }
 
   const adminName = profileRes.data?.full_name || profileRes.data?.email || user.email || 'Admin';

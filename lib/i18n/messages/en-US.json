@@ -12465,5 +12465,16 @@
   "workspace.assistantWorkspace": "Assistant workspace",
   "workspace.context": "Context",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan and results"
+  "workspace.planAndResults": "Plan and results",
+  "adminCredential.heading": "Admin data is unavailable: Supabase rejected this deployment’s service-role key.",
+  "adminCredential.empty": "SUPABASE_SERVICE_ROLE_KEY is empty on this deployment.",
+  "adminCredential.publishable": "The configured key is a PUBLISHABLE key (sb_publishable_…) — that is the public key. Use a server secret key instead.",
+  "adminCredential.legacy": "The configured key is a legacy JWT (eyJ…). New and legacy API keys can coexist. Check that this key belongs to this project and is still enabled.",
+  "adminCredential.secret": "The configured key has the right shape (sb_secret_…). Check whether it belongs to a different project or has been revoked.",
+  "adminCredential.unknown": "The configured key matches no known Supabase key format.",
+  "adminCredential.remedyProject": "Copy a current secret key for project {project} from {url}, set it as SUPABASE_SERVICE_ROLE_KEY in this deployment’s environment, then redeploy.",
+  "adminCredential.remedyGeneric": "Copy this project’s current secret key from Supabase → Project Settings → API Keys, set it as SUPABASE_SERVICE_ROLE_KEY in this deployment’s environment, then redeploy.",
+  "adminCredential.profileUnavailable": "Your admin profile could not be loaded; your account email is shown instead.",
+  "adminCredential.invitesUnavailable": "The pending invitation count is unavailable.",
+  "adminCredential.notificationsUnavailable": "The admin notification feed is unavailable."
 }

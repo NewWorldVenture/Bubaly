@@ -7,7 +7,10 @@ import { RecomputeButton, LeadRow } from './lead-scores-client';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Lead Scores', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('leadScores.leadScores'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type ScoredContact = {
