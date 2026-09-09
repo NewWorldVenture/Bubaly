@@ -46,6 +46,18 @@ export const GATED_SURFACES = {
   // reached them, and they shipped their CTA, their FAQ heading and their
   // breadcrumb chip in English on every locale.
   'marketing-public-pages': ['lib/marketing/public-pages.tsx'],
+  // Pure helpers under lib/ whose strings the PUBLIC site renders: the consent
+  // banner every visitor meets first, the /lp call to action, the progressive
+  // profile nudge, the trust-center status pills and the footer's social row.
+  // They are imported at build time, long before a request has a locale, so
+  // each one holds catalogue KEYS and its component resolves them.
+  'marketing-lib-copy': [
+    'lib/marketing/consent-ui.ts',
+    'lib/marketing/landing.ts',
+    'lib/marketing/progressive-profile.ts',
+    'lib/marketing/trust-ledger.ts',
+    'lib/marketing/social-links.ts',
+  ],
 };
 
 // NOT gated: `everything` — ['app', 'components'].

@@ -106,8 +106,8 @@ function Question({
 
   return (
     <div className="mt-3">
-      <p className="text-sm font-semibold">{q.prompt}</p>
-      {q.help && <p className="mt-0.5 text-xs text-muted">{q.help}</p>}
+      <p className="text-sm font-semibold">{t(q.promptKey)}</p>
+      {q.helpKey && <p className="mt-0.5 text-xs text-muted">{t(q.helpKey)}</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {q.options.map((o) => {
@@ -123,7 +123,7 @@ function Question({
               )}
             >
               {active && <Check className="h-3 w-3" />}
-              {o.label}
+              {t(o.labelKey)}
             </button>
           );
         })}
