@@ -1,11 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { firstName } from '@/lib/utils/format';
-import { BookOpen, Calendar, ChevronRight, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronRight, GraduationCap, Inbox, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settleAll } from '@/lib/supabase/settle';
+import { classify, type FrontDeskSubKind } from '@/lib/front-desk/school-sports';
+import { proposeFrontDeskAction } from '@/app/(app)/dashboard/school/actions';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -32,6 +36,36 @@ const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'F
 const SUBJECT_ICONS: Record<string, string> = { Math: '📐', English: '📝', Science: '🔬', History: '🏛️', Spanish: '🌎', Art: '🎨', Music: '🎵', PE: '⚽' };
 const SUBJECT_COLORS: Record<string, string> = { Math: 'bg-violet-500', English: 'bg-blue-500', Science: 'bg-emerald-500', History: 'bg-orange-500', Spanish: 'bg-rose-500', Art: 'bg-pink-500', Music: 'bg-amber-500', PE: 'bg-cyan-500' };
 const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
+
+// ── School & Sports desk ───────────────────────────────────────────────────
+// The columns 0214 actually gives `family_inbox_messages`. There is no
+// member_id, linked_type, linked_id or sub_intent on that table, so the desk
+// classifies every row it reads, every time it reads it, and the only thing it
+// takes from the database about what was DONE is `ai_handled`.
+type DeskMessage = {
+  id: string;
+  subject: string | null;
+  body: string | null;
+  from_addr: string | null;
+  ai_handled: boolean;
+  occurred_at: string;
+};
+
+/** `teams` (0006), narrowed to the roster columns the classifier matches on. */
+type DeskTeam = { member_id: string | null; team_name: string | null; sport: string | null; coach: string | null };
+
+/** How many recent messages are classified. The desk is a queue, not an archive. */
+const DESK_SCAN_LIMIT = 40;
+/** How many classified rows the card shows before it points at the inbox. */
+const DESK_VISIBLE = 6;
+
+const DESK_KIND_KEY: Record<FrontDeskSubKind, string> = {
+  form: 'schoolDesk.kindForm',
+  fee: 'schoolDesk.kindFee',
+  gear: 'schoolDesk.kindGear',
+  transport: 'schoolDesk.kindTransport',
+  schedule_change: 'schoolDesk.kindScheduleChange',
+};
 
 const GRADE_DIST_COLORS = [
   { label: 'A (90-100%)', min: 90, color: '#34d399' },
@@ -131,8 +165,84 @@ export function SchoolModule() {
   const loading = eventsLoading || classesLoading || gradesLoading;
   const error = eventsError || classesError || gradesError;
 
+  // ── School & Sports desk ─────────────────────────────────
+  // Its own loader rather than `useRealtimeQuery`, for two reasons that both
+  // come down to honesty. `family_inbox_messages` is not in the realtime
+  // publication (lib/realtime/published-tables.ts), so a channel on it would
+  // report SUBSCRIBED and deliver nothing forever. And the shared hook is
+  // deliberately forgiving — it swallows a missing table and an offline read
+  // into an empty list — which is right for a widget and wrong here: an empty
+  // desk means "nothing from school needs you", and that is a claim a failed
+  // read must never make. This one logs and fails closed to an error with a
+  // retry, and `deskRows === null` is never rendered as a queue of zero.
+  const [deskRows, setDeskRows] = useState<DeskMessage[] | null>(null);
+  const [deskTeams, setDeskTeams] = useState<DeskTeam[]>([]);
+  const [deskError, setDeskError] = useState(false);
+  const [deskLoading, setDeskLoading] = useState(true);
+  const [proposing, setProposing] = useState<string | null>(null);
+
+  const loadDesk = useCallback(async () => {
+    setDeskLoading(true);
+    const sb = createClient();
+    // `settleAll`, so a transport failure on either read arrives as
+    // { data: null, error } rather than rejecting and taking the page to the
+    // error boundary. Both are plain PostgREST builders — no ServiceResult and
+    // no plain value rides in here.
+    const [messages, teams] = await settleAll([
+      sb.from('family_inbox_messages')
+        .select('id, subject, body, from_addr, ai_handled, occurred_at')
+        .eq('family_id', familyId)
+        .neq('status', 'archived')
+        .order('occurred_at', { ascending: false })
+        .limit(DESK_SCAN_LIMIT),
+      sb.from('teams')
+        .select('member_id, team_name, sport, coach')
+        .eq('family_id', familyId)
+        .limit(200),
+    ]);
+    if (messages.error || teams.error) {
+      console.error('[school-desk] front desk read failed', messages.error ?? teams.error);
+      setDeskRows(null);
+      setDeskError(true);
+      setDeskLoading(false);
+      return;
+    }
+    setDeskRows((messages.data ?? []) as DeskMessage[]);
+    setDeskTeams((teams.data ?? []) as DeskTeam[]);
+    setDeskError(false);
+    setDeskLoading(false);
+  }, [familyId]);
+
+  useEffect(() => { void loadDesk(); }, [loadDesk]);
+
   // ── Derived data ─────────────────────────────────────────
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+
+  // Classification is derived here, at read time, because there is nowhere to
+  // store it: 0214 gives the table no sub_intent, member_id or linked_* column.
+  // `deskRows === null` (a failed read) yields no items AND is never rendered
+  // as an empty desk — the error branch below owns that case.
+  const deskItems = useMemo(() => {
+    if (!deskRows) return [];
+    const roster = members.map((m) => ({ id: m.id, display_name: m.display_name }));
+    return deskRows
+      .map((row) => ({ row, verdict: classify(row, roster, deskTeams, classes, { now }) }))
+      .filter((entry) => entry.verdict.domain !== null)
+      .slice(0, DESK_VISIBLE);
+  }, [deskRows, deskTeams, members, classes, now]);
+
+  const deskPending = useMemo(() => deskItems.filter((e) => !e.row.ai_handled).length, [deskItems]);
+
+  async function proposeFromDesk(messageId: string) {
+    setProposing(messageId);
+    const result = await proposeFrontDeskAction(messageId);
+    setProposing(null);
+    if (!result.ok) { toastError(result.error); return; }
+    success(result.outcome === 'pending_approval' ? tr('schoolDesk.sentForApproval') : tr('schoolDesk.proposalApplied'));
+    // Re-read rather than patch state: "Handled" is whatever `ai_handled` says
+    // after the write, not what this browser hoped it would say.
+    await loadDesk();
+  }
 
   // Students: members who have classes or grades
   const studentIds = useMemo(() => {
@@ -316,6 +426,69 @@ export function SchoolModule() {
             </div>
           ))}
         </div>
+
+        {/* School & Sports desk — inbox messages this module can act on */}
+        {tab === 'Overview' && (
+          <div className="rounded-2xl border border-border bg-surface/40">
+            <div className="flex items-center justify-between p-5">
+              <div>
+                <h2 className="font-semibold">{tr('schoolDesk.title')}</h2>
+                <p className="text-xs text-muted">{tr('schoolDesk.subtitle')}</p>
+              </div>
+              <Link href="/dashboard/inbox" className="flex items-center gap-1 text-xs font-semibold text-brand-text">
+                {tr('schoolDesk.openInbox')} <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="p-5 pt-0">
+              {deskLoading && !deskRows && !deskError ? (
+                <SkeletonList count={2} />
+              ) : deskError ? (
+                // A failed read says so. It never renders as "nothing needs you".
+                <ErrorState message={tr('schoolDesk.readFailed')} onRetry={() => { void loadDesk(); }} />
+              ) : deskItems.length === 0 ? (
+                <EmptyState icon={Inbox} title={tr('schoolDesk.emptyTitle')} description={tr('schoolDesk.emptyBody')} />
+              ) : (
+                <div className="space-y-2">
+                  {deskItems.map(({ row, verdict }) => {
+                    const kind = verdict.subKind
+                      ? tr(DESK_KIND_KEY[verdict.subKind])
+                      : tr(verdict.domain === 'sports' ? 'schoolDesk.domainSports' : 'schoolDesk.domainSchool');
+                    const headline = (row.subject ?? '').trim() || (row.body ?? '').trim().slice(0, 80) || tr('schoolDesk.noSubject');
+                    return (
+                      <div key={row.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/20 p-3">
+                        <span className="text-lg" aria-hidden>{verdict.domain === 'sports' ? '⚽' : '🎒'}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{headline}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                            <span className="rounded-full border border-border px-2 py-0.5 font-semibold text-fg">{kind}</span>
+                            {verdict.child && <span className="rounded-full border border-border px-2 py-0.5">{firstName(verdict.child.name)}</span>}
+                            {verdict.date && <span className="tabular-nums">{verdict.date}</span>}
+                            {verdict.amount_cents != null && verdict.currency && (
+                              <span className="tabular-nums">
+                                {new Intl.NumberFormat(undefined, { style: 'currency', currency: verdict.currency }).format(verdict.amount_cents / 100)}
+                              </span>
+                            )}
+                            <span className="text-muted/60">{timeAgo(row.occurred_at)}</span>
+                          </div>
+                        </div>
+                        {row.ai_handled ? (
+                          // Read straight off the row. Nothing else in this
+                          // component is allowed to put this word on screen.
+                          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-400">{tr('schoolDesk.handled')}</span>
+                        ) : (
+                          <Button onClick={() => { void proposeFromDesk(row.id); }} disabled={proposing !== null}>
+                            <Sparkles className="h-4 w-4" /> {proposing === row.id ? tr('schoolDesk.proposing') : tr('schoolDesk.propose')}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="pt-1 text-xs text-muted">{tr('schoolDesk.approvalNote', { count: deskPending })}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Upcoming Assignments */}
         {(tab === 'Overview' || tab === 'Assignments') && (

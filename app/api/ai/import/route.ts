@@ -11,6 +11,7 @@ import { roleOf } from '@/lib/trust/server';
 import { gateAiAction } from '@/lib/trust/ai-gate';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { buildProposal, classify } from '@/lib/front-desk/school-sports';
 
 // Map a Magic-Import action to a Trust Engine domain so the governance layer can
 // allow / block / require-approval before the AI writes anything.
@@ -47,6 +48,42 @@ function summarize(name: string, a: Record<string, unknown>): string {
     case 'create_meal_plan_entry': return `🍽️ Meal: ${a.meal_name}${fmtWhen(a.plan_date)}`;
     default: return name;
   }
+}
+
+/**
+ * The deterministic school/sports proposal for pasted text, or null.
+ *
+ * Runs BESIDE the model rather than instead of it. The audit's finding about
+ * this route was that Magic Import "can only propose create_calendar_event,
+ * create_chore, create_reminder, add_grocery_item, create_meal_plan_entry — no
+ * forms, fees, gear, transport", and that a pasted school letter therefore came
+ * back as whatever the model happened to notice. The classifier answers the
+ * same question the inbound webhook asks (`lib/contact-center/routing.ts`), so
+ * a letter pasted here and the same letter mailed to the family's @bubaly.com
+ * address produce the same proposal.
+ *
+ * TEXT ONLY, no roster: this route holds a Supabase client, but reading
+ * family_members / teams / school_classes to link a child would add three reads
+ * whose failure has no honest answer here — refusing the whole import because
+ * the teams table hiccuped is worse than a proposal that names no child. The
+ * desk card in the school module already has the roster in hand and passes it.
+ *
+ * Nothing here executes. The item joins the list the user confirms, and every
+ * confirmed item goes through `gateAiAction` in phase 2 exactly as before.
+ */
+function frontDeskItem(text: string, now: Date): Item | null {
+  const message = { subject: null, body: text };
+  const classification = classify(message, [], [], [], { now: now.toISOString() });
+  if (!classification.domain) return null;
+  const proposal = buildProposal(message, classification);
+  if (!proposal) return null;
+  return { name: proposal.name, args: proposal.args, summary: summarize(proposal.name, proposal.args) };
+}
+
+/** The title an item is about, for de-duplication. Empty when it has none. */
+function itemKey(item: Item): string {
+  const raw = item.args.title ?? item.args.name ?? item.args.meal_name ?? '';
+  return typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().toLowerCase() : '';
 }
 
 export async function POST(req: NextRequest) {
@@ -175,7 +212,16 @@ reading, not a request from this family.`;
       },
     );
 
-    return NextResponse.json(items);
+    // The deterministic pass is added AFTER the model's, and only when the
+    // model did not already produce the same row: a duplicate reminder is two
+    // approval cards for one permission slip.
+    const desk = frontDeskItem(text, now);
+    const deskKey = desk ? itemKey(desk) : '';
+    const alreadyProposed = desk !== null
+      && items.items.some((item) => item.name === desk.name && itemKey(item) === deskKey);
+    const merged = desk && !alreadyProposed ? [...items.items, desk] : items.items;
+
+    return NextResponse.json({ ...items, items: merged });
   } catch (err) {
     console.error('Import error:', err);
     return NextResponse.json({ error: 'Could not process that import.' }, { status: 500 });
