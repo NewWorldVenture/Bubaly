@@ -48,6 +48,7 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/pricing', priority: 0.9, changeFrequency: 'monthly' },
   { path: '/ai', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/mobile', priority: 0.7, changeFrequency: 'monthly' },
+  { path: '/family-display', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/security', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/faq', priority: 0.6, changeFrequency: 'monthly' },
   { path: '/blog', priority: 0.7, changeFrequency: 'weekly' },
