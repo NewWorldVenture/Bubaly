@@ -7,6 +7,7 @@
 // No Supabase / React imports.
 
 export type InteractionKind = 'visit' | 'call' | 'message' | 'gift' | 'favor' | 'note';
+export type TimelineTranslator = (key: string, params?: Record<string, string | number>) => string;
 
 export interface LoggedInteraction {
   id: string;
@@ -57,6 +58,7 @@ function toDate(s: string): Date {
 
 /** Merge logged interactions + inbox communications (+ this year's birthday) into one timeline. */
 export function buildContactTimeline(input: {
+  t: TimelineTranslator;
   interactions: LoggedInteraction[];
   communications: CommunicationLike[];
   birthdayMonth?: number | null;
@@ -82,7 +84,9 @@ export function buildContactTimeline(input: {
       id: `comm-${c.id}`,
       kind: 'communication',
       date: ymd(toDate(c.received_at)),
-      title: c.subject || `${c.direction === 'outbound' ? 'Reached out' : 'Heard from them'} · ${c.channel}`,
+      title: c.subject || input.t(c.direction === 'outbound' ? 'contactTimeline.reachedOut' : 'contactTimeline.heardFrom', {
+        channel: Object.hasOwn(CHANNEL_LABEL_KEY, c.channel) ? input.t(CHANNEL_LABEL_KEY[c.channel]) : c.channel,
+      }),
       detail: c.summary,
       amount: null,
     });
@@ -96,7 +100,7 @@ export function buildContactTimeline(input: {
         id: `bday-${now.getUTCFullYear()}`,
         kind: 'birthday',
         date: ymd(bd),
-        title: 'Birthday 🎂',
+        title: `${input.t('family.birthday')} 🎂`,
         detail: null,
         amount: null,
       });
@@ -120,12 +124,12 @@ export function touchCadenceDays(entries: TimelineEntry[]): number | null {
 }
 
 /** Relationship health from the timeline: fresh / due / overdue vs. the cadence. */
-export function contactHealth(entries: TimelineEntry[], name: string, now: Date = new Date()): ContactHealth {
+export function contactHealth(entries: TimelineEntry[], name: string, t: TimelineTranslator, now: Date = new Date()): ContactHealth {
   const touches = entries.filter((e) => e.kind !== 'birthday');
   if (touches.length === 0) {
     return {
       lastTouch: null, daysSince: null, cadenceDays: null, status: 'no_history',
-      suggestion: `No history with ${name} yet — log a visit or call to start the timeline.`,
+      suggestion: t('contactTimeline.suggestionNoHistory', { name }),
     };
   }
 
@@ -143,19 +147,27 @@ export function contactHealth(entries: TimelineEntry[], name: string, now: Date 
 
   const suggestion =
     status === 'fresh'
-      ? `You're in good touch with ${name} — last contact ${daysSince === 0 ? 'today' : `${daysSince}d ago`}.`
+      ? t(daysSince === 0 ? 'contactTimeline.suggestionFreshToday' : 'contactTimeline.suggestionFreshDays', { name, days: daysSince })
       : status === 'due'
-        ? `It's been ${daysSince} days — about time for a call or visit with ${name}.`
-        : `It's been ${daysSince} days since you connected with ${name} — well past your usual rhythm. A quick call goes a long way.`;
+        ? t('contactTimeline.suggestionDue', { name, days: daysSince })
+        : t('contactTimeline.suggestionOverdue', { name, days: daysSince });
 
   return { lastTouch, daysSince, cadenceDays, status, suggestion };
 }
 
-export const INTERACTION_LABEL: Record<InteractionKind, string> = {
-  visit: 'Visit',
-  call: 'Call',
-  message: 'Message',
-  gift: 'Gift',
-  favor: 'Favor',
-  note: 'Note',
+export const INTERACTION_LABEL_KEY: Record<InteractionKind, string> = {
+  visit: 'contactTimeline.visit',
+  call: 'contacts.call',
+  message: 'contact.message',
+  gift: 'relationship.gift',
+  favor: 'contactTimeline.favor',
+  note: 'search.kindNote',
+};
+
+const CHANNEL_LABEL_KEY: Record<string, string> = {
+  call: 'contacts.call',
+  text: 'contact.message',
+  sms: 'contact.message',
+  email: 'contacts.email',
+  school: 'school.school',
 };

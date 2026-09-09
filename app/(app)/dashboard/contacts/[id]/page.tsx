@@ -32,6 +32,7 @@ async function ReadFailure() {
  * relationship-health read (last touch vs. this relationship's natural cadence).
  */
 export default async function ContactTimelinePage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslations();
   const { id } = await params;
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -80,6 +81,7 @@ export default async function ContactTimelinePage({ params }: { params: Promise<
   }
 
   const timeline = buildContactTimeline({
+    t,
     interactions: interactions.map((i): LoggedInteraction => ({
       id: i.id, kind: i.kind as LoggedInteraction['kind'], occurred_on: i.occurred_on,
       title: i.title, note: i.note, amount: i.amount,
@@ -88,7 +90,7 @@ export default async function ContactTimelinePage({ params }: { params: Promise<
     birthdayMonth: contact.birthday_month,
     birthdayDay: contact.birthday_day,
   });
-  const health = contactHealth(timeline, contact.name);
+  const health = contactHealth(timeline, contact.name, t);
 
   return (
     <ContactTimelineModule

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -99,6 +99,7 @@ export async function draftReconnectMessageAction(
   } catch { /* table not present in this env */ }
 
   const timeline = buildContactTimeline({
+    t,
     interactions: (rawInts ?? []).map((i): LoggedInteraction => ({
       id: i.id, kind: i.kind as LoggedInteraction['kind'], occurred_on: i.occurred_on,
       title: i.title, note: i.note, amount: i.amount,
@@ -107,20 +108,22 @@ export async function draftReconnectMessageAction(
     birthdayMonth: contact.birthday_month,
     birthdayDay: contact.birthday_day,
   });
-  const health = contactHealth(timeline, contact.name);
+  const health = contactHealth(timeline, contact.name, t);
 
   const historyLines = timeline.slice(0, 8)
     .map((e) => `- ${e.date}: ${e.title}${e.detail ? ` (${e.detail})` : ''}`)
     .join('\n') || '- (no logged history yet)';
 
   const toneWord = tone === 'brief' ? 'short and low-key' : tone === 'playful' ? 'light and playful' : 'warm and genuine';
+  const { locale } = await getLocaleContext();
   const system =
     'You help a busy parent write a ready-to-send message to reconnect with someone in their life ' +
     '(family, friend, coach, caregiver). Ground the message ONLY in the provided history — never invent ' +
     'shared events, names, dates, plans, or feelings that aren’t there. If you need a detail the notes ' +
     'don’t give, use one brief bracketed placeholder like [day that works]. Write it from the family to ' +
     'the contact, first person. Keep it under 60 words, natural (like a real text), no subject line, no ' +
-    'sign-off block — just the message. Return ONLY the message text.';
+    'sign-off block — just the message. Return ONLY the message text. ' +
+    `Write the message in the selected locale: ${locale.code}.`;
   const user =
     `Contact: ${contact.name}${contact.relationship ? ` (${contact.relationship})` : ''}\n` +
     `Time since last contact: ${health.daysSince == null ? 'no logged history' : `${health.daysSince} days`}\n` +
@@ -133,7 +136,7 @@ export async function draftReconnectMessageAction(
     // with is not something the request ledger needs to carry.
     const message = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: 'contacts.reconnect', text: 'Draft a reconnect message' },
+      { feature: 'contacts.reconnect', text: t('contactTimeline.draftRequestTitle') },
       async (obs) => {
         const provider = await resolveProvider();
         const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 220 });
