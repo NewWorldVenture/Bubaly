@@ -204,6 +204,18 @@ describe.each(LOCALES)('Contact timeline in %s', (locale) => {
     expect(request.messages[0].content).toContain('Desired tone: light and playful');
     expect(request.messages[0].content).toContain('Saved title (Saved detail)');
   });
+  it('retries a failed history read with the selected tone and replaces the error after success', async () => {
+    h.draft.mockResolvedValueOnce({ ok: false, error: t('contactTimeline.historyUnavailable') });
+    render(); click(t('contactTimeline.draftAMessageWithAi')); await Promise.all(h.work);
+    let html = render();
+    expect(html).toContain(escaped(t('contactTimeline.historyUnavailable')));
+    expect(html).toContain(escaped(t('states.tryAgain')));
+    click(t('states.tryAgain')); await Promise.all(h.work);
+    html = render();
+    expect(h.draft).toHaveBeenLastCalledWith('contact-1', 'warm');
+    expect(html).toContain('Original provider message');
+    expect(html).not.toContain(escaped(t('contactTimeline.historyUnavailable')));
+  });
 });
 
 it('uses UTC for calendar dates and leaves malformed saved dates and unknown channels readable', () => {

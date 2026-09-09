@@ -3579,6 +3579,7 @@
   "contactTimeline.favor": "Gunst",
   "contactTimeline.giftsOptional": "$ (cadeaus — optioneel)",
   "contactTimeline.heardFrom": "Contact ontvangen · {channel}",
+  "contactTimeline.historyUnavailable": "De geschiedenis van dit contact kon niet worden geladen. Probeer het opnieuw.",
   "contactTimeline.lastTouch": "laatste contact",
   "contactTimeline.logIt": "Vastleggen",
   "contactTimeline.logTouch": "Contact vastleggen",

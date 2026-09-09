@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import type { Tables } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -70,12 +71,22 @@ export async function draftReconnectMessageAction(
   const t = await getTranslations();
   if (!contactId) return { ok: false, error: t('actions.invalidContact') };
   const ctx = await requireUserContext();
-  const supabase = await createServer();
   const familyId = ctx.active.familyId;
-
-  const { data: contact } = await supabase
-    .from('family_contacts').select('*')
-    .eq('id', contactId).eq('family_id', familyId).maybeSingle();
+  const historyFailure = (source: 'contact' | 'interactions' | 'communications'): ReconnectResult => {
+    // Report the failed boundary without copying private history or provider details.
+    console.error('[contacts-reconnect] required read failed', { source });
+    return { ok: false, error: t('contactTimeline.historyUnavailable') };
+  };
+  let supabase: Awaited<ReturnType<typeof createServer>>;
+  let contact: Tables<'family_contacts'> | null;
+  try {
+    supabase = await createServer();
+    const { data, error } = await supabase
+      .from('family_contacts').select('*')
+      .eq('id', contactId).eq('family_id', familyId).maybeSingle();
+    if (error) return historyFailure('contact');
+    contact = data;
+  } catch { return historyFailure('contact'); }
   if (!contact) return { ok: false, error: t('actions.contactNotFound') };
 
   if (!(await isAIConfigured())) {
@@ -83,24 +94,30 @@ export async function draftReconnectMessageAction(
   }
 
   // Ground strictly in logged history + linked communications + birthday.
-  const { data: rawInts } = await supabase
-    .from('contact_interactions').select('*')
-    .eq('contact_id', contactId).eq('family_id', familyId)
-    .order('occurred_on', { ascending: false }).limit(12);
-
-  let comms: CommunicationLike[] = [];
+  let rawInts: Tables<'contact_interactions'>[];
+  let comms: CommunicationLike[];
+  let historySource: 'interactions' | 'communications' = 'interactions';
   try {
-    const { data } = await supabase
+    const interactions = await supabase
+      .from('contact_interactions').select('*')
+      .eq('contact_id', contactId).eq('family_id', familyId)
+      .order('occurred_on', { ascending: false }).limit(12);
+    if (interactions.error || !Array.isArray(interactions.data)) return historyFailure('interactions');
+    rawInts = interactions.data;
+
+    historySource = 'communications';
+    const { data, error } = await supabase
       .from('family_communications')
       .select('id, channel, direction, subject, summary, received_at')
       .eq('contact_id', contactId).eq('family_id', familyId)
       .order('received_at', { ascending: false }).limit(8);
-    comms = (data ?? []) as CommunicationLike[];
-  } catch { /* table not present in this env */ }
+    if (error || !Array.isArray(data)) return historyFailure('communications');
+    comms = data as CommunicationLike[];
+  } catch { return historyFailure(historySource); }
 
   const timeline = buildContactTimeline({
     t,
-    interactions: (rawInts ?? []).map((i): LoggedInteraction => ({
+    interactions: rawInts.map((i): LoggedInteraction => ({
       id: i.id, kind: i.kind as LoggedInteraction['kind'], occurred_on: i.occurred_on,
       title: i.title, note: i.note, amount: i.amount,
     })),

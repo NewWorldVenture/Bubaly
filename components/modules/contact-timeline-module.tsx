@@ -5,6 +5,7 @@
 // the merged timeline (logged interactions · inbox communications · birthdays).
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Phone, MessageSquare, Gift, HandHeart, StickyNote, Users,
   Cake, Mail, HeartPulse, Plus, Loader2, Trash2, X, Sparkles, Copy, Check as CheckIcon, RefreshCw,
@@ -17,6 +18,7 @@ import {
 } from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ErrorState } from '@/components/ui/states';
 
 type Tone = 'warm' | 'brief' | 'playful';
 const TONES: { key: Tone; labelKey: string }[] = [
@@ -36,6 +38,12 @@ const HEALTH_STYLE: Record<ContactHealth['status'], { chip: string; labelKey: st
 };
 
 const KIND_OPTIONS: InteractionKind[] = ['visit', 'call', 'message', 'gift', 'favor', 'note'];
+
+export function ContactTimelineReadError() {
+  const t = useTranslations();
+  const router = useRouter();
+  return <ErrorState message={t('contactTimeline.historyUnavailable')} onRetry={() => router.refresh()} />;
+}
 
 /** Stored calendar dates have no time zone; format them without shifting days. */
 function displayDate(value: string, locale: string): string {
@@ -261,7 +269,13 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
           </div>
 
           {error ? (
-            <p className="mt-2 text-xs text-rose-300">{error}</p>
+            <div className="mt-2">
+              <p className="text-xs text-rose-300" role="alert">{error}</p>
+              <button onClick={() => draft(tone)} disabled={pending}
+                className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
+                {tr('states.tryAgain')}
+              </button>
+            </div>
           ) : pending && !message ? (
             <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {tr('contactTimeline.writing')}</p>
           ) : message ? (

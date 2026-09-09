@@ -3579,6 +3579,7 @@
   "contactTimeline.favor": "Favor",
   "contactTimeline.giftsOptional": "$ (regalos: opcional)",
   "contactTimeline.heardFrom": "Contacto recibido · {channel}",
+  "contactTimeline.historyUnavailable": "No se ha podido cargar el historial de este contacto. Inténtalo de nuevo.",
   "contactTimeline.lastTouch": "último contacto",
   "contactTimeline.logIt": "Registrar",
   "contactTimeline.logTouch": "Registrar contacto",

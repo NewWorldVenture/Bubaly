@@ -3579,6 +3579,7 @@
   "contactTimeline.favor": "Gefallen",
   "contactTimeline.giftsOptional": "$ (Geschenke – optional)",
   "contactTimeline.heardFrom": "Nachricht erhalten · {channel}",
+  "contactTimeline.historyUnavailable": "Der Verlauf dieses Kontakts konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
   "contactTimeline.lastTouch": "letzter Kontakt",
   "contactTimeline.logIt": "Erfassen",
   "contactTimeline.logTouch": "Kontakt festhalten",
