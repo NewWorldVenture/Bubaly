@@ -104,7 +104,7 @@ export default async function AIPage() {
           </div>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted">
-            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-brand-text" /> Family-scoped &amp; private</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-brand-text" />{' '}{t('ai.familyScopedPrivate')}</span>
             <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-brand-text" />{' '}{t('ai.takesRealAction')}</span>
           </div>
         </Section>

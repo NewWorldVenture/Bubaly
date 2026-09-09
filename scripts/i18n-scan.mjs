@@ -40,6 +40,24 @@ export const GATED_SURFACES = {
   // The two pure catalogs the public family-display page renders. Copy parked
   // in a data structure under lib/ is the blind spot this gate exists for.
   'marketing-display-catalogs': ['lib/marketing/certified-devices.ts', 'lib/marketing/display-compare.ts'],
+  // The generated marketing pages — /questions, /guides, /compare, /alternatives,
+  // /audiences, /resources, /glossary, /p. They live under lib/ because they are
+  // one renderer over a database table, so neither marketing surface above
+  // reached them, and they shipped their CTA, their FAQ heading and their
+  // breadcrumb chip in English on every locale.
+  'marketing-public-pages': ['lib/marketing/public-pages.tsx'],
+  // Pure helpers under lib/ whose strings the PUBLIC site renders: the consent
+  // banner every visitor meets first, the /lp call to action, the progressive
+  // profile nudge, the trust-center status pills and the footer's social row.
+  // They are imported at build time, long before a request has a locale, so
+  // each one holds catalogue KEYS and its component resolves them.
+  'marketing-lib-copy': [
+    'lib/marketing/consent-ui.ts',
+    'lib/marketing/landing.ts',
+    'lib/marketing/progressive-profile.ts',
+    'lib/marketing/trust-ledger.ts',
+    'lib/marketing/social-links.ts',
+  ],
 };
 
 // NOT gated: `everything` — ['app', 'components'].
@@ -88,13 +106,28 @@ const NOT_COPY = [
   /^\//,                        // paths
   /^[a-z0-9-]+$/,               // slugs, ids, css tokens
   /^[A-Z0-9_]+$/,               // SCREAMING enums
-  /^\d/,                        // starts with a digit
+  // A string that OPENS on a digit is usually a measurement, a time or an id —
+  // `8:00 AM`, `1024px`, `5 min` — and the flat rule `/^\d/` excluded all of
+  // them. It excluded copy too: the numbered step `2. AI understands it`, its
+  // neighbour `3. It's organized for your family` and the assistant's reply
+  // `2 chores due, and 1 appointment.` all sat on the gated marketing surface
+  // in English with the gate reporting the file clean. What separates them is
+  // what FOLLOWS the number — a lowercase word of four or more letters is
+  // prose; `AM`, `PM`, `px` and `min` are units.
+  /^\d(?![\s\S]*[a-z]{4})/,
   /^[^a-zA-Z]*$/,               // no letters at all
   /^&[a-z]+;$/i,                // bare entities
   // Source code that happens to sit between a `>` and a `<`. Widening the text
-  // pattern to span newlines pulled in fragments like `); return locked ? (`;
-  // prose does not contain these, so excluding them costs no real findings.
-  /[;{}]/,
+  // pattern to span newlines pulled in fragments like `); return locked ? (`.
+  //
+  // Braces stay excluded — a `{` in a string is a template or an object, never
+  // prose. The SEMICOLON does not: it is ordinary punctuation, and excluding it
+  // hid a whole English paragraph on /faq ("Parents manage everything; adults
+  // manage shared household data; teens manage their own items…") from a gate
+  // that reported the file clean. The fragment the comment cites is caught by
+  // the two rules below it — `=>` and the statement keywords — which is what
+  // was really doing the work here.
+  /[{}]/,
   /=>/,
   /\b(?:return|const|let|var|function|import|export|typeof|null|undefined)\b/,
   // Bracket punctuation at either end means we sliced through an expression,
@@ -181,6 +214,15 @@ const NOT_COPY_PROPS = new Set([
   'align', 'size', 'position', 'target', 'rel', 'as', 'bucket', 'scope', 'from', 'to',
   'env', 'model', 'sort', 'order', 'dir', 'ext', 'mime', 'tag', 'group', 'domain',
   'host', 'port', 'prefix', 'suffix', 'sep', 'delimiter',
+  // Inline-style properties. A React `style={{ … }}` holds CSS, and a CSS value
+  // reads as copy once a leading digit stops disqualifying it: `620% auto` is a
+  // background size, not a sentence, and `auto` is the four lowercase letters
+  // that make it look like one.
+  'backgroundSize', 'backgroundPosition', 'backgroundImage', 'background',
+  'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
+  'top', 'left', 'right', 'bottom', 'inset', 'gap', 'flex', 'aspectRatio',
+  'padding', 'margin', 'fontSize', 'lineHeight', 'borderRadius', 'boxShadow',
+  'transformOrigin', 'objectPosition', 'gridTemplateColumns', 'gridTemplateRows',
   // SVG and image geometry. `d` holds a path — "M18.244 2.25h3.308l…" reads as
   // two words of prose to any rule that does not know the attribute — and
   // `sizes` holds a media-query list, "(min-width: 1024px) 800px, 100vw".
@@ -233,13 +275,66 @@ const DATA_PATTERN = /(?:^|[\s,{[])([A-Za-z_$][\w$]*)\s*:\s*'([^'\\\n]{3,})'/gm;
  * body containing an apostrophe or a nested list still reads to its real end.
  */
 const ARRAY_PROP_PATTERN = /\b([A-Za-z_$][\w$]*)\s*:\s*\[/g;
+/**
+ * The same copy, bound to a NAME instead of a property:
+ *
+ *   const workflows = [
+ *     ['Morning ready', 'Schedules, reminders, and handoffs in one calm view.'],
+ *   ];
+ *
+ * This is the fourth blind spot, and it hid a card strip rendered on
+ * /how-it-works in English under a translated heading — on the gated
+ * marketing surface, with the gate reporting clean. `prop: [` and `const x = [`
+ * are the same mistake to a reader; only the binding differs, and the scanner
+ * was matching the binding rather than the copy.
+ *
+ * The name is captured so NOT_COPY_PROPS still exempts the identifier lists
+ * (route tables, class-name maps) that legitimately hold short lowercase
+ * tokens.
+ */
+const ARRAY_VAR_PATTERN = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;]+?)?=\s*\[/g;
+/**
+ * The same copy again, bound to NOTHING — an array literal written straight
+ * into the markup and mapped on the spot:
+ *
+ *   {['Pack soccer gear', 'Bring snacks', 'Team jersey'].map(item => …)}
+ *
+ * Neither pattern above sees it: there is no property and no `const`. It is
+ * matched by the shape that gives it away, an open bracket whose first element
+ * is a string. Usually it has no name to look up and the VALUE rules do all the
+ * work, which is what they are for; the one name worth capturing is the JSX
+ * attribute it is sometimes the value of — `className={['group flex …'].join(' ')}`
+ * is a class list, and `className` is already in NOT_COPY_PROPS. The three
+ * patterns overlap on `prop: ['…']` and `const x = ['…']`, so findings are
+ * deduplicated by offset below.
+ */
+const ARRAY_INLINE_PATTERN = /(?:\b([A-Za-z_$][\w$]*)\s*=\s*\{\s*)?\[\s*'/g;
 const STRING_IN_ARRAY = /'((?:[^'\\\n]|\\.){3,})'/g;
+/**
+ * `…, tier: '` — the string is the VALUE OF A PROPERTY, so DATA_PATTERN owns it
+ * and NOT_COPY_PROPS decides whether it is copy. Reporting it here as well
+ * would report it twice AND lose the property name that makes the decision:
+ * `const SWITCH_HIGHLIGHTS: Highlight[] = [{ …, tier: 'Family Basic' }]` is a
+ * plan IDENTIFIER typed as a string-literal union — a catalogue key there does
+ * not compile, and its visible label is a separate HI_TIER_LABEL lookup. A
+ * ternary's `: 'b'` is not matched: the character before that colon is a quote,
+ * not the end of an identifier.
+ */
+const ARRAY_STRING_IS_PROP_VALUE = /[A-Za-z_$][\w$]*\s*:\s*$/;
 
 function arrayFindings(source) {
   const out = [];
-  for (const m of source.matchAll(ARRAY_PROP_PATTERN)) {
+  const seen = new Set();
+  const matches = [
+    ...source.matchAll(ARRAY_PROP_PATTERN),
+    ...source.matchAll(ARRAY_VAR_PATTERN),
+    ...source.matchAll(ARRAY_INLINE_PATTERN),
+  ];
+  for (const m of matches) {
     if (NOT_COPY_PROPS.has(m[1])) continue;
-    const open = (m.index ?? 0) + m[0].length - 1;
+    // The bracket, wherever it sits in the match: last for `prop: [` and
+    // `const x = [`, one before the quote for the inline `['…'`.
+    const open = (m.index ?? 0) + m[0].lastIndexOf('[');
     let depth = 0;
     let end = open;
     for (let i = open; i < source.length; i += 1) {
@@ -248,7 +343,13 @@ function arrayFindings(source) {
       else if (c === ']') { depth -= 1; if (depth === 0) { end = i; break; } }
     }
     const span = source.slice(open, end);
-    for (const s of span.matchAll(STRING_IN_ARRAY)) out.push([s[1], open + (s.index ?? 0)]);
+    for (const s of span.matchAll(STRING_IN_ARRAY)) {
+      const at = open + (s.index ?? 0);
+      if (seen.has(at)) continue;
+      seen.add(at);
+      if (ARRAY_STRING_IS_PROP_VALUE.test(span.slice(0, s.index ?? 0))) continue;
+      out.push([s[1], at]);
+    }
   }
   return out;
 }
