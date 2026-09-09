@@ -30,6 +30,7 @@ import {
 } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { visibleReminderTags, withReminderProvenance } from '@/lib/reminders/provenance';
 
 type Reminder = Tables<'family_reminders'>;
 
@@ -140,7 +141,7 @@ export function RemindersModule() {
   // Every tag in use, for the "filter by tag" chips (iOS taps a tag to filter).
   const allTags = useMemo(() => {
     const seen = new Set<string>();
-    for (const r of reminders) for (const t of r.tags ?? []) seen.add(t);
+    for (const r of reminders) for (const t of visibleReminderTags(r.tags)) seen.add(t);
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [reminders]);
 
@@ -510,7 +511,7 @@ export function RemindersModule() {
                         <Link2 className="h-3.5 w-3.5" />{tr('reminders.link')}
                       </a>
                     )}
-                    {(reminder.tags ?? []).map((t) => (
+                    {visibleReminderTags(reminder.tags).map((t) => (
                       <button key={t} type="button" onClick={() => setFilterTag((cur) => cur === t ? null : t)}
                         className={cn('flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] transition hover:bg-brand/15',
                           filterTag === t ? 'bg-brand/15 text-brand-text' : 'bg-elevated')}>
@@ -608,7 +609,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   const [flagged, setFlagged] = useState(reminder?.flagged ?? false);
   const [listId, setListId] = useState(reminder?.list_id ?? '');
   const [earlyMinutes, setEarlyMinutes] = useState<string>(reminder?.early_reminder_minutes != null ? String(reminder.early_reminder_minutes) : '');
-  const [tags, setTags] = useState<string[]>(reminder?.tags ?? []);
+  const [tags, setTags] = useState<string[]>(visibleReminderTags(reminder?.tags));
   const [tagInput, setTagInput] = useState('');
   const [subtasks, setSubtasks] = useState<Subtask[]>(normalizeSubtasks(reminder?.subtasks));
   const [subtaskInput, setSubtaskInput] = useState('');
@@ -616,7 +617,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   const [uploading, setUploading] = useState(false);
 
   function commitTags() {
-    const merged = parseTags([formatTags(tags), tagInput].filter(Boolean).join(','));
+    const merged = visibleReminderTags(parseTags([formatTags(tags), tagInput].filter(Boolean).join(',')));
     setTags(merged); setTagInput('');
     return merged;
   }
@@ -672,7 +673,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       image_url: imageUrl || null,
       subtasks: subtasks as unknown as Tables<'family_reminders'>['subtasks'],
       list_id: listId || null,
-      tags: finalTags,
+      tags: withReminderProvenance(reminder?.tags, finalTags),
     };
     // ── Validation ──
     if (!payload.title) return toastError(tr('remindersModule.titleIsRequired'));
