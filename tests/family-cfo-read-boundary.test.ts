@@ -121,3 +121,53 @@ describe('family-cfo outbound links resolve to real routes', () => {
     expect(page).toContain("project: { labelKey: 'familyCfo.homeProject', icon: Hammer, href: '/dashboard/projects' }");
   });
 });
+
+// A counter next to the word "bills" has to count BILLS. The forecast expands a
+// monthly bill into three payments inside a 12-week horizon, so reading the
+// occurrence counters here told a household with three bills that it had five,
+// and a household with one autopay rent that three bills were covered.
+describe('family-cfo coverage copy counts bills, not payments', () => {
+  const timelineModule = fs.readFileSync('components/modules/money-timeline-module.tsx', 'utf8');
+
+  it('the covered tile and the coverage sentence read the distinct-bill counters', () => {
+    expect(page).toContain("tr('familyCfo.nOfMBills', { n: coveredBills, m: coverage.totalBills })");
+    expect(page).toContain('const coveredBills = coverage.coveredBills + coverage.paidBills;');
+    expect(page).toContain("tr('familyCfo.everyBillInTheNext12', { n: coverage.totalBills })");
+    expect(page).toContain('open: coverage.openBills');
+    // No "bills" string on this page may be built from an occurrence counter.
+    expect(page).not.toContain('coverage.coveredCount');
+    expect(page).not.toContain('coverage.paidCount');
+    expect(page).not.toContain('coverage.openCount');
+  });
+
+  it('the all-clear fires on open BILLS, so a paid recurring bill cannot trigger it', () => {
+    expect(page).toContain('coverage.openBills === 0');
+    expectSays(page, 'familyCfo.everyBillInTheNext12', 'Every one of the {n} bills in the next 12 weeks is covered — autopay or already paid. Nothing to do by hand.');
+  });
+
+  it('the money-timeline module counts autopay bills, not autopay payments', () => {
+    expect(timelineModule).toContain("t('moneyTimelineModule.nBillsCoveredByAutopay', { n: timeline.coverage.coveredBills })");
+    expect(timelineModule).not.toContain('coverage.coveredCount');
+    expectSays(timelineModule, 'moneyTimelineModule.nBillsCoveredByAutopay', '{n} covered by autopay');
+  });
+});
+
+// A commitment that lands outside the 12-week horizon was never weighed by the
+// forecast. Answering it with the green "Yes" chip is an affirmative money
+// verdict with no evidence behind it, so it gets a neutral verdict of its own.
+describe('affordability answers only what the forecast weighed', () => {
+  const scenario = fs.readFileSync('components/finance/affordability-scenario.tsx', 'utf8');
+
+  it('maps the beyond-horizon case to its own neutral chip, never verdictOk', () => {
+    expect(scenario).toContain("not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed'");
+    expectSays(scenario, 'affordabilityScenario.verdictNotAssessed', 'Not in this horizon');
+    expect(scenario).toContain("result.verdict === 'not_assessed'");
+    // The chip is picked from the verdict alone, so 'ok' can only come from a
+    // scenario the forecast actually carried.
+    expect(scenario).toContain('const v = result ? VERDICT[result.verdict] : null;');
+  });
+
+  it('says the forecast did not reach that date rather than implying a check happened', () => {
+    expectSays(scenario, 'affordabilityScenario.nothingInTheNext12Weeks', 'That date is beyond the 12-week forecast, so this has not been checked against it.');
+  });
+});

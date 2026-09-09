@@ -194,7 +194,8 @@ export function MealsModule() {
    * allergy/preference/pantry swaps both live in the groceries service. This
    * only reports what it did: how many lines were written, how many were
    * already there, how many the cupboard covered, and every swap with its
-   * reason. Each of those is a fact about rows the service just wrote.
+   * reason. Each of those is a fact about what the service just did — which
+   * for a pantry swap is a line it did NOT write.
    */
   async function addWeekToGroceryList() {
     if (addingPlan) return;
@@ -480,9 +481,12 @@ export function MealsModule() {
               <Link href="/dashboard/grocery" className="ml-auto text-xs text-brand-text hover:underline">{tr('meals.openFullList')}</Link>
             </div>
 
-            {/* What the last add actually did. Every line here describes rows the
-                groceries service wrote or skipped a moment ago — the swaps are
-                the names now ON the list, not a suggestion about them. */}
+            {/* What the last add actually did. Every line here describes rows
+                the groceries service wrote, skipped or deliberately left
+                unwritten a moment ago. An allergy or dislike swap names what
+                went ON the list in place of the plan's ingredient; a pantry
+                swap is the opposite — nothing was written, because the family
+                already owns the thing, and the sentence says so. */}
             {lastAdd && (
               <div className="mb-3 rounded-2xl border border-border bg-surface/30 p-3">
                 <p className="text-xs font-semibold">{tr('mealsModule.whatChangedOnYourList')}</p>

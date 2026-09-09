@@ -94,6 +94,47 @@ describe('allergies', () => {
     expect(result.substitutions).toEqual([]);
   });
 
+  it('a nut or fruit butter is not dairy, whatever the word at the end says', () => {
+    // `butter` is a whole-word match, so a bare substring rule rewrote every
+    // spread whose name merely ends in it: "peanut olive oil" went on the list
+    // of a family that is only allergic to dairy, with a reason that said
+    // peanut butter contains butter.
+    const result = applySubstitutions(
+      items('peanut butter', 'apple butter', 'cocoa butter', 'butter lettuce'),
+      { allergies: ['dairy'] },
+    );
+    expect(names(result)).toEqual(['peanut butter', 'apple butter', 'cocoa butter', 'butter lettuce']);
+    expect(result.substitutions).toEqual([]);
+  });
+
+  it('still swaps the butter that IS dairy', () => {
+    const result = applySubstitutions(items('butter', 'unsalted butter'), { allergies: ['dairy'] });
+    expect(names(result)).toEqual(['olive oil', 'unsalted olive oil']);
+  });
+
+  it('a nut butter survives a household allergic to both peanuts and dairy', () => {
+    // The safe spread is a SEED butter, and reading "butter" in it as dairy
+    // dropped the line: the family got no spread at all and a message saying
+    // there was no safe swap.
+    const result = applySubstitutions(items('peanut butter'), { allergies: ['peanut', 'dairy'] });
+    expect(names(result)).toEqual(['sunflower seed butter']);
+    expect(result.substitutions[0]).toMatchObject({ to: 'sunflower seed butter', reasonKey: 'allergySwap' });
+  });
+
+  it('does not keep the allergen in the modifier it left standing', () => {
+    // Rewriting only the matched span left "whole wheat gluten-free bread" —
+    // wheat bread that is also gluten-free, on a coeliac household's list.
+    const result = applySubstitutions(
+      items('whole wheat bread', 'wheat pasta', 'whole wheat flour'),
+      { allergies: ['gluten'] },
+    );
+    expect(names(result)).toEqual(['gluten-free bread', 'gluten-free pasta', 'gluten-free flour']);
+    for (const swap of result.substitutions) {
+      expect(swap.to).not.toMatch(/wheat/i);
+      expect(swap.reasonKey).toBe('allergySwap');
+    }
+  });
+
   it('gluten reaches pasta, bread and flour, each with a reason', () => {
     const result = applySubstitutions(items('spaghetti', 'bread', 'all-purpose flour'), { allergies: ['gluten'] });
     expect(names(result)).toEqual(['gluten-free spaghetti', 'gluten-free bread', 'gluten-free flour']);

@@ -277,6 +277,10 @@ still filed as paperwork; the badge says "Filed with Bubaly", not "Handled"),
 M3 (the graph projects events, assets, obligations and preferences — and a
 truncated read no longer authorises a prune).
 
+**Landed in #428:** the last fix M21's review asked for — a chore signed off
+from a notification reports the status the row recorded (`submitted` for an
+ordinary chore, which still waits for a parent), not "marked done".
+
 **Still open:** the `request_id` link the inbox cannot claim without the
 migration in §6.
 
@@ -296,6 +300,11 @@ call; `compareQuotes` ranks real `project_quotes` with reasons).
 retailer hand-off, Bought → pantry), M33 (household search across eleven
 sources with evidence; the command bar reserves room for record hits).
 
+**Landed after #428 (batch 2b):** M10's review fixes — a nut butter is not
+dairy, a proposed swap never keeps the allergen it was meant to remove, and a
+bought line is put away and cleared together so a trip that fails half way
+leaves the pantry and the list agreeing.
+
 **Still open:** M9 (school + sports front desk).
 
 ### Phase 3 — Deepen
@@ -313,8 +322,20 @@ surface), M22 (one view of what Bubaly believes, with a reset), M25/M34
 lays out its tasks and never deletes a move it only found), M29/M30 (contacts
 import with a review step; onboarding answers remembered).
 
-**Still open:** M12 (home twin history), the dd9-13 inventory/moving CRUD
-conversion (its review returned `approved=false`; being re-reviewed).
+**Landed in #428:** M13/M14's re-reviewed fixes (the move burn-down counts
+the boxes it actually read — it used to say "0/0 boxes unpacked" to every
+family — and a move the playbook only *found* keeps its own date, which the
+toast now names), M25/M34's fixes (the outcome card says what the server's own
+outcome was — working, a question, or an answer — never a blanket "working on
+it"; a finished playbook no longer suppresses next year's transition), and a
+migrate import that stops part way says what it saved, keyed in seven locales.
+
+**Landed after #428 (batch 2b):** M14's CFO fixes — distinct bills are
+counted, a recurring bill paid this month stays in later months, and the
+affordability scenario refuses to answer for a month the forecast never
+weighed.
+
+**Still open:** M12 (home twin history).
 
 ### Phase 4 — Expand
 Front-desk identity, marketplace, partner API, network effects, hardware.
@@ -327,6 +348,14 @@ Privacy Center that streams a role-scoped export).
 page gated on publication), M39 (the referral flywheel: signup capture,
 Stripe-confirmed reward, prompts), X3/X5/X10/X12 (error-aware metric tiles).
 
+**Landed in #428:** the metrics core's reviewer fixes (S-15). Four numbers
+the admin report presented as measured: the handled count now reads both run
+state columns (a manager-approved run stamps only the legacy `status`),
+conversion is no longer structurally 0% (it was dated from a row this repo
+writes once at family creation), the referral coefficient counts households
+only (accepted invites are members, reported beside it), and "terminal" has
+one definition, without `blocked`.
+
 **Still open:** M27, M32, M37 — each needs a migration in §6.
 
 ### Public site
@@ -337,11 +366,20 @@ reorganised around outcomes. Every illustrative element is badged; aggregate
 lines hide rather than render a zero; the social-proof band returns null when
 nothing is published.
 
-**Still open:** W3 and W4 are BUILT but held back: their branches carry 90 and
-217 English literals on the gated `marketing-pages` surface, and merging either
-turns `i18n-gate` red. They are being re-applied with every string keyed (see
-§7). W4 remains the highest-value single fix on the public site — it is the one
-claiming what it cannot prove. W6, W7 remain.
+**Landed after #428 (batch 2b):** W4 — the Trust Center says only what a row
+can prove (no bank-level security, no SOC 2, no uptime numbers; the forbidden
+vocabulary is pinned by `tests/marketing-claims-contract.test.ts`), with the
+same overclaims removed from /ai, /features, /mobile and /faq, and every one of
+its 217 strings keyed in seven locales. W3 — the pricing page says what the
+price buys: a per-day framing, the outcomes each tier hands back, and a value
+block whose three number sources (real aggregate, badged illustrative sample,
+published case studies) stay visibly apart; 51 new keys in seven locales.
+
+**Still open:** W6, W7. And a translation pass: the six non-English catalogues
+are missing 304 keys en-US has (mostly `pricingContent.*`, the older
+`security.*`, `visualMocks.*`, `ai.*`, `aiShowcase.*`) — those strings fall
+back to English for every other locale. That is a translation job, not code,
+and it belongs in its own PR.
 
 ### What the adversarial review caught in #421
 
@@ -357,6 +395,17 @@ shipped:
   down, because that column is free text any member can write.
 - Merging `settleAll` exposed an orphaned promise in `lib/briefing/decisions.ts`
   (see the hazard note in §3).
+
+And what the reviews of #424's sections caught, landed in #428 and batch 2b:
+
+- `getMove` passed an **empty list** where `moveSummary` expects the boxes, so
+  "4 days in · 0/0 boxes unpacked" was invented for every family mid-move.
+- Conversion was **structurally 0%**: `subscriptions.created_at` is the
+  family's creation instant in this repo, always earlier than any activation.
+- The outcome card said "working on it" for requests the server had answered
+  inline or parked on a question — a claim of work with no run behind it.
+- One household inviting a spouse, two grandparents and a sitter read a viral
+  coefficient of **4.00** with zero new households behind it.
 
 ---
 
@@ -415,31 +464,41 @@ exactly which DDL is missing and what is therefore not claimed.
 
 ## 7. Where the remaining work physically is
 
-**Fourteen sections have landed on PR #424** and need no further work from
-anyone: M2/M20, M3, M10, M15, M16/M23, M17, M19, M22, M25/M34, M29/M30, M33,
-M38, M39, and the X3/X5/X10/X12 metric tiles. Do not re-land them; the audit
-in `docs/MARKET_DOMINATION_AUDIT.md` predates them and still says `partial`.
+**Landed and needing no further work from anyone:**
 
-**Three are in progress and claimed — do not start them:**
+- **PR #424** — fourteen sections: M2/M20, M3, M10, M15, M16/M23, M17, M19,
+  M22, M25/M34, M29/M30, M33, M38, M39, and the X3/X5/X10/X12 metric tiles.
+- **PR #428** — the review fixes those sections still lacked: dd9-13 (M13/M14),
+  323-13 (M21), de4-12 (S-15 metrics core), dd9-16 (M25/M34), and the migrate
+  import's part-way failure copy.
+- **The PR after #428 (batch 2b)** — S-19 (W4 Trust Center), S-20 (W3 pricing
+  value), the M10 meals-loop review fixes, and the M14 Family CFO review fixes.
 
-| Section | Where | State |
-|---|---|---|
-| S-19 · W4 Trust Center | branch `worktree-wf_9fc0af7c-543-3` | built; 217 literals being lifted into the seven catalogues |
-| S-20 · W3 pricing value | branch `worktree-wf_9fc0af7c-543-4` | built; 90 literals being lifted into the seven catalogues |
-| dd9-13 · M13/M14 CRUD | branch `worktree-wf_67303136-dd9-13` | review returned `approved=false`; being re-reviewed against its fix commits |
+Do not re-land any of them; the audit in `docs/MARKET_DOMINATION_AUDIT.md`
+predates them and still says `partial` for several.
 
-Those three live only in one working container. If you can reach them, merge
-before you rebuild; if you cannot, they are claimed anyway — pick a different
-section.
+**Superseded — do not merge, even though the branches still exist in the
+integrator's container:** `dd9-4`, `ba1-1`, `ba1-2`, `6f2-5`, `de4-11`,
+`6b2-3`, `543-1`, `68a-1`, `323-4`, `323-5`, `323-6`, `323-14`, `358-4`,
+`2e4-1`, `4b7-1` (≥97% of each branch's own delta is already on main through
+the reviewed sibling that landed), and `358-11` (a *parallel implementation* of
+S-14 whose three review fixes main already had or does not need — its one
+missing finding, the migrate copy, landed in #428).
 
-**Genuinely unclaimed** — build these from the queue's spec: M9, M12, W6, W7,
-and everything in §6 that waits on a migration.
+**Genuinely unclaimed — build these from the queue's spec:** S-06 · M9 (school
+and sports front desk), S-04 · M12 (home twin history), W6, W7, the 304-key
+translation pass named in §5, and everything in §6 that waits on a migration.
 
-**A lesson the integrator paid for, so you do not have to:** when a review
-returns fixes, they are usually on a *different* branch than the one first
-merged — the harness placed reviewing agents in fresh worktrees. Before
+**Two lessons the integrator paid for, so you do not have to.** First: when a
+review returns fixes, they are usually on a *different* branch than the one
+first merged — the harness placed reviewing agents in fresh worktrees. Before
 merging any section, check that the branch you are holding is the one carrying
-the review's fix commits, not the one the review was written against.
+the review's fix commits. Second: a branch that touches the same files as a
+landed section is not necessarily a fix stack on it. Measure how much of the
+branch's *own delta* (versus its merge-base) already lives on main before you
+merge: ≥97% means superseded; ~85% with a few hundred lines missing means a
+fix stack worth porting; ~10% on files main also rewrote means a parallel
+implementation, and merging it would land the section twice.
 
 ---
 

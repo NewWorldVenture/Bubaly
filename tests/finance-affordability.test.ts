@@ -66,9 +66,13 @@ describe('assessAffordability', () => {
     expect(r.maxAffordable).toBeCloseTo(266.67, 2);
   });
 
-  it('reports zero occurrences and ok when the commitment lands beyond the horizon', () => {
+  // A commitment the forecast never weighed must not come back as a yes. The
+  // verdict has its own value so the panel can render a neutral chip instead of
+  // the green "Yes" — an affirmative money answer with no evidence behind it.
+  it('does not answer ok when the commitment lands beyond the horizon', () => {
     const r = assessAffordability(base(), { label: 'Summer camp', amount: 2000, date: '2026-09-01' });
-    expect(r.verdict).toBe('ok');
+    expect(r.verdict).not.toBe('ok');
+    expect(r.verdict).toBe('not_assessed');
     expect(r.scenario.occurrences).toBe(0);
     expect(r.scenario.total).toBe(0);
     // The answer still says what was tried, so the panel never labels it with a
@@ -76,6 +80,12 @@ describe('assessAffordability', () => {
     expect(r.scenario.date).toBe('2026-09-01');
     expect(r.maxAffordable).toBeNull();
     expect(r.after).toEqual(r.before);
+  });
+
+  it('does not answer ok for a large commitment beyond the horizon either', () => {
+    const r = assessAffordability({ ...base(), startingBalance: 300, buffer: 200 }, { label: 'Boat', amount: 50000, date: '2026-09-01' });
+    expect(r.verdict).toBe('not_assessed');
+    expect(r.scenario.occurrences).toBe(0);
   });
 
   it('reports maxAffordable 0 when the forecast already dips under the buffer without it', () => {
