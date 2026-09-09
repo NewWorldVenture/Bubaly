@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
+import { runPagePath } from '@/lib/ai/chat-request';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 // ⚠️ RSC boundary rule (this WAS the kiosk's persistent crash): display-grid.tsx
@@ -17,6 +18,7 @@ import { AutoRefresh } from '@/components/display/auto-refresh';
 import { DEFAULT_TILES, resolveTiles, type Tile } from '@/lib/display/tiles';
 import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
 import type { DisplayData } from '@/components/display/display-grid';
+import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
@@ -31,7 +33,72 @@ function emptyDisplay(familyName: string, now: Date): DisplayData {
     members: [], events: [], upcoming: [], chores: [], meals: [],
     grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
     notes: [], featured: [], photos: [],
+    // `handled` is deliberately LEFT OUT here: this fallback is reached when the
+    // load failed, and an unread ledger must render the tile's error state, not
+    // a "0 things handled today" the screen cannot stand behind.
+
     calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays: [] },
+  };
+}
+
+/** How many finished runs the tile lists under its count. */
+const HANDLED_TILE_ITEMS = 3;
+
+/**
+ * "Bubaly handled today" — the count and the last three, from the ledger.
+ *
+ * COMPLETED runs only. `partially_completed` is a real and useful state, but
+ * this tile is a headline number on a kitchen wall with nobody standing at it,
+ * and "8 things handled" has to mean eight things that finished. The Handled
+ * ledger on Home is where a partial run is shown honestly as partial.
+ *
+ * Unlike every other read on this page, this one FAILS CLOSED: a count is a
+ * claim, and a claim behind a failed read is a lie the screen tells all day.
+ * The tile renders "Bubaly could not read what it finished · Retry" instead —
+ * never 0.
+ */
+async function loadHandledToday(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  start: Date,
+  end: Date,
+  untitledRun: string,
+): Promise<HandledToday> {
+  const [rowsRes, countRes] = await Promise.all([
+    settle(supabase.from('family_automation_runs')
+      .select('id, summary, completed_at')
+      .eq('family_id', familyId)
+      .eq('state', 'completed')
+      .gte('completed_at', start.toISOString())
+      .lt('completed_at', end.toISOString())
+      .order('completed_at', { ascending: false })
+      .limit(HANDLED_TILE_ITEMS)),
+    settle(supabase.from('family_automation_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId)
+      .eq('state', 'completed')
+      .gte('completed_at', start.toISOString())
+      .lt('completed_at', end.toISOString())),
+  ]);
+
+  const readError = rowsRes.error ?? countRes.error;
+  // A null count with no error is still a number nobody can stand behind
+  // (countOrNull's rule), so it fails closed exactly like an error does.
+  if (readError || typeof countRes.count !== 'number') {
+    console.error('[display] handled today read failed', readError);
+    return { status: 'error' };
+  }
+
+  const rows = (rowsRes.data ?? []) as { id: string; summary: string | null; completed_at: string | null }[];
+  return {
+    status: 'ok',
+    count: countRes.count,
+    items: rows.map((run) => ({
+      key: `run:${run.id}`,
+      title: run.summary?.trim() || untitledRun,
+      href: runPagePath(run.id),
+      at: run.completed_at ?? start.toISOString(),
+    })),
   };
 }
 
@@ -48,6 +115,7 @@ async function loadDisplay(
   familyId: string,
   familyName: string,
   now: Date,
+  untitledRun: string,
 ): Promise<LoadedDisplay> {
   const start = new Date(now); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);
@@ -105,6 +173,10 @@ async function loadDisplay(
     choreIds.length ? supabase.from('chores').select('id, title').in('id', choreIds) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
     mealIds.length ? supabase.from('meals').select('id, name').in('id', mealIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
+  // Started AFTER the batch above and awaited immediately, so no promise is in
+  // flight across an array literal where a throw could orphan it (§3).
+  const handled = await loadHandledToday(supabase, familyId, start, end, untitledRun);
+
   const choreTitle = new Map((choreRows ?? []).map((c) => [c.id, c.title]));
   const mealName = new Map((meals ?? []).map((m) => [m.id, m.name]));
 
@@ -146,6 +218,7 @@ async function loadDisplay(
       ...(featuredRecipe ?? []).map((r) => r.photo_url).filter((u): u is string => Boolean(u)),
     ].slice(0, 24),
     calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
+    handled,
   };
 
   // The stored layout is untrusted jsonb: a single malformed element (e.g. a
@@ -220,6 +293,7 @@ export default async function KitchenDisplayPage() {
     console.error('[display] context unavailable, rendering reconnect screen:', err);
     return <DisplayReconnect />;
   }
+  const t = await getTranslations();
   const familyId = ctx.active.familyId;
   const familyName = ctx.active.family.name;
   const now = new Date();
@@ -227,7 +301,7 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now);
+    loaded = await loadDisplay(supabase, familyId, familyName, now, t('displayHandled.untitledRun'));
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any
