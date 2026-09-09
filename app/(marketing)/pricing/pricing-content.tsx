@@ -278,7 +278,13 @@ function PlanCard({
               {fs.items.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm text-white/80">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                  <span>{item}</span>
+                  {/* Keys. www.bubaly.com/pricing has been printing
+                      "pricingContent.sharedFamilyCalendar" in every plan card,
+                      in every language, because this rendered `item` raw. The
+                      four platform names in FREE_FEATURES are not keys and pass
+                      through unchanged — `translate` returns an unknown key
+                      verbatim. */}
+                  <span>{tr(item)}</span>
                 </li>
               ))}
             </ul>
