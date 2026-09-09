@@ -16,6 +16,7 @@
 // family has, and would silently stop offering the policies it has earned.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { getTool } from '@/lib/ai/tools/registry';
 import {
   findPolicyCandidates, policyCandidateToDraft, toolNameFromApprovalPayload,
@@ -69,7 +70,7 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
       .eq('family_id', familyId).in('subject_kind', ['ai', 'everyone']).eq('enabled', true).limit(200),
     supabase.from('autopilot_suggestions')
       .select('id, dedupe_key, status, detail, confidence')
-      .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).limit(200),
+      .eq('family_id', familyId).eq('kind', POLICY_SUGGESTION_KIND).not('dedupe_key', 'like', 'archived:%').limit(200),
   ]);
 
   const failed = [approvalsResult, toolCallsResult, policiesResult, suggestionsResult].find((r) => r.error);
@@ -131,11 +132,8 @@ export async function runPolicyScan(
   // 1) An OPEN policy suggestion whose streak broke this scan is withdrawn.
   //    Resolved rows stay: a dismissed offer is not re-made, an accepted one
   //    is the record of a policy the family holds.
-  const stale = history.existingSuggestions.filter((s) => s.status === 'open' && !draftKeys.has(s.dedupe_key)).map((s) => s.id);
-  if (stale.length > 0) {
-    const { error } = await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
-    if (error) throw new Error('Autopilot could not clear stale policy suggestions');
-  }
+  const stale = history.existingSuggestions.filter((s) => s.status === 'open' && !draftKeys.has(s.dedupe_key));
+  const archived = await archiveStaleSuggestions(supabase, familyId, stale, now);
 
   let inserted = 0;
   let refreshed = 0;
@@ -176,5 +174,5 @@ export async function runPolicyScan(
     inserted++;
   }
 
-  return { candidates: drafts.length, inserted, refreshed, cleared: stale.length };
+  return { candidates: drafts.length, inserted, refreshed, cleared: archived };
 }

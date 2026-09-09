@@ -3,7 +3,7 @@
 //
 // Reads the family's real rows, builds the normalized snapshot, runs the pure
 // engine, then reconciles `autopilot_suggestions`: respects prior resolutions,
-// clears stale OPEN suggestions whose signal vanished, and auto-executes new
+// archives stale OPEN suggestions whose signal vanished, and auto-executes new
 // high-confidence reminders (reversibly — it inserts a real `reminders` row).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
@@ -12,6 +12,7 @@ import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/aut
 import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
 import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
+import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
@@ -80,7 +81,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30).limit(100),
     // Family Memory: unpurchased wish-list items → gift ideas for upcoming birthdays.
     supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
-    supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
+    supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').limit(500),
   ]);
 
   const readResults = [
@@ -194,17 +195,13 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
-  // 1) Clear stale OPEN suggestions whose signal disappeared this scan.
+  // 1) Archive stale OPEN suggestions whose signal disappeared this scan.
   //    `policy:*` rows belong to the policy pass below, which reconciles them
   //    against the approval history; they are never in `drafts`, so without
   //    this carve-out every scan would delete the offer it had just made.
   const stale = (existing ?? [])
-    .filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key) && !isPolicySuggestionKey(e.dedupe_key))
-    .map((e) => e.id);
-  if (stale.length > 0) {
-    const { error: staleError } = await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
-    if (staleError) throw new Error('Autopilot could not clear stale suggestions');
-  }
+    .filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key) && !isPolicySuggestionKey(e.dedupe_key));
+  const archived = await archiveStaleSuggestions(supabase, familyId, stale, now);
 
   // 2) Insert genuinely-new drafts; auto-execute the safe high-confidence ones.
   //    Ambient delivery: high-urgency or auto-handled items also become a
@@ -330,7 +327,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   return {
     scanned: drafts.length,
     autoExecuted,
-    cleared: stale.length + policy.cleared,
+    cleared: archived + policy.cleared,
     notified,
     policyCandidates: policy.candidates,
   };

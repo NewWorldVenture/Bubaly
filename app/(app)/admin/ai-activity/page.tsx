@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { fmtDate } from '@/lib/utils/format';
+import { SignalPrecisionCard } from '@/components/metrics/signal-precision-card';
+import { loadSignalPrecision } from '@/lib/metric/signal-precision-server';
 import {
   AI_ACTIVITY_PAGE_SIZE, AI_IN_FLIGHT_STATES, AI_REQUEST_STATES,
   listAiActivity, recentAiFeatures, summarizeAiActivity, type AiActivityRow,
@@ -60,7 +62,7 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
   const supabase = createServiceClient();
   const since = new Date(Date.now() - SUMMARY_WINDOW_HOURS * 3600_000).toISOString();
 
-  const [result, summary, features] = await Promise.all([
+  const [result, summary, features, precision] = await Promise.all([
     listAiActivity(supabase, {
       status: sp.status,
       feature: sp.feature,
@@ -70,6 +72,7 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
     }),
     summarizeAiActivity(supabase, since),
     recentAiFeatures(supabase),
+    loadSignalPrecision(supabase, { allFamilies: true }),
   ]);
 
   if (!result.ok) return <AIActivityReadError message={result.error} />;
@@ -99,6 +102,8 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
         <SummaryTile label={`In flight · last ${SUMMARY_WINDOW_HOURS}h`} value={summary.inFlight} tone="brand" />
         <SummaryTile label={`Total · last ${SUMMARY_WINDOW_HOURS}h`} value={summary.total} tone="neutral" />
       </div>
+
+      <SignalPrecisionCard result={precision} retryHref="/admin/ai-activity" allFamilies />
 
       <Card>
         <FilterForm action="/admin/ai-activity" hidden={{ family: sp.family }}>

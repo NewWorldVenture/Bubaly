@@ -23,7 +23,7 @@ function stubClient(failingTable: string | null) {
         ? { data: null, error: { message: `permission denied for table ${table}` } }
         : { data: [], error: null };
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'order', 'limit']) chain[method] = () => chain;
+      for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'order', 'limit']) chain[method] = () => chain;
       chain.maybeSingle = () => Promise.resolve(result);
       chain.single = () => Promise.resolve(result);
       chain.insert = () => { writes.push({ table, operation: 'insert' }); return chain; };
@@ -166,7 +166,9 @@ describe('policy scan reconciliation', () => {
     const result = await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
 
     expect(result).toEqual({ candidates: 0, inserted: 0, refreshed: 0, cleared: 1 });
-    expect(policyRows(db)).toEqual([]);
+    expect(policyRows(db).filter((row) => row.status === 'open')).toEqual([]);
+    expect(db.table('autopilot_suggestions')).toHaveLength(1);
+    expect(db.table('autopilot_suggestions')[0]).toMatchObject({ status: 'snoozed', expires_at: NOW.toISOString(), resolved_at: null });
   });
 
   it('withdraws an open offer when the tool fails', async () => {
@@ -177,7 +179,27 @@ describe('policy scan reconciliation', () => {
     const result = await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
 
     expect(result.cleared).toBe(1);
-    expect(policyRows(db)).toEqual([]);
+    expect(policyRows(db).filter((row) => row.status === 'open')).toEqual([]);
+    expect(db.table('autopilot_suggestions')).toHaveLength(1);
+    expect(db.table('autopilot_suggestions')[0]).toMatchObject({ status: 'snoozed', expires_at: NOW.toISOString(), resolved_at: null });
+  });
+
+  it('can offer a newly valid streak after withdrawal without deleting the old evidence', async () => {
+    seedStreak(db, 'family-1', 3);
+    await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+    const rejection = approvalRow('family-1', { status: 'rejected', decided_at: '2026-09-05T10:00:00Z' });
+    db.seed('approval_requests', [rejection]);
+    await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+    const archived = { ...policyRows(db)[0] };
+
+    // The disqualifying event falls outside the observation window; current
+    // approvals still support a candidate. This changes test data only.
+    db.table('approval_requests').find((row) => row.id === rejection.id)!.decided_at = '2025-01-01T00:00:00Z';
+    const result = await runPolicyScan(db as never, 'family-1', 'user-1', { now: NOW });
+    expect(result.inserted).toBe(1);
+    expect(policyRows(db)).toHaveLength(2);
+    expect(policyRows(db).find((row) => row.id === archived.id)).toEqual(archived);
+    expect(policyRows(db).find((row) => row.dedupe_key === KEY)?.status).toBe('open');
   });
 
   it('does not offer a policy the family already holds — to Bubaly or to everyone', async () => {
