@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  CERTIFIED_DEVICES, DEVICE_SETUP_STEPS, DEVICE_TIERS, PROGRAM_DISCLAIMER_KEY,
+  CERTIFIED_DEVICES, DEVICE_COPY_FIELDS, DEVICE_SETUP_STEPS, DEVICE_TIERS, PROGRAM_DISCLAIMER_KEY,
   deviceCopyKeys, devicesInTier,
 } from '@/lib/marketing/certified-devices';
 import {
@@ -37,20 +37,32 @@ describe('the device catalog', () => {
       .toEqual(CERTIFIED_DEVICES.filter((d) => d.tier === 'recommended').map((d) => d.id));
   });
 
-  it('gives every row an English label, a catalogue key, a minimum OS, a browser and a stand note', () => {
+  it('states every rendered field as a catalogue key — name, note, OS, browser, stand', () => {
     for (const device of CERTIFIED_DEVICES) {
-      expect(device.label.trim(), device.id).not.toBe('');
-      expect(device.labelKey, device.id).toMatch(/^certifiedDevices\./);
-      expect(device.standNoteKey, device.id).toMatch(/^certifiedDevices\./);
-      expect(device.minOs.trim(), device.id).not.toBe('');
-      expect(device.browser.trim(), device.id).not.toBe('');
+      for (const field of DEVICE_COPY_FIELDS) {
+        expect(device[field], `${device.id}.${field}`).toMatch(/^certifiedDevices\.[A-Za-z0-9]+$/);
+      }
     }
   });
 
-  it('carries setup steps with both an English label and a key', () => {
+  it('carries no English prose of its own — a row is an id, a tier and five keys', () => {
+    // The device name and the browser list used to be English literals here
+    // (`label: 'Any laptop, desktop or Chromebook'`), printed verbatim on the
+    // public page. Nothing in a row may be readable copy again: the i18n gate
+    // scans app/(marketing), and copy that hides in a data structure under lib/
+    // is exactly what it cannot see.
+    const allowed = new Set(['id', 'tier', ...DEVICE_COPY_FIELDS]);
+    for (const device of CERTIFIED_DEVICES) {
+      expect(Object.keys(device).filter((k) => !allowed.has(k)), device.id).toEqual([]);
+    }
+    for (const step of DEVICE_SETUP_STEPS) {
+      expect(Object.keys(step).sort(), step.id).toEqual(['bodyKey', 'id', 'labelKey']);
+    }
+  });
+
+  it('carries setup steps, each with a label key and a body key', () => {
     expect(DEVICE_SETUP_STEPS.length).toBeGreaterThanOrEqual(5);
     for (const step of DEVICE_SETUP_STEPS) {
-      expect(step.label.trim(), step.id).not.toBe('');
       expect(step.labelKey, step.id).toMatch(/^certifiedDevices\./);
       expect(step.bodyKey, step.id).toMatch(/^certifiedDevices\./);
     }
@@ -160,5 +172,62 @@ describe('both catalogs are keyed in all seven languages', () => {
   it.each(LOCALES)('%s has every catalog key', (locale) => {
     const missing = ALL_KEYS.filter((key) => !catalogues[locale][key]);
     expect(missing, `missing in ${locale}`).toEqual([]);
+  });
+});
+
+describe('the device name a visitor reads is a translation, not English in a data file', () => {
+  // The defect this pins: `label: 'Any laptop, desktop or Chromebook'` and
+  // `browser: 'Chrome, Edge or Safari'` were rendered verbatim on the public
+  // page, in every language, and no test noticed because the row's only key was
+  // bound to the description underneath. Identity is keyed like everything else
+  // now, and each of those keys is either genuinely translated or declared in
+  // INVARIANT.txt as a proper noun — the two cases a reviewer can tell apart.
+  const IDENTITY_FIELDS = ['nameKey', 'minOsKey', 'browserKey'] as const;
+  const identityKeys = [...new Set(CERTIFIED_DEVICES.flatMap((d) => IDENTITY_FIELDS.map((f) => d[f])))];
+  const invariant = new Set(
+    readFileSync('lib/i18n/messages/INVARIANT.txt', 'utf8')
+      .split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#')),
+  );
+
+  it('carries a name, an operating system and a browser in all seven catalogues', () => {
+    expect(identityKeys.length).toBeGreaterThanOrEqual(12);
+    for (const key of identityKeys) {
+      for (const locale of LOCALES) expect(catalogues[locale][key]?.trim(), `${locale} ${key}`).toBeTruthy();
+    }
+  });
+
+  it('either translates the string or declares it invariant — never leaves it silently English', () => {
+    const others = LOCALES.filter((locale) => locale !== 'en-US');
+    for (const key of identityKeys) {
+      const en = catalogues['en-US'][key]!;
+      for (const locale of others) {
+        if (invariant.has(en)) expect(catalogues[locale][key], `${locale} ${key}`).toBe(en);
+        else expect(catalogues[locale][key], `${locale} ${key} is still the English string`).not.toBe(en);
+      }
+    }
+  });
+
+  it('keeps ordinary English words out of what it calls invariant', () => {
+    // INVARIANT.txt's own header: "A string with an ordinary word in it does
+    // NOT belong here". "Older iPad (iPadOS 15)" is a sentence about an iPad;
+    // "iPadOS 15" is a version number.
+    for (const key of identityKeys) {
+      const en = catalogues['en-US'][key]!;
+      if (invariant.has(en)) {
+        expect(en, key).not.toMatch(/\b(?:any|older|or|and|the|newer|generation|laptop|desktop)\b/i);
+      }
+    }
+  });
+
+  it('renders every one of those keys through t(), not a raw field', () => {
+    const page = readFileSync('app/(marketing)/family-display/page.tsx', 'utf8');
+    for (const field of DEVICE_COPY_FIELDS) expect(page, field).toContain(`t(device.${field})`);
+    expect(page).not.toMatch(/\{device\.(?:label|browser|minOs)\}/);
+  });
+
+  it('gates both catalogs in the scanner, so copy cannot hide under lib/ again', () => {
+    const scanner = readFileSync('scripts/i18n-scan.mjs', 'utf8');
+    expect(scanner).toContain("'lib/marketing/certified-devices.ts'");
+    expect(scanner).toContain("'lib/marketing/display-compare.ts'");
   });
 });

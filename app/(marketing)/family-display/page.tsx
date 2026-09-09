@@ -154,16 +154,16 @@ export default async function FamilyDisplayPage() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {devicesInTier(tier, CERTIFIED_DEVICES).map((device) => (
                   <div key={device.id} className="glass-card p-5">
-                    <h4 className="font-semibold">{device.label}</h4>
-                    <p className="mt-2 text-sm text-muted">{t(device.labelKey)}</p>
+                    <h4 className="font-semibold">{t(device.nameKey)}</h4>
+                    <p className="mt-2 text-sm text-muted">{t(device.noteKey)}</p>
                     <dl className="mt-3 space-y-1 text-xs text-muted">
                       <div className="flex gap-2">
                         <dt className="font-medium">{t('marketingDisplay.minOs')}</dt>
-                        <dd>{device.minOs}</dd>
+                        <dd>{t(device.minOsKey)}</dd>
                       </div>
                       <div className="flex gap-2">
                         <dt className="font-medium">{t('marketingDisplay.browser')}</dt>
-                        <dd>{device.browser}</dd>
+                        <dd>{t(device.browserKey)}</dd>
                       </div>
                     </dl>
                     <p className="mt-3 text-xs text-muted">{t(device.standNoteKey)}</p>

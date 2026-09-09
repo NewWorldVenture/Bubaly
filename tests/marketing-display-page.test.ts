@@ -75,6 +75,10 @@ describe('the page itself', () => {
     expect(page).toContain('DEVICE_SETUP_STEPS.map');
     expect(page).toContain('DISPLAY_COMPARE_ROWS.map');
     expect(page).toContain('devicesInTier(tier, CERTIFIED_DEVICES)');
+    // Including the device's own name and browser: those were English literals
+    // printed verbatim here, on a page every locale reads.
+    expect(page).toContain('t(device.nameKey)');
+    expect(page).not.toMatch(/\{device\.(?:label|browser|minOs)\}/);
     expect(page).toContain('PROGRAM_DISCLAIMER_KEY');
     expect(page).toContain('COMPARE_FAIRNESS_KEY');
   });

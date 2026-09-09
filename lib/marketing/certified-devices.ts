@@ -15,6 +15,20 @@
 // is the "Test this display" self-check in /display/setup. Every note points
 // there rather than promising behaviour this file cannot observe.
 //
+// EVERY FIELD A PAGE RENDERS IS A CATALOGUE KEY, including the device name, the
+// minimum OS and the browser. An earlier draft carried the name and the browser
+// as English literals — `label: 'Any laptop, desktop or Chromebook'`,
+// `browser: 'Chrome, Edge or Safari'` — and the public page printed them
+// verbatim, so a French visitor read English on a page the i18n gate called
+// clean. The gate scans `app/(marketing)` and `components/marketing`; copy
+// parked in a data structure under `lib/` was invisible to it. The fix is not a
+// better fallback, it is having no English here at all: en-US.json is the
+// English, the six other catalogues are the rest, and the names that are proper
+// nouns ("Google Pixel Tablet", "Safari", "Android 13") are declared identical
+// in lib/i18n/messages/INVARIANT.txt so "same as English" reads as a decision
+// rather than a missed translation. These two files are gated in
+// scripts/i18n-scan.mjs so the blind spot cannot reopen.
+//
 // Pure data + pure helpers: no I/O, no React, no Supabase.
 
 export const DEVICE_TIERS = ['recommended', 'compatible'] as const;
@@ -23,17 +37,20 @@ export type DeviceTier = (typeof DEVICE_TIERS)[number];
 export type CertifiedDevice = {
   id: string;
   tier: DeviceTier;
-  /** The model as its maker writes it — a proper noun, identical in every language. */
-  label: string;
-  /** Catalogue key for the one-line description under the model. */
-  labelKey: string;
-  /** Minimum operating system, as a requirement. */
-  minOs: string;
-  /** The browser the display runs in on that device. */
-  browser: string;
+  /** Catalogue key for the card heading — the device as its maker writes it. */
+  nameKey: string;
+  /** Catalogue key for the one-line description under the name. */
+  noteKey: string;
+  /** Catalogue key for the minimum operating system, stated as a requirement. */
+  minOsKey: string;
+  /** Catalogue key for the browser the display runs in on that device. */
+  browserKey: string;
   /** Catalogue key for the mounting/stand/power note. */
   standNoteKey: string;
 };
+
+/** The five fields of a row that reach a reader's eyes. Every one is a key. */
+export const DEVICE_COPY_FIELDS = ['nameKey', 'noteKey', 'minOsKey', 'browserKey', 'standNoteKey'] as const;
 
 /**
  * The list, most-recommended first inside each tier.
@@ -42,69 +59,72 @@ export type CertifiedDevice = {
  * does not need Bubaly to tell them tablets exist; what they need is the four
  * or five shapes of device somebody has actually run the wall on, and an honest
  * "anything else with a current browser probably works, here is how to check".
+ *
+ * The browser and OS keys are shared between rows on purpose: four iPads that
+ * all say Safari should say it with one string, not four that can drift apart.
  */
 export const CERTIFIED_DEVICES: readonly CertifiedDevice[] = [
   {
     id: 'ipad',
     tier: 'recommended',
-    label: 'iPad (10th generation or newer)',
-    labelKey: 'certifiedDevices.ipadNote',
-    minOs: 'iPadOS 16.4',
-    browser: 'Safari',
+    nameKey: 'certifiedDevices.ipadName',
+    noteKey: 'certifiedDevices.ipadNote',
+    minOsKey: 'certifiedDevices.osIpad164',
+    browserKey: 'certifiedDevices.browserSafari',
     standNoteKey: 'certifiedDevices.ipadStand',
   },
   {
     id: 'ipad-air',
     tier: 'recommended',
-    label: 'iPad Air / iPad Pro',
-    labelKey: 'certifiedDevices.ipadAirNote',
-    minOs: 'iPadOS 16.4',
-    browser: 'Safari',
+    nameKey: 'certifiedDevices.ipadAirName',
+    noteKey: 'certifiedDevices.ipadAirNote',
+    minOsKey: 'certifiedDevices.osIpad164',
+    browserKey: 'certifiedDevices.browserSafari',
     standNoteKey: 'certifiedDevices.ipadAirStand',
   },
   {
     id: 'pixel-tablet',
     tier: 'recommended',
-    label: 'Google Pixel Tablet',
-    labelKey: 'certifiedDevices.pixelNote',
-    minOs: 'Android 13',
-    browser: 'Chrome',
+    nameKey: 'certifiedDevices.pixelName',
+    noteKey: 'certifiedDevices.pixelNote',
+    minOsKey: 'certifiedDevices.osAndroid13',
+    browserKey: 'certifiedDevices.browserChrome',
     standNoteKey: 'certifiedDevices.pixelStand',
   },
   {
     id: 'galaxy-tab',
     tier: 'recommended',
-    label: 'Samsung Galaxy Tab A9+ / Tab S',
-    minOs: 'Android 13',
-    labelKey: 'certifiedDevices.galaxyNote',
-    browser: 'Chrome',
+    nameKey: 'certifiedDevices.galaxyName',
+    noteKey: 'certifiedDevices.galaxyNote',
+    minOsKey: 'certifiedDevices.osAndroid13',
+    browserKey: 'certifiedDevices.browserChrome',
     standNoteKey: 'certifiedDevices.galaxyStand',
   },
   {
     id: 'older-ipad',
     tier: 'compatible',
-    label: 'Older iPad (iPadOS 15)',
-    labelKey: 'certifiedDevices.olderIpadNote',
-    minOs: 'iPadOS 15',
-    browser: 'Safari',
+    nameKey: 'certifiedDevices.olderIpadName',
+    noteKey: 'certifiedDevices.olderIpadNote',
+    minOsKey: 'certifiedDevices.osIpad15',
+    browserKey: 'certifiedDevices.browserSafari',
     standNoteKey: 'certifiedDevices.olderIpadStand',
   },
   {
     id: 'fire-hd',
     tier: 'compatible',
-    label: 'Amazon Fire HD 10',
-    labelKey: 'certifiedDevices.fireNote',
-    minOs: 'Fire OS 8',
-    browser: 'Silk',
+    nameKey: 'certifiedDevices.fireName',
+    noteKey: 'certifiedDevices.fireNote',
+    minOsKey: 'certifiedDevices.osFire8',
+    browserKey: 'certifiedDevices.browserSilk',
     standNoteKey: 'certifiedDevices.fireStand',
   },
   {
     id: 'desktop',
     tier: 'compatible',
-    label: 'Any laptop, desktop or Chromebook',
-    labelKey: 'certifiedDevices.desktopNote',
-    minOs: 'Chrome 84 / Edge 84 / Safari 16.4',
-    browser: 'Chrome, Edge or Safari',
+    nameKey: 'certifiedDevices.desktopName',
+    noteKey: 'certifiedDevices.desktopNote',
+    minOsKey: 'certifiedDevices.osDesktop',
+    browserKey: 'certifiedDevices.browserDesktop',
     standNoteKey: 'certifiedDevices.desktopStand',
   },
 ];
@@ -112,19 +132,17 @@ export const CERTIFIED_DEVICES: readonly CertifiedDevice[] = [
 /** The steps a family follows on the device itself, in order. */
 export type DeviceSetupStep = {
   id: string;
-  /** English label — mirrored by `labelKey` for every locale. */
-  label: string;
   labelKey: string;
   bodyKey: string;
 };
 
 export const DEVICE_SETUP_STEPS: readonly DeviceSetupStep[] = [
-  { id: 'sign-in', label: 'Sign in on the tablet', labelKey: 'certifiedDevices.stepSignIn', bodyKey: 'certifiedDevices.stepSignInBody' },
-  { id: 'install', label: 'Add Bubaly to the home screen', labelKey: 'certifiedDevices.stepInstall', bodyKey: 'certifiedDevices.stepInstallBody' },
-  { id: 'open-display', label: 'Open the display and go full screen', labelKey: 'certifiedDevices.stepOpen', bodyKey: 'certifiedDevices.stepOpenBody' },
-  { id: 'stay-awake', label: 'Keep the screen awake', labelKey: 'certifiedDevices.stepAwake', bodyKey: 'certifiedDevices.stepAwakeBody' },
-  { id: 'lock-it-down', label: 'Lock it to the one app', labelKey: 'certifiedDevices.stepPin', bodyKey: 'certifiedDevices.stepPinBody' },
-  { id: 'mount', label: 'Stand it up and plug it in', labelKey: 'certifiedDevices.stepMount', bodyKey: 'certifiedDevices.stepMountBody' },
+  { id: 'sign-in', labelKey: 'certifiedDevices.stepSignIn', bodyKey: 'certifiedDevices.stepSignInBody' },
+  { id: 'install', labelKey: 'certifiedDevices.stepInstall', bodyKey: 'certifiedDevices.stepInstallBody' },
+  { id: 'open-display', labelKey: 'certifiedDevices.stepOpen', bodyKey: 'certifiedDevices.stepOpenBody' },
+  { id: 'stay-awake', labelKey: 'certifiedDevices.stepAwake', bodyKey: 'certifiedDevices.stepAwakeBody' },
+  { id: 'lock-it-down', labelKey: 'certifiedDevices.stepPin', bodyKey: 'certifiedDevices.stepPinBody' },
+  { id: 'mount', labelKey: 'certifiedDevices.stepMount', bodyKey: 'certifiedDevices.stepMountBody' },
 ];
 
 /** The sentence that keeps the tier names from reading as a commercial claim. */
@@ -139,7 +157,7 @@ export function devicesInTier(tier: DeviceTier, devices: readonly CertifiedDevic
 export function deviceCopyKeys(devices: readonly CertifiedDevice[] = CERTIFIED_DEVICES): string[] {
   return [
     PROGRAM_DISCLAIMER_KEY,
-    ...devices.flatMap((device) => [device.labelKey, device.standNoteKey]),
+    ...devices.flatMap((device) => DEVICE_COPY_FIELDS.map((field) => device[field])),
     ...DEVICE_SETUP_STEPS.flatMap((step) => [step.labelKey, step.bodyKey]),
   ];
 }

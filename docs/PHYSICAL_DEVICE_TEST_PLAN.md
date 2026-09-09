@@ -191,7 +191,11 @@ tablet, Family Basic or above, a charger and a stand.
 8. **Handled today tile.** Add the **Handled today** tile. With the tablet
    offline (airplane mode) reload: the tile must read **"Bubaly could not read
    what it finished"** with a **Try again** — **a zero here is a FAIL.** Back
-   online, the count must match the completed runs in Home → Handled.
+   online, the count must match the runs Home → Handled shows as **completed**
+   today. It is not the same number as Home's own total whenever a run finished
+   only partly: the wall counts `state = 'completed'`, Home counts
+   `completed` **and** `partially_completed` (`HANDLED_RUN_STATES`,
+   `lib/metric/time-saved.ts`). Check against the completed rows, not the total.
 9. **24-hour soak.** Leave the display running overnight, plugged in, on the home
    screen. The next morning check: the screen is on (or the auto-lock note from
    step 5 applies), the date/greeting rolled over, today's events are today's,
