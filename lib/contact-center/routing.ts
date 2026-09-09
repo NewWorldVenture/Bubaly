@@ -4,10 +4,14 @@
 // The AI provider layers richer summaries on top of this in the webhook path;
 // this guarantees a sensible answer even when AI is unconfigured.
 
+import { frontDeskDomain } from '@/lib/front-desk/school-sports';
+
 export type InboundChannel = 'email' | 'sms' | 'voice';
 
 export type InboundIntent =
-  | 'urgent' | 'appointment' | 'delivery' | 'sales' | 'spam' | 'personal' | 'other';
+  | 'urgent' | 'appointment' | 'delivery' | 'sales' | 'spam' | 'personal'
+  | 'school' | 'sports'
+  | 'other';
 
 export type RouteAction = 'escalate' | 'auto_reply' | 'file';
 
@@ -18,6 +22,8 @@ const INTENT_META: Record<InboundIntent, { label: string; tone: string; emoji: s
   sales:       { label: 'Sales pitch',  tone: 'text-muted',       emoji: '🏷️' },
   spam:        { label: 'Spam',         tone: 'text-muted',       emoji: '🚫' },
   personal:    { label: 'Personal',     tone: 'text-emerald-500', emoji: '💬' },
+  school:      { label: 'School',       tone: 'text-violet-500',  emoji: '🎒' },
+  sports:      { label: 'Sports',       tone: 'text-cyan-500',    emoji: '⚽' },
   other:       { label: 'General',      tone: 'text-brand-text',  emoji: '✉️' },
 };
 
@@ -25,19 +31,40 @@ export function intentMeta(intent: string): { label: string; tone: string; emoji
   return (INTENT_META as Record<string, { label: string; tone: string; emoji: string }>)[intent] ?? INTENT_META.other;
 }
 
+/**
+ * Urgent outranks everything, including the front desk.
+ *
+ * Pulled out of `RULES` so the school/sports pass can sit between it and the
+ * rest: a school calling to say a child is hurt escalates to a human, and does
+ * not go and sit in a desk queue waiting for someone to press Propose. It is
+ * still the first thing tested, exactly as it was when it led that list.
+ */
+const URGENT = /\b(emergency|urgent|asap|right away|hospital|accident|911|locked out|flooding|leak|help me)\b/i;
+
 // Ordered strongest-signal-first: the first bucket that matches wins.
 const RULES: { intent: InboundIntent; re: RegExp }[] = [
-  { intent: 'urgent',      re: /\b(emergency|urgent|asap|right away|hospital|accident|911|locked out|flooding|leak|help me)\b/i },
   { intent: 'appointment', re: /\b(appointment|reschedul|confirm|booking|reservation|dentist|doctor|pick ?up|drop ?off|meeting at|see you (at|on))\b/i },
   { intent: 'delivery',    re: /\b(deliver|package|parcel|shipment|out for delivery|courier|fedex|ups|usps|amazon|dropped off|left at)\b/i },
   { intent: 'sales',       re: /\b(offer|discount|limited time|warranty|free quote|special deal|upgrade your|save \$|promo(tion)?)\b/i },
   { intent: 'spam',        re: /\b(you(?:'| ha)ve won|claim your prize|gift card|crypto|wire transfer|social security|irs|final notice|click this link|verify your account)\b/i },
 ];
 
-/** Classify inbound text into a single best-fit intent. */
+/**
+ * Classify inbound text into a single best-fit intent.
+ *
+ * School and sports are tested BEFORE appointment/delivery/sales because those
+ * buckets swallowed them: "the parent-teacher conference has been rescheduled"
+ * is an `appointment` by keyword and a school schedule change in fact, and the
+ * generic bucket is what left every school mail filed with nothing anyone could
+ * act on. `frontDeskDomain` only fires on a real school or sports signal, so a
+ * dentist appointment is untouched.
+ */
 export function classifyIntent(text: string | null | undefined): InboundIntent {
   const t = (text ?? '').trim();
   if (!t) return 'other';
+  if (URGENT.test(t)) return 'urgent';
+  const desk = frontDeskDomain(t);
+  if (desk) return desk;
   for (const { intent, re } of RULES) if (re.test(t)) return intent;
   return 'personal';
 }
@@ -60,7 +87,12 @@ export function routeInbound(intent: InboundIntent): RouteAction {
  * behind that escalation would race the person it just woke.
  */
 export function shouldPlanInbound(intent: string): boolean {
-  return intent === 'appointment' || intent === 'delivery' || intent === 'personal';
+  return intent === 'appointment' || intent === 'delivery' || intent === 'personal'
+    // School and sports mail is household work by definition — a form to sign,
+    // a fee to pay, a practice that moved. It reaches the planner on the same
+    // terms as the rest: a filed request, gated, with anything risky waiting
+    // for a parent. Nothing here executes.
+    || intent === 'school' || intent === 'sports';
 }
 
 /** Whether the family should be pinged now (urgent → yes; the rest wait in the inbox). */
@@ -86,6 +118,10 @@ export function autoReplyText(intent: InboundIntent, familyLabel = 'the family')
       return `Got it — I’ve recorded this delivery update for ${familyLabel}.`;
     case 'sales':
       return `Thanks for the offer. ${familyLabel} isn’t taking sales calls at this number, but I’ve noted it.`;
+    case 'school':
+      return `Thanks — I’ve logged this school notice for ${familyLabel} and put it in front of them.`;
+    case 'sports':
+      return `Thanks — I’ve logged this for ${familyLabel} and flagged it with their team schedule.`;
     case 'spam':
       return `This message has been filed.`;
     default:

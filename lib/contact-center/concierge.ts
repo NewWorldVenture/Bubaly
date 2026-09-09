@@ -26,6 +26,19 @@ function coerceIntent(v: unknown): InboundIntent {
 }
 
 /**
+ * The model is never offered "school" or "sports" (see SYSTEM above), so the
+ * best it can say about a permission slip is "other" — and taking that at face
+ * value threw away the deterministic front-desk verdict, which is the only
+ * thing that files a school notice as school work. It defers ONLY to those two
+ * and ONLY when the model reached for the generic bucket; every other answer
+ * the model gives still wins, exactly as before.
+ */
+function preferFrontDesk(modelIntent: InboundIntent, fallback: InboundIntent): InboundIntent {
+  const deskVerdict = fallback === 'school' || fallback === 'sports';
+  return modelIntent === 'other' && deskVerdict ? fallback : modelIntent;
+}
+
+/**
  * Run the concierge over an inbound message. Uses the AI provider when
  * configured; otherwise (or on any error) falls back to the deterministic
  * routing lib so the line always answers. Never throws.
@@ -56,7 +69,7 @@ export async function runConcierge(input: {
     });
     const raw = completion.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     const parsed = JSON.parse(raw) as { intent?: unknown; summary?: unknown; reply?: unknown };
-    const intent = coerceIntent(parsed.intent);
+    const intent = preferFrontDesk(coerceIntent(parsed.intent), fallbackIntent);
     return {
       intent,
       summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim().slice(0, 140) : fallback.summary,
