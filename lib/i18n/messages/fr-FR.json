@@ -11008,7 +11008,7 @@
   "timeSaved.remindersDelivered": "rappels envoyés",
   "timeSaved.savedThisWeek": "{amount} de temps de planification modélisé · 7 derniers jours",
   "timeSaved.tasksAutoHandled": "tâches traitées automatiquement",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Hypothèse : 12 minutes par plan terminé avec une date de fin ; ce n’est pas un gain de temps mesuré. Les plans partiels, les actions individuelles et les rappels sont exclus.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Hypothèse : {minutes} minutes par plan terminé avec une date de fin ; ce n’est pas un gain de temps mesuré. Les plans partiels, les actions individuelles et les rappels sont exclus.",
   "timeSaved.tryAgain": "Réessayer",
   "timetable.addClass": "Ajouter un cours",
   "timetable.allStudents": "Tous les élèves",

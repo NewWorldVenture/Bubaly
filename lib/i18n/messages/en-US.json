@@ -11008,7 +11008,7 @@
   "timeSaved.remindersDelivered": "reminders delivered",
   "timeSaved.savedThisWeek": "{amount} modeled planning time · last 7 days",
   "timeSaved.tasksAutoHandled": "tasks auto-handled",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Assumes 12 minutes per dated completed plan; not measured time saved. Partial plans, separate actions and reminders are excluded.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Assumes {minutes} minutes per dated completed plan; not measured time saved. Partial plans, separate actions and reminders are excluded.",
   "timeSaved.tryAgain": "Try again",
   "timetable.addClass": "Add class",
   "timetable.allStudents": "All students",

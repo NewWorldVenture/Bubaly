@@ -3,6 +3,7 @@
 import { Clock } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 import type { TimeSavedResult } from '@/lib/metric/time-saved';
+import { MODELED_MINUTES_PER_COMPLETED_PLAN } from '@/lib/metric/completed-plans-model';
 
 export async function TimeSavedBanner({ result, retryHref }: { result: TimeSavedResult; retryHref: string }) {
   const t = await getTranslations();
@@ -37,7 +38,7 @@ export async function TimeSavedBanner({ result, retryHref }: { result: TimeSaved
               {t('timeSaved.nThingsHandledForYou', { count: data.actions })}
             </span>
           </p>
-          <p className="mt-0.5 text-xs text-muted">{t('timeSaved.timeYouDidntSpendOnFamilyAdmin')}</p>
+          <p className="mt-0.5 text-xs text-muted">{t('timeSaved.timeYouDidntSpendOnFamilyAdmin', { minutes: MODELED_MINUTES_PER_COMPLETED_PLAN })}</p>
           <p className="mt-1 text-xs text-muted">{t('timeSaved.undatedCompletedPlans', { count: data.undatedCompletedRuns })}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {data.rows.map((r) => (

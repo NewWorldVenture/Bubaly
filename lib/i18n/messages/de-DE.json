@@ -11008,7 +11008,7 @@
   "timeSaved.remindersDelivered": "zugestellte Erinnerungen",
   "timeSaved.savedThisWeek": "{amount} modellierte Planungszeit · letzte 7 Tage",
   "timeSaved.tasksAutoHandled": "automatisch erledigte Aufgaben",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Annahme: 12 Minuten pro abgeschlossenem Plan mit Abschlussdatum; keine gemessene Zeitersparnis. Teilweise abgeschlossene Pläne, einzelne Aktionen und Erinnerungen sind ausgeschlossen.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Annahme: {minutes} Minuten pro abgeschlossenem Plan mit Abschlussdatum; keine gemessene Zeitersparnis. Teilweise abgeschlossene Pläne, einzelne Aktionen und Erinnerungen sind ausgeschlossen.",
   "timeSaved.tryAgain": "Erneut versuchen",
   "timetable.addClass": "Kurs hinzufügen",
   "timetable.allStudents": "Alle Schüler",

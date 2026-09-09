@@ -11008,7 +11008,7 @@
   "timeSaved.remindersDelivered": "lembretes enviados",
   "timeSaved.savedThisWeek": "{amount} de tempo de planeamento modelado · últimos 7 dias",
   "timeSaved.tasksAutoHandled": "tarefas tratadas automaticamente",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Pressupõe 12 minutos por plano concluído com data de conclusão; não é tempo poupado medido. Excluem-se planos parciais, ações individuais e lembretes.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Pressupõe {minutes} minutos por plano concluído com data de conclusão; não é tempo poupado medido. Excluem-se planos parciais, ações individuais e lembretes.",
   "timeSaved.tryAgain": "Tentar novamente",
   "timetable.addClass": "Adicionar aula",
   "timetable.allStudents": "Todos os alunos",
