@@ -15,6 +15,7 @@ import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { DocumentCapture } from '@/components/capture/document-capture';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -193,6 +194,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
           ))}
         </div>
 
+        {mode === 'photo' || mode === 'document' ? <DocumentCapture photo={mode === 'photo'} /> : <>
         {/* Input area */}
         <div className="relative mb-4 overflow-hidden rounded-2xl border border-border bg-surface/40 focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/30">
           {recording ? (
@@ -277,6 +279,8 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
             {routing ? 'Capturing…' : 'Capture with AI'}
           </button>
         )}
+
+        </>}
 
         {/* Quick route shortcuts — the member's own picks; customize to edit.
             Shared component = identical behavior in the Quick-capture modal. */}

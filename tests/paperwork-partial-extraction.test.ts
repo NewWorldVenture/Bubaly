@@ -9,6 +9,7 @@ import type { Tables } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const state = vi.hoisted(() => ({ db: null as unknown, locale: 'en-US' as LocaleCode }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'parent-1' }, active: { familyId: 'family-1', member: { id: 'member-1' }, family: { timezone: 'UTC' }, role: 'parent' } }) }));

@@ -20,6 +20,8 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { DocumentCapture } from '@/components/capture/document-capture';
+import { useRouter } from 'next/navigation';
 
 function draftFromMeta(meta: Json): string | null {
   return meta && typeof meta === 'object' && !Array.isArray(meta)
@@ -61,6 +63,7 @@ function parseActions(j: Json): StoredAction[] {
 
 export function PaperworkModule({ items }: { items: Item[] }) {
   const t = useTranslations();
+  const router = useRouter();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('needs_action');
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -133,7 +136,10 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       </header>
 
       {/* Composer */}
-      {composerOpen && <Composer onDone={() => setComposerOpen(false)} />}
+      {composerOpen && <div className="mt-4 space-y-4">
+        <DocumentCapture onSaved={() => { setFilter('needs_action'); router.refresh(); }} />
+        <Composer onDone={() => setComposerOpen(false)} />
+      </div>}
 
       {/* Filter chips */}
       <div className="mt-5 flex flex-wrap gap-2">
