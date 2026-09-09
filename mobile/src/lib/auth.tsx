@@ -31,14 +31,13 @@ export type AuthState = {
 };
 
 const AuthContext = createContext<AuthState | null>(null);
+type FamilyState = { owner: string | null; family: ActiveFamily | null; loading: boolean; error: string | null };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [family, setFamily] = useState<ActiveFamily | null>(null);
-  const [familyLoading, setFamilyLoading] = useState(false);
-  const [familyError, setFamilyError] = useState<string | null>(null);
+  const [familyState, setFamilyState] = useState<FamilyState>({ owner: null, family: null, loading: false, error: null });
 
   useEffect(() => {
     const connection = connectAuthSession<Session>({
@@ -54,17 +53,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userId = session?.user.id ?? null;
   const userRef = useRef(userId); userRef.current = userId;
+  const family = familyState.owner === userId ? familyState.family : null;
+  const familyLoading = !!userId && (familyState.owner !== userId || familyState.loading);
+  const familyError = familyState.owner === userId ? familyState.error : null;
+  const updateFamily = useCallback((patch: Partial<Omit<FamilyState, 'owner'>>) => {
+    const owner = userRef.current;
+    setFamilyState((previous) => userRef.current !== owner ? previous : {
+      ...(previous.owner === owner ? previous : { owner, family: null, loading: false, error: null }), ...patch,
+    });
+  }, []);
   const loader = useRef<FamilySession | null>(null);
   if (!loader.current) loader.current = new FamilySession({ user: () => userRef.current,
-    read: (id) => resolveActiveFamily(supabase, id), loading: setFamilyLoading,
-    result: (next, failed) => { setFamily(next); setFamilyError(failed ? mobileTranslate(deviceLocale(), 'mobileAssistant.familyUnavailable') : null); } });
+    read: (id) => resolveActiveFamily(supabase, id), loading: (loading) => updateFamily({ loading }),
+    result: (next, failed) => updateFamily({ family: next, error: failed ? mobileTranslate(deviceLocale(), 'mobileAssistant.familyUnavailable') : null }) });
   const freshFamily = useCallback(() => loader.current!.refresh(), []);
 
   useEffect(() => {
-    loader.current!.invalidate(); setFamily(null); setFamilyError(null); setFamilyLoading(false);
+    loader.current!.invalidate(); updateFamily({ family: null, error: null, loading: false });
     if (userId) void freshFamily();
     return () => loader.current!.invalidate();
-  }, [userId, freshFamily]);
+  }, [userId, freshFamily, updateFamily]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });

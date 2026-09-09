@@ -18,28 +18,41 @@ import { deviceLocale, mobileTranslate, type MobileTranslator } from '../../src/
 import { VoiceSession, VoiceSessionError, type VoicePhase } from '../../src/lib/voice-session';
 
 type Message = { id: string; role: 'user' | 'assistant' | 'error'; content: string; actions?: AssistantAction[]; cards?: AssistantCard[] };
+type Conversation = { owner: string; id: string; messages: Message[]; draft: string; phase: VoicePhase };
+const emptyConversation = (owner: string): Conversation => ({ owner, id: Crypto.randomUUID(), messages: [], draft: '', phase: 'idle' });
 
 const SUGGESTIONS = ['suggestionWeek', 'suggestionGroceries', 'suggestionDinner', 'suggestionReminder'];
 
 export default function AssistantScreen() {
   const { colors, spacing, radius } = useTheme();
   const { accessToken, session, family, familyLoading, familyError, freshFamily, refreshFamily } = useAuth();
-  const [conversationId, setConversationId] = useState(() => Crypto.randomUUID());
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState('');
-  const [phase, setPhase] = useState<VoicePhase>('idle');
+  const contextKey = [session?.user.id, family?.familyId, family?.memberId, family?.role].join(':');
+  const [conversation, setConversation] = useState(() => emptyConversation(contextKey));
+  const ownsConversation = conversation.owner === contextKey;
+  const conversationId = conversation.id;
+  // Passive cleanup runs after paint. The first render of another context must
+  // already hide the previous owner's message, draft and recording state.
+  const messages = ownsConversation ? conversation.messages : [];
+  const draft = ownsConversation ? conversation.draft : '';
+  const phase = ownsConversation ? conversation.phase : 'idle';
   const [locale, setLocale] = useState(deviceLocale);
   const t: MobileTranslator = (key, params) => mobileTranslate(locale, key, params);
   const listRef = useRef<FlatList<Message>>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const mounted = useRef(true);
   const focused = useRef(false);
-  const runtime = useRef({ accessToken, session, family, conversationId, locale, freshFamily, recorder });
-  runtime.current = { accessToken, session, family, conversationId, locale, freshFamily, recorder };
+  const runtime = useRef({ accessToken, session, family, conversationId, contextKey, ownsConversation, locale, freshFamily, recorder });
+  runtime.current = { accessToken, session, family, conversationId, contextKey, ownsConversation, locale, freshFamily, recorder };
+  const isCurrentConversation = (owner: string, id: string) => runtime.current.contextKey === owner
+    && runtime.current.conversationId === id && runtime.current.ownsConversation;
+  const updateConversation = (update: (previous: Conversation) => Conversation, owner = runtime.current.contextKey, id = runtime.current.conversationId) => {
+    setConversation((previous) => previous.owner === owner && previous.id === id && isCurrentConversation(owner, id) ? update(previous) : previous);
+  };
+  const setDraft = (value: string) => updateConversation((previous) => ({ ...previous, draft: value }), contextKey, conversationId);
   const [flow] = useState(() => new VoiceSession({
     context: () => {
       const current = runtime.current;
-      return current.accessToken && current.session && current.family ? { userId: current.session.user.id,
+      return current.ownsConversation && current.accessToken && current.session && current.family ? { userId: current.session.user.id,
         familyId: current.family.familyId, memberId: current.family.memberId, role: current.family.role,
         conversationId: current.conversationId, token: current.accessToken, locale: current.locale } : null;
     },
@@ -50,16 +63,15 @@ export default function AssistantScreen() {
     stop: () => runtime.current.recorder.stop(), recordingUri: () => runtime.current.recorder.uri,
     transcribe: (context, uri, signal) => transcribeSpeech({ token: context.token, recording: { uri }, expectedFamilyId: context.familyId, locale: context.locale, signal }),
     ask: (context, text, signal) => askAssistant({ token: context.token, conversationId: context.conversationId, message: text, expectedFamilyId: context.familyId, locale: context.locale, signal }),
-    phase: (next) => { if (mounted.current) setPhase(next); },
-    user: (text) => { setDraft(''); setMessages((rows) => [...rows, { id: Crypto.randomUUID(), role: 'user', content: text }]); },
-    reply: (reply) => setMessages((rows) => [...rows, { id: Crypto.randomUUID(), role: 'assistant', content: reply.content, actions: reply.actions, cards: reply.cards },
-      ...(!reply.persisted ? [{ id: Crypto.randomUUID(), role: 'error' as const, content: mobileTranslate(runtime.current.locale, 'mobileAssistant.notSaved') }] : [])]),
-    error: (error) => setMessages((rows) => [...rows, { id: Crypto.randomUUID(), role: 'error', content: error instanceof VoiceSessionError
-      ? mobileTranslate(runtime.current.locale, error.key) : error instanceof AssistantError ? error.message : mobileTranslate(runtime.current.locale, 'mobileAssistant.recordingFailed') }]),
+    phase: (next) => { if (mounted.current) updateConversation((previous) => ({ ...previous, phase: next })); },
+    user: (text) => updateConversation((previous) => ({ ...previous, draft: '', messages: [...previous.messages, { id: Crypto.randomUUID(), role: 'user', content: text }] })),
+    reply: (reply) => updateConversation((previous) => ({ ...previous, messages: [...previous.messages, { id: Crypto.randomUUID(), role: 'assistant', content: reply.content, actions: reply.actions, cards: reply.cards },
+      ...(!reply.persisted ? [{ id: Crypto.randomUUID(), role: 'error' as const, content: mobileTranslate(runtime.current.locale, 'mobileAssistant.notSaved') }] : [])] })),
+    error: (error) => updateConversation((previous) => ({ ...previous, messages: [...previous.messages, { id: Crypto.randomUUID(), role: 'error', content: error instanceof VoiceSessionError
+      ? mobileTranslate(runtime.current.locale, error.key) : error instanceof AssistantError ? error.message : mobileTranslate(runtime.current.locale, 'mobileAssistant.recordingFailed') }] })),
   }));
-  const contextKey = [session?.user.id, family?.familyId, family?.memberId, family?.role].join(':');
   useEffect(() => {
-    flow.invalidate(); setConversationId(Crypto.randomUUID()); setMessages([]); setDraft('');
+    flow.invalidate(); setConversation(emptyConversation(contextKey));
   }, [contextKey, flow]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; flow.suspend(); }; }, [flow]);
   useFocusEffect(useCallback(() => {
@@ -76,16 +88,15 @@ export default function AssistantScreen() {
     });
     return () => listener.remove();
   }, [flow]);
-  const unavailable = !accessToken || !family || !!familyError;
+  const unavailable = !ownsConversation || !accessToken || !family || !!familyError;
   const busy = phase !== 'idle' && phase !== 'recording';
   const microphoneDisabled = phase === 'recording' ? false : busy || unavailable || familyLoading;
-  const send = (text: string) => flow.send(text);
+  const send = (text: string) => { if (isCurrentConversation(contextKey, conversationId)) return flow.send(text); };
 
   const reset = () => {
+    if (!isCurrentConversation(contextKey, conversationId)) return;
     flow.invalidate();
-    setConversationId(Crypto.randomUUID());
-    setMessages([]);
-    setDraft('');
+    setConversation(emptyConversation(contextKey));
   };
 
   const newChat = (
@@ -127,8 +138,8 @@ export default function AssistantScreen() {
             phase !== 'idle' ? <AppText variant="muted" style={{ paddingVertical: spacing[2] }}>{t(`mobileAssistant.${({ checking: 'checking', preparing: 'preparing', recording: 'listening', stopping: 'stopping', transcribing: 'transcribing', sending: 'thinking' })[phase]}`)}</AppText> : null
           }
         />
-        {unavailable && <View style={{ paddingHorizontal: spacing[5], gap: spacing[2] }}>
-          <AppText color={colors.danger}>{t(familyError ? 'mobileAssistant.familyUnavailable' : 'mobileAssistant.needsFamily')}</AppText>
+        {(!family || familyError) && <View style={{ paddingHorizontal: spacing[5], gap: spacing[2] }}>
+          <AppText color={colors.danger}>{t(familyLoading ? 'mobileAssistant.checking' : familyError ? 'mobileAssistant.familyUnavailable' : 'mobileAssistant.needsFamily')}</AppText>
           <Pressable accessibilityRole="button" disabled={familyLoading} onPress={() => void refreshFamily()} style={{ minHeight: 44, justifyContent: 'center' }}><AppText>{t('mobileAssistant.retry')}</AppText></Pressable>
         </View>}
         <View style={{ flexDirection: 'row', gap: spacing[2], paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg, alignItems: 'flex-end' }}>
@@ -140,7 +151,7 @@ export default function AssistantScreen() {
             accessibilityLabel={t(phase === 'recording' ? 'mobileAssistant.stopSend' : 'mobileAssistant.speak')}
             accessibilityState={{ busy, selected: phase === 'recording' }}
             disabled={microphoneDisabled}
-            onPress={() => { void (phase === 'recording' ? flow.stopAndSend() : flow.startRecording()); }}
+            onPress={() => { if (isCurrentConversation(contextKey, conversationId)) void (phase === 'recording' ? flow.stopAndSend() : flow.startRecording()); }}
             style={({ pressed }) => ({
               width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
               borderWidth: 1,

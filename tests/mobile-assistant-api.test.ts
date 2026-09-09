@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../mobile/src/lib/config', () => ({ config: { apiUrl: 'https://www.bubaly.com' } }));
-import { askAssistant, transcribeSpeech } from '../mobile/src/lib/api';
 import { mobileTranslate } from '../mobile/src/lib/mobile-i18n';
+
+// Native config is mocked at runtime. Keep this import dynamic so the separate
+// web typecheck does not require Expo packages installed only by the mobile job.
+const apiModule = '../mobile/src/lib/api';
+const { askAssistant, transcribeSpeech } = await import(apiModule);
 
 afterEach(() => vi.unstubAllGlobals());
 const base = { token: 'token', expectedFamilyId: 'family-1', locale: 'fr-FR' };
