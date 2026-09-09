@@ -126,7 +126,7 @@ function gpaFromPct(pct: number): number {
 export function SchoolModule() {
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
-  const { success, error: toastError } = useToast();
+  const { toast, success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
   const [scheduleIdx, setScheduleIdx] = useState(0);
 
@@ -240,10 +240,32 @@ export function SchoolModule() {
 
   async function proposeFromDesk(messageId: string) {
     setProposing(messageId);
-    const result = await proposeFrontDeskAction(messageId);
+    // A server action can reject rather than return — a dropped POST, a
+    // redirect out of requireUserContext, a missing service-role key. Without
+    // this catch the rejection was unhandled, `setProposing` never cleared,
+    // and every Propose button on the desk sat disabled reading "Proposing…"
+    // until the family reloaded the page, with nothing said about why.
+    const result = await proposeFrontDeskAction(messageId).catch((err: unknown) => {
+      console.error('[school-desk] propose failed', err);
+      return null;
+    });
     setProposing(null);
+    if (!result) { toastError(tr('schoolDesk.couldNotPropose')); return; }
     if (!result.ok) { toastError(result.error); return; }
-    success(result.outcome === 'pending_approval' ? tr('schoolDesk.sentForApproval') : tr('schoolDesk.proposalApplied'));
+    if (result.outcome === 'pending_approval') {
+      success(tr('schoolDesk.sentForApproval'));
+    } else if (result.handled) {
+      // `handled` is true only because `family_inbox_messages.ai_handled` came
+      // back true from the write. That is the ONLY thing that entitles this
+      // toast to say the message is marked handled.
+      success(tr('schoolDesk.proposalApplied'));
+    } else {
+      // The action ran and something durable exists, but the message could not
+      // be marked — the service-role write failed, or the row was archived out
+      // from under us. The re-read below will render this row WITHOUT the
+      // Handled badge, so the toast must not have promised otherwise.
+      toast(tr('schoolDesk.proposalNotMarked'), 'info');
+    }
     // Re-read rather than patch state: "Handled" is whatever `ai_handled` says
     // after the write, not what this browser hoped it would say.
     await loadDesk();

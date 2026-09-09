@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Apri la posta in arrivo",
   "schoolDesk.parentsOnly": "Solo un genitore o un adulto può archiviare un messaggio della famiglia.",
   "schoolDesk.proposalApplied": "Fatto: questo messaggio è contrassegnato come gestito.",
+  "schoolDesk.proposalNotMarked": "Fatto: l’azione è stata eseguita, ma non è stato possibile contrassegnare questo messaggio come gestito.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Proponi",
   "schoolDesk.proposing": "Proposta in corso…",

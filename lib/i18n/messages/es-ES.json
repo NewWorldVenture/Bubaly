@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Abrir bandeja de entrada",
   "schoolDesk.parentsOnly": "Solo un padre o un adulto puede archivar un mensaje de la familia.",
   "schoolDesk.proposalApplied": "Listo: este mensaje queda marcado como resuelto.",
+  "schoolDesk.proposalNotMarked": "Listo: la acción se ejecutó, pero no se pudo marcar este mensaje como gestionado.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Proponer",
   "schoolDesk.proposing": "Proponiendo…",

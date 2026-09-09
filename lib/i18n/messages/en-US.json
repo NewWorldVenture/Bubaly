@@ -9627,6 +9627,7 @@
   "schoolDesk.openInbox": "Open inbox",
   "schoolDesk.parentsOnly": "Only a parent or adult can file a family message.",
   "schoolDesk.proposalApplied": "Done — this message is marked handled.",
+  "schoolDesk.proposalNotMarked": "Done — the action ran, but this message could not be marked handled.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Propose",
   "schoolDesk.proposing": "Proposing…",

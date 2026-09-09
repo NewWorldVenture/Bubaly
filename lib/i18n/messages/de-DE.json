@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Posteingang öffnen",
   "schoolDesk.parentsOnly": "Nur ein Elternteil oder Erwachsener kann eine Familiennachricht ablegen.",
   "schoolDesk.proposalApplied": "Erledigt — diese Nachricht ist als erledigt markiert.",
+  "schoolDesk.proposalNotMarked": "Fertig — die Aktion wurde ausgeführt, aber diese Nachricht konnte nicht als erledigt markiert werden.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Vorschlagen",
   "schoolDesk.proposing": "Wird vorgeschlagen …",

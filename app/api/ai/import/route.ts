@@ -38,13 +38,41 @@ function fmtWhen(value: unknown): string {
   })})`;
 }
 
+/**
+ * The grocery names an `add_grocery_item` payload carries, in EITHER shape.
+ *
+ * The registry tool (`lib/ai/tools/groceries.ts`) accepts both the legacy
+ * single-item spelling the model emits (`{name, quantity}`) and the batch form
+ * (`{items: [{name}, ...]}`) that the front-desk classifier builds for a gear
+ * list. Reading only `a.name` printed "Grocery: undefined" for the batch, and
+ * that string is what the family reads in the confirm list AND what phase 2
+ * stores as `approval_requests.title` -- so a parent was asked to approve a
+ * card naming none of the items it would add.
+ */
+function groceryNames(a: Record<string, unknown>): string[] {
+  const batch = Array.isArray(a.items) ? a.items : [];
+  const names = batch
+    .map((entry) => (entry && typeof entry === 'object' ? (entry as { name?: unknown }).name : null))
+    .filter((n): n is string => typeof n === 'string' && n.trim() !== '')
+    .map((n) => n.trim());
+  const single = typeof a.name === 'string' && a.name.trim() ? a.name.trim() : null;
+  return single ? [...names, single] : names;
+}
+
 /** Human-readable summary for a proposed action, shown before the user confirms. */
 function summarize(name: string, a: Record<string, unknown>): string {
   switch (name) {
     case 'create_calendar_event': return `📅 Event: “${a.title}”${fmtWhen(a.starts_at)}`;
     case 'create_chore': return `✅ Chore: “${a.title}”${a.due_at ? fmtWhen(a.due_at) : ''}`;
     case 'create_reminder': return `⏰ Reminder: “${a.title}”${fmtWhen(a.remind_at)}`;
-    case 'add_grocery_item': return `🛒 Grocery: ${a.name}${a.quantity ? ` × ${a.quantity}` : ''}`;
+    case 'add_grocery_item': {
+      const names = groceryNames(a);
+      // Nothing nameable in the payload: fall through to the tool name rather
+      // than print a word the payload does not contain.
+      if (names.length === 0) return name;
+      const quantity = names.length === 1 && a.quantity ? ` × ${a.quantity}` : '';
+      return `🛒 Grocery: ${names.join(', ')}${quantity}`;
+    }
     case 'create_meal_plan_entry': return `🍽️ Meal: ${a.meal_name}${fmtWhen(a.plan_date)}`;
     default: return name;
   }
@@ -80,9 +108,16 @@ function frontDeskItem(text: string, now: Date): Item | null {
   return { name: proposal.name, args: proposal.args, summary: summarize(proposal.name, proposal.args) };
 }
 
-/** The title an item is about, for de-duplication. Empty when it has none. */
+/**
+ * The title an item is about, for de-duplication. Empty when it has none.
+ *
+ * A batched grocery payload has no `title`, `name` or `meal_name` at all, so it
+ * used to key as the empty string and every gear list looked like a duplicate
+ * of every other one. Its key is the names it would add.
+ */
 function itemKey(item: Item): string {
-  const raw = item.args.title ?? item.args.name ?? item.args.meal_name ?? '';
+  const batch = item.name === 'add_grocery_item' ? groceryNames(item.args).join('|') : '';
+  const raw = item.args.title ?? item.args.name ?? item.args.meal_name ?? batch;
   return typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().toLowerCase() : '';
 }
 

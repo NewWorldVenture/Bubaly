@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Inbox openen",
   "schoolDesk.parentsOnly": "Alleen een ouder of volwassene kan een gezinsbericht afhandelen.",
   "schoolDesk.proposalApplied": "Klaar — dit bericht is als afgehandeld gemarkeerd.",
+  "schoolDesk.proposalNotMarked": "Klaar — de actie is uitgevoerd, maar dit bericht kon niet als afgehandeld worden gemarkeerd.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Voorstellen",
   "schoolDesk.proposing": "Bezig met voorstellen…",

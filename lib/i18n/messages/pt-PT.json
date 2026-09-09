@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Abrir caixa de entrada",
   "schoolDesk.parentsOnly": "Apenas um dos pais ou um adulto pode arquivar uma mensagem da família.",
   "schoolDesk.proposalApplied": "Concluído — esta mensagem está marcada como tratada.",
+  "schoolDesk.proposalNotMarked": "Concluído — a ação foi executada, mas não foi possível marcar esta mensagem como tratada.",
   "schoolDesk.proposalTitle": "{kind}: {subject}",
   "schoolDesk.propose": "Propor",
   "schoolDesk.proposing": "A propor…",

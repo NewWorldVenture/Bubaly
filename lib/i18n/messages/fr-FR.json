@@ -9461,6 +9461,7 @@
   "schoolDesk.openInbox": "Ouvrir la boîte de réception",
   "schoolDesk.parentsOnly": "Seul un parent ou un adulte peut classer un message de la famille.",
   "schoolDesk.proposalApplied": "C’est fait — ce message est marqué comme traité.",
+  "schoolDesk.proposalNotMarked": "C’est fait — l’action a été exécutée, mais ce message n’a pas pu être marqué comme traité.",
   "schoolDesk.proposalTitle": "{kind} : {subject}",
   "schoolDesk.propose": "Proposer",
   "schoolDesk.proposing": "Proposition en cours…",

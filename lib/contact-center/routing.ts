@@ -121,7 +121,7 @@ export function autoReplyText(intent: InboundIntent, familyLabel = 'the family')
     case 'school':
       return `Thanks — I’ve logged this school notice for ${familyLabel} and put it in front of them.`;
     case 'sports':
-      return `Thanks — I’ve logged this for ${familyLabel} and flagged it with their team schedule.`;
+      return `Thanks — I’ve logged this club message for ${familyLabel} and put it in front of them.`;
     case 'spam':
       return `This message has been filed.`;
     default:

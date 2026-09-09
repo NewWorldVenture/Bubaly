@@ -11,8 +11,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  classifyIntent, intentMeta, routeInbound, shouldNotifyFamily, shouldPlanInbound,
+  autoReplyText, classifyIntent, intentMeta, routeInbound, shouldNotifyFamily, shouldPlanInbound,
 } from '@/lib/contact-center/routing';
+import { buildProposal, classify } from '@/lib/front-desk/school-sports';
 
 const deskCard = readFileSync('components/modules/school-module.tsx', 'utf8');
 const deskAction = readFileSync('app/(app)/dashboard/school/actions.ts', 'utf8');
@@ -81,6 +82,22 @@ describe('inbound routing knows school and sports', () => {
     expect(intentMeta('school').label).toBe('School');
     expect(intentMeta('sports').label).toBe('Sports');
     expect(intentMeta('nonsense').label).toBe('General');
+  });
+
+  it('auto-replies without claiming a link no column could hold', () => {
+    // These replies are really sent: app/api/contact-center/sms/route.ts falls
+    // back to autoReplyText whenever the provider returns none, persists it via
+    // recordOutboundMessage and hands it back as TwiML. So they may claim only
+    // what filing the message proves. Nothing ties a message to a child, a team
+    // or a schedule — 0214 has no member_id, linked_type, linked_id or
+    // sub_intent — and the sports line used to say it had "flagged it with
+    // their team schedule".
+    for (const intent of ['school', 'sports'] as const) {
+      const reply = autoReplyText(intent, 'the Smiths');
+      expect(reply).toContain('the Smiths');
+      expect(reply).toMatch(/logged/i);
+      expect(reply).not.toMatch(/team schedule|their calendar|linked|added it to|booked|signed/i);
+    }
   });
 
   it('stores the verdict in a free-text column — 0214 puts no CHECK on ai_intent', () => {
@@ -173,6 +190,35 @@ describe('the desk card only claims what a row says', () => {
     expect(deskCard).toContain('await loadDesk();');
   });
 
+  it('says "marked handled" only when the write came back saying so', () => {
+    // `proposeFrontDeskAction` returns `handled` — computed from the row the
+    // service-role update returned — precisely so the toast can tell "the
+    // action ran AND ai_handled is now true" from "the action ran but the mark
+    // failed". The desk used to toast the first for every executed outcome,
+    // and the loadDesk() on the very next line then rendered that same row
+    // WITHOUT the Handled badge.
+    const fn = /async function proposeFromDesk\([\s\S]*?\n  \}/.exec(deskCard);
+    expect(fn).not.toBeNull();
+    expect(fn![0]).toContain('} else if (result.handled) {');
+    const branchAt = fn![0].indexOf('result.handled');
+    const appliedAt = fn![0].indexOf("tr('schoolDesk.proposalApplied')");
+    expect(branchAt).toBeGreaterThan(-1);
+    expect(appliedAt).toBeGreaterThan(branchAt);
+    // The other half of the branch says something the row can stand behind.
+    expect(fn![0]).toContain("tr('schoolDesk.proposalNotMarked')");
+    // And exactly one place makes the stronger claim.
+    expect((deskCard.match(/schoolDesk\.proposalApplied/g) ?? []).length).toBe(1);
+  });
+
+  it('never leaves Propose stuck on "Proposing…" when the server action rejects', () => {
+    const fn = /async function proposeFromDesk\([\s\S]*?\n  \}/.exec(deskCard);
+    expect(fn).not.toBeNull();
+    expect(fn![0]).toContain('.catch(');
+    expect(fn![0]).toContain("console.error('[school-desk] propose failed'");
+    expect(fn![0]).toContain('setProposing(null);');
+    expect(fn![0]).toContain("toastError(tr('schoolDesk.couldNotPropose'))");
+  });
+
   it('classifies at read time, because there is no column to store it in', () => {
     expect(deskCard).toContain('verdict: classify(row, roster, deskTeams, classes, { now })');
   });
@@ -242,6 +288,40 @@ describe('magic import proposes the same thing', () => {
   it('still sends every confirmed item through the gate', () => {
     expect(importRoute).toContain('await gateAiAction(');
     expect(importRoute).toContain("if (outcome.effect === 'require_approval')");
+  });
+
+  it('names the gear in the summary a parent is asked to approve', () => {
+    // The gear branch emits the registry's BATCH shape, never {name}.
+    const message = {
+      subject: null,
+      body: 'Soccer practice Saturday: please bring cleats, shin guards and a water bottle.',
+    };
+    const verdict = classify(message, [], [], [], { now: '2026-09-09T12:00:00.000Z' });
+    expect(verdict.subKind).toBe('gear');
+    const proposal = buildProposal(message, verdict);
+    expect(proposal?.name).toBe('add_grocery_item');
+    expect(proposal?.args.name).toBeUndefined();
+    expect(proposal?.args.items).toEqual([
+      { name: 'cleats' }, { name: 'shin guards' }, { name: 'water bottle' },
+    ]);
+
+    // So reading `a.name` for that shape prints "Grocery: undefined" — and the
+    // summary is both the line in the confirm list AND the `title` phase 2
+    // hands gateAiAction, which is persisted as approval_requests.title.
+    expect(importRoute).toContain('function groceryNames(');
+    const summarizeFn = /function summarize\([\s\S]*?\n}/.exec(importRoute);
+    expect(summarizeFn).not.toBeNull();
+    expect(summarizeFn![0]).toContain('groceryNames(a)');
+    expect(summarizeFn![0]).not.toMatch(/Grocery: \$\{a\.name\}/);
+  });
+
+  it('de-duplicates a batched grocery item by the names it would add', () => {
+    // itemKey read title/name/meal_name only, all absent from the batch shape,
+    // so every gear list keyed as the empty string and looked like a duplicate
+    // of every other one.
+    const keyFn = /function itemKey\([\s\S]*?\n}/.exec(importRoute);
+    expect(keyFn).not.toBeNull();
+    expect(keyFn![0]).toContain("item.name === 'add_grocery_item' ? groceryNames(item.args)");
   });
 
   it('maps every proposable tool to a trust domain', () => {
