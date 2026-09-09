@@ -11003,7 +11003,7 @@
   "timeSaved.remindersDelivered": "verzonden herinneringen",
   "timeSaved.savedThisWeek": "{amount} gemodelleerde planningstijd · afgelopen 7 dagen",
   "timeSaved.tasksAutoHandled": "automatisch afgehandelde taken",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Aanname: 12 minuten per voltooid plan met voltooiingsdatum; geen gemeten tijdwinst. Gedeeltelijke plannen, losse acties en herinneringen zijn uitgesloten.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Aanname: {minutes} minuten per voltooid plan met voltooiingsdatum; geen gemeten tijdwinst. Gedeeltelijke plannen, losse acties en herinneringen zijn uitgesloten.",
   "timeSaved.tryAgain": "Probeer opnieuw",
   "timetable.addClass": "Les toevoegen",
   "timetable.allStudents": "Alle leerlingen",

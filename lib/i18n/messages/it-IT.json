@@ -11003,7 +11003,7 @@
   "timeSaved.remindersDelivered": "promemoria inviati",
   "timeSaved.savedThisWeek": "{amount} di tempo di pianificazione modellato · ultimi 7 giorni",
   "timeSaved.tasksAutoHandled": "attività gestite in automatico",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Si ipotizzano 12 minuti per ogni piano completato con una data di completamento; non è tempo risparmiato misurato. Sono esclusi piani parziali, singole azioni e promemoria.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Si ipotizzano {minutes} minuti per ogni piano completato con una data di completamento; non è tempo risparmiato misurato. Sono esclusi piani parziali, singole azioni e promemoria.",
   "timeSaved.tryAgain": "Riprova",
   "timetable.addClass": "Aggiungi corso",
   "timetable.allStudents": "Tutti gli studenti",

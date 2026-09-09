@@ -11003,7 +11003,7 @@
   "timeSaved.remindersDelivered": "recordatorios enviados",
   "timeSaved.savedThisWeek": "{amount} de tiempo de planificación modelado · últimos 7 días",
   "timeSaved.tasksAutoHandled": "tareas gestionadas automáticamente",
-  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Supone 12 minutos por plan completado con fecha de finalización; no es un ahorro de tiempo medido. Se excluyen los planes parciales, las acciones individuales y los recordatorios.",
+  "timeSaved.timeYouDidntSpendOnFamilyAdmin": "Supone {minutes} minutos por plan completado con fecha de finalización; no es un ahorro de tiempo medido. Se excluyen los planes parciales, las acciones individuales y los recordatorios.",
   "timeSaved.tryAgain": "Inténtalo de nuevo",
   "timetable.addClass": "Añadir clase",
   "timetable.allStudents": "Todos los estudiantes",
