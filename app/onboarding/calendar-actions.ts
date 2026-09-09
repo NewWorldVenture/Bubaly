@@ -10,6 +10,7 @@ import { createSyncOAuthState, syncOAuthStatePath } from '@/lib/sync/oauth-state
 import { calendarContinuationCookie, onboardingCalendarProvider, sealCalendarContinuation } from '@/lib/onboarding/calendar-state';
 import { prepareCalendarFamily, verifyCalendarWizard } from '@/lib/services/onboarding-calendar/setup';
 import { previewConnectedCalendar } from '@/lib/services/onboarding-calendar';
+import { assertOnboardingCalendarAccess } from '@/lib/services/onboarding-calendar/access';
 import { buildFirstBrief } from '@/lib/onboarding/first-brief';
 import type { ServiceScope } from '@/lib/services/types';
 
@@ -26,8 +27,10 @@ export async function startCalendarConnectionAction(input: z.infer<typeof startS
     const auth = await db.auth.getUser();
     if (auth.error || !auth.data.user) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     const scope: ServiceScope = { db: createServiceClient(), familyId: '', userId: auth.data.user.id, role: 'parent', actorKind: 'member', memberId: null, tz: family.timezone };
+    await assertOnboardingCalendarAccess(scope);
     const prepared = await prepareCalendarFamily(scope, { ...family, displayName });
     if (!prepared.ok) return prepared;
+    await assertOnboardingCalendarAccess({ ...scope, familyId: prepared.data.familyId });
     const state = `onboarding.${createSyncOAuthState()}`;
     (await cookies()).set(calendarContinuationCookie(provider), sealCalendarContinuation({ userId: scope.userId!, familyId: prepared.data.familyId, provider, state }), {
       httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: syncOAuthStatePath(provider), maxAge: 600,

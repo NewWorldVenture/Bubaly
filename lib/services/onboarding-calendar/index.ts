@@ -8,6 +8,7 @@ import { onboardingRunKey } from '@/lib/onboarding/idempotency';
 import { sealCalendarPreview, type CalendarPreviewReceipt } from '@/lib/onboarding/calendar-state';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { assertOnboardingCalendarAccess } from './access';
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 async function unavailable() { return fail((await getTranslations())('connectedCalendar.unavailable'), { code: SERVICE_CODES.db, retryable: true }); }
@@ -24,6 +25,7 @@ async function ownedAccount(scope: ServiceScope, accountId: string) {
   const marker = object(object(account.data.metadata).onboardingCalendar);
   if (marker.version !== 1 || !['preview', 'import'].includes(String(marker.state)) ||
     (marker.state === 'preview' ? account.data.sync_direction !== 'manual' : account.data.sync_direction !== 'import')) throw new Error('Calendar connection is not available for import');
+  await assertOnboardingCalendarAccess(scope);
   return { account: account.data, marker };
 }
 
@@ -73,6 +75,7 @@ export async function previewConnectedCalendar(scope: ServiceScope, accountId: s
     const { account, marker } = await ownedAccount(scope, accountId);
     if (marker.state !== 'preview' || account.provider !== adapter.provider || !['google', 'microsoft'].includes(adapter.provider)) throw new Error('Calendar preview unavailable');
     const { calendar, rows } = await pullCalendar(scope, accountId, adapter);
+    await assertOnboardingCalendarAccess(scope);
     const active = rows.filter((row) => !row.cancelled);
     const events = active.map((row) => row.event);
     return ok({ events, calendarName: calendar.name, receipt: sealCalendarPreview({ userId: scope.userId!, familyId: scope.familyId,
@@ -93,6 +96,8 @@ const localFieldsHash = (row: Record<string, unknown>) => onboardingRunKey('conn
 /** Single canonical materializer shared by Finish and future import-only runs.
  * Imported rows live in calendar_events. Mapping hashes preserve local edits. */
 async function writeEvents(scope: ServiceScope, accountId: string, provider: 'google' | 'microsoft', rows: ImportRow[]): Promise<ImportCounts> {
+  // Refresh may have waited on the provider since its initial access proof.
+  await assertOnboardingCalendarAccess(scope);
   const result: ImportCounts = { imported: 0, exported: 0, skipped: 0, conflicts: 0 };
   for (const row of rows) {
     const mapping = await scope.db.from('sync_external_mappings').select('id, local_id, metadata')
@@ -204,6 +209,7 @@ export async function enableConnectedCalendar(scope: ServiceScope, receipt: Cale
     if (receipt.familyId !== scope.familyId || receipt.userId !== scope.userId || receipt.provider !== account.provider) throw new Error('Calendar preview ownership changed');
     if (marker.state === 'import' && marker.calendarExternalId !== receipt.calendarExternalId) throw new Error('Calendar selection changed');
     const metadata = { ...object(account.metadata), onboardingCalendar: { version: 1, state: 'import', calendarExternalId: receipt.calendarExternalId } } as Json;
+    await assertOnboardingCalendarAccess(scope);
     const saved = await scope.db.from('sync_accounts').update({ sync_direction: 'import', sync_status: 'synced', metadata }).eq('id', account.id).eq('family_id', scope.familyId)
       .eq('user_id', scope.userId!).eq('sync_direction', account.sync_direction).eq('updated_at', account.updated_at).select('id').maybeSingle();
     if (saved.error || !saved.data) throw saved.error ?? new Error('Calendar import could not be enabled');

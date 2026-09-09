@@ -5,6 +5,7 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 import { previewConnectedCalendar, finishConnectedCalendar, enableConnectedCalendar, refreshOnboardingCalendar, validateConnectedCalendarReceipt } from '@/lib/services/onboarding-calendar';
 import { readCalendarPreview, readCalendarContinuation, sealCalendarContinuation } from '@/lib/onboarding/calendar-state';
 import { connectAccount } from '@/lib/sync/accounts';
+import { getProviderAccessToken } from '@/lib/sync/access-token';
 
 vi.mock('@/lib/sync/access-token', () => ({ getProviderAccessToken: vi.fn(async () => 'server-token') }));
 vi.mock('@/lib/i18n/server', async () => {
@@ -28,6 +29,7 @@ beforeEach(() => {
   db.seed('sync_accounts', [{ id: accountId, user_id: userId, family_id: familyId, provider: 'google', external_id: 'calendar@example.test',
     updated_at: '2026-09-09T00:00:00Z', sync_direction: 'manual', metadata: { unrelated: true, onboardingCalendar: { version: 1, state: 'preview' } } }]);
   db.seed('family_members', [{ id: 'member', user_id: userId, family_id: familyId, role: 'parent', is_active: true }]);
+  db.seed('families', [{ id: familyId, trial_ends_at: null, closed_at: null }]);
   db.seed('user_preferences', [{ user_id: userId, active_family_id: familyId }]);
   db.seed('onboarding_progress', [{ user_id: userId, family_id: familyId, source: 'wizard', status: 'in_progress' }]);
   scope = { db: db as never, userId, familyId, memberId: 'member', actorKind: 'member', role: 'parent', tz: 'UTC' };
@@ -51,6 +53,54 @@ async function imported() {
   expect(await enableConnectedCalendar(scope, result.proof)).toMatchObject({ ok: true });
   return result;
 }
+
+describe('current Calendar Sync permission at import boundaries', () => {
+  it('blocks disabled preview before token access and provider reads', async () => {
+    vi.mocked(getProviderAccessToken).mockClear();
+    db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+    expect(await previewConnectedCalendar(scope, accountId, adapter)).toMatchObject({ ok: false });
+    expect(getProviderAccessToken).not.toHaveBeenCalled(); expect(adapter.listCalendars).not.toHaveBeenCalled();
+    expect(db.table('calendar_events')).toHaveLength(0);
+  });
+
+  it('does not refresh an active import once its trial expires', async () => {
+    await imported(); vi.mocked(getProviderAccessToken).mockClear(); vi.mocked(adapter.listCalendars).mockClear();
+    db.table('families')[0].trial_ends_at = '2020-01-01T00:00:00Z';
+    expect(await refreshOnboardingCalendar({ ...scope, actorKind: 'system', role: 'system' }, accountId, adapter)).toMatchObject({ ok: false });
+    expect(getProviderAccessToken).not.toHaveBeenCalled(); expect(adapter.listCalendars).not.toHaveBeenCalled();
+    expect(db.table('calendar_events')).toHaveLength(1);
+  });
+
+  it('rechecks permission after provider work before changing canonical events', async () => {
+    await imported();
+    vi.mocked(adapter.pullCalendarWindow!).mockImplementationOnce(async () => {
+      db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+      return [{ ...events[0], title: 'Remote change' }];
+    });
+    expect(await refreshOnboardingCalendar(scope, accountId, adapter)).toMatchObject({ ok: false });
+    expect(db.table('calendar_events')).toHaveLength(1);
+    expect(db.table('calendar_events')[0].title).toBe('School visit');
+    expect(db.table('sync_external_mappings')).toHaveLength(1);
+  });
+
+  it('rechecks current entitlement after reading completion and before activating imports', async () => {
+    const receipt = await preview();
+    db.table('onboarding_progress')[0].status = 'completed';
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation((table) => {
+      const query = from(table);
+      if (table === 'onboarding_progress') {
+        const read = query.maybeSingle.bind(query);
+        vi.spyOn(query, 'maybeSingle').mockImplementation(async () => {
+          const result = await read(); db.table('families')[0].closed_at = new Date().toISOString(); return result;
+        });
+      }
+      return query;
+    });
+    expect(await enableConnectedCalendar(scope, receipt.proof)).toMatchObject({ ok: false });
+    expect(db.table('sync_accounts')[0].sync_direction).toBe('manual');
+  });
+});
 
 describe('connected calendar preview and canonical import', () => {
   it('previews privately, verifies the receipt and imports exactly one canonical copy across Finish and background retries', async () => {

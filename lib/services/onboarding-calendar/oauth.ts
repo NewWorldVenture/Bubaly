@@ -9,6 +9,7 @@ import { microsoftCalendarReadAuthUrl, microsoftRedirectUri, exchangeMicrosoftCa
 import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 import { calendarContinuationCookie, readCalendarContinuation, type CalendarContinuation, type OnboardingCalendarProvider } from '@/lib/onboarding/calendar-state';
 import { verifyCalendarWizard } from './setup';
+import { assertOnboardingCalendarAccess } from './access';
 import type { ServiceScope } from '@/lib/services/types';
 
 function back(req: NextRequest, provider: OnboardingCalendarProvider, status: string, accountId?: string) {
@@ -30,7 +31,9 @@ async function wizardScope(continuation: CalendarContinuation): Promise<ServiceS
   if (family.error || !family.data) return null;
   const scope: ServiceScope = { db: admin, familyId: continuation.familyId, userId: auth.user.id,
     actorKind: 'member', role: 'parent', memberId: null, tz: family.data.timezone };
-  return await verifyCalendarWizard(scope) ? scope : null;
+  if (!await verifyCalendarWizard(scope)) return null;
+  await assertOnboardingCalendarAccess(scope);
+  return scope;
 }
 
 export async function startOnboardingCalendarOAuth(req: NextRequest, provider: OnboardingCalendarProvider): Promise<NextResponse> {
@@ -66,6 +69,7 @@ export async function finishOnboardingCalendarOAuth(req: NextRequest, provider: 
     const tokens = provider === 'google' ? await exchangeCode(code, redirectUri) : await exchangeMicrosoftCalendarReadCode(code, redirectUri);
     const identity = await adapter.getAccountIdentity(tokens.accessToken);
     if (!identity || !await verifyCalendarWizard(scope)) return back(req, provider, 'unavailable');
+    await assertOnboardingCalendarAccess(scope);
     const accountId = await connectAccount(scope.db, { userId: scope.userId!, familyId: scope.familyId,
       provider, externalId: identity, displayName: identity, tokens, scope: tokens.scope, onboardingCalendar: true });
     const audit = await scope.db.from('sync_audit_logs').insert({ user_id: scope.userId, family_id: scope.familyId,

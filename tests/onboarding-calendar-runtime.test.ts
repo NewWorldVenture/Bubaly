@@ -34,6 +34,7 @@ const { finalizeOnboardingAction } = await import('@/app/onboarding/actions');
 const { default: OnboardingLayout } = await import('@/app/onboarding/layout');
 const { GET: googleStart } = await import('@/app/api/sync/google/auth/route');
 const { GET: googleFinish } = await import('@/app/api/sync/google/callback/route');
+const { GET: providerStart } = await import('@/app/api/sync/[provider]/auth/route');
 const { GET: providerFinish } = await import('@/app/api/sync/[provider]/callback/route');
 const userId = '10000000-0000-4000-8000-000000000001';
 const familyId = '20000000-0000-4000-8000-000000000001';
@@ -56,7 +57,7 @@ beforeEach(() => {
   defaults: { sync_accounts: { updated_at: '2026-09-09T00:00:00Z' }, calendar_events: { updated_at: '2026-09-09T00:00:00Z' } },
   rpc: { onboarding_claim_family: () => [{ family_id: familyId, created: false }] } });
   mock.db = db;
-  db.seed('families', [{ id: familyId, created_by: userId, name: 'Ada family', timezone: 'UTC' }]);
+  db.seed('families', [{ id: familyId, created_by: userId, name: 'Ada family', timezone: 'UTC', trial_ends_at: null, closed_at: null }]);
   db.seed('family_members', [{ id: 'owner-member', user_id: userId, family_id: familyId, role: 'parent', is_active: true, created_at: '2026-09-09' }]);
   db.seed('user_preferences', [{ user_id: userId, active_family_id: familyId, notification_prefs: { keep: true } }]);
   db.seed('onboarding_progress', [{ user_id: userId, family_id: familyId, source: 'wizard', status: 'in_progress', updated_at: '2026-09-09T00:00:00Z' }]);
@@ -82,6 +83,101 @@ async function connected() {
   if (!preview.ok) throw new Error(preview.error);
   return { accountId, preview: preview.data };
 }
+
+async function pendingOAuth(provider: 'google' | 'microsoft') {
+  (mock.adapter as { provider: string }).provider = provider;
+  const started = await startCalendarConnectionAction({ provider, family: { name: 'Ada family', timezone: 'UTC' }, displayName: 'Ada' });
+  if (!started.ok) throw new Error(started.error);
+  const response = provider === 'google' ? await googleStart(request(started.url))
+    : await providerStart(request(started.url), { params: Promise.resolve({ provider }) });
+  const state = new URL(response.headers.get('location')!).searchParams.get('state')!;
+  mock.cookies.set(syncOAuthStateCookie(provider), response.cookies.get(syncOAuthStateCookie(provider))!.value);
+  const callback = () => {
+    const req = request(`/api/sync/${provider}/callback?code=approved&state=${state}`);
+    return provider === 'google' ? googleFinish(req) : providerFinish(req, { params: Promise.resolve({ provider }) });
+  };
+  return callback;
+}
+
+describe('onboarding Calendar Sync feature enforcement', () => {
+  it.each(['off', 'failed-read'])('blocks %s before the family claim or continuation cookie', async (mode) => {
+    db.replace('families', []); db.replace('family_members', []); db.replace('onboarding_progress', []); db.replace('user_preferences', []);
+    if (mode === 'off') db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+    else {
+      const from = db.from.bind(db);
+      vi.spyOn(db, 'from').mockImplementation((table) => {
+        if (table === 'app_settings') throw new Error('configuration unavailable');
+        return from(table);
+      });
+    }
+    const claim = vi.spyOn(db, 'rpc');
+    expect(await startCalendarConnectionAction({ provider: 'google', family: { name: 'Ada family', timezone: 'UTC' }, displayName: 'Ada' })).toMatchObject({ ok: false });
+    expect(claim).not.toHaveBeenCalled(); expect(mock.cookies.size).toBe(0);
+    expect(mock.exchange).not.toHaveBeenCalled(); expect(db.table('families')).toHaveLength(0);
+  });
+
+  it('rechecks configuration before redirecting a prepared continuation to Google', async () => {
+    const started = await startCalendarConnectionAction({ provider: 'google', family: { name: 'Ada family', timezone: 'UTC' }, displayName: 'Ada' });
+    if (!started.ok) throw new Error(started.error);
+    db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+    const response = await googleStart(request(started.url));
+    expect(response.headers.get('location')).toContain('/onboarding?calendarStatus=unavailable');
+    expect(mock.exchange).not.toHaveBeenCalled(); expect(db.table('sync_accounts')).toHaveLength(0);
+  });
+
+  it.each(['google', 'microsoft'] as const)('rejects %s consent return when the feature was disabled', async (provider) => {
+    const callback = await pendingOAuth(provider);
+    db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+    expect((await callback()).headers.get('location')).toContain('calendarStatus=unavailable');
+    expect(mock.exchange).not.toHaveBeenCalled(); expect(mock.identity).not.toHaveBeenCalled();
+    expect(db.table('sync_accounts')).toHaveLength(0); expect(db.table('sync_tokens')).toHaveLength(0);
+  });
+
+  it.each(['google', 'microsoft'] as const)('rechecks %s configuration after identity lookup before storing tokens', async (provider) => {
+    const callback = await pendingOAuth(provider);
+    mock.identity.mockImplementationOnce(async () => {
+      db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+      return 'ada@example.test';
+    });
+    expect((await callback()).headers.get('location')).toContain('calendarStatus=unavailable');
+    expect(mock.exchange).toHaveBeenCalledTimes(1);
+    expect(db.table('sync_accounts')).toHaveLength(0); expect(db.table('sync_tokens')).toHaveLength(0);
+  });
+
+  it('blocks a preview changed during provider work without issuing a usable receipt', async () => {
+    const { accountId } = await connected();
+    const adapter = mock.adapter as { pullCalendarWindow: () => Promise<Record<string, unknown>[]> };
+    const original = adapter.pullCalendarWindow;
+    adapter.pullCalendarWindow = async () => {
+      const events = await original();
+      db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+      return events;
+    };
+    expect(await previewConnectedCalendarAction(accountId)).toMatchObject({ ok: false });
+    expect(db.table('calendar_events')).toHaveLength(0);
+    expect(db.table('sync_accounts')[0].sync_direction).toBe('manual');
+  });
+
+  it('rejects a valid earlier preview on Finish before any profile or canonical event write', async () => {
+    const { preview } = await connected();
+    db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+    const payload = buildFinalizePayload(emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: 'UTC', importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt }));
+    expect(await finalizeOnboardingAction(payload)).toMatchObject({ ok: false });
+    expect(mock.saveProfile).not.toHaveBeenCalled(); expect(db.table('calendar_events')).toHaveLength(0);
+    expect(db.table('sync_accounts')[0].sync_direction).toBe('manual');
+  });
+
+  it('allows the normal Basic trial and requires Plus only when the feature is configured for it', async () => {
+    db.table('families')[0].trial_ends_at = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'basic' } }]);
+    const { accountId } = await connected();
+    db.table('app_settings')[0].value = { 'calendar-sync': 'plus' };
+    expect(await previewConnectedCalendarAction(accountId)).toMatchObject({ ok: false });
+    db.seed('subscriptions', [{ family_id: familyId, plan: 'plus', status: 'active' }]);
+    expect(await previewConnectedCalendarAction(accountId)).toMatchObject({ ok: true });
+    expect(db.table('families')).toHaveLength(1);
+  });
+});
 
 describe('onboarding OAuth routes and Finish integration', () => {
   it('keeps the connection dormant through consent and preview, then imports once into the named family on Finish', async () => {
@@ -178,7 +274,7 @@ describe('onboarding OAuth routes and Finish integration', () => {
     vi.spyOn(db, 'rpc').mockImplementation(async (name, args = {}) => {
       expect(name).toBe('onboarding_claim_family');
       if (!db.table('families').length) {
-        db.seed('families', [{ id: familyId, created_by: userId, name: args.p_name, timezone: args.p_timezone }]);
+        db.seed('families', [{ id: familyId, created_by: userId, name: args.p_name, timezone: args.p_timezone, trial_ends_at: new Date(Date.now() + 5 * 86_400_000).toISOString(), closed_at: null }]);
         db.seed('onboarding_progress', [{ user_id: userId, family_id: familyId, source: 'wizard', status: 'in_progress', updated_at: '2026-09-09T00:00:00Z' }]);
       }
       return { data: [{ family_id: familyId, created: true }], error: null } as never;
