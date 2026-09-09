@@ -88,17 +88,12 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
 
   const [
     membersRes,
-    { data: photos },
-    { data: milestones },
-    { data: announcements },
-    { data: dates },
-    // settleAll, which is what makes the promise above true. These reads run
-    // inside householdBody, and householdBody runs inside a Promise.all over
-    // every household — so a rejected read here would throw out of this card,
-    // reject that outer map, and blank EVERY family's card, which is the exact
-    // failure the comment above says is confined. settleAll answers a rejection
-    // with { data, error }, so the roster check below fails this card closed and
-    // the other households still render.
+    photosRes,
+    milestonesRes,
+    announcementsRes,
+    datesRes,
+    // Settle transport failures per source so the error stays within this
+    // household's card instead of rejecting the entire page's Promise.all.
   ] = await settleAll([
     supabase.from('family_members').select('id, display_name, birthday, color, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_photos').select('url, caption, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(12),
@@ -107,18 +102,34 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
     supabase.from('family_dates').select('title, event_date, kind').eq('family_id', familyId),
   ]);
 
-  // The member roster is the spine of the portal — every section (family grid,
-  // milestone/announcement author names, birthday celebrations) builds off it.
-  // A dropped error would render an empty portal for a grandparent. Fail closed
-  // on the roster; the photo/milestone/announcement/date enrichment reads stay
-  // best-effort (each degrades to a hidden section). With several households on
-  // the page the failure is scoped to THIS family's card — the others still
-  // render, and this one says so rather than showing an empty family.
+  // Every source contributes to the digest. A failed photo or milestone read
+  // must not look like a household with nothing new to share. Log each failure
+  // and render the existing retry guidance for this household alone.
+  const sourceErrors = [
+    ['photos', photosRes.error],
+    ['milestones', milestonesRes.error],
+    ['announcements', announcementsRes.error],
+    ['dates', datesRes.error],
+  ] as const;
+  let incomplete = false;
+  for (const [source, error] of sourceErrors) {
+    if (error) {
+      console.error(`[dashboard/grandparent-portal] ${source} read failed`, error);
+      incomplete = true;
+    }
+  }
   if (membersRes.error) {
     console.error('[dashboard/grandparent-portal] member roster read failed', membersRes.error);
     return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
   }
+  if (incomplete) {
+    return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
+  }
   const members = membersRes.data;
+  const photos = photosRes.data;
+  const milestones = milestonesRes.data;
+  const announcements = announcementsRes.data;
+  const dates = datesRes.data;
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
 
