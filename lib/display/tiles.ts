@@ -9,9 +9,15 @@
 // stored layout untrusted input like everything else: `resolveTiles` validates
 // every element and always returns a renderable layout.
 
+// `ask` and `handled_today` are appended, never inserted: a stored layout is
+// matched by key, so the ORDER of this list is free — but DEFAULT_TILES below
+// is what a family with no saved layout sees, and reshuffling that would move
+// the tiles under the hands of every household that never customised the wall.
+// Both new tiles are opt-in from the layout editor for exactly that reason.
 export const WIDGET_KEYS = [
   'clock', 'weather', 'schedule', 'upcoming', 'calendar', 'chores',
   'meals', 'grocery', 'members', 'reminders', 'birthdays', 'featured', 'notes', 'timers',
+  'ask', 'handled_today',
 ] as const;
 export type WidgetKey = (typeof WIDGET_KEYS)[number];
 
@@ -34,6 +40,9 @@ export function isServiceHref(v: unknown): v is string {
   return typeof v === 'string' && SERVICE_HREF_RE.test(v) && !v.startsWith('//');
 }
 
+/** The layout a family with no saved row sees. Deliberately UNCHANGED by the
+ *  `ask` / `handled_today` additions: this array is the wall every household
+ *  that never opened the editor is looking at, and its order is stable. */
 export const DEFAULT_TILES: Tile[] = [
   { id: 't1', widget: 'featured', size: 'hero' },
   { id: 't2', widget: 'schedule', size: 'md' },

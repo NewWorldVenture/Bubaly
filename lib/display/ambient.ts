@@ -77,6 +77,7 @@ export type DisplaySettings = {
   screensaver: boolean;   // gentle burn-in drift for always-on panels
   background: BackgroundMode; // gradient wash vs rotating family photos
   idleMinutes: number;    // minutes of no interaction → photo-frame; 0 = off
+  setupDismissed: boolean; // the "Set up this tablet" first-run card was dismissed
 };
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -88,6 +89,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   screensaver: true,
   background: 'gradient',
   idleMinutes: 5,
+  setupDismissed: false,
 };
 
 /** Coerce an untrusted JSON blob into a valid DisplaySettings (defaults win). */
@@ -108,6 +110,7 @@ export function normalizeSettings(raw: unknown): DisplaySettings {
     screensaver: bool(r.screensaver, DEFAULT_DISPLAY_SETTINGS.screensaver),
     background,
     idleMinutes,
+    setupDismissed: bool(r.setupDismissed, DEFAULT_DISPLAY_SETTINGS.setupDismissed),
   };
 }
 
