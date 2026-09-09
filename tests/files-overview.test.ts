@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  filterByView, searchDocs, sortDocs, groupByCategory, formatBytes, storageSummary, fileKind,
+  filterByView, filterByCategory, searchDocs, sortDocs, groupByCategory, formatBytes, storageSummary, fileKind,
   type DocLike,
 } from '@/lib/files/overview';
 
@@ -38,18 +38,38 @@ describe('sortDocs', () => {
 });
 
 describe('groupByCategory', () => {
-  it('distinguishes a generated label from an authored General without changing the bucket identity', () => {
-    expect(groupByCategory([doc({ category: null })])[0]).toMatchObject({ name: 'General', defaultLabel: true });
-    expect(groupByCategory([doc({ category: null }), doc({ category: 'General' })])[0]).toMatchObject({ name: 'General', count: 2, defaultLabel: false });
+  it('keeps absent/blank categories separate from authored General without changing rows', () => {
+    const rows = [doc({ category: null }), doc({ category: '' }), doc({ category: '   ' }), doc({ category: 'General' }), doc({ category: ' General ' })];
+    const before = structuredClone(rows);
+    expect(groupByCategory(rows)).toMatchObject([{ name: null, count: 3 }, { name: 'General', count: 2 }]);
+    expect(rows).toEqual(before);
   });
-  it('buckets by category with counts + bytes, default General', () => {
+  it('buckets by category with counts + bytes and a null uncategorized identity', () => {
     const folders = groupByCategory([
       doc({ category: 'Travel', size_bytes: 100 }),
       doc({ category: 'Travel', size_bytes: 200 }),
       doc({ category: null, size_bytes: 50 }),
     ]);
     expect(folders[0]).toMatchObject({ name: 'Travel', count: 2, bytes: 300 });
-    expect(folders.find((f) => f.name === 'General')).toMatchObject({ count: 1, bytes: 50 });
+    expect(folders.find((f) => f.name === null)).toMatchObject({ count: 1, bytes: 50 });
+  });
+});
+
+describe('filterByCategory', () => {
+  it('uses the same trimming as grouping while preserving case and plain-text syntax characters', () => {
+    const values = [null, '', ' ', 'General', 'general', ' General ', 'tax,school', 'name:"value"', '[a].*%_', 'null', 'uncategorized'];
+    const rows = values.map((category, i) => doc({ id: String(i), category, title: 'No category name in title' }));
+    expect(filterByCategory(rows, null).map((d) => d.id)).toEqual(['0', '1', '2']);
+    expect(filterByCategory(rows, 'General').map((d) => d.id)).toEqual(['3', '5']);
+    expect(filterByCategory(rows, 'general').map((d) => d.id)).toEqual(['4']);
+    for (const category of values.slice(6) as string[]) expect(filterByCategory(rows, category).map((d) => d.category)).toEqual([category]);
+    expect(filterByCategory(rows, 'tax')).toEqual([]);
+  });
+
+  it('combines exact category choice with independent plain-text title/category search', () => {
+    const rows = [doc({ title: 'Receipt [2026].pdf', category: null }), doc({ title: 'Receipt [2026].pdf', category: 'General' }), doc({ title: 'Another.pdf', category: null })];
+    expect(searchDocs(filterByCategory(rows, null), '[2026]').map((d) => d.category)).toEqual([null]);
+    expect(searchDocs(filterByCategory(rows, 'General'), '[2026]').map((d) => d.category)).toEqual(['General']);
   });
 });
 

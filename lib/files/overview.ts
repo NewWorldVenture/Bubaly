@@ -37,6 +37,11 @@ export function searchDocs(docs: DocLike[], query: string): DocLike[] {
   return docs.filter((d) => d.title.toLowerCase().includes(q) || (d.category ?? '').toLowerCase().includes(q));
 }
 
+/** Same trimming as folder grouping; null means no category, never a label. */
+export function filterByCategory(docs: DocLike[], category: string | null): DocLike[] {
+  return docs.filter((d) => (d.category?.trim() || null) === category);
+}
+
 export type SortKey = 'recent' | 'name' | 'size';
 
 export function sortDocs(docs: DocLike[], key: SortKey): DocLike[] {
@@ -46,21 +51,19 @@ export function sortDocs(docs: DocLike[], key: SortKey): DocLike[] {
   return copy.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-export type Folder = { name: string; count: number; bytes: number; defaultLabel: boolean };
+export type Folder = { name: string | null; count: number; bytes: number };
 
-/** Group docs into folders by category (default "General"), sorted by count. */
+/** Group by the trimmed authored category; absent/blank categories keep a null identity. */
 export function groupByCategory(docs: DocLike[]): Folder[] {
-  const by = new Map<string, Folder>();
+  const by = new Map<string | null, Folder>();
   for (const d of docs) {
-    const name = d.category?.trim() || 'General';
-    const f = by.get(name) ?? { name, count: 0, bytes: 0, defaultLabel: true };
-    // A user-authored category must never be translated, including "General".
-    if (d.category?.trim()) f.defaultLabel = false;
+    const name = d.category?.trim() || null;
+    const f = by.get(name) ?? { name, count: 0, bytes: 0 };
     f.count += 1;
     f.bytes += d.size_bytes ?? 0;
     by.set(name, f);
   }
-  return [...by.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return [...by.values()].sort((a, b) => b.count - a.count || (a.name ?? '').localeCompare(b.name ?? ''));
 }
 
 /** Human-readable byte size (1024-based), e.g. 2.4 MB. */

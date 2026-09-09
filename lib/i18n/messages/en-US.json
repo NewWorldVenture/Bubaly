@@ -5227,6 +5227,7 @@
   "filesHubModule.sortName": "Name (A–Z)",
   "filesHubModule.sortRecent": "Most recent",
   "filesHubModule.tooLarge": "File is too large ({limit} MB limit).",
+  "filesHubModule.uncategorized": "Uncategorized",
   "filesHubModule.updateFailed": "Could not update this file. Please try again.",
   "filesHubModule.uploadHint": "Upload a file to get started.",
   "filesHubModule.uploadTitle": "Upload to {view}",

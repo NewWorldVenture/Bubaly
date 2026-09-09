@@ -14,7 +14,7 @@ import SharedPage, { generateMetadata as sharedMetadata } from '@/app/(app)/dash
 type Document = Tables<'documents'>;
 type Props = Record<string, unknown> & { children?: ReactNode; action?: ReactNode };
 const h = vi.hoisted(() => ({
-  locale: 'en-US' as LocaleCode, role: 'parent', slots: [] as unknown[], cursor: 0, docs: [] as Document[],
+  locale: 'en-US' as LocaleCode, role: 'parent', familyId: 'family-1', slots: [] as unknown[], cursor: 0, docs: [] as Document[],
   tree: null as ReactNode, form: null as ReactElement<Props> | null, readError: null as unknown,
   success: vi.fn(), error: vi.fn(), refresh: vi.fn(), store: vi.fn(), discard: vi.fn(), signed: vi.fn(),
   insert: vi.fn(), update: vi.fn(), remove: vi.fn(), eq: vi.fn(), navigate: vi.fn(), cancel: vi.fn(), confirm: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('react', async (original) => ({
     return [h.slots[index], (next: unknown) => { h.slots[index] = typeof next === 'function' ? next(h.slots[index]) : next; }];
   },
 }));
-vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: 'family-1', userId: 'user-1', role: h.role }) }));
+vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: h.familyId, userId: 'user-1', role: h.role }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: h.docs, loading: false, error: h.readError, refresh: h.refresh }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: h.success, error: h.error }) }));
 vi.mock('@/components/ui/modal', async () => {
@@ -87,6 +87,18 @@ async function clickName(name: string) {
   const control = find((n) => n.props['aria-label'] === name && typeof n.props.onClick === 'function');
   await (control.props.onClick as () => unknown)();
 }
+async function chooseFolder(label: string) {
+  const control = find((n) => n.type === 'button' && typeof n.props['aria-pressed'] === 'boolean'
+    && nodes(n.props.children).some((child) => child.type === 'span' && textOf(child.props.children) === label));
+  await (control.props.onClick as () => unknown)();
+}
+function visibleTitles() {
+  return nodes(h.tree).filter((n) => n.type === 'p' && typeof n.props.title === 'string').map((n) => n.props.title);
+}
+function search(value: string) {
+  const input = find((n) => n.props['aria-label'] === t('filesHub.searchFiles'));
+  (input.props.onChange as (event: unknown) => void)({ target: { value } });
+}
 function expandFields(node: ReactNode): ReactNode {
   if (Array.isArray(node)) return node.map(expandFields);
   if (!isValidElement<Props>(node)) return node;
@@ -115,7 +127,7 @@ async function prepareUpload(view: FileView, category = '') {
 async function submit() { await (h.form!.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault: vi.fn() }); }
 
 beforeEach(() => {
-  h.locale = 'en-US'; h.role = 'parent'; h.slots = []; h.cursor = 0; h.tree = null; h.form = null; h.readError = null; h.docs = [doc()];
+  h.locale = 'en-US'; h.role = 'parent'; h.familyId = 'family-1'; h.slots = []; h.cursor = 0; h.tree = null; h.form = null; h.readError = null; h.docs = [doc()];
   vi.clearAllMocks();
   h.store.mockResolvedValue({ path: 'family-1/path/result.pdf', error: null });
   h.discard.mockResolvedValue({ error: null }); h.insert.mockResolvedValue({ error: null }); h.eq.mockResolvedValue({ error: null });
@@ -154,7 +166,7 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
     expect(html).toContain(escaped(new Date('2026-05-01T15:00:00Z').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' })));
     expect(html).toContain('General'); expect(html).toContain('Original.pdf');
     h.docs = [doc({ created_at: 'not-a-date' })];
-    expect(render()).toContain(escaped(t('socialFeed.general')));
+    expect(render()).toContain(escaped(t('filesHubModule.uncategorized')));
     expect(render()).not.toContain('Invalid Date');
   });
 
@@ -239,6 +251,40 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
       expect(h.assurance).toHaveBeenLastCalledWith({ active: { familyId: 'family-1' } }, 'documents', `/dashboard/files/${view}`);
     }
   });
+
+  it('selects uncategorized files separately from authored General, combines search and clears the selection', async () => {
+    h.docs = [doc({ id: 'empty', title: 'Receipt.pdf', category: null }), doc({ id: 'blank', title: 'Blank.pdf', category: '   ' }), doc({ id: 'named', title: 'Named.pdf', category: 'General' })];
+    const before = structuredClone(h.docs);
+    const html = render(); expect(html).toContain(escaped(t('filesHubModule.uncategorized'))); expect(html).toContain('General');
+    await chooseFolder(t('filesHubModule.uncategorized')); render();
+    expect(visibleTitles().sort()).toEqual(['Blank.pdf', 'Receipt.pdf']);
+    expect(find((n) => n.props['aria-label'] === t('filesHub.searchFiles')).props.value).toBe('');
+    search('Receipt'); render(); expect(visibleTitles()).toEqual(['Receipt.pdf']);
+    await chooseFolder('General'); render(); expect(visibleTitles()).toEqual(['Named.pdf']);
+    expect(find((n) => n.props['aria-label'] === t('filesHub.searchFiles')).props.value).toBe('');
+    await clickText(t('documents.allFiles')); render(); expect(visibleTitles()).toHaveLength(3);
+    expect(h.docs).toEqual(before);
+    expect(h.update).not.toHaveBeenCalled(); expect(h.insert).not.toHaveBeenCalled(); expect(h.store).not.toHaveBeenCalled();
+  });
+});
+
+it('matches folder punctuation literally and ignores category selection from another view or household', async () => {
+  const names = ['tax,school', 'name:"value"', '[a].*%_', 'General', 'general', 'null', 'uncategorized'];
+  h.docs = names.map((category, i) => doc({ id: `file-${i}`, title: `Record ${i}.pdf`, category }));
+  for (const [index, category] of names.entries()) {
+    render(); await chooseFolder(category); render(); expect(visibleTitles()).toEqual([`Record ${index}.pdf`]);
+  }
+  h.docs = [doc({ id: 'secure', title: 'Vault.pdf', category: null, is_secure: true })];
+  render('vault'); expect(visibleTitles()).toEqual(['Vault.pdf']);
+  h.familyId = 'family-2'; h.docs = [doc({ id: 'new', title: 'New household.pdf', family_id: 'family-2', category: null })];
+  render(); expect(visibleTitles()).toEqual(['New household.pdf']);
+});
+
+it('keeps All Files available when a selected category has no remaining documents', async () => {
+  h.docs = [doc({ category: 'General' })]; render(); await chooseFolder('General');
+  h.docs = []; const html = render(); expect(html).toContain(escaped(t('filesHubModule.noMatches')));
+  await clickText(t('documents.allFiles'));
+  expect(render()).toContain(escaped(t('filesHubModule.emptyView', { view: t('filesHubModule.cloudTitle') })));
 });
 
 it.each(['teen', 'child', 'caregiver', 'guest'])('does not offer visibility changes to %s', (role) => {

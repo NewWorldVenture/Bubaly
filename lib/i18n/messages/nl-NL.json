@@ -5227,6 +5227,7 @@
   "filesHubModule.sortName": "Naam (A–Z)",
   "filesHubModule.sortRecent": "Meest recent",
   "filesHubModule.tooLarge": "Het bestand is te groot (limiet van {limit} MB).",
+  "filesHubModule.uncategorized": "Zonder categorie",
   "filesHubModule.updateFailed": "Dit bestand kon niet worden bijgewerkt. Probeer het opnieuw.",
   "filesHubModule.uploadHint": "Upload een bestand om te beginnen.",
   "filesHubModule.uploadTitle": "Uploaden naar {view}",

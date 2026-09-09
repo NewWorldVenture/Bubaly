@@ -21,7 +21,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_MB, DOCUMENT_MAX_BYTES } from '@/lib/storage/documents';
 import {
-  VIEW_META, filterByView, searchDocs, sortDocs, groupByCategory, storageSummary, formatBytes, fileKind,
+  VIEW_META, filterByView, filterByCategory, searchDocs, sortDocs, groupByCategory, storageSummary, formatBytes, fileKind,
   type FileView, type SortKey, type DocLike,
 } from '@/lib/files/overview';
 import type { Tables } from '@/lib/database.types';
@@ -77,6 +77,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<{ familyId: string; view: FileView; category: string | null } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
@@ -86,7 +87,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   const byId = useMemo(() => new Map(data.map((d) => [d.id, d])), [data]);
   const scoped = useMemo(() => filterByView(data.map(toDocLike), view), [data, view]);
-  const visible = useMemo(() => sortDocs(searchDocs(scoped, query), sort), [scoped, query, sort]);
+  const folderFilter = selectedFolder?.familyId === familyId && selectedFolder.view === view ? selectedFolder : null;
+  const visible = useMemo(() => sortDocs(searchDocs(folderFilter ? filterByCategory(scoped, folderFilter.category) : scoped, query), sort), [scoped, query, sort, folderFilter]);
+  const filtered = Boolean(query) || folderFilter !== null;
   const summary = useMemo(() => storageSummary(scoped), [scoped]);
   const folders = useMemo(() => groupByCategory(scoped), [scoped]);
 
@@ -197,12 +200,18 @@ export function FilesHubModule({ view }: { view: FileView }) {
       </div>
 
       {/* Folders */}
-      {folders.length > 0 && (
+      {(folders.length > 0 || folderFilter) && (
         <div className="flex flex-wrap gap-2">
+          <button onClick={() => { setSelectedFolder(null); setQuery(''); }} aria-pressed={folderFilter === null}
+            className={cn('rounded-xl border px-3 py-1.5 text-sm transition hover:bg-elevated/40', folderFilter === null ? 'border-brand/50 bg-brand/10 text-brand-text' : 'border-border bg-surface/40')}>
+            {t('documents.allFiles')}
+          </button>
           {folders.map((f) => (
-            <button key={f.name} onClick={() => setQuery(f.name)}
-              className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-1.5 text-sm transition hover:bg-elevated/40">
-              <span className="font-medium">{f.defaultLabel ? t('socialFeed.general') : f.name}</span>
+            <button key={f.name === null ? 'uncategorized' : `category:${f.name}`}
+              onClick={() => { setSelectedFolder({ familyId, view, category: f.name }); setQuery(''); }}
+              aria-pressed={folderFilter !== null && folderFilter.category === f.name}
+              className={cn('flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm transition hover:bg-elevated/40', folderFilter !== null && folderFilter.category === f.name ? 'border-brand/50 bg-brand/10 text-brand-text' : 'border-border bg-surface/40')}>
+              <span className="font-medium">{f.name === null ? t('filesHubModule.uncategorized') : f.name}</span>
               <span className="text-xs text-muted">{number.format(f.count)}</span>
             </button>
           ))}
@@ -233,9 +242,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
       {/* File grid */}
       {visible.length === 0 ? (
-        <EmptyState icon={ViewIcon} title={query ? t('filesHubModule.noMatches') : t('filesHubModule.emptyView', { view: viewTitle })}
-          description={query ? t('filesHubModule.searchHint') : t('filesHubModule.uploadHint')}
-          action={!query ? <Button onClick={() => setOpen(true)}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button> : undefined} />
+        <EmptyState icon={ViewIcon} title={filtered ? t('filesHubModule.noMatches') : t('filesHubModule.emptyView', { view: viewTitle })}
+          description={filtered ? t('filesHubModule.searchHint') : t('filesHubModule.uploadHint')}
+          action={!filtered ? <Button onClick={() => setOpen(true)}><Upload className="h-4 w-4" /> {t('filesHub.upload')}</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((d) => {
@@ -261,7 +270,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                 </div>
                 <div className="mt-3 min-w-0">
                   <p className="truncate text-sm font-semibold" title={d.title}>{d.title}</p>
-                  <p className="text-xs text-muted">{d.category?.trim() || t('socialFeed.general')} · {formatBytes(d.size_bytes, locale)}</p>
+                  <p className="text-xs text-muted">{d.category?.trim() || t('filesHubModule.uncategorized')} · {formatBytes(d.size_bytes, locale)}</p>
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
                   {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> {t('filesHub.secure')}</span>}

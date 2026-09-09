@@ -5227,6 +5227,7 @@
   "filesHubModule.sortName": "Nome (A–Z)",
   "filesHubModule.sortRecent": "Mais recentes",
   "filesHubModule.tooLarge": "O ficheiro é demasiado grande (limite de {limit} MB).",
+  "filesHubModule.uncategorized": "Sem categoria",
   "filesHubModule.updateFailed": "Não foi possível atualizar este ficheiro. Tente novamente.",
   "filesHubModule.uploadHint": "Carregue um ficheiro para começar.",
   "filesHubModule.uploadTitle": "Carregar para {view}",
