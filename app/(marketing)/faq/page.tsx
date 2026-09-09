@@ -4,9 +4,9 @@ import { type FAQ } from '@/components/marketing/faq-accordion';
 import { FaqTabs, type FaqSection } from '@/components/marketing/faq-tabs';
 import { CTASection } from '@/components/marketing/cta';
 import { FaqStructuredData, MarketingPageStructuredData } from '@/components/marketing/structured-data';
-import { readPublishedAeoQuestionsCached } from '@/lib/marketing/aeo';
+import { localizeAeoQuestions, readPublishedAeoQuestionsCached } from '@/lib/marketing/aeo';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -31,7 +31,7 @@ const FAQ_SECTIONS: FaqSection[] = [
     id: 'roles-access',
     label: 'faq.rolesAccess',
     items: [
-      { q: 'faq.howDoRolesWork', a: 'There are six roles: Parent/Admin, Adult, Teen, Child, Caregiver, and Guest. Parents manage everything; adults manage shared household data; teens manage their own items; children complete chores; caregivers see only assigned areas; guests view limited shared events.' },
+      { q: 'faq.howDoRolesWork', a: 'faq.thereAreSixRolesParent' },
       { q: 'faq.canIInviteABabysitter', a: 'faq.absolutelyInviteThemAsA' },
     ],
   },
@@ -75,7 +75,15 @@ export default async function FAQPage() {
   // adding/editing an answer in /admin/marketing/aeo updates this page and its
   // rich results automatically — no duplication.
   const aeo = await readPublishedAeoQuestionsCached(60);
-  const knowledge: FAQ[] = aeo.questions.map((q) => ({ q: q.question, a: q.answer }));
+  // Through `localizeAeoQuestions`, exactly as MarketingAeoSection does on every
+  // other page. Without it this page — the one whose entire subject is answers —
+  // rendered a translated heading, translated tabs and translated core FAQs over
+  // an English Knowledge Center, which is the half-translated state migration
+  // 0277 exists to end. English locales skip the lookup; a reader in another
+  // language sees the questions that have been translated and not the rest.
+  const { locale } = await getLocaleContext();
+  const localizedKnowledge = await localizeAeoQuestions(aeo.questions, locale.code);
+  const knowledge: FAQ[] = localizedKnowledge.map((q) => ({ q: q.question, a: q.answer }));
 
   // FAQ_SECTIONS holds catalogue KEYS (it is module-level, where `t` does not
   // exist). Resolve them HERE rather than inside FAQAccordion: the accordion

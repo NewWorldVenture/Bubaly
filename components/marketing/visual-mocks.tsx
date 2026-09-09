@@ -200,7 +200,7 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
             {/* Today's Schedule */}
             <div className="mt-4 flex-1">
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-[11px] font-bold text-white">Today&apos;s Schedule</p>
+                <p className="text-[11px] font-bold text-white">{t('visualMocks.todaysSchedule')}</p>
                 <span className="text-[9px] text-violet-400">{t('visualMocks.viewAll')}</span>
               </div>
               <div className="space-y-3.5">
@@ -237,13 +237,13 @@ export async function HeroPhoneMockup({ className }: { className?: string }) {
 export async function ProductMockup() {
   const t = await getTranslations();
   const schedule = [
-    ['8:00 AM', 'School Drop-off'],
-    ['10:00 AM', 'Math Meeting'],
-    ['4:30 PM', 'Soccer Practice'],
+    ['8:00 AM', t('visualMocks.schoolDropOff')],
+    ['10:00 AM', t('visualMocks.mathMeeting')],
+    ['4:30 PM', t('visualMocks.soccerPractice')],
     ['7:00 PM', t('visualMocks.familyDinner')],
   ];
-  const chores = ['Tidy Living Room', 'Take Out Trash', 'Feed the Dog'];
-  const meals = ['Honey Garlic Chicken', 'Taco Tuesday', 'Salmon & Veggies'];
+  const chores = [t('visualMocks.tidyLivingRoom'), t('visualMocks.takeOutTrash'), t('visualMocks.feedTheDog')];
+  const meals = [t('visualMocks.honeyGarlicChicken'), t('visualMocks.tacoTuesday'), t('visualMocks.salmonVeggies')];
 
   return (
     <div className="dark relative mx-auto w-full max-w-[760px] pt-8 lg:pt-0">
@@ -278,7 +278,7 @@ export async function ProductMockup() {
                 ))}
               </MiniPanel>
               <MiniPanel title={t('visualMocks.upcoming')}>
-                {['Math Test', 'Doctor Appointment', 'Field Trip'].map((item) => (
+                {[t('visualMocks.mathTest'), t('visualMocks.doctorAppointment'), t('visualMocks.fieldTrip')].map((item) => (
                   <div key={item} className="py-2 text-xs">
                     <p className="font-semibold">{item}</p>
                     <p className="text-white/55">{t('visualMocks.thisWeek')}</p>
@@ -303,7 +303,7 @@ export async function ProductMockup() {
                 ))}
               </MiniPanel>
               <MiniPanel title={t('visualMocks.groceryList')}>
-                {['Milk', 'Eggs', 'Bread', 'Avocados'].map((item) => (
+                {[t('visualMocks.milk'), t('visualMocks.eggs'), t('visualMocks.bread'), t('visualMocks.avocados')].map((item) => (
                   <div key={item} className="flex items-center gap-2 py-1.5 text-xs text-white/70">
                     <Circle className="h-3.5 w-3.5" /> {item}
                   </div>
@@ -326,7 +326,7 @@ export async function ProductMockup() {
 
 export async function PhoneMockup({ className }: { className?: string }) {
   const t = await getTranslations();
-  const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', t('visualMocks.familyDinner')];
+  const items = [t('visualMocks.schoolDropOff'), t('visualMocks.mathMeeting'), t('visualMocks.soccerPractice'), t('visualMocks.familyDinner')];
   return (
     <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
       <div className="rounded-[1.45rem] bg-[#09111d] p-4">
@@ -344,7 +344,7 @@ export async function PhoneMockup({ className }: { className?: string }) {
           ))}
         </MiniPanel>
         <MiniPanel title={t('visualMocks.chores')} className="mt-3 p-3">
-          {['Tidy Living Room', 'Take Out Trash'].map((item) => (
+          {[t('visualMocks.tidyLivingRoom'), t('visualMocks.takeOutTrash')].map((item) => (
             <div key={item} className="flex items-center justify-between py-1.5 text-[10px]">
               <span>{item}</span>
               <Circle className="h-3 w-3 text-white/55" />
@@ -459,8 +459,6 @@ export async function FamilyMomentsBand({ compact = false }: { compact?: boolean
 
 export async function DeviceShowcase() {
   const t = await getTranslations();
-  // Device names are product names — the same word in every language.
-  const devices = ['iPhone', 'Android', 'iPad', 'Web App'] as const;
 
   return (
     <section className="py-10 sm:py-12">
@@ -469,10 +467,10 @@ export async function DeviceShowcase() {
       </h2>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
-        {devices.map((device) => (
-          <div key={device} className="device-card group flex flex-col items-center gap-3">
-            <div aria-hidden="true" className="dark"><DeviceArtwork device={device} /></div>
-            <span className="text-sm font-medium text-[rgb(var(--canvas-fg)/0.75)] transition group-hover:text-[rgb(var(--canvas-fg))]">{device}</span>
+        {SHOWCASE_DEVICES.map(({ key, labelKey }) => (
+          <div key={key} className="device-card group flex flex-col items-center gap-3">
+            <div aria-hidden="true" className="dark"><DeviceArtwork device={key} /></div>
+            <span className="text-sm font-medium text-[rgb(var(--canvas-fg)/0.75)] transition group-hover:text-[rgb(var(--canvas-fg))]">{t(labelKey)}</span>
           </div>
         ))}
       </div>
@@ -495,6 +493,18 @@ export async function DeviceShowcase() {
 }
 
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
+// DeviceName is an IDENTIFIER — it picks the artwork below and is typed as a
+// string-literal union, so a catalogue key cannot go in it. The visible label
+// is a separate lookup, the same split pricing-content.tsx makes between a
+// HiTier and HI_TIER_LABEL. 'iPhone' and 'iPad' are the same word in every
+// language, but they go through the catalogue too: a translator then sees the
+// whole row, and no literal is left for a future edit to leave in English.
+const SHOWCASE_DEVICES: { key: DeviceName; labelKey: string }[] = [
+  { key: 'iPhone', labelKey: 'visualMocks.deviceIphone' },
+  { key: 'Android', labelKey: 'visualMocks.deviceAndroid' },
+  { key: 'iPad', labelKey: 'visualMocks.deviceIpad' },
+  { key: 'Web App', labelKey: 'visualMocks.deviceWebApp' },
+];
 
 async function ScheduleScreen() {
   const t = await getTranslations();
@@ -507,7 +517,7 @@ async function ScheduleScreen() {
       <div className="mt-1.5 rounded-md bg-gradient-to-r from-violet-500/20 to-blue-500/20 px-1.5 py-1">
         <div className="flex items-center gap-1">
           <Sparkles className="h-2.5 w-2.5 text-violet-400" />
-          <span className="text-[5px] font-semibold text-white">3 events today</span>
+          <span className="text-[5px] font-semibold text-white">{t('visualMocks.threeEventsToday')}</span>
         </div>
       </div>
       <div className="mt-1.5 flex-1 space-y-1">
@@ -540,7 +550,7 @@ async function TasksScreen() {
         <span className="text-[6px] font-bold text-white">{t('visualMocks.bubaly')}</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
-      <p className="mt-1.5 text-[5px] font-semibold text-white/70">Today&apos;s Tasks</p>
+      <p className="mt-1.5 text-[5px] font-semibold text-white/70">{t('visualMocks.todaysTasks')}</p>
       <div className="mt-1 flex-1 space-y-1">
         {[
           { text: t('visualMocks.packLunches'), done: true },
@@ -680,7 +690,7 @@ async function DeviceArtwork({ device }: { device: DeviceName }) {
     );
   }
 
-  if (device === 'Web App') {
+  if (device === t('visualMocks.webApp')) {
     return (
       <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
         <div className="h-[92px] rounded-lg border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-[104px]">
@@ -873,12 +883,15 @@ export const FEATURE_TOPICS = [
   { icon: Sparkles, title: 'visualMocks.aiFamilyAssistant', tone: 'violet' },
 ] as const;
 
+// The same five steps reference-showcases.tsx renders, so the same
+// `workSteps.*` keys: authored once, translated once, and a copy fix lands on
+// both. Whatever renders these must call t() on them.
 export const WORK_STEPS = [
-  [Sparkles, 'Create Your Family', 'Set up your household in minutes and invite family members.'],
-  [Mail, 'Add or Forward Anything', 'Forward emails, snap photos of flyers, or add events, tasks, and lists.'],
-  [Sparkles, 'AI Gets to Work', 'Our AI reads, understands, and organizes everything into the right places.'],
-  [UsersIcon, 'Everyone Stays in Sync', 'Calendars, tasks, reminders, and updates are shared in real time.'],
-  [Check, 'Life Runs Smoother', 'Bubaly helps you plan ahead, avoid chaos, and enjoy more time together.'],
+  [Sparkles, 'workSteps.createYourFamily', 'workSteps.createYourFamilyBody'],
+  [Mail, 'workSteps.addOrForward', 'workSteps.addOrForwardBody'],
+  [Sparkles, 'workSteps.aiGetsToWork', 'workSteps.aiGetsToWorkBody'],
+  [UsersIcon, 'workSteps.everyoneInSync', 'workSteps.everyoneInSyncBody'],
+  [Check, 'workSteps.lifeRunsSmoother', 'workSteps.lifeRunsSmootherBody'],
 ] as const;
 
 function UsersIcon({ className }: { className?: string }) {
