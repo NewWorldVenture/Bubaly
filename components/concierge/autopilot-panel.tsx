@@ -7,18 +7,13 @@
 // family_automation_runs rows the server loop writes; all writes go through
 // the manager-gated server actions.
 //
-// THE HANDLED NUMBER IS NOT THIS FILE'S TO INVENT. The header used to count
-// runs with `trigger_type = 'plan_accepted'` and the legacy `status =
-// 'executed'`, which is a third definition of "handled" that disagreed with the
-// brief and with time-saved. It now counts exactly what
-// `countHandledThisWeek` says counts: runs, executed autopilot suggestions,
-// completed specialist activity and delivered reminders. The brief and
-// time-saved surfaces consume that same total, including every source's errors.
+// The shared metric counts dated recorded completed plans. Feed rows remain
+// separate; undated history is shown as excluded coverage.
 //
 // And a read that fails says so. The panel used to swallow every error and
 // render an empty feed, which is the same lie as a zero: "Bubaly did nothing"
 // when the truth is "we could not ask".
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { AlertTriangle, Bot, Check, ChevronDown, Loader2, ShieldQuestion, Sparkles, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -53,16 +48,24 @@ export function AutopilotPanel({ className }: { className?: string }) {
   const [level, setLevel] = useState<AutopilotLevel>('ask');
   const [runs, setRuns] = useState<Run[]>([]);
   const [handled, setHandled] = useState<MetricCount>(null);
+  const [undated, setUndated] = useState<MetricCount>(null);
   const [readFailed, setReadFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [snapshotFamily, setSnapshotFamily] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const currentFamily = useRef(familyId);
+  const requestSequence = useRef(0);
+  currentFamily.current = familyId;
 
   const load = useCallback(async () => {
+    if (currentFamily.current !== familyId) return;
+    const request = ++requestSequence.current;
+    const isCurrent = () => currentFamily.current === familyId && requestSequence.current === request;
     setLoaded(false);
-    const supabase = createClient();
     try {
+      const supabase = createClient();
       // `settleAll` for the two feeds so an unreachable table degrades one of
       // them rather than both; the count runs alongside and answers `null` when
       // its own read fails.
@@ -77,6 +80,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
         ]),
         countHandledThisWeek(supabase, familyId),
       ]);
+      if (!isCurrent()) return;
       // A failed queue read must not render as an empty queue: "nothing is
       // waiting for you" is a claim, and we cannot make it.
       if (runRows.error) {
@@ -88,15 +92,22 @@ export function AutopilotPanel({ className }: { className?: string }) {
       }
       setLevel(dialLevel(policy.data?.effect));
       setHandled(handledCount.total);
+      setUndated(handledCount.undatedCompletedRuns);
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('[autopilot-panel] autopilot read failed', error);
       setReadFailed(true);
       setHandled(null);
+      setUndated(null);
     }
+    setSnapshotFamily(familyId);
     setLoaded(true);
   }, [familyId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { requestSequence.current += 1; };
+  }, [load]);
 
   const queued = runs.filter((r) => r.status === 'pending');
   const executed = runs.filter((r) => r.status === 'executed').slice(0, 5);
@@ -107,6 +118,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
     setLevel(next);
     startTransition(async () => {
       const res = await setConciergeAutopilotAction(next);
+      if (currentFamily.current !== familyId) return;
       if (!res.ok) { setLevel(prev); toastError(res.error); }
       else success(next === 'auto' ? t('autopilotPanel.autoPilotOnAcceptedPlansExecuteThemselves')
         : next === 'ask' ? t('autopilotPanel.bubalyWillAskBeforeExecuting')
@@ -118,6 +130,7 @@ export function AutopilotPanel({ className }: { className?: string }) {
     setBusyId(runId);
     startTransition(async () => {
       const res = await executeQueuedRunAction(runId);
+      if (currentFamily.current !== familyId) return;
       if (!res.ok) toastError(res.error);
       else success(res.summary ?? t('autopilotPanel.executed'));
       setBusyId(null);
@@ -129,13 +142,14 @@ export function AutopilotPanel({ className }: { className?: string }) {
     setBusyId(runId);
     startTransition(async () => {
       const res = await dismissQueuedRunAction(runId);
+      if (currentFamily.current !== familyId) return;
       if (!res.ok) toastError(res.error);
       setBusyId(null);
       void load();
     });
   };
 
-  if (!loaded) return null;
+  if (!loaded || snapshotFamily !== familyId) return null;
 
   return (
     <div className={cn('rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-transparent p-4', className)}>
@@ -163,10 +177,9 @@ export function AutopilotPanel({ className }: { className?: string }) {
           <span className="block text-xs text-muted">
             {handled === null
               ? t('autopilotPanel.couldNotReadWhatBubalyHandled')
-              : handled > 0
-                ? t('autopilotPanel.nThingsHandledForYouThisWeek', { count: handled })
-                : t('autopilotPanel.acceptedPlansCanLandOnTheCalendar')}
+              : t('autopilotPanel.nThingsHandledForYouThisWeek', { count: handled })}
           </span>
+          {undated !== null && <span className="mt-1 block text-xs text-muted">{t('timeSaved.undatedCompletedPlans', { count: undated })}</span>}
         </span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted transition-transform', open && 'rotate-180')} />
       </button>
