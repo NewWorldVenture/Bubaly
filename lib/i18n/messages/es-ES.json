@@ -12465,5 +12465,19 @@
   "workspace.assistantWorkspace": "Espacio de trabajo del asistente",
   "workspace.context": "Contexto",
   "workspace.conversation": "Conversación",
-  "workspace.planAndResults": "Plan y resultados"
+  "workspace.planAndResults": "Plan y resultados",
+  "valueComparison.heading": "Valor estimado de los planes completados",
+  "valueComparison.unavailable": "No pudimos consultar los planes completados o el precio del plan. Inténtalo de nuevo.",
+  "valueComparison.recorded": "{count} finalizaciones de planes registradas en los últimos 7 días · {minutes} minutos calculados",
+  "valueComparison.hourlyLabel": "Valor que asignas a tu tiempo (USD/hora)",
+  "valueComparison.estimatedValue": "Valor estimado del tiempo · 7 días",
+  "valueComparison.planShare": "Precio publicado del plan · parte de 7 días",
+  "valueComparison.ratio": "Valor estimado / parte del precio",
+  "valueComparison.multiple": "{ratio}×",
+  "valueComparison.invalidHourly": "Introduce un valor por hora entre 0 y 1.000 USD.",
+  "valueComparison.assumptions": "Se suponen {minutes} minutos por plan completado. Es un modelo, no tiempo medido ni dinero ahorrado. Cambiar el valor por hora solo afecta a esta estimación.",
+  "valueComparison.methodHeading": "Cómo funciona esta estimación",
+  "valueComparison.method": "Cuenta los planes completados por completo según su fecha de finalización registrada. Excluye planes parciales, tareas independientes, actividad de asistentes y recordatorios para evitar solapamientos. El indicador de tiempo ahorrado incluye otras actividades y usa una base distinta.",
+  "valueComparison.undated": "{count} planes completados no tienen fecha de finalización y se excluyen; no podemos asignarlos a esta semana.",
+  "valueComparison.priceMethod": "Usa el precio publicado en USD del plan actual, no tu factura, descuentos ni impuestos. Los precios mensuales se multiplican por 12; los anuales se usan directamente. La parte de 7 días es el precio anual × 7 ÷ 365,25. Esta semana no se extrapola a semanas futuras."
 }

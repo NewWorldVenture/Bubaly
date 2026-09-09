@@ -12465,5 +12465,19 @@
   "workspace.assistantWorkspace": "Assistant workspace",
   "workspace.context": "Context",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan and results"
+  "workspace.planAndResults": "Plan and results",
+  "valueComparison.heading": "Estimated value of completed plans",
+  "valueComparison.unavailable": "We could not read the completed plans or plan price. Try again.",
+  "valueComparison.recorded": "{count} recorded plan completions in the last 7 days · {minutes} modeled minutes",
+  "valueComparison.hourlyLabel": "Your assumed value of time (USD/hour)",
+  "valueComparison.estimatedValue": "Estimated time value · 7 days",
+  "valueComparison.planShare": "Published plan price · 7-day share",
+  "valueComparison.ratio": "Estimated value / price share",
+  "valueComparison.multiple": "{ratio}×",
+  "valueComparison.invalidHourly": "Enter an hourly value from 0 to 1,000 USD.",
+  "valueComparison.assumptions": "Assumes {minutes} minutes per completed plan. This is a model, not measured time or cash saved. Changing the hourly value affects only this estimate.",
+  "valueComparison.methodHeading": "How this estimate works",
+  "valueComparison.method": "Counts fully completed plans by their recorded completion date. Partial plans, separate tasks, assistant activity and reminders are excluded to avoid overlap. The time-saved banner includes other activity and uses a different basis.",
+  "valueComparison.undated": "{count} completed plans have no completion date and are excluded; we cannot place them in this week.",
+  "valueComparison.priceMethod": "Uses the current plan’s published USD price, not your invoice, discounts or taxes. Monthly prices are multiplied by 12; annual prices are used directly. The 7-day share is annual price × 7 ÷ 365.25. This week is not projected into future weeks."
 }

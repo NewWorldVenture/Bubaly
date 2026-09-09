@@ -12465,5 +12465,19 @@
   "workspace.assistantWorkspace": "Espace de travail de l'assistant",
   "workspace.context": "Contexte",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan et résultats"
+  "workspace.planAndResults": "Plan et résultats",
+  "valueComparison.heading": "Valeur estimée des plans terminés",
+  "valueComparison.unavailable": "Impossible de consulter les plans terminés ou le prix de la formule. Réessayez.",
+  "valueComparison.recorded": "{count} fins de plans enregistrées au cours des 7 derniers jours · {minutes} minutes modélisées",
+  "valueComparison.hourlyLabel": "Valeur que vous attribuez au temps (USD/heure)",
+  "valueComparison.estimatedValue": "Valeur estimée du temps · 7 jours",
+  "valueComparison.planShare": "Prix publié de la formule · part de 7 jours",
+  "valueComparison.ratio": "Valeur estimée / part du prix",
+  "valueComparison.multiple": "{ratio}×",
+  "valueComparison.invalidHourly": "Saisissez une valeur horaire comprise entre 0 et 1 000 USD.",
+  "valueComparison.assumptions": "Hypothèse : {minutes} minutes par plan terminé. Il s’agit d’un modèle, pas de temps mesuré ni d’argent économisé. La valeur horaire ne modifie que cette estimation.",
+  "valueComparison.methodHeading": "Méthode de calcul",
+  "valueComparison.method": "Compte les plans entièrement terminés selon leur date de fin enregistrée. Les plans partiels, tâches distinctes, activités des assistants et rappels sont exclus pour éviter les doublons. L’indicateur de temps gagné inclut d’autres activités et utilise une autre base.",
+  "valueComparison.undated": "{count} plans terminés n’ont pas de date de fin et sont exclus ; nous ne pouvons pas les attribuer à cette semaine.",
+  "valueComparison.priceMethod": "Utilise le prix publié en USD de la formule actuelle, sans tenir compte de votre facture, des remises ou des taxes. Les prix mensuels sont multipliés par 12 ; les prix annuels sont utilisés directement. La part de 7 jours est le prix annuel × 7 ÷ 365,25. Cette semaine n’est pas extrapolée aux semaines futures."
 }

@@ -14,10 +14,21 @@ describe('countOrNull', () => {
     await expect(countOrNull(ok(7))).resolves.toBe(7);
   });
 
-  it('reads a null count as a real zero', async () => {
-    // PostgREST answers `count: null` for a head query over an empty table.
-    // That IS zero rows, and must not be confused with an error.
-    await expect(countOrNull(ok(null))).resolves.toBe(0);
+  it('preserves an explicit exact zero', async () => {
+    await expect(countOrNull(ok(0))).resolves.toBe(0);
+  });
+
+  it.each([null, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])('does not invent a count from %s', async (count) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(countOrNull(ok(count), 'handled runs')).resolves.toBeNull();
+    expect(spy).toHaveBeenCalledWith('[metric] handled runs read failed: exact count missing or invalid');
+  });
+
+  it('returns unavailable and logs a rejected transport read', async () => {
+    const error = new Error('connection reset');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(countOrNull(Promise.reject(error), 'handled runs')).resolves.toBeNull();
+    expect(spy).toHaveBeenCalledWith('[metric] handled runs read failed', error);
   });
 
   it('returns null on a read error — never 0 — and logs it under [metric]', async () => {

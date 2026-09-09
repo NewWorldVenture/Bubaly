@@ -12465,5 +12465,19 @@
   "workspace.assistantWorkspace": "Arbeitsbereich des Assistenten",
   "workspace.context": "Kontext",
   "workspace.conversation": "Unterhaltung",
-  "workspace.planAndResults": "Plan und Ergebnisse"
+  "workspace.planAndResults": "Plan und Ergebnisse",
+  "valueComparison.heading": "Geschätzter Wert abgeschlossener Pläne",
+  "valueComparison.unavailable": "Abgeschlossene Pläne oder Tarifpreis konnten nicht geladen werden. Versuche es erneut.",
+  "valueComparison.recorded": "{count} erfasste Planabschlüsse in den letzten 7 Tagen · {minutes} modellierte Minuten",
+  "valueComparison.hourlyLabel": "Dein angenommener Zeitwert (USD/Stunde)",
+  "valueComparison.estimatedValue": "Geschätzter Zeitwert · 7 Tage",
+  "valueComparison.planShare": "Veröffentlichter Tarifpreis · Anteil für 7 Tage",
+  "valueComparison.ratio": "Geschätzter Wert / Preisanteil",
+  "valueComparison.multiple": "{ratio}×",
+  "valueComparison.invalidHourly": "Gib einen Stundenwert zwischen 0 und 1.000 USD ein.",
+  "valueComparison.assumptions": "Annahme: {minutes} Minuten pro abgeschlossenem Plan. Dies ist ein Modell, keine gemessene Zeit- oder Geldersparnis. Der Stundenwert ändert nur diese Schätzung.",
+  "valueComparison.methodHeading": "So funktioniert die Schätzung",
+  "valueComparison.method": "Gezählt werden vollständig abgeschlossene Pläne nach dem erfassten Abschlussdatum. Teilweise abgeschlossene Pläne, einzelne Aufgaben, Assistentenaktivitäten und Erinnerungen sind ausgeschlossen, um Überschneidungen zu vermeiden. Die Anzeige zur Zeitersparnis berücksichtigt andere Aktivitäten auf einer anderen Grundlage.",
+  "valueComparison.undated": "{count} abgeschlossene Pläne haben kein Abschlussdatum und sind ausgeschlossen; sie lassen sich dieser Woche nicht zuordnen.",
+  "valueComparison.priceMethod": "Verwendet den veröffentlichten USD-Preis des aktuellen Tarifs, nicht deine Rechnung, Rabatte oder Steuern. Monatspreise werden mit 12 multipliziert, Jahrespreise direkt verwendet. Der Anteil für 7 Tage ist Jahrespreis × 7 ÷ 365,25. Diese Woche wird nicht auf künftige Wochen hochgerechnet."
 }

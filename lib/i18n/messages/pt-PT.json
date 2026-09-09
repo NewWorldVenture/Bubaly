@@ -12465,5 +12465,19 @@
   "workspace.assistantWorkspace": "Espaço de trabalho do assistente",
   "workspace.context": "Contexto",
   "workspace.conversation": "Conversa",
-  "workspace.planAndResults": "Plano e resultados"
+  "workspace.planAndResults": "Plano e resultados",
+  "valueComparison.heading": "Valor estimado dos planos concluídos",
+  "valueComparison.unavailable": "Não foi possível consultar os planos concluídos ou o preço da subscrição. Tenta novamente.",
+  "valueComparison.recorded": "{count} conclusões de planos registadas nos últimos 7 dias · {minutes} minutos calculados pelo modelo",
+  "valueComparison.hourlyLabel": "Valor que atribuis ao tempo (USD/hora)",
+  "valueComparison.estimatedValue": "Valor estimado do tempo · 7 dias",
+  "valueComparison.planShare": "Preço publicado da subscrição · parcela de 7 dias",
+  "valueComparison.ratio": "Valor estimado / parcela do preço",
+  "valueComparison.multiple": "{ratio}×",
+  "valueComparison.invalidHourly": "Introduz um valor por hora entre 0 e 1.000 USD.",
+  "valueComparison.assumptions": "Pressupõe {minutes} minutos por plano concluído. É um modelo, não tempo medido nem dinheiro poupado. Alterar o valor por hora afeta apenas esta estimativa.",
+  "valueComparison.methodHeading": "Como funciona esta estimativa",
+  "valueComparison.method": "Conta os planos totalmente concluídos pela data de conclusão registada. Planos parciais, tarefas separadas, atividade dos assistentes e lembretes são excluídos para evitar sobreposições. O indicador de tempo poupado inclui outras atividades e usa uma base diferente.",
+  "valueComparison.undated": "{count} planos concluídos não têm data de conclusão e são excluídos; não podemos atribuí-los a esta semana.",
+  "valueComparison.priceMethod": "Usa o preço publicado em USD da subscrição atual, não a tua fatura, descontos ou impostos. Os preços mensais são multiplicados por 12; os anuais são usados diretamente. A parcela de 7 dias é o preço anual × 7 ÷ 365,25. Esta semana não é projetada para semanas futuras."
 }
