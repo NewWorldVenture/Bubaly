@@ -13,6 +13,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 
 const PATH = '/dashboard/paperwork';
 
@@ -94,6 +95,7 @@ export async function materializePaperworkActionAction(input: {
     .from('paperwork_items').select('*')
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!item) return;
+  if (isPaperworkExtractionPartial(item.meta)) throw new Error(tr('paperwork.partialExtractionWarning'));
 
   const actions = (Array.isArray(item.actions) ? item.actions : []) as unknown as StoredAction[];
   const action = actions[input.actionIndex];
@@ -172,6 +174,7 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
     .from('paperwork_items').select('*')
     .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!item) return { ok: false, error: tr('actions.paperworkNotFound') };
+  if (isPaperworkExtractionPartial(item.meta)) return { ok: false, error: tr('paperwork.partialExtractionWarning') };
 
   if (!(await isAIConfigured())) {
     return { ok: false, error: tr('actions.aiIsnTConfiguredYet') };

@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "Slechts een deel van deze bijlage is vastgelegd. Bekijk het origineel voordat je handelt; datums, bedragen of instructies kunnen ontbreken.",
+  "paperwork.viewCapturedExcerpt": "Vastgelegd fragment bekijken",
   "App.couldNotSetTheDefaultDashboard": "Kan het standaarddashboard niet instellen.",
   "App.couldNotSwitchActiveFamily": "Kan niet van actief gezin wisselen.",
   "App.couldNotVerifyFamilyMembership": "Kan het gezinslidmaatschap niet verifiëren.",

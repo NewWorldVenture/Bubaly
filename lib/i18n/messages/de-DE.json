@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "Nur ein Teil dieses Anhangs wurde erfasst. Prüfe das Original, bevor du handelst; Daten, Beträge oder Anweisungen können fehlen.",
+  "paperwork.viewCapturedExcerpt": "Erfassten Auszug anzeigen",
   "App.couldNotSetTheDefaultDashboard": "Das Standard-Dashboard konnte nicht festgelegt werden.",
   "App.couldNotSwitchActiveFamily": "Die aktive Familie konnte nicht gewechselt werden.",
   "App.couldNotVerifyFamilyMembership": "Die Familienmitgliedschaft konnte nicht überprüft werden.",

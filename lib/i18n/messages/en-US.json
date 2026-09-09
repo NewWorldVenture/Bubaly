@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "Only part of this attachment was captured. Review the original before acting; dates, amounts, or instructions may be missing.",
+  "paperwork.viewCapturedExcerpt": "View captured excerpt",
   "App.couldNotSetTheDefaultDashboard": "Could not set the default dashboard.",
   "App.couldNotSwitchActiveFamily": "Could not switch active family.",
   "App.couldNotVerifyFamilyMembership": "Could not verify family membership.",

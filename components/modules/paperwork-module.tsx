@@ -12,6 +12,7 @@ import {
 import type { Tables, Json } from '@/lib/database.types';
 import type { PaperworkAction, PaperworkKind } from '@/lib/paperwork/triage';
 import { kindLabel } from '@/lib/paperwork/triage';
+import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import {
   addPaperworkAction, materializePaperworkActionAction, setPaperworkStatusAction,
   draftPaperworkReplyAction,
@@ -169,6 +170,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
         {visible.map((it) => {
           const Icon = KIND_ICON[(it.kind as PaperworkKind)] ?? FileText;
           const actions = parseActions(it.actions);
+          const partial = isPaperworkExtractionPartial(it.meta);
           const busyItem = busyKey === it.id;
           return (
             <article key={it.id} id={`paperwork-${it.id}`} className={cn(
@@ -192,16 +194,27 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                         <AlertTriangle className="h-2.5 w-2.5" /> {t('paperwork.urgent')}
                       </span>
                     )}
-                    {it.due_on && (
+                    {!partial && it.due_on && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                         <Clock className="h-2.5 w-2.5" /> due {it.due_on}
                       </span>
                     )}
                   </div>
-                  {it.summary && <p className="mt-1 text-xs text-muted">{it.summary}{it.sender ? ` · from ${it.sender}` : ''}</p>}
+                  {!partial && it.summary && <p className="mt-1 text-xs text-muted">{it.summary}{it.sender ? ` · from ${it.sender}` : ''}</p>}
+                  {partial && (
+                    <div className="mt-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+                      <p role="note">{t('paperwork.partialExtractionWarning')}</p>
+                      {it.raw_text && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-semibold">{t('paperwork.viewCapturedExcerpt')}</summary>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-fg/90">{it.raw_text}</p>
+                        </details>
+                      )}
+                    </div>
+                  )}
 
                   {/* Extracted actions */}
-                  {it.status !== 'archived' && actions.length > 0 && (
+                  {!partial && it.status !== 'archived' && actions.length > 0 && (
                     <div className="mt-3 space-y-1.5">
                       {actions.map((a, i) => {
                         const done = Boolean(a.materialized_id);
@@ -234,7 +247,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                   )}
 
                   {/* AI-drafted reply — "fill it out for me" */}
-                  {it.status !== 'archived' && (() => {
+                  {!partial && it.status !== 'archived' && (() => {
                     const draft = drafts[it.id] ?? draftFromMeta(it.meta);
                     const drafting = busyKey === `draft:${it.id}`;
                     return (

@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "Solo se ha capturado parte de este archivo adjunto. Revisa el original antes de actuar; pueden faltar fechas, importes o instrucciones.",
+  "paperwork.viewCapturedExcerpt": "Ver el fragmento capturado",
   "App.couldNotSetTheDefaultDashboard": "No se ha podido establecer el panel por defecto.",
   "App.couldNotSwitchActiveFamily": "No se ha podido cambiar de familia activa.",
   "App.couldNotVerifyFamilyMembership": "No se ha podido verificar la pertenencia a la familia.",

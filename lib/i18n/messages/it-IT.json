@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "È stata acquisita solo una parte di questo allegato. Controlla l’originale prima di agire: potrebbero mancare date, importi o istruzioni.",
+  "paperwork.viewCapturedExcerpt": "Visualizza l’estratto acquisito",
   "App.couldNotSetTheDefaultDashboard": "Impossibile impostare la dashboard predefinita.",
   "App.couldNotSwitchActiveFamily": "Impossibile cambiare la famiglia attiva.",
   "App.couldNotVerifyFamilyMembership": "Impossibile verificare l’appartenenza alla famiglia.",

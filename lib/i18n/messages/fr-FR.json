@@ -1,4 +1,6 @@
 {
+  "paperwork.partialExtractionWarning": "Seule une partie de cette pièce jointe a été extraite. Consultez l’original avant d’agir ; des dates, des montants ou des consignes peuvent manquer.",
+  "paperwork.viewCapturedExcerpt": "Voir l’extrait enregistré",
   "App.couldNotSetTheDefaultDashboard": "Impossible de définir le tableau de bord par défaut.",
   "App.couldNotSwitchActiveFamily": "Impossible de changer de famille active.",
   "App.couldNotVerifyFamilyMembership": "Impossible de vérifier l’appartenance à la famille.",
