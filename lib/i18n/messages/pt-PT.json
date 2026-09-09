@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Introduz um valor por hora entre 0 e 1.000 USD.",
   "valueComparison.assumptions": "Pressupõe {minutes} minutos por plano concluído. É um modelo, não tempo medido nem dinheiro poupado. Alterar o valor por hora afeta apenas esta estimativa.",
   "valueComparison.methodHeading": "Como funciona esta estimativa",
-  "valueComparison.method": "Conta os planos totalmente concluídos pela data de conclusão registada. Planos parciais, tarefas separadas, atividade dos assistentes e lembretes são excluídos para evitar sobreposições. O indicador de tempo poupado inclui outras atividades e usa uma base diferente.",
+  "valueComparison.method": "Conta os planos totalmente concluídos pela data de conclusão registada. Planos parciais, tarefas separadas, atividade dos assistentes e lembretes são excluídos para evitar sobreposições.",
   "valueComparison.undated": "{count} planos concluídos não têm data de conclusão e são excluídos; não podemos atribuí-los a esta semana.",
   "valueComparison.priceMethod": "Usa o preço publicado em USD da subscrição atual, não a tua fatura, descontos ou impostos. Os preços mensais são multiplicados por 12; os anuais são usados diretamente. A parcela de 7 dias é o preço anual × 7 ÷ 365,25. Esta semana não é projetada para semanas futuras."
 }

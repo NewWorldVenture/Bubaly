@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Inserisci un valore orario tra 0 e 1.000 USD.",
   "valueComparison.assumptions": "Si ipotizzano {minutes} minuti per piano completato. È un modello, non tempo misurato o denaro risparmiato. Il valore orario modifica solo questa stima.",
   "valueComparison.methodHeading": "Come funziona la stima",
-  "valueComparison.method": "Conta i piani interamente completati in base alla data di completamento registrata. Piani parziali, attività separate, attività degli assistenti e promemoria sono esclusi per evitare sovrapposizioni. L’indicatore del tempo risparmiato include altre attività e usa una base diversa.",
+  "valueComparison.method": "Conta i piani interamente completati in base alla data di completamento registrata. Piani parziali, attività separate, attività degli assistenti e promemoria sono esclusi per evitare sovrapposizioni.",
   "valueComparison.undated": "{count} piani completati non hanno una data di completamento e sono esclusi: non possiamo attribuirli a questa settimana.",
   "valueComparison.priceMethod": "Usa il prezzo pubblicato in USD dell’abbonamento attuale, non la fattura, gli sconti o le imposte. I prezzi mensili sono moltiplicati per 12; quelli annuali sono usati direttamente. La quota di 7 giorni è il prezzo annuale × 7 ÷ 365,25. Questa settimana non viene proiettata sulle settimane future."
 }

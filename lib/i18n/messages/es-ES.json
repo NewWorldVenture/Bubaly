@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Introduce un valor por hora entre 0 y 1.000 USD.",
   "valueComparison.assumptions": "Se suponen {minutes} minutos por plan completado. Es un modelo, no tiempo medido ni dinero ahorrado. Cambiar el valor por hora solo afecta a esta estimación.",
   "valueComparison.methodHeading": "Cómo funciona esta estimación",
-  "valueComparison.method": "Cuenta los planes completados por completo según su fecha de finalización registrada. Excluye planes parciales, tareas independientes, actividad de asistentes y recordatorios para evitar solapamientos. El indicador de tiempo ahorrado incluye otras actividades y usa una base distinta.",
+  "valueComparison.method": "Cuenta los planes completados por completo según su fecha de finalización registrada. Excluye planes parciales, tareas independientes, actividad de asistentes y recordatorios para evitar solapamientos.",
   "valueComparison.undated": "{count} planes completados no tienen fecha de finalización y se excluyen; no podemos asignarlos a esta semana.",
   "valueComparison.priceMethod": "Usa el precio publicado en USD del plan actual, no tu factura, descuentos ni impuestos. Los precios mensuales se multiplican por 12; los anuales se usan directamente. La parte de 7 días es el precio anual × 7 ÷ 365,25. Esta semana no se extrapola a semanas futuras."
 }

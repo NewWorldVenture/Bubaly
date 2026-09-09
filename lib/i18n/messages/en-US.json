@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Enter an hourly value from 0 to 1,000 USD.",
   "valueComparison.assumptions": "Assumes {minutes} minutes per completed plan. This is a model, not measured time or cash saved. Changing the hourly value affects only this estimate.",
   "valueComparison.methodHeading": "How this estimate works",
-  "valueComparison.method": "Counts fully completed plans by their recorded completion date. Partial plans, separate tasks, assistant activity and reminders are excluded to avoid overlap. The time-saved banner includes other activity and uses a different basis.",
+  "valueComparison.method": "Counts fully completed plans by their recorded completion date. Partial plans, separate tasks, assistant activity and reminders are excluded to avoid overlap.",
   "valueComparison.undated": "{count} completed plans have no completion date and are excluded; we cannot place them in this week.",
   "valueComparison.priceMethod": "Uses the current plan’s published USD price, not your invoice, discounts or taxes. Monthly prices are multiplied by 12; annual prices are used directly. The 7-day share is annual price × 7 ÷ 365.25. This week is not projected into future weeks."
 }

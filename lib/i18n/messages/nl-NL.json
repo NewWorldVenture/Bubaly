@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Voer een uurwaarde in van 0 tot 1.000 USD.",
   "valueComparison.assumptions": "Gaat uit van {minutes} minuten per afgerond plan. Dit is een model, geen gemeten tijd of bespaard geld. De uurwaarde verandert alleen deze schatting.",
   "valueComparison.methodHeading": "Zo werkt deze schatting",
-  "valueComparison.method": "Telt volledig afgeronde plannen op basis van de vastgelegde afrondingsdatum. Gedeeltelijke plannen, losse taken, assistentactiviteiten en herinneringen zijn uitgesloten om overlap te voorkomen. De tijdsbesparingsbanner bevat andere activiteiten en gebruikt een andere basis.",
+  "valueComparison.method": "Telt volledig afgeronde plannen op basis van de vastgelegde afrondingsdatum. Gedeeltelijke plannen, losse taken, assistentactiviteiten en herinneringen zijn uitgesloten om overlap te voorkomen.",
   "valueComparison.undated": "{count} afgeronde plannen hebben geen afrondingsdatum en zijn uitgesloten; we kunnen ze niet aan deze week toewijzen.",
   "valueComparison.priceMethod": "Gebruikt de gepubliceerde USD-prijs van het huidige abonnement, niet je factuur, kortingen of belastingen. Maandprijzen worden met 12 vermenigvuldigd; jaarprijzen worden rechtstreeks gebruikt. Het aandeel voor 7 dagen is de jaarprijs × 7 ÷ 365,25. Deze week wordt niet doorgetrokken naar toekomstige weken."
 }

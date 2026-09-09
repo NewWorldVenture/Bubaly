@@ -12477,7 +12477,7 @@
   "valueComparison.invalidHourly": "Saisissez une valeur horaire comprise entre 0 et 1 000 USD.",
   "valueComparison.assumptions": "Hypothèse : {minutes} minutes par plan terminé. Il s’agit d’un modèle, pas de temps mesuré ni d’argent économisé. La valeur horaire ne modifie que cette estimation.",
   "valueComparison.methodHeading": "Méthode de calcul",
-  "valueComparison.method": "Compte les plans entièrement terminés selon leur date de fin enregistrée. Les plans partiels, tâches distinctes, activités des assistants et rappels sont exclus pour éviter les doublons. L’indicateur de temps gagné inclut d’autres activités et utilise une autre base.",
+  "valueComparison.method": "Compte les plans entièrement terminés selon leur date de fin enregistrée. Les plans partiels, tâches distinctes, activités des assistants et rappels sont exclus pour éviter les doublons.",
   "valueComparison.undated": "{count} plans terminés n’ont pas de date de fin et sont exclus ; nous ne pouvons pas les attribuer à cette semaine.",
   "valueComparison.priceMethod": "Utilise le prix publié en USD de la formule actuelle, sans tenir compte de votre facture, des remises ou des taxes. Les prix mensuels sont multipliés par 12 ; les prix annuels sont utilisés directement. La part de 7 jours est le prix annuel × 7 ÷ 365,25. Cette semaine n’est pas extrapolée aux semaines futures."
 }
