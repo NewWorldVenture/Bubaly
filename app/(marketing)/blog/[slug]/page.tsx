@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
-import { readAeoQuestionsForCategoryCached, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
+import { localizeAeoQuestions, readAeoQuestionsForCategoryCached, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import { ReadingProgress } from './reading-progress';
 import { ShareButtons } from './share-buttons';
 import { TableOfContents } from './table-of-contents';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -108,7 +108,11 @@ export default async function BlogPostPage({ params }: Params) {
     readAeoQuestionsForCategoryCached(post.category, 4),
   ]);
   const aeo = pathAeo.questions.length > 0 ? pathAeo : categoryAeo;
-  const aeoFaqs = aeo.questions;
+  // Through localizeAeoQuestions, the same way MarketingAeoSection and /faq do.
+  // An article rendered in the reader's language carried an English FAQ block
+  // and English FAQPage structured data underneath it.
+  const { locale } = await getLocaleContext();
+  const aeoFaqs = await localizeAeoQuestions(aeo.questions, locale.code);
 
   const headings = extractHeadings(post.body);
   const wordCount = post.body.reduce((n, b) => n + b.text.split(/\s+/).length, 0);
@@ -270,7 +274,7 @@ export default async function BlogPostPage({ params }: Params) {
 
             {!aeo.available && (
               <p className="mb-10 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200" role="status">
-                The related Knowledge Center answers are temporarily unavailable. This article is complete; please refresh later for the latest FAQs.
+                {tr('blog.theRelatedKnowledgeCenterAnswers')}
               </p>
             )}
 
