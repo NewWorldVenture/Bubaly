@@ -40,6 +40,12 @@ export const GATED_SURFACES = {
   // The two pure catalogs the public family-display page renders. Copy parked
   // in a data structure under lib/ is the blind spot this gate exists for.
   'marketing-display-catalogs': ['lib/marketing/certified-devices.ts', 'lib/marketing/display-compare.ts'],
+  // The generated marketing pages — /questions, /guides, /compare, /alternatives,
+  // /audiences, /resources, /glossary, /p. They live under lib/ because they are
+  // one renderer over a database table, so neither marketing surface above
+  // reached them, and they shipped their CTA, their FAQ heading and their
+  // breadcrumb chip in English on every locale.
+  'marketing-public-pages': ['lib/marketing/public-pages.tsx'],
 };
 
 // NOT gated: `everything` — ['app', 'components'].
