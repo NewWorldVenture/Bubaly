@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UpgradeModal } from '@/components/app/upgrade-modal';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { getMessages, getRawMessages } from '@/lib/i18n/messages';
-import type { Locale } from '@/lib/i18n/locales';
+import { localeOrDefault, type LocaleCode } from '@/lib/i18n/locales';
 
 const state = vi.hoisted(() => ({ role: 'parent', checkout: vi.fn(), serverRead: vi.fn() }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ role: state.role, familyId: 'family-pricing' }) }));
@@ -19,15 +19,15 @@ vi.mock('@/components/ui/modal', () => ({
   Modal: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement('section', null, children) : null,
 }));
 
-const locales: Locale[] = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
+const locales: LocaleCode[] = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
 const tiers = [
   { level: 1, monthly: '$12.04', equivalent: '$9.99', annual: '$119.88' },
   { level: 2, monthly: '$30.11', equivalent: '$24.99', annual: '$299.88' },
 ];
 
-function render(locale: Locale, requiredLevel: number, open = true): string {
+function render(locale: LocaleCode, requiredLevel: number, open = true): string {
   return renderToStaticMarkup(createElement(LocaleProvider, {
-    locale, source: 'cookie', messages: getMessages(locale),
+    locale: localeOrDefault(locale), source: 'cookie', messages: getMessages(locale),
   } as Parameters<typeof LocaleProvider>[0],
   createElement(UpgradeModal, { open, onClose: () => {}, requiredLevel })));
 }
