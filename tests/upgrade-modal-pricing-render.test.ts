@@ -6,9 +6,13 @@ import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { getMessages, getRawMessages } from '@/lib/i18n/messages';
 import type { Locale } from '@/lib/i18n/locales';
 
-const state = vi.hoisted(() => ({ role: 'parent', checkout: vi.fn() }));
-vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ role: state.role }) }));
+const state = vi.hoisted(() => ({ role: 'parent', checkout: vi.fn(), serverRead: vi.fn() }));
+vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ role: state.role, familyId: 'family-pricing' }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: vi.fn() }) }));
+// A pending family-value summary can render beside the prices. Its server
+// dependencies stay behind the action boundary and must not run during render.
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: state.serverRead }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: state.serverRead }));
 // Render the actual modal contents; the portal and focus trap need a browser
 // and are independent of which prices and billing periods a family sees.
 vi.mock('@/components/ui/modal', () => ({
@@ -36,11 +40,14 @@ beforeEach(() => {
   state.role = 'parent';
   state.checkout.mockReset();
   state.checkout.mockImplementation(() => { throw new Error('Rendering prices must not start checkout'); });
+  state.serverRead.mockReset();
+  state.serverRead.mockImplementation(() => { throw new Error('Rendering prices must not read a server session'); });
   vi.stubGlobal('fetch', state.checkout);
 });
 
 afterEach(() => {
   expect(state.checkout).not.toHaveBeenCalled();
+  expect(state.serverRead).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
 
