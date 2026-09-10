@@ -7,12 +7,16 @@
 // the first paint: a share that cold-starts the app still shows the text,
 // where a client-side read would flash an empty box first.
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { CaptureShell } from '@/components/capture/capture-shell';
 import { loadCaptureShortcuts } from '@/app/(app)/capture/shortcuts-actions';
 import { sharedCaptureText } from '@/lib/capture/share';
 
-export const metadata: Metadata = { title: 'Capture' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('captureShell.capture') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function CapturePage({
