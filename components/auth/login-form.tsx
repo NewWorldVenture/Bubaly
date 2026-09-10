@@ -14,7 +14,7 @@ import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction, stitchIdentityAction } from '@/app/(auth)/actions';
 import { describeDbError } from '@/lib/supabase/errors';
-import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function LoginForm() {
@@ -27,8 +27,8 @@ export function LoginForm() {
   const [showPhone, setShowPhone] = useState(false);
   // A same-origin ?redirect= (e.g. an invite's /join?token=…) that OAuth + phone
   // sign-in must also honor — not just the password path below.
-  const redirectParam = params.get('redirect');
-  const redirectDest = safeInternalRedirect(redirectParam, '') || undefined;
+  const selection = resolveAuthSelection(params);
+  const redirectDest = selection.next ?? undefined;
   // The /auth/callback route bounces failed OAuth / email-confirmation here.
   const authError = params.get('error') === 'auth';
 
@@ -113,7 +113,7 @@ export function LoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         {t('login.newHere')}{' '}
-        <Link href="/signup" className="font-medium text-brand-text hover:underline">{t('login.createAnAccount')}</Link>
+        <Link href={authScreenHref('/signup', selection)} className="font-medium text-brand-text hover:underline">{t('login.createAnAccount')}</Link>
       </p>
       <p className="mt-2 text-center text-sm text-muted">
         {t('login.kidLoggingIn')}{' '}

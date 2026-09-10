@@ -93,7 +93,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
   return (
     <div className="space-y-4 animate-fade-in">
       <div>
-        <h2 className="text-lg font-semibold">{t('phoneAuth.enterTheCodeWeSentYou')}</h2>
+        <h2 className="text-lg font-semibold">{t('phoneAuth.codeEntryTitle')}</h2>
         <p className="mt-0.5 text-sm text-muted">{t('phoneAuth.weSentA6DigitCode')} {phone}.</p>
       </div>
       <OtpInput

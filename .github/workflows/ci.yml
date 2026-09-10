@@ -276,6 +276,9 @@ jobs:
           # run-e2e.mjs runs `next build` first — same heap need as the Build step.
           NODE_OPTIONS: --max-old-space-size=4096
           E2E_AUTHENTICATED: '1'
+          # Each durable-session test owns a unique local-only account/household.
+          E2E_DURABLE_SESSION: '1'
+          NEXT_PUBLIC_SITE_URL: http://localhost:3107
           E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
           # tests/e2e/concierge.spec.ts drives "Plan our week" through the real
@@ -298,6 +301,7 @@ jobs:
             test-results/**/error-context.md
             test-results/**/*.png
             !test-results/**/trace.zip
+            !test-results/*durable-session*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json

@@ -59,6 +59,9 @@ export { GUEST_LANDING_PATH, DEFAULT_LANDING_PATH, landingPathForRole } from '@/
 export async function getUser() {
   const supabase = await createServer();
   const { data, error } = await supabase.auth.getUser();
+  // #482's chain reached the same conclusion independently. Keeping this form:
+  // it raises through the shared helper (one log, not two) and stays INSIDE the
+  // session-missing guard, so an ordinary signed-out visitor can never throw.
   if (error && !isSessionMissing(error)) {
     if (isRetryableAuthError(error)) throwContextUnavailable('authenticated user', error);
     console.error('[auth] user lookup failed', error);
@@ -76,6 +79,7 @@ export async function isSuperAdmin(): Promise<boolean> {
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) {
     if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);
+    if (isRetryableAuthError(authError)) throw new Error('Account context is temporarily unavailable.');
     return false;
   }
   if (!auth.user) return false;

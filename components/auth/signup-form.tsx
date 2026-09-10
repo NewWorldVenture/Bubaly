@@ -14,7 +14,7 @@ import { stitchIdentityAction } from '@/app/(auth)/actions';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { describeDbError } from '@/lib/supabase/errors';
-import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { isPlausibleReferralCode, normalizeCode } from '@/lib/referrals/core';
 import { rememberReferralCodeAction } from '@/app/(auth)/signup/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -29,6 +29,11 @@ export function SignupForm() {
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  // Explicit safe destinations (including invitations) take precedence. A
+  // selected price only continues to review after setup; auth never buys it.
+  const selection = resolveAuthSelection(params);
+  const nextDest = selection.next ?? '/onboarding';
+  const loginHref = authScreenHref('/login', selection);
 
   // A `/signup?ref=CODE` visit: keep the code (an httpOnly cookie, and the auth
   // metadata on the email path) so it survives confirmation and every signup
@@ -88,24 +93,16 @@ export function SignupForm() {
     return (
       <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
         <MailCheck className="h-12 w-12 text-brand-text" />
-        <h1 className="mt-4 text-xl font-semibold">{t('signup.checkYourEmail')}</h1>
+        <h1 className="mt-4 text-xl font-semibold">{t('signup.checkEmailTitle')}</h1>
         <p className="mt-2 text-sm text-muted">
           {t('signup.weSentAConfirmationLinkTo')}
         </p>
-        <Link href="/login" className="mt-6 text-sm font-medium text-brand-text hover:underline">
+        <Link href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
           {t('signup.backToSignIn')}
         </Link>
       </div>
     );
   }
-
-  const plan = params.get('plan');
-  // Honor ?redirect= (e.g. an invite's /join?token=…) across EVERY signup avenue —
-  // email, phone, and OAuth — so an invited member returns to accept the invite
-  // instead of being routed into the wizard to create a family of their own.
-  // Same-origin paths only; defaults to the onboarding wizard.
-  const redirectParam = params.get('redirect');
-  const nextDest = safeInternalRedirect(redirectParam, '/onboarding');
 
   return (
     <div className="glass-card p-7 animate-fade-in sm:p-8">
@@ -114,10 +111,10 @@ export function SignupForm() {
         <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
           <Sparkles className="h-7 w-7 text-brand-text" />
         </span>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{t('signup.aSafePlaceForYourFamily')}</h1>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{t('signup.familyHomeTitle')}</h1>
         <p className="mt-2 text-sm text-muted">
-          {t('signup.oneCalmHomeForYourCalendar')}
-          {plan ? ` — start on the ${plan} plan, free` : ' — free to start, no credit card'}.
+          {t('signup.oneCalmHomeForYourCalendar')}.
+          {' '}{selection.reviewPlan ? t('signup.reviewSelectedPlanAfterSetup') : t('signup.freeToStartNoCreditCard')}
         </p>
         {referralCode && (
           <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand-text" data-testid="signup-referral">
@@ -140,7 +137,7 @@ export function SignupForm() {
 
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
-        <span className="text-xs text-muted">or</span>
+        <span className="text-xs text-muted">{t('signup.or')}</span>
         <div className="flex-1 border-t border-border" />
       </div>
 
@@ -170,7 +167,7 @@ export function SignupForm() {
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
-          <Field label={t('signup.yourName')} error={errors.fullName} required>
+          <Field label={t('signup.nameLabel')} error={errors.fullName} required>
             {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder={t('signupForm.jordanRivera')} autoFocus />}
           </Field>
           <Field label={t('signup.email')} error={errors.email} required>
@@ -188,8 +185,8 @@ export function SignupForm() {
       <LegalConsent />
 
       <p className="mt-5 text-center text-sm text-muted">
-        {t('signup.alreadyHaveAnAccount')}{' '}
-        <Link href="/login" className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</Link>
+        {t('signup.existingAccountPrompt')}{' '}
+        <Link href={loginHref} className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</Link>
       </p>
     </div>
   );

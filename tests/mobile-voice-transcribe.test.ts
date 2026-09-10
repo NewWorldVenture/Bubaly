@@ -57,7 +57,7 @@ describe('parseTranscribeResponse', () => {
   });
 
   it('says voice is not configured on the honest 503 rather than failing silently', () => {
-    const parsed = parseTranscribeResponse(503, { error: 'Voice isn’t configured' });
+    const parsed = parseTranscribeResponse(503, { error: 'Voice isn’t configured', code: 'not_configured' });
     expect(parsed.ok).toBe(false);
     if (!parsed.ok) {
       expect(parsed.status).toBe(503);

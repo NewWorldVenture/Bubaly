@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTranslations } from '@/lib/i18n/server';
+import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import { authenticateAI } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
@@ -19,11 +19,13 @@ export const maxDuration = 60;
 // so the phone can be spoken to as well as the browser, and an anonymous caller
 // gets a JSON 401.
 export async function POST(req: NextRequest) {
-  const t = await getTranslations();
+  const t = await getAIRequestTranslations(req);
   try {
     const authed = await authenticateAI(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
+    const familyError = assertAIRequestFamily(req, ctx.active.familyId, t);
+    if (familyError) return familyError;
     const limited = await enforceAIRateLimit(supabase, `ai-voice-speak:${ctx.user.id}`, { limit: 30 });
     if (!limited.ok) return NextResponse.json(
       { error: t('speak.tooManyVoiceRequestsPlease') },
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(
-        { error: t('speak.voiceIsnTConfiguredAdd') },
+        { error: t('speak.voiceIsnTConfiguredAdd'), code: 'not_configured' },
         { status: 503 },
       );
     }

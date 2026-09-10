@@ -17,6 +17,7 @@
 //     a visible edit to this file.
 import { createBrowserClient } from '@supabase/ssr';
 import { durableCookieOptions, isSecureOrigin } from '../auth/session';
+import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import type { Database } from '../database.types';
 
 type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
@@ -33,6 +34,7 @@ function build(): BrowserClient {
       // lifetime itself. `secure` is omitted off https so the localhost dev
       // server and a Capacitor LAN shell keep their cookies at all.
       cookieOptions: durableCookieOptions(secure),
+      global: { fetch: createSessionRefreshFetch(process.env.NEXT_PUBLIC_SUPABASE_URL!) },
       auth: {
         // Stay signed in until sign-out: keep the session across restarts,
         // refresh the access token in the background, and finish the PKCE

@@ -43,7 +43,7 @@ export function isRetryableAuthError(error: unknown): boolean {
   if (status !== null && (status === 0 || status === 408 || status === 429 || status >= 500)) return true;
 
   const code = typeof e.code === 'string' ? e.code : '';
-  if (/^(?:network_error|request_timeout|over_request_rate_limit|unexpected_failure)$/.test(code)) return true;
+  if (/^(?:network_error|request_timeout|over_request_rate_limit|unexpected_failure|session_storage_unavailable)$/.test(code)) return true;
 
   const message = typeof e.message === 'string' ? e.message : '';
   return /fetch failed|network ?error|failed to fetch|timed? ?out|econnreset|enotfound|eai_again|socket hang up/i.test(message);

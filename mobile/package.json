@@ -4,13 +4,22 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "node scripts/patch-auth-storage-errors.mjs",
+    "auth:patch:check": "node scripts/patch-auth-storage-errors.mjs --check",
+    "test:auth-storage": "node --test scripts/auth-storage-errors.test.mjs",
+    "prestart": "npm run auth:patch:check",
     "start": "expo start",
+    "preandroid": "npm run auth:patch:check",
     "android": "expo start --android",
+    "preios": "npm run auth:patch:check",
     "ios": "expo start --ios",
+    "pretypecheck": "npm run auth:patch:check && npm run test:auth-storage",
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.15",
+    "@expo/ui": "~57.0.16",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.115.0",

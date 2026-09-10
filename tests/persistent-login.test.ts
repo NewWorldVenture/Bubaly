@@ -305,12 +305,12 @@ describe('the app keeps the session and the server render in step', () => {
   const layout = readFileSync('app/(app)/layout.tsx', 'utf8');
 
   it('is mounted for every authenticated route', () => {
-    expect(layout).toContain('<SessionKeeper />');
+    expect(layout).toContain('<SessionKeeper userId={user.id} />');
   });
 
   it('keeps refreshing while the App Lock screen is up', () => {
     // Otherwise unlocking with the PIN after a long idle lands on /login.
-    expect(layout.indexOf('<SessionKeeper />')).toBeLessThan(layout.indexOf('AppLockGate enabled'));
+    expect(layout.indexOf('<SessionKeeper userId={user.id} />')).toBeLessThan(layout.indexOf('AppLockGate enabled'));
   });
 
   it('revives on the events that follow a long absence', () => {

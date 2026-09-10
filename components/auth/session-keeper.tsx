@@ -25,13 +25,15 @@ import { isNative } from '@/lib/native/capacitor';
 /** Don't re-check more than this often; the triggers below can arrive in bursts. */
 const REVIVE_INTERVAL_MS = 30_000;
 
-export function SessionKeeper() {
+export function SessionKeeper({ userId }: { userId: string }) {
   const router = useRouter();
 
   useEffect(() => {
     const supabase = createClient();
     let disposed = false;
-    let lastRevive = 0;
+    let lastRevive = -Infinity;
+    let authRevision = 0;
+    let lastRead = 0;
 
     // `getSession()` reads the stored session and refreshes it when the access
     // token has expired, so this is "make sure we're still current" — never a
@@ -40,16 +42,28 @@ export function SessionKeeper() {
       const now = Date.now();
       if (disposed || now - lastRevive < REVIVE_INTERVAL_MS) return;
       lastRevive = now;
-      void supabase.auth.getSession().catch(() => { /* offline; the timer retries */ });
+      const revision = authRevision;
+      const read = ++lastRead;
+      void supabase.auth.getSession().then(({ data, error }) => {
+        // An auth event or a later read supersedes this snapshot. A failed
+        // refresh says nothing about whether the saved session still exists.
+        if (disposed || revision !== authRevision || read !== lastRead || error) return;
+        // Server POST sign-out clears cookies without broadcasting an auth
+        // event to other tabs. Reconcile their rendered identity on return.
+        if ((data.session?.user.id ?? null) !== userId) router.refresh();
+      }).catch(() => { /* offline; the next lifecycle event retries */ });
     };
 
     const onVisible = () => { if (document.visibilityState === 'visible') revive(); };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (disposed) return;
+      authRevision += 1;
       // Re-render the server tree against the session that now exists. On
       // SIGNED_OUT that means the route guards see no user and route to /login,
       // so the redirect stays in one place instead of being duplicated here.
-      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT' || event === 'USER_UPDATED'
+        || (event === 'SIGNED_IN' && session && session.user.id !== userId)) {
         router.refresh();
       }
     });
@@ -83,7 +97,7 @@ export function SessionKeeper() {
       window.removeEventListener('pageshow', revive);
       removeResume();
     };
-  }, [router]);
+  }, [router, userId]);
 
   return null;
 }
