@@ -8,6 +8,7 @@ import {
 import { submitRequest } from '@/lib/ai/runs/intake';
 import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
 import { systemScopeForFamily } from '@/lib/services/scope';
+import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 
 type Admin = ReturnType<typeof createServiceClient>;
@@ -256,8 +257,8 @@ export type InboundRouteOutcome = {
  * `request_id` column to stamp (see the migration ask), so the link between the
  * row and its run is not claimed anywhere it cannot be proved.
  *
- * Never throws: the webhook's job is to acknowledge the provider, and a planner
- * that is unavailable must not turn a delivered message into a retry storm.
+ * Paperwork persistence/enrichment failures throw a retryable error. The email
+ * adapter must revisit saved paperwork before its existing planner dedupe.
  */
 export async function routeInboundToPlanner(admin: Admin, input: {
   familyId: string;
@@ -267,6 +268,7 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   body: string;
   intent: string;
   providerRef?: string | null;
+  sender?: string | null;
   /** Injectable for tests; production uses the real intake. */
   submit?: typeof submitRequest;
   now?: Date;
@@ -290,7 +292,7 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   // Filed idempotently: the webhook's caller already skips a redelivery, and
   // the filer itself refuses to make the same record twice.
   const paperworkItemId = input.channel === 'email'
-    ? await fileInboundPaperwork(admin, input.familyId, text, input.now, input.providerRef)
+    ? await fileInboundPaperwork(admin, input.familyId, text, input.now, input.providerRef, input.sender)
     : null;
 
   // The planner gate applies only to PLANNING. A message that is not worth a
@@ -336,30 +338,45 @@ export async function routeInboundToPlanner(admin: Admin, input: {
  * closest admitted value with the finer kind kept in `meta`.
  *
  * IDEMPOTENT, because a webhook fires twice and a family must not be shown two
- * copies of one water bill. The dedupe key is `raw_text` under `family_id`: the
- * same email carries the same text, and unlike `meta->>'provider_ref'` it is a
- * column both Postgres and the read path can filter on without a new index. The
- * ref is still stamped into `meta` so the row can be traced back to the delivery
- * it came from.
+ * copies of one water bill. A saved delivery's provider_ref is checked first,
+ * so an edited source body remains the same item on retry. The legacy fallback
+ * is raw_text under family_id. Enrichment only updates metadata and compares
+ * the saved row version before writing, preserving later user edits.
  */
 export async function fileInboundPaperwork(
-  admin: Admin, familyId: string, text: string, now?: Date, providerRef?: string | null,
+  admin: Admin, familyId: string, text: string, now?: Date, providerRef?: string | null, sender?: string | null,
 ): Promise<string | null> {
   const triage = triagePaperwork(text, now ?? new Date());
   if (!FILEABLE_PAPERWORK.has(triage.kind)) return null;
   const rawText = text.slice(0, 20_000);
 
-  const existing = await admin
+  // The delivery identity survives a person's edit to raw_text. Fall back to
+  // the legacy text key only when no item for this delivery has been filed.
+  const byDelivery = providerRef ? await admin.from('paperwork_items').select('id')
+    .eq('family_id', familyId).contains('meta', { source: 'inbound_email', provider_ref: providerRef }).limit(1).maybeSingle() : null;
+  if (byDelivery?.error) {
+    console.error('[contact-center] inbound paperwork delivery read failed', byDelivery.error);
+    throw new PaperworkEnrichmentError('Could not check the saved paperwork delivery. Retry.');
+  }
+  const existing = byDelivery?.data?.id ? byDelivery : await admin
     .from('paperwork_items')
     .select('id')
     .eq('family_id', familyId)
     .eq('raw_text', rawText)
     .limit(1)
     .maybeSingle();
-  if (existing.data?.id) return existing.data.id;
-  // A read that did not answer cannot prove this is new — but refusing to file
-  // would lose the bill, and a visible duplicate is the smaller harm of the two.
-  if (existing.error) console.error('[contact-center] inbound paperwork de-dupe read failed', existing.error);
+  if (existing.error) {
+    console.error('[contact-center] inbound paperwork de-dupe read failed', existing.error);
+    throw new PaperworkEnrichmentError('Could not check the saved paperwork. Retry.');
+  }
+  const enrich = async (id: string) => {
+    const scope = await systemScopeForFamily(admin, familyId, { now });
+    if (!scope) throw new PaperworkEnrichmentError('Could not read the paperwork household. Retry.');
+    const result = await enrichPaperworkEntities(scope, id);
+    if (!result.ok) throw new PaperworkEnrichmentError(result.error);
+    return id;
+  };
+  if (existing.data?.id) return enrich(existing.data.id);
 
   const fields = paperworkKindFields(triage.kind);
   const { data, error } = await admin
@@ -370,6 +387,7 @@ export async function fileInboundPaperwork(
       title: triage.title,
       summary: triage.summary,
       raw_text: rawText,
+      sender: sender ?? null,
       due_on: triage.due_on,
       amount: triage.amount,
       urgency: triage.urgency,
@@ -382,9 +400,10 @@ export async function fileInboundPaperwork(
     .maybeSingle();
   if (error) {
     console.error('[contact-center] inbound paperwork insert failed', error);
-    return null;
+    throw new PaperworkEnrichmentError('Could not save the paperwork. Retry.');
   }
-  return data?.id ?? null;
+  if (!data?.id) throw new PaperworkEnrichmentError('Could not confirm the saved paperwork. Retry.');
+  return enrich(data.id);
 }
 
 /** Record an outbound message the concierge sent (auto-reply), for the timeline. */
