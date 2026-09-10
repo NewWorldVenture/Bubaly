@@ -12750,5 +12750,22 @@
   "onboardingCopy.letsBegin": "Let’s begin",
   "onboardingCopy.dashboardReady": "Your dashboard is personalized and ready to explore.",
   "onboardingCopy.kidLogin": "Give {names} a login — username and PIN, no email needed",
-  "onboardingCopy.primaryCalendarPreview": "Preview from your primary calendar: the next 30 days. Finish imports these events. Future reads add upcoming appointments and apply reported changes; events missing from a read are kept. Your provider calendar and tasks stay unchanged."
+  "onboardingCopy.primaryCalendarPreview": "Preview from your primary calendar: the next 30 days. Finish imports these events. Future reads add upcoming appointments and apply reported changes; events missing from a read are kept. Your provider calendar and tasks stay unchanged.",
+  "completeSetupCopy.saveError": "Could not save your setup",
+  "completeSetupCopy.resetError": "Could not reset onboarding",
+  "completeSetupCopy.title": "Complete your setup",
+  "completeSetupCopy.headlineReset": "Let’s set your family up again",
+  "completeSetupCopy.headlineComplete": "Your family is fully set up",
+  "completeSetupCopy.headlineNeedsSetup": "Finish setting up your family",
+  "completeSetupCopy.headlineRemaining": "A few things left to set up",
+  "completeSetupCopy.scoreComplete": "Complete",
+  "completeSetupCopy.scoreSetup": "Set up",
+  "completeSetupCopy.profileComplete": "Your family profile is complete. Nice work!",
+  "completeSetupCopy.skippedSetup": "You skipped guided setup when you signed up — finish it here.",
+  "completeSetupCopy.fewThingsLeft": "A few quick things and you’re fully set up.",
+  "completeSetupCopy.missingName": "Add your name",
+  "completeSetupCopy.missingQuestionnaire": "Tell us about your family",
+  "completeSetupCopy.missingGoals": "Pick what you want help with",
+  "completeSetupCopy.missingCalendar": "Connect your calendar",
+  "completeSetupCopy.missingPin": "Protect your profile with a PIN"
 }

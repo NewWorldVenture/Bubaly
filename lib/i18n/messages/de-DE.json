@@ -12750,5 +12750,22 @@
   "onboardingCopy.letsBegin": "Los geht’s",
   "onboardingCopy.dashboardReady": "Ihre Übersicht ist auf Sie abgestimmt und bereit zum Erkunden.",
   "onboardingCopy.kidLogin": "Richten Sie einen Zugang für {names} ein — mit Benutzername und PIN, ohne E-Mail-Adresse",
-  "onboardingCopy.primaryCalendarPreview": "Vorschau aus Ihrem Hauptkalender: die nächsten 30 Tage. Abschließen importiert diese Termine. Spätere Abrufe ergänzen anstehende Termine und übernehmen gemeldete Änderungen; nicht mehr gelieferte Termine bleiben erhalten. Kalender und Aufgaben beim Anbieter bleiben unverändert."
+  "onboardingCopy.primaryCalendarPreview": "Vorschau aus Ihrem Hauptkalender: die nächsten 30 Tage. Abschließen importiert diese Termine. Spätere Abrufe ergänzen anstehende Termine und übernehmen gemeldete Änderungen; nicht mehr gelieferte Termine bleiben erhalten. Kalender und Aufgaben beim Anbieter bleiben unverändert.",
+  "completeSetupCopy.saveError": "Ihre Einrichtung konnte nicht gespeichert werden",
+  "completeSetupCopy.resetError": "Die Einführung konnte nicht zurückgesetzt werden",
+  "completeSetupCopy.title": "Schließen Sie Ihre Einrichtung ab",
+  "completeSetupCopy.headlineReset": "Richten wir Ihre Familie erneut ein",
+  "completeSetupCopy.headlineComplete": "Ihre Familie ist vollständig eingerichtet",
+  "completeSetupCopy.headlineNeedsSetup": "Schließen Sie die Einrichtung Ihrer Familie ab",
+  "completeSetupCopy.headlineRemaining": "Noch ein paar Dinge einzurichten",
+  "completeSetupCopy.scoreComplete": "Abgeschlossen",
+  "completeSetupCopy.scoreSetup": "Eingerichtet",
+  "completeSetupCopy.profileComplete": "Ihr Familienprofil ist vollständig. Gut gemacht!",
+  "completeSetupCopy.skippedSetup": "Sie haben die geführte Einrichtung bei der Registrierung übersprungen — schließen Sie sie hier ab.",
+  "completeSetupCopy.fewThingsLeft": "Noch ein paar kurze Schritte, dann ist alles eingerichtet.",
+  "completeSetupCopy.missingName": "Fügen Sie Ihren Namen hinzu",
+  "completeSetupCopy.missingQuestionnaire": "Erzählen Sie uns von Ihrer Familie",
+  "completeSetupCopy.missingGoals": "Wählen Sie, wobei Sie Unterstützung möchten",
+  "completeSetupCopy.missingCalendar": "Verbinden Sie Ihren Kalender",
+  "completeSetupCopy.missingPin": "Schützen Sie Ihr Profil mit einer PIN"
 }

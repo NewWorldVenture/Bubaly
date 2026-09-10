@@ -12750,5 +12750,22 @@
   "onboardingCopy.letsBegin": "Laten we beginnen",
   "onboardingCopy.dashboardReady": "Je dashboard is gepersonaliseerd en klaar om te verkennen.",
   "onboardingCopy.kidLogin": "Geef {names} toegang — gebruikersnaam en pincode, geen e-mail nodig",
-  "onboardingCopy.primaryCalendarPreview": "Voorbeeld uit je primaire agenda: de komende 30 dagen. Afronden importeert deze afspraken. Latere uitlezingen voegen komende afspraken en gemelde wijzigingen toe; afspraken die ontbreken blijven bewaard. Je agenda en taken bij de aanbieder blijven ongewijzigd."
+  "onboardingCopy.primaryCalendarPreview": "Voorbeeld uit je primaire agenda: de komende 30 dagen. Afronden importeert deze afspraken. Latere uitlezingen voegen komende afspraken en gemelde wijzigingen toe; afspraken die ontbreken blijven bewaard. Je agenda en taken bij de aanbieder blijven ongewijzigd.",
+  "completeSetupCopy.saveError": "Je instellingen konden niet worden opgeslagen",
+  "completeSetupCopy.resetError": "De eerste instellingen konden niet worden hersteld",
+  "completeSetupCopy.title": "Rond je instellingen af",
+  "completeSetupCopy.headlineReset": "Laten we je gezin opnieuw instellen",
+  "completeSetupCopy.headlineComplete": "Je gezin is helemaal ingesteld",
+  "completeSetupCopy.headlineNeedsSetup": "Rond de instellingen voor je gezin af",
+  "completeSetupCopy.headlineRemaining": "Er zijn nog een paar dingen in te stellen",
+  "completeSetupCopy.scoreComplete": "Voltooid",
+  "completeSetupCopy.scoreSetup": "Ingesteld",
+  "completeSetupCopy.profileComplete": "Je gezinsprofiel is compleet. Goed gedaan!",
+  "completeSetupCopy.skippedSetup": "Je hebt de begeleide instellingen bij het aanmelden overgeslagen — rond ze hier af.",
+  "completeSetupCopy.fewThingsLeft": "Nog een paar korte stappen en alles is ingesteld.",
+  "completeSetupCopy.missingName": "Voeg je naam toe",
+  "completeSetupCopy.missingQuestionnaire": "Vertel ons over je gezin",
+  "completeSetupCopy.missingGoals": "Kies waar je hulp bij wilt",
+  "completeSetupCopy.missingCalendar": "Koppel je agenda",
+  "completeSetupCopy.missingPin": "Bescherm je profiel met een pincode"
 }

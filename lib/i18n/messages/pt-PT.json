@@ -12750,5 +12750,22 @@
   "onboardingCopy.letsBegin": "Vamos começar",
   "onboardingCopy.dashboardReady": "O seu painel está personalizado e pronto a explorar.",
   "onboardingCopy.kidLogin": "Crie um acesso para {names} — nome de utilizador e PIN, sem precisar de e-mail",
-  "onboardingCopy.primaryCalendarPreview": "Pré-visualização do seu calendário principal: os próximos 30 dias. Concluir importa estes eventos. As leituras seguintes adicionam compromissos futuros e aplicam alterações comunicadas; os eventos ausentes de uma leitura são mantidos. O calendário e as tarefas no fornecedor permanecem inalterados."
+  "onboardingCopy.primaryCalendarPreview": "Pré-visualização do seu calendário principal: os próximos 30 dias. Concluir importa estes eventos. As leituras seguintes adicionam compromissos futuros e aplicam alterações comunicadas; os eventos ausentes de uma leitura são mantidos. O calendário e as tarefas no fornecedor permanecem inalterados.",
+  "completeSetupCopy.saveError": "Não foi possível guardar a sua configuração",
+  "completeSetupCopy.resetError": "Não foi possível repor a configuração inicial",
+  "completeSetupCopy.title": "Conclua a sua configuração",
+  "completeSetupCopy.headlineReset": "Vamos configurar a sua família novamente",
+  "completeSetupCopy.headlineComplete": "A sua família está totalmente configurada",
+  "completeSetupCopy.headlineNeedsSetup": "Conclua a configuração da sua família",
+  "completeSetupCopy.headlineRemaining": "Faltam alguns detalhes por configurar",
+  "completeSetupCopy.scoreComplete": "Concluído",
+  "completeSetupCopy.scoreSetup": "Configurado",
+  "completeSetupCopy.profileComplete": "O perfil da sua família está completo. Bom trabalho!",
+  "completeSetupCopy.skippedSetup": "Ignorou a configuração guiada ao registar-se — conclua-a aqui.",
+  "completeSetupCopy.fewThingsLeft": "Faltam apenas alguns passos rápidos para concluir a configuração.",
+  "completeSetupCopy.missingName": "Adicione o seu nome",
+  "completeSetupCopy.missingQuestionnaire": "Fale-nos da sua família",
+  "completeSetupCopy.missingGoals": "Escolha em que gostaria de ter ajuda",
+  "completeSetupCopy.missingCalendar": "Ligue o seu calendário",
+  "completeSetupCopy.missingPin": "Proteja o seu perfil com um PIN"
 }

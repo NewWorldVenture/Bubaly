@@ -12750,5 +12750,22 @@
   "onboardingCopy.letsBegin": "Cominciamo",
   "onboardingCopy.dashboardReady": "La tua dashboard è personalizzata e pronta da esplorare.",
   "onboardingCopy.kidLogin": "Crea un accesso per {names}: nome utente e PIN, senza e-mail",
-  "onboardingCopy.primaryCalendarPreview": "Anteprima dal tuo calendario principale: i prossimi 30 giorni. Completa la configurazione per importare questi eventi. Le letture successive aggiungono gli appuntamenti futuri e applicano le modifiche segnalate; gli eventi assenti da una lettura vengono conservati. Il calendario e le attività del fornitore restano invariati."
+  "onboardingCopy.primaryCalendarPreview": "Anteprima dal tuo calendario principale: i prossimi 30 giorni. Completa la configurazione per importare questi eventi. Le letture successive aggiungono gli appuntamenti futuri e applicano le modifiche segnalate; gli eventi assenti da una lettura vengono conservati. Il calendario e le attività del fornitore restano invariati.",
+  "completeSetupCopy.saveError": "Impossibile salvare la configurazione",
+  "completeSetupCopy.resetError": "Impossibile reimpostare la configurazione iniziale",
+  "completeSetupCopy.title": "Completa la configurazione",
+  "completeSetupCopy.headlineReset": "Configuriamo di nuovo la tua famiglia",
+  "completeSetupCopy.headlineComplete": "La tua famiglia è configurata",
+  "completeSetupCopy.headlineNeedsSetup": "Completa la configurazione della tua famiglia",
+  "completeSetupCopy.headlineRemaining": "Mancano poche cose da configurare",
+  "completeSetupCopy.scoreComplete": "Completato",
+  "completeSetupCopy.scoreSetup": "Configurato",
+  "completeSetupCopy.profileComplete": "Il profilo della tua famiglia è completo. Ottimo lavoro!",
+  "completeSetupCopy.skippedSetup": "Hai saltato la configurazione guidata durante la registrazione: completala qui.",
+  "completeSetupCopy.fewThingsLeft": "Pochi passaggi veloci e sarà tutto pronto.",
+  "completeSetupCopy.missingName": "Aggiungi il tuo nome",
+  "completeSetupCopy.missingQuestionnaire": "Parlaci della tua famiglia",
+  "completeSetupCopy.missingGoals": "Scegli per cosa vorresti aiuto",
+  "completeSetupCopy.missingCalendar": "Collega il tuo calendario",
+  "completeSetupCopy.missingPin": "Proteggi il tuo profilo con un PIN"
 }
