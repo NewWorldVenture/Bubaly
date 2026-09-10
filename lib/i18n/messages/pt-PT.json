@@ -3709,6 +3709,8 @@
   "crm.manageLeadsProspectsAndCustomer": "Faça a gestão de leads, potenciais clientes e contactos.",
   "crm.refreshCrm": "Atualizar CRM",
   "cta.startYourFreeTrial": "Comece o teste gratuito",
+  "customerStories.bodyLabel": "História completa do cliente",
+  "customerStories.unavailable": "Não foi possível carregar esta história de cliente.",
   "customers.adjustTheFilterOrSearch": "Ajuste o filtro ou a pesquisa para ver clientes.",
   "customers.couldNotLoadMarketingCustomers": "Não foi possível carregar os clientes de marketing do Supabase. Atualize e tente novamente.",
   "customers.marketingCustomers": "Clientes de marketing",

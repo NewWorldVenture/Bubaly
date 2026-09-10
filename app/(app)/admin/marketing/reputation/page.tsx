@@ -96,6 +96,10 @@ export default async function ReputationPage() {
           <input name="industry" placeholder={tr('adminMarketingReputation.industrySegment')} className={inputCls} />
           <input name="result_metric" placeholder={tr('adminMarketingReputation.resultEGSaved6Hrs')} className={`${inputCls} lg:col-span-2`} />
           <input name="summary" placeholder={tr('adminMarketingReputation.oneLineSummary')} className={`${inputCls} lg:col-span-2`} />
+          <label className="text-sm text-muted sm:col-span-2 lg:col-span-4">
+            {tr('customerStories.bodyLabel')}
+            <textarea name="body" rows={6} className={`${inputCls} mt-1 h-auto py-2`} />
+          </label>
           <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> {tr('adminMarketingReputation.publish')}</label>
           <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addCaseStudy')}</button>
         </form>
@@ -110,7 +114,24 @@ export default async function ReputationPage() {
               <tbody>
                 {cList.map((c) => (
                   <tr key={c.id} className="border-t border-border align-top">
-                    <td className="py-2 font-medium">{c.title}<p className="text-xs text-muted">/{c.slug}</p></td>
+                    <td className="py-2 font-medium">
+                      {c.title}<p className="text-xs text-muted">/{c.slug}</p>
+                      <details className="mt-3 min-w-64 font-normal">
+                        <summary className="cursor-pointer text-xs text-brand-text">{tr('approval.edit')}</summary>
+                        <form action={saveCaseStudyAction} className="mt-3 grid gap-3">
+                          <input type="hidden" name="id" value={c.id} />
+                          <input type="hidden" name="slug" value={c.slug} />
+                          <label className="text-xs text-muted">{tr('adminMarketingReputation.title')}<input name="title" required defaultValue={c.title} className={`${inputCls} mt-1`} /></label>
+                          <label className="text-xs text-muted">{tr('adminMarketingReputation.customer')}<input name="customer_name" defaultValue={c.customer_name ?? ''} className={`${inputCls} mt-1`} /></label>
+                          <label className="text-xs text-muted">{tr('adminMarketingReputation.industrySegment')}<input name="industry" defaultValue={c.industry ?? ''} className={`${inputCls} mt-1`} /></label>
+                          <label className="text-xs text-muted">{tr('adminMarketingReputation.oneLineSummary')}<textarea name="summary" rows={2} defaultValue={c.summary ?? ''} className={`${inputCls} mt-1 h-auto py-2`} /></label>
+                          <label className="text-xs text-muted">{tr('customerStories.bodyLabel')}<textarea name="body" rows={6} defaultValue={c.body ?? ''} className={`${inputCls} mt-1 h-auto py-2`} /></label>
+                          <label className="text-xs text-muted">{tr('adminMarketingReputation.result')}<input name="result_metric" defaultValue={c.result_metric ?? ''} className={`${inputCls} mt-1`} /></label>
+                          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" defaultChecked={c.is_published} />{tr('adminMarketingReputation.publish')}</label>
+                          <button type="submit" className={btnCls}>{tr('content.save')}</button>
+                        </form>
+                      </details>
+                    </td>
                     <td className="py-2">{c.customer_name ?? '—'}</td>
                     <td className="py-2 text-xs text-muted">{c.result_metric ?? '—'}</td>
                     <td className="py-2"><span className={`rounded px-1.5 py-0.5 text-[11px] ${c.is_published ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>{c.is_published ? 'Live' : 'Draft'}</span></td>

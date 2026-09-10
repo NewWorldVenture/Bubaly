@@ -1,8 +1,9 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { slugify, clampRating } from '@/lib/marketing/reputation';
+import { CASE_STUDIES_CACHE_TAG } from '@/lib/marketing/case-study';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -67,6 +68,7 @@ export async function saveCaseStudyAction(formData: FormData) {
     industry: s(formData, 'industry'),
     customer_name: s(formData, 'customer_name'),
     summary: s(formData, 'summary'),
+    ...(formData.has('body') ? { body: s(formData, 'body') } : {}),
     result_metric: s(formData, 'result_metric'),
     is_published: formData.get('is_published') === 'on',
   };
@@ -80,6 +82,7 @@ export async function saveCaseStudyAction(formData: FormData) {
     if (error || !data) marketingActionFailure('create the case study', error ?? new Error('The case study row was not returned after save.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'case_study', resourceId: data.id });
   }
+  revalidateTag(CASE_STUDIES_CACHE_TAG);
   revalidatePath('/admin/marketing/reputation');
 }
 
@@ -88,5 +91,6 @@ export async function deleteCaseStudyAction(id: string) {
   const { data, error } = await supabase.from('case_studies').delete().eq('id', id).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('delete the case study', error ?? new Error('Case study not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'case_study', resourceId: id });
+  revalidateTag(CASE_STUDIES_CACHE_TAG);
   revalidatePath('/admin/marketing/reputation');
 }

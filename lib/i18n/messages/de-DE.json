@@ -3709,6 +3709,8 @@
   "crm.manageLeadsProspectsAndCustomer": "Leads, Interessenten und Kundenkontakte verwalten.",
   "crm.refreshCrm": "CRM aktualisieren",
   "cta.startYourFreeTrial": "Kostenlos testen",
+  "customerStories.bodyLabel": "Vollständige Kundengeschichte",
+  "customerStories.unavailable": "Diese Kundengeschichte konnte nicht geladen werden.",
   "customers.adjustTheFilterOrSearch": "Passen Sie Filter oder Suche an, um Kundschaft zu sehen.",
   "customers.couldNotLoadMarketingCustomers": "Fehler beim Laden: die Marketing-Kundschaft aus Supabase. Bitte aktualisieren und erneut versuchen.",
   "customers.marketingCustomers": "Marketing-Kundschaft",
