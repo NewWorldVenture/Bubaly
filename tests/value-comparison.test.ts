@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { annualListPriceCents, compareEstimatedTimeValue } from '@/lib/metric/value';
+import { BASIC_ANNUAL_CENTS, BASIC_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 
 const mocks = vi.hoisted(() => ({ requireUserContext: vi.fn(), createServer: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
@@ -33,12 +34,12 @@ describe('time value arithmetic', () => {
   it('compares the same seven days and uses exact annual list prices', () => {
     const monthly = compareEstimatedTimeValue(60, 25, annualListPriceCents('basic')!);
     expect(monthly?.estimatedValueCents).toBe(2500);
-    expect(monthly?.periodListCents).toBeCloseTo(999 * 12 * 7 / 365.25);
-    expect(monthly?.ratio).toBeCloseTo(2500 / (999 * 12 * 7 / 365.25));
-    expect(annualListPriceCents('basic_annual')).toBe(9999);
-    expect(annualListPriceCents('family_annual')).toBe(9999);
-    expect(annualListPriceCents('plus_annual')).toBe(24999);
-    expect(annualListPriceCents('plus')).toBe(2499 * 12);
+    expect(monthly?.periodListCents).toBeCloseTo(BASIC_MONTHLY_CENTS * 12 * 7 / 365.25);
+    expect(monthly?.ratio).toBeCloseTo(2500 / (BASIC_MONTHLY_CENTS * 12 * 7 / 365.25));
+    expect(annualListPriceCents('basic_annual')).toBe(BASIC_ANNUAL_CENTS);
+    expect(annualListPriceCents('family_annual')).toBe(BASIC_ANNUAL_CENTS);
+    expect(annualListPriceCents('plus_annual')).toBe(PLUS_ANNUAL_CENTS);
+    expect(annualListPriceCents('plus')).toBe(PLUS_MONTHLY_CENTS * 12);
     expect(annualListPriceCents('free')).toBe(0);
     expect(annualListPriceCents('unknown')).toBeNull();
   });
@@ -53,7 +54,7 @@ describe('time value arithmetic', () => {
 
 describe('family value read boundary', () => {
   it('loads only the authenticated household and counts completion time rather than creation time', async () => {
-    expect(await loadFamilyValueComparisonAction()).toEqual({ familyId: 'ours', result: { state: 'available', completedRuns: 1, undatedCompletedRuns: 0, annualListCents: 11988 } });
+    expect(await loadFamilyValueComparisonAction()).toEqual({ familyId: 'ours', result: { state: 'available', completedRuns: 1, undatedCompletedRuns: 0, annualListCents: BASIC_MONTHLY_CENTS * 12 } });
     expect(mocks.requireUserContext).toHaveBeenCalledOnce();
     expect(mocks.createServer).toHaveBeenCalledOnce();
   });
