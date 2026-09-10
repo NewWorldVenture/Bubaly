@@ -17,10 +17,10 @@ export type DocLike = {
   created_at: string;
 };
 
-export const VIEW_META: Record<FileView, { title: string; description: string; folder: string }> = {
-  cloud: { title: 'Cloud Storage', description: 'Every file your family has stored, in one place.', folder: 'cloud' },
-  vault: { title: 'Secure Vault', description: 'Encrypted, private files only members can open.', folder: 'vault' },
-  shared: { title: 'Shared Files', description: 'Files shared with the whole family.', folder: 'shared' },
+export const VIEW_META: Record<FileView, { titleKey: string; descriptionKey: string; folder: string }> = {
+  cloud: { titleKey: 'filesHubModule.cloudTitle', descriptionKey: 'filesHubModule.cloudDescription', folder: 'cloud' },
+  vault: { titleKey: 'filesHubModule.vaultTitle', descriptionKey: 'filesHubModule.vaultDescription', folder: 'vault' },
+  shared: { titleKey: 'filesHubModule.sharedTitle', descriptionKey: 'filesHubModule.sharedDescription', folder: 'shared' },
 };
 
 /** Which documents belong to a given view. Cloud = all; Vault = secure; Shared = non-secure. */
@@ -37,6 +37,11 @@ export function searchDocs(docs: DocLike[], query: string): DocLike[] {
   return docs.filter((d) => d.title.toLowerCase().includes(q) || (d.category ?? '').toLowerCase().includes(q));
 }
 
+/** Same trimming as folder grouping; null means no category, never a label. */
+export function filterByCategory(docs: DocLike[], category: string | null): DocLike[] {
+  return docs.filter((d) => (d.category?.trim() || null) === category);
+}
+
 export type SortKey = 'recent' | 'name' | 'size';
 
 export function sortDocs(docs: DocLike[], key: SortKey): DocLike[] {
@@ -46,28 +51,29 @@ export function sortDocs(docs: DocLike[], key: SortKey): DocLike[] {
   return copy.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-export type Folder = { name: string; count: number; bytes: number };
+export type Folder = { name: string | null; count: number; bytes: number };
 
-/** Group docs into folders by category (default "General"), sorted by count. */
+/** Group by the trimmed authored category; absent/blank categories keep a null identity. */
 export function groupByCategory(docs: DocLike[]): Folder[] {
-  const by = new Map<string, Folder>();
+  const by = new Map<string | null, Folder>();
   for (const d of docs) {
-    const name = d.category?.trim() || 'General';
+    const name = d.category?.trim() || null;
     const f = by.get(name) ?? { name, count: 0, bytes: 0 };
     f.count += 1;
     f.bytes += d.size_bytes ?? 0;
     by.set(name, f);
   }
-  return [...by.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return [...by.values()].sort((a, b) => b.count - a.count || (a.name ?? '').localeCompare(b.name ?? ''));
 }
 
 /** Human-readable byte size (1024-based), e.g. 2.4 MB. */
-export function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '0 B';
+export function formatBytes(bytes: number | null | undefined, locale = 'en-US'): string {
+  if (!bytes || bytes <= 0) return `${new Intl.NumberFormat(locale).format(0)} B`;
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   const val = bytes / Math.pow(1024, i);
-  return `${val >= 100 || i === 0 ? Math.round(val) : val.toFixed(1)} ${units[i]}`;
+  const digits = val >= 100 || i === 0 ? 0 : 1;
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(val)} ${units[i]}`;
 }
 
 export type StorageSummary = { files: number; bytes: number; secure: number; shared: number };

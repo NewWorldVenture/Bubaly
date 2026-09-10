@@ -18,6 +18,7 @@
 import { isSensitiveCategory } from './sensitivity';
 
 export type UploadView = 'cloud' | 'vault' | 'shared';
+export type UploadTranslator = (key: string, params?: Record<string, string | number>) => string;
 
 export type UploadRequest = {
   view: UploadView;
@@ -44,17 +45,17 @@ export type UploadDecision =
  * Never a quiet downgrade: a refusal they can read beats a success they cannot
  * verify.
  */
-export function decideUpload(request: UploadRequest): UploadDecision {
+export function decideUpload(request: UploadRequest, t: UploadTranslator): UploadDecision {
   if (!request.manager && request.view === 'vault') {
     return {
       allowed: false,
-      reason: 'Only a parent or another adult can add a file to the Secure Vault. Ask one of them, or upload it to Shared Files instead.',
+      reason: t('filesHubModule.refuseVault'),
     };
   }
   if (!request.manager && isSensitiveCategory(request.category)) {
     return {
       allowed: false,
-      reason: `Only a parent or another adult can file a ${request.category.trim().toLowerCase()} document. Ask one of them to add it.`,
+      reason: t('filesHubModule.refuseSensitive', { category: request.category.trim().toLowerCase() }),
     };
   }
   return { allowed: true, isSecure: request.view === 'vault' };
@@ -82,13 +83,14 @@ export type UploadOutcome =
 export async function performUpload(
   request: UploadRequest & { folderFallback: string },
   effects: UploadEffects,
+  t: UploadTranslator,
 ): Promise<UploadOutcome> {
-  const decision = decideUpload(request);
+  const decision = decideUpload(request, t);
   if (!decision.allowed) return { ok: false, reason: decision.reason };
 
   const folder = request.category.trim() || request.folderFallback;
   const { path, error: storeError } = await effects.store(folder);
-  if (storeError || !path) return { ok: false, reason: storeError ?? 'Upload failed' };
+  if (storeError || !path) return { ok: false, reason: storeError ?? t('avatarPicker.uploadFailed') };
 
   const { error: recordError } = await effects.record({ storagePath: path, isSecure: decision.isSecure });
   if (recordError) {

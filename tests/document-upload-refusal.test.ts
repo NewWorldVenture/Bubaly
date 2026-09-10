@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decideUpload, performUpload, type UploadEffects } from '@/lib/documents/upload';
+import { decideUpload as decide, performUpload as perform, type UploadEffects, type UploadRequest } from '@/lib/documents/upload';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+const t = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
+const decideUpload = (request: UploadRequest) => decide(request, t);
+const performUpload = (request: UploadRequest & { folderFallback: string }, effects: UploadEffects) => perform(request, effects, t);
 
 // The Vault refusal, executed rather than read.
 //
