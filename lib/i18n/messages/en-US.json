@@ -8094,6 +8094,7 @@
   "onboardingWizard.contextChanged": "Your account or family changed. Reload this page before continuing.",
   "onboardingWizard.couldNotReadThatCalendar": "Could not read that calendar",
   "onboardingWizard.createA4DigitPin": "Create a 4-digit PIN",
+  "onboardingWizard.createProfileTitle": "Create your profile",
   "onboardingWizard.detectedAutomatically": ", detected automatically.",
   "onboardingWizard.dinnerIdeasForThisWeek": "Dinner ideas for this week",
   "onboardingWizard.dinnerIdeasForTonight": "Dinner ideas for tonight",

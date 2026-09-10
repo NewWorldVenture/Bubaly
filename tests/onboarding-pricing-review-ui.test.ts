@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: []
 // Actual wizard callbacks with persistent hook slots and storage; no browser claim.
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
+  useMemo: (factory: () => unknown, deps: unknown[]) => {
+    const index = mocks.cursor++; const previous = mocks.slots[index] as { value: unknown; deps: unknown[] } | undefined;
+    if (!previous || deps.some((value, i) => !Object.is(value, previous.deps[i]))) mocks.slots[index] = { value: factory(), deps };
+    return (mocks.slots[index] as { value: unknown }).value;
+  },
   useState: (initial: unknown) => { const i = mocks.cursor++; if (!(i in mocks.slots)) mocks.slots[i] = typeof initial === 'function' ? initial() : initial;
     return [mocks.slots[i], (value: unknown) => { mocks.slots[i] = typeof value === 'function' ? value(mocks.slots[i]) : value; }]; },
   useRef: (initial: unknown) => { const i = mocks.cursor++; if (!(i in mocks.slots)) mocks.slots[i] = { current: initial }; return mocks.slots[i]; },
@@ -104,4 +109,42 @@ describe('explicit selected-plan review after successful onboarding',()=>{
   const tree=render({reviewPlan:null,calendarStatus:'unavailable'});expect(nodes(tree).some(n=>n.props.href==='/pricing')).toBe(true);
   expect(mocks.finish).not.toHaveBeenCalled();expect(mocks.push).not.toHaveBeenCalled();
  });
+});
+
+describe('retired onboarding screen callbacks stay retired across ABA changes',()=>{
+ it.each(['owner','reviewPlan'] as const)('old Finish stays invalid after %s changes away and back',kind=>{
+  render();const old=finishControl(render());
+  render(kind==='owner'?{expectedOwner:{userId:'33333333-3333-4333-8333-333333333333',familyId:null}}:{reviewPlan:'basic_annual'});
+  render();old();expect(mocks.finish).not.toHaveBeenCalled();
+ });
+ it('late Finish from the first A cannot clear the current draft or display Done after A-B-A',async()=>{
+  let resolve:(value:unknown)=>void=()=>{};mocks.finish.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  render();finishControl(render())();render({reviewPlan:'basic_annual'});render();
+  const currentDraft=storage.get(DRAFT_STORAGE_KEY);resolve({ok:true,data:{familyId}});await Promise.resolve();await Promise.resolve();
+  expect(storage.get(DRAFT_STORAGE_KEY)).toBe(currentDraft);expect(donePanel(render())).toBeNull();expect(mocks.push).not.toHaveBeenCalled();
+ });
+ it('retained Done review and Explore controls stay invalid after A-B-A',async()=>{
+  render();finishControl(render())();await vi.waitFor(()=>expect(donePanel(render())).not.toBeNull());
+  const oldReview=control(donePanel(render()),'onboardingWizard.reviewSelectedPlan');
+  const oldExplore=control(donePanel(render()),'onboardingWizard.startExploring');
+  render({reviewPlan:'basic_annual'});render();oldReview();oldExplore();expect(mocks.push).not.toHaveBeenCalled();
+ });
+});
+
+it('a retired Finish response cannot release another screen’s pending Finish lock', async () => {
+  let first: (value: unknown) => void = () => {};
+  let second: (value: unknown) => void = () => {};
+  mocks.finish.mockImplementationOnce(() => new Promise(resolve => { first = resolve; }))
+    .mockImplementationOnce(() => new Promise(resolve => { second = resolve; }));
+  render(); finishControl(render())();
+  const current = { reviewPlan: 'basic_annual' as const };
+  render(current); const finish = finishControl(render(current)); finish();
+  expect(mocks.finish).toHaveBeenCalledTimes(2);
+  first({ ok: true, data: { familyId } }); await Promise.resolve(); await Promise.resolve();
+  finish(); expect(mocks.finish).toHaveBeenCalledTimes(2);
+  expect(donePanel(render(current))).toBeNull();
+  second({ ok: true, data: { familyId } });
+  await vi.waitFor(() => expect(donePanel(render(current))).not.toBeNull());
+  control(donePanel(render(current)), 'onboardingWizard.reviewSelectedPlan')();
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith('/dashboard/billing?view=manage&reviewPlan=basic_annual');
 });

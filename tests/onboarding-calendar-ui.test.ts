@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: []
   start: vi.fn(), preview: vi.fn(), assign: vi.fn(), receive: vi.fn() }));
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
+  useMemo: (factory: () => unknown, deps: unknown[]) => {
+    const index = mocks.cursor++; const previous = mocks.slots[index] as { value: unknown; deps: unknown[] } | undefined;
+    if (!previous || deps.some((value, i) => !Object.is(value, previous.deps[i]))) mocks.slots[index] = { value: factory(), deps };
+    return (mocks.slots[index] as { value: unknown }).value;
+  },
   useState: (initial: unknown) => {
     const index = mocks.cursor++;
     if (!(index in mocks.slots)) mocks.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -131,4 +136,29 @@ describe('pricing hint on explicit calendar connection', () => {
     resolve({ ok: true, url: '/api/sync/google/auth?onboarding=1' });
     await Promise.resolve(); await Promise.resolve(); expect(mocks.assign).not.toHaveBeenCalled();
   });
+});
+
+describe('calendar screen callbacks cannot revive across ABA changes',()=>{
+ const expectedOwner={userId:'11111111-1111-4111-8111-111111111111',familyId:null};
+ const otherOwner={...expectedOwner,userId:'22222222-2222-4222-8222-222222222222'};
+ it('retained Connect remains invalid after the owner changes away and back',()=>{
+  const old=button(render({expectedOwner,reviewPlan:'plus_annual'}),'connectedCalendar.google').props.onClick as ()=>void;
+  render({expectedOwner:otherOwner,reviewPlan:'plus_annual'});render({expectedOwner,reviewPlan:'plus_annual'});old();
+  expect(mocks.start).not.toHaveBeenCalled();expect(mocks.assign).not.toHaveBeenCalled();
+ });
+ it('retained Retry cannot issue a preview before passive cleanup after the owner changes',async()=>{
+  mocks.preview.mockResolvedValueOnce({ok:false,error:'Retry the preview'});
+  render({expectedOwner,accountId:'same-account'});await vi.waitFor(()=>expect(textOf(render({expectedOwner,accountId:'same-account'}))).toContain('Retry the preview'));
+  const retry=button(render({expectedOwner,accountId:'same-account'}),'connectedCalendar.retry').props.onClick as ()=>void;
+  mocks.cursor=0;ConnectedCalendar({...defaults,expectedOwner:otherOwner,accountId:'same-account'});
+  const count=mocks.preview.mock.calls.length;retry();expect(mocks.preview).toHaveBeenCalledTimes(count);
+ });
+ it('late rejected preview cannot show its failure on a newly rendered owner before cleanup',async()=>{
+  let reject:(error:unknown)=>void=()=>{};mocks.preview.mockImplementationOnce(()=>new Promise((_,no)=>{reject=no;}));
+  render({expectedOwner,accountId:'same-account'});
+  mocks.cursor=0;ConnectedCalendar({...defaults,expectedOwner:otherOwner,accountId:'same-account'});
+  reject(new Error('private old error'));await Promise.resolve();await Promise.resolve();
+  mocks.cursor=0;const current=ConnectedCalendar({...defaults,expectedOwner:otherOwner,accountId:'same-account'});
+  expect(textOf(current)).not.toContain(SOURCE_MESSAGES['connectedCalendar.unavailable']);
+ });
 });

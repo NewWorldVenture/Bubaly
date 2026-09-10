@@ -12,7 +12,7 @@
 // All flow logic (steps, progress, validation, draft→payload) lives in the pure,
 // tested lib/onboarding/flow.ts; this file is the renderer.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -55,18 +55,20 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   const tr = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
-  const screenKey = `${expectedOwner?.userId ?? ''}:${expectedOwner?.familyId ?? ''}:${reviewPlan ?? ''}`;
-  const currentScreen = useRef(screenKey);
-  currentScreen.current = screenKey;
+  // Each owner/selection lifetime has a distinct identity, including A → B → A.
+  const screenOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId, reviewPlan }), [expectedOwner?.userId, expectedOwner?.familyId, reviewPlan]);
+  const currentScreen = useRef(screenOwner);
+  currentScreen.current = screenOwner;
   const mounted = useRef(true);
-  const finishing = useRef(false);
+  const finishing = useRef<typeof screenOwner | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const [step, setStep] = useState<OnboardingStep>('profile');
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
     emptyDraft({ name: initialName, lastName: initialLastName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
   const [familyNameTouched, setFamilyNameTouched] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingOwner, setSavingOwner] = useState<typeof screenOwner | null>(null);
+  const saving = savingOwner === screenOwner;
   // The server-computed first brief (timeline · clashes · dinner ideas · time
   // saved), returned by finalize and shown on the celebration screen.
   const [doneBrief, setDoneBrief] = useState<FirstBrief | null>(null);
@@ -134,19 +136,22 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   }, [step, current, total]);
 
   async function finish() {
-    if (!mounted.current || currentScreen.current !== screenKey || finishing.current) return;
-    finishing.current = true;
-    setSaving(true);
+    if (!mounted.current || currentScreen.current !== screenOwner || finishing.current === screenOwner) return;
+    finishing.current = screenOwner;
+    setSavingOwner(screenOwner);
     try {
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft), expectedOwner);
-    if (!mounted.current || currentScreen.current !== screenKey) return;
+    if (!mounted.current || currentScreen.current !== screenOwner) return;
     if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
     setDoneBrief(res.data?.brief ?? null);
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
-    } catch { if (mounted.current && currentScreen.current === screenKey) toastError(tr('actions.couldNotFinishSettingUp2')); }
-    finally { finishing.current = false; if (mounted.current && currentScreen.current === screenKey) setSaving(false); }
+    } catch { if (mounted.current && currentScreen.current === screenOwner) toastError(tr('actions.couldNotFinishSettingUp2')); }
+    finally {
+      if (finishing.current === screenOwner) finishing.current = null;
+      if (mounted.current && currentScreen.current === screenOwner) setSavingOwner(null);
+    }
   }
 
   function advance() {
@@ -203,8 +208,8 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
         {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief}
-          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenKey) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
-          onGo={() => { if (mounted.current && currentScreen.current === screenKey) { router.push('/dashboard'); router.refresh(); } }} />}
+          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenOwner) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
+          onGo={() => { if (mounted.current && currentScreen.current === screenOwner) { router.push('/dashboard'); router.refresh(); } }} />}
       </div>
 
       {step !== 'done' && (

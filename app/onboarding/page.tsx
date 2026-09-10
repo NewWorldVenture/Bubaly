@@ -10,8 +10,11 @@ import { getUserContext } from '@/lib/supabase/auth';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { verifyCalendarWizard } from '@/lib/services/onboarding-calendar/setup';
 import { authScreenHref, parseReviewSelection, reviewBillingPath, reviewOnboardingPath } from '@/lib/billing/review-selection';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Create your profile' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations())('onboardingWizard.createProfileTitle') };
+}
 
 export default async function OnboardingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams ?? {};

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { startCalendarConnectionAction, previewConnectedCalendarAction } from '@/app/onboarding/calendar-actions';
@@ -15,26 +15,29 @@ export function ConnectedCalendar({ providers, accountId, status, family, displa
   reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
 }) {
   const t = useTranslations();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const screenOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId, reviewPlan, accountId }), [expectedOwner?.userId, expectedOwner?.familyId, reviewPlan, accountId]);
+  const [busyOwner, setBusyOwner] = useState<typeof screenOwner | null>(null);
+  const [failure, setFailure] = useState<{ owner: typeof screenOwner; message: string } | null>(null);
+  const busy = busyOwner === screenOwner;
+  const error = failure?.owner === screenOwner ? failure.message : null;
   const generation = useRef(0);
-  const screenKey = `${expectedOwner?.userId ?? ''}:${expectedOwner?.familyId ?? ''}:${reviewPlan ?? ''}`;
-  const currentScreen = useRef(screenKey);
-  currentScreen.current = screenKey;
+  const currentScreen = useRef(screenOwner);
+  currentScreen.current = screenOwner;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const load = useCallback(async () => {
-    if (!accountId) return;
+    if (!accountId || !mounted.current || currentScreen.current !== screenOwner) return;
     const current = ++generation.current;
-    setBusy(true); setError(null);
+    const isCurrent = () => mounted.current && currentScreen.current === screenOwner && generation.current === current;
+    setBusyOwner(screenOwner); setFailure(null);
     try {
       const result = await previewConnectedCalendarAction(accountId);
-      if (!mounted.current || currentScreen.current !== screenKey || generation.current !== current) return;
-      if (!result.ok) { setError(result.error); return; }
+      if (!isCurrent()) return;
+      if (!result.ok) { setFailure({ owner: screenOwner, message: result.error }); return; }
       onPreview(result.data);
-    } catch { if (generation.current === current) setError(t('connectedCalendar.unavailable')); }
-    finally { if (generation.current === current) setBusy(false); }
-  }, [accountId, onPreview, t, screenKey]);
+    } catch { if (isCurrent()) setFailure({ owner: screenOwner, message: t('connectedCalendar.unavailable') }); }
+    finally { if (isCurrent()) setBusyOwner(null); }
+  }, [accountId, onPreview, t, screenOwner]);
   useEffect(() => {
     const pendingGeneration = generation;
     void load();
@@ -42,19 +45,20 @@ export function ConnectedCalendar({ providers, accountId, status, family, displa
   }, [load]);
 
   async function connect(provider: CalendarProvider) {
-    if (!mounted.current || currentScreen.current !== screenKey || busy) return;
+    if (!mounted.current || currentScreen.current !== screenOwner || busy) return;
     const current = ++generation.current;
-    setBusy(true); setError(null);
+    const isCurrent = () => mounted.current && currentScreen.current === screenOwner && generation.current === current;
+    setBusyOwner(screenOwner); setFailure(null);
     try {
       const input = { provider, family, displayName };
       const result = expectedOwner || isReviewPlan(reviewPlan)
         ? await startCalendarConnectionAction(input, { expectedOwner, ...(isReviewPlan(reviewPlan) ? { reviewPlan } : {}) })
         : await startCalendarConnectionAction(input);
-      if (!mounted.current || currentScreen.current !== screenKey || generation.current !== current) return;
-      if (!result.ok) { setError(result.error); return; }
+      if (!isCurrent()) return;
+      if (!result.ok) { setFailure({ owner: screenOwner, message: result.error }); return; }
       window.location.assign(result.url);
-    } catch { if (mounted.current && currentScreen.current === screenKey && generation.current === current) setError(t('connectedCalendar.unavailable')); }
-    finally { if (mounted.current && currentScreen.current === screenKey && generation.current === current) setBusy(false); }
+    } catch { if (isCurrent()) setFailure({ owner: screenOwner, message: t('connectedCalendar.unavailable') }); }
+    finally { if (isCurrent()) setBusyOwner(null); }
   }
   if (!providers.length && !accountId) return null;
   return <section className="space-y-3 rounded-2xl border border-border p-4">
