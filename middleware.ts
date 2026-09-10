@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
+  shouldForwardAuthCode,
 } from '@/lib/auth/session';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
@@ -68,9 +69,18 @@ export async function middleware(req: NextRequest) {
   // sessions or interpret OAuth query parameters for this read-only response.
   if (path === '/api/build-info') return NextResponse.next({ request: req });
 
-  // If an OAuth code lands on the wrong path, forward it to /auth/callback
-  const code = req.nextUrl.searchParams.get('code');
-  if (code && path !== '/auth/callback') {
+  // A Supabase OAuth code that landed on the wrong path gets forwarded to
+  // /auth/callback — but ONLY when it is ours to exchange. `code` is the
+  // standard OAuth parameter, so this rescue used to capture the provider
+  // callbacks under /api/ (Google Calendar, the sync providers) and hand their
+  // authorization codes to exchangeCodeForSession, which answered /login: a
+  // signed-in user logged out for connecting their calendar. See
+  // shouldForwardAuthCode.
+  if (shouldForwardAuthCode({
+    path,
+    hasCode: req.nextUrl.searchParams.has('code'),
+    cookieNames: req.cookies.getAll().map((c) => c.name),
+  })) {
     const url = req.nextUrl.clone();
     url.pathname = '/auth/callback';
     return NextResponse.redirect(url);

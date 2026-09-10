@@ -54,8 +54,12 @@ describe('authenticated context error boundary', () => {
 
   it('keeps shared auth failures observable while failing closed for privileged checks', () => {
     // A signed-out visitor (AuthSessionMissingError) is not a failure and must
-    // not be logged; every other error stays observable.
-    expect(source).toContain("if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);");
+    // not be logged; every other error stays observable — a transient one by
+    // raising (throwContextUnavailable logs it), a definitive one by logging
+    // and reporting no user, which is what it actually means.
+    expect(source).toContain("if (error && !isSessionMissing(error)) {");
+    expect(source).toContain("if (isRetryableAuthError(error)) throwContextUnavailable('authenticated user', error);");
+    expect(source).toContain("console.error('[auth] user lookup failed', error);");
     expect(source).toContain("console.error('[auth] super-admin allowlist lookup failed', error);");
   });
 });

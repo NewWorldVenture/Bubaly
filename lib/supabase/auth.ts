@@ -6,6 +6,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
+import { isRetryableAuthError } from '@/lib/auth/session';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -44,11 +45,24 @@ function isSessionMissing(error: unknown): boolean {
 // rest of the app already looks for account context.
 export { GUEST_LANDING_PATH, DEFAULT_LANDING_PATH, landingPathForRole } from '@/lib/auth/landing';
 
-/** Returns the signed-in user or null. */
+/**
+ * The signed-in user, or null when there genuinely is not one.
+ *
+ * Null means SIGNED OUT — never "the lookup failed". Those are different
+ * answers and every caller here redirects or 401s on null, so conflating them
+ * turns a network blip into a login page for a session that is perfectly
+ * valid: the admin console did exactly that, undoing one layer down the
+ * outage-is-not-a-logout distinction the middleware had just made on the same
+ * request. A transient failure therefore raises instead, and a definitive
+ * rejection still returns null, because that IS signed out.
+ */
 export async function getUser() {
   const supabase = await createServer();
   const { data, error } = await supabase.auth.getUser();
-  if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);
+  if (error && !isSessionMissing(error)) {
+    if (isRetryableAuthError(error)) throwContextUnavailable('authenticated user', error);
+    console.error('[auth] user lookup failed', error);
+  }
   return data.user;
 }
 

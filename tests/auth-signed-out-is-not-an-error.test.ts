@@ -14,7 +14,15 @@ describe('anonymous visitors are not logged as auth failures', () => {
     expect(src).toMatch(/auth session missing/i);
   });
   it('getUser and isSuperAdmin only log genuine lookup failures', () => {
-    expect(src).toContain("if (error && !isSessionMissing(error)) console.error('[auth] user lookup failed', error);");
+    expect(src).toContain("if (error && !isSessionMissing(error)) {");
+    expect(src).toContain("console.error('[auth] user lookup failed', error);");
     expect(src).toContain("if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);");
+  });
+
+  // Not logging a signed-out visitor is one half. The other is not REPORTING a
+  // failed lookup as a signed-out visitor: null is what every caller redirects
+  // or 401s on, so a network blip returning null is a logout.
+  it('raises on a transient lookup failure rather than reporting no user', () => {
+    expect(src).toContain('if (isRetryableAuthError(error)) throwContextUnavailable');
   });
 });
