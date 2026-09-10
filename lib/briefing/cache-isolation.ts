@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { AppContextValue } from '@/components/app/app-context';
 import { BriefDecisionsSchema } from '@/lib/briefing/response-schema';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export type BriefingType = 'morning' | 'evening' | 'weekly';
 
@@ -81,7 +82,7 @@ type BriefingContext = Pick<AppContextValue,
  * does not expose revisions for all source permissions, so sensitive briefs
  * must never be restored from browser storage (BRIEF-CACHE-ISOLATION, 3.28/34.49).
  */
-export function briefingContextKey(context: BriefingContext, day: string): string | null {
+export function briefingContextKey(context: BriefingContext, day: string, locale: LocaleCode = DEFAULT_LOCALE): string | null {
   const { familyId, userId, selfMember: member } = context;
   if (!familyId || !userId || !member?.id || !member.is_active
     || member.family_id !== familyId || member.user_id !== userId) return null;
@@ -89,7 +90,7 @@ export function briefingContextKey(context: BriefingContext, day: string): strin
   return JSON.stringify([
     familyId, userId, member.id, context.role, member.role, member.updated_at,
     context.isSuperAdmin, context.planLevel,
-    Object.entries(context.featureTiers).sort(([a], [b]) => a.localeCompare(b)), day,
+    Object.entries(context.featureTiers).sort(([a], [b]) => a.localeCompare(b)), day, locale,
   ]);
 }
 

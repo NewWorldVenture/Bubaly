@@ -23,7 +23,7 @@ import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
   type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,9 +49,9 @@ const DOT_CLASSES: Record<string, string> = {
   emerald: 'bg-emerald-400', amber: 'bg-amber-400', cyan: 'bg-cyan-400', indigo: 'bg-indigo-400',
 };
 const STRESS_CONFIG = {
-  low:      { label: 'Low Stress',  color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-  moderate: { label: 'Moderate',    color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20' },
-  high:     { label: 'High Stress', color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20' },
+  low:      { labelKey: 'briefingView.stressLow',  color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+  moderate: { labelKey: 'briefingView.stressModerate',    color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20' },
+  high:     { labelKey: 'briefingView.stressHigh', color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20' },
 };
 const URGENCY_CLASSES = {
   high:   'text-rose-400 bg-rose-500/10 border-rose-500/30',
@@ -103,10 +103,10 @@ const DOMAIN_META: Record<ConciergeDomain, { emoji: string; label: string; href:
   trip:        { emoji: '✈️', label: 'Trip',        href: '/dashboard/vacations' },
   pantry:      { emoji: '🥫', label: 'Pantry',      href: '/dashboard/pantry' },
 };
-const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot: string }> = {
-  overdue: { label: 'Overdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
-  today:   { label: 'Today',     cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30',   dot: 'bg-amber-400' },
-  soon:    { label: 'Coming up', cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',      dot: 'bg-cyan-400' },
+const DIGEST_URGENCY: Record<ConciergeUrgency, { labelKey: string; cls: string; dot: string }> = {
+  overdue: { labelKey: 'briefingView.urgencyOverdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
+  today:   { labelKey: 'briefingView.urgencyToday',     cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30',   dot: 'bg-amber-400' },
+  soon:    { labelKey: 'briefingView.urgencySoon', cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',      dot: 'bg-cyan-400' },
 };
 
 /**
@@ -119,15 +119,15 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
   const { counts, items, headline } = digest;
   return (
     <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/[0.04] border border-violet-500/20 p-6">
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <LayoutGrid className="h-4 w-4 text-violet-400" />
           <span className="text-sm font-semibold text-fg uppercase tracking-wider">{tr('briefing.needsAttentionToday')}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          {counts.overdue > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-rose-400 bg-rose-500/10 border-rose-500/30">{counts.overdue} overdue</span>}
-          {counts.today > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-amber-400 bg-amber-500/10 border-amber-500/30">{counts.today} today</span>}
-          {counts.soon > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-cyan-300 bg-cyan-500/10 border-cyan-500/30">{counts.soon} soon</span>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {counts.overdue > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-rose-400 bg-rose-500/10 border-rose-500/30">{tr('briefingView.countOverdue', { count: counts.overdue })}</span>}
+          {counts.today > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-amber-400 bg-amber-500/10 border-amber-500/30">{tr('briefingView.countToday', { count: counts.today })}</span>}
+          {counts.soon > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-cyan-300 bg-cyan-500/10 border-cyan-500/30">{tr('briefingView.countSoon', { count: counts.soon })}</span>}
         </div>
       </div>
       {items.length === 0 ? (
@@ -142,15 +142,15 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
             return (
               <li key={i}>
                 <a href={meta.href}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 hover:bg-surface/70 transition-colors group">
+                  className="grid grid-cols-[6px_20px_minmax(0,1fr)_16px] items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-surface/40 px-3 py-2.5 hover:bg-surface/70 transition-colors group sm:grid-cols-[6px_20px_minmax(0,1fr)_auto_16px]">
                   <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', u.dot)} />
                   <span className="text-base flex-shrink-0">{meta.emoji}</span>
                   <span className="flex-1 min-w-0">
                     <span className="text-sm font-medium text-fg block truncate">{item.title}</span>
                     <span className="text-xs text-muted block truncate">{item.detail}</span>
                   </span>
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0', u.cls)}>{u.label}</span>
-                  <ChevronRight className="h-4 w-4 text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity flex-shrink-0" />
+                  <span className={cn('col-start-3 row-start-2 justify-self-start text-xs px-2 py-0.5 rounded-full border sm:col-start-4 sm:row-start-1', u.cls)}>{tr(u.labelKey)}</span>
+                  <ChevronRight className="col-start-4 row-start-1 h-4 w-4 text-muted opacity-100 sm:col-start-5 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity" />
                 </a>
               </li>
             );
@@ -332,10 +332,10 @@ function AlsoToday({ items, unavailable }: { items: AlsoTodayRow[]; unavailable:
 function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; loading: boolean; type: TabType }) {
   const tr = useTranslations();
   const cfg: Record<TabType, { icon: React.ReactNode; title: string; desc: string }> = {
-    morning: { icon: <Sun className="h-8 w-8 text-amber-400" />,    title: 'Morning Briefing', desc: 'Start your day with a complete picture of what your family needs today.' },
-    evening: { icon: <Moon className="h-8 w-8 text-indigo-400" />,  title: 'Evening Recap',   desc: 'Review what got done, what is outstanding, and preview tomorrow.' },
-    weekly:  { icon: <CalendarDays className="h-8 w-8 text-emerald-400" />, title: 'Weekly Overview', desc: 'Get ahead of the week with conflicts flagged and suggestions ready.' },
-    kitchen: { icon: <Tv2 className="h-8 w-8 text-cyan-400" />,     title: 'Kitchen Display', desc: 'Always-on display showing who is where and what is coming up.' },
+    morning: { icon: <Sun className="h-8 w-8 text-amber-400" />,    title: tr('briefingView.morningTitle'), desc: tr('briefingView.morningDescription') },
+    evening: { icon: <Moon className="h-8 w-8 text-indigo-400" />,  title: tr('briefingView.eveningTitle'),   desc: tr('briefingView.eveningDescription') },
+    weekly:  { icon: <CalendarDays className="h-8 w-8 text-emerald-400" />, title: tr('briefingView.weeklyTitle'), desc: tr('briefingView.weeklyDescription') },
+    kitchen: { icon: <Tv2 className="h-8 w-8 text-cyan-400" />,     title: tr('briefingView.kitchenTitle'), desc: tr('briefingView.kitchenDescription') },
   };
   const { icon, title, desc } = cfg[type];
   return (
@@ -346,7 +346,7 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
       <Button onClick={onGenerate} disabled={loading}
         className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-        {loading ? 'Generating…' : `Generate ${title}`}
+        {loading ? tr('briefingView.generating') : tr('briefingView.generate', { title })}
       </Button>
       {loading && <p className="text-muted text-sm mt-4">{tr('briefing.analyzingYourFamilyDataWithAi')}</p>}
     </div>
@@ -386,7 +386,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
             <div className="mt-5 pt-5 border-t border-border flex flex-col sm:flex-row gap-3">
               {ops.stressReason && (
                 <div className={cn('flex-1 rounded-xl border px-4 py-3 text-sm', stress.bg)}>
-                  <span className={cn('font-semibold', stress.color)}>{stress.label}: </span>
+                  <span className={cn('font-semibold', stress.color)}>{tr(stress.labelKey)}: </span>
                   <span className="text-fg/80">{ops.stressReason}</span>
                 </div>
               )}
@@ -425,7 +425,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
                         {item.member && <div className="text-xs text-muted mt-0.5">{item.member}</div>}
                       </div>
                       <span className={cn('text-xs px-2.5 py-0.5 rounded-full border flex-shrink-0 mt-0.5', COLOR_CLASSES[item.color] ?? COLOR_CLASSES.blue)}>
-                        {item.member || 'Family'}
+                        {item.member || tr('family.family')}
                       </span>
                     </div>
                   </div>
@@ -497,7 +497,7 @@ function MorningContent({ data, relationships }: { data: BriefingData; relations
               <div key={i} className="rounded-xl bg-surface/50 border border-border p-4">
                 <div className="font-semibold text-fg mb-2">
                   {kid.name}
-                  {kid.age != null && <span className="text-muted text-xs ml-1">(Age {kid.age})</span>}
+                  {kid.age != null && <span className="text-muted text-xs ml-1">{tr('briefingView.age', { age: kid.age })}</span>}
                 </div>
                 <ul className="space-y-1.5">
                   {kid.items.map((item, j) => (
@@ -582,7 +582,7 @@ function EveningContent({ data, recap }: { data: BriefingData; recap?: React.Rea
       {data.tomorrowPreview && (
         <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-5">
           <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <ChevronRight className="h-4 w-4" /> {tr('briefing.tomorrowPreview')} {data.tomorrowPreview.events} events
+            <ChevronRight className="h-4 w-4" /> {tr('briefing.tomorrowPreview')} {tr(data.tomorrowPreview.events === 1 ? 'briefingView.oneEvent' : 'briefingView.manyEvents', { count: data.tomorrowPreview.events })}
           </h3>
           <ul className="space-y-1.5">
             {(data.tomorrowPreview.notes ?? []).map((note, i) => (
@@ -651,6 +651,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   now: Date;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
   function memberStatus(memberId: string): { label: string; active: boolean; next: boolean } {
     const current = todayEvents.find(e => {
       if (e.assignee_id !== memberId) return false;
@@ -661,15 +662,15 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
     if (current) return { label: current.title, active: true, next: false };
     const next = todayEvents.find(e => e.assignee_id === memberId && new Date(e.starts_at) > now);
     if (next) {
-      const t = new Date(next.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      return { label: `Next: ${next.title} at ${t}`, active: false, next: true };
+      const t = new Date(next.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+      return { label: tr('briefingView.nextEvent', { title: next.title, time: t }), active: false, next: true };
     }
-    return { label: 'Available', active: false, next: false };
+    return { label: tr('briefingView.available'), active: false, next: false };
   }
 
   const upcoming = todayEvents.filter(e => new Date(e.starts_at) > now).slice(0, 5);
-  const clockStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const dayStr   = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const clockStr = now.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+  const dayStr   = now.toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
     <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
@@ -729,12 +730,14 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((e, i) => {
-                  const t = new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                  const parts = new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit' }).formatToParts(new Date(e.starts_at));
+                  const clock = parts.filter(part => part.type !== 'dayPeriod').map(part => part.value).join('').trim();
+                  const period = parts.find(part => part.type === 'dayPeriod')?.value;
                   return (
                     <div key={i} className="flex items-center gap-5 rounded-2xl bg-surface/40 border border-border p-5">
                       <div className="text-right min-w-[72px] flex-shrink-0">
-                        <div className="text-2xl font-bold text-fg tabular-nums">{t.split(':')[0] + ':' + t.split(':')[1].split(' ')[0]}</div>
-                        <div className="text-xs text-muted uppercase">{t.split(' ')[1]}</div>
+                        <div className="text-2xl font-bold text-fg tabular-nums">{clock}</div>
+                        {period && <div className="text-xs text-muted uppercase">{period}</div>}
                       </div>
                       <div className="w-px h-12 bg-elevated" />
                       <div className="flex-1 min-w-0">
@@ -772,6 +775,7 @@ type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.Reac
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
   const tr = useTranslations();
+  const locale = useLocale();
   const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [now, setNow] = useState(new Date());
@@ -781,7 +785,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
     return () => clearInterval(id);
   }, []);
 
-  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10));
+  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10), locale.code);
 
   useEffect(() => {
     try {
@@ -805,6 +809,7 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 }) {
   const tr = useTranslations();
   const { familyId, members } = useApp();
+  const locale = useLocale();
   const [session] = useState(() => createBriefingSession());
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const active = tab === 'kitchen' ? null : state[tab];
@@ -858,13 +863,13 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const kitchenError = eventsError || remindersError;
   const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
 
   const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'morning', label: 'Morning',      icon: <Sun className="h-4 w-4" /> },
-    { id: 'evening', label: 'Evening',      icon: <Moon className="h-4 w-4" /> },
-    { id: 'weekly',  label: 'This Week',    icon: <CalendarDays className="h-4 w-4" /> },
-    { id: 'kitchen', label: 'Kitchen Mode', icon: <Tv2 className="h-4 w-4" /> },
+    { id: 'morning', label: tr('briefingView.morningTab'),      icon: <Sun className="h-4 w-4" /> },
+    { id: 'evening', label: tr('briefingView.eveningTab'),      icon: <Moon className="h-4 w-4" /> },
+    { id: 'weekly',  label: tr('briefingView.weeklyTab'),    icon: <CalendarDays className="h-4 w-4" /> },
+    { id: 'kitchen', label: tr('briefingView.kitchenTab'), icon: <Tv2 className="h-4 w-4" /> },
   ];
 
   // Kitchen mode renders fullscreen
