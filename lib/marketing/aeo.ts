@@ -6,6 +6,7 @@
 import { unstable_cache } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { localeFallbackChain } from '@/lib/i18n/messages';
 
 export type AeoQuestion = {
   /** Empty for questions that came from a page payload rather than a table row;
@@ -285,6 +286,25 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
  * in English. Half-translating a page is the bug being fixed here, and a
  * shorter list in the reader's own language beats a full one in someone else's.
  * English locales skip the lookup entirely and are unaffected.
+ *
+ * Two things stop that rule from turning a translation gap into a hole.
+ *
+ * A regional locale reads its parent's rows. The translation table is keyed on
+ * the exact code, but fr-CA, es-MX and es-US ship as OVERLAY catalogues that
+ * resolve their chrome through fr-FR and es-ES — so keying the answers strictly
+ * would leave a French-Canadian reader with French chrome around no Knowledge
+ * Center at all, for want of a row that exists one step up the same chain the
+ * rest of the page already walks. `localeFallbackChain` is that chain, shared
+ * with the catalogue so the two cannot drift; a nearer locale's row wins.
+ *
+ * And when NOTHING in the set resolves, the English questions come back rather
+ * than an empty list. Dropping is only ever the better answer while something
+ * survives it: MarketingAeoSection renders nothing at all for an empty list, so
+ * the last question dropped takes the heading and the FAQPage schema with it.
+ * That is how an empty translation table read on the live site — French chrome
+ * and no accordion, silently, on every page. English answers under a translated
+ * heading are the smaller problem AND the visible one, which is the same
+ * judgement the payload branch below already makes.
  */
 export async function localizeAeoQuestions(
   questions: AeoQuestion[],
@@ -299,18 +319,27 @@ export async function localizeAeoQuestions(
   // section: an untranslatable answer is a smaller problem than a missing one.
   if (ids.length === 0) return questions;
 
+  const chain = localeFallbackChain(locale);
   try {
     const { data, error } = await anonClient()
       .from('marketing_aeo_question_translations')
-      .select('question_id, question, answer')
-      .eq('locale', locale)
+      .select('question_id, locale, question, answer')
+      .in('locale', chain)
       .in('question_id', ids);
     if (error) {
       // A failed lookup must not blank the section: fall back to what we have.
       console.error('[marketing-aeo] translation read failed', error);
       return questions;
     }
-    const byId = new Map((data ?? []).map((row) => [row.question_id, row]));
+    // Lower index = nearer relative, so fr-CA beats fr-FR for a fr-CA reader.
+    const distance = new Map(chain.map((code, index) => [code, index]));
+    const byId = new Map<string, { locale: string; question: string; answer: string }>();
+    for (const row of data ?? []) {
+      const nearer = byId.get(row.question_id);
+      if (nearer && (distance.get(nearer.locale) ?? Infinity) <= (distance.get(row.locale) ?? Infinity)) continue;
+      byId.set(row.question_id, row);
+    }
+    if (byId.size === 0) return questions;
     return questions.flatMap((q) => {
       const translated = byId.get(q.id);
       if (!translated) return [];
