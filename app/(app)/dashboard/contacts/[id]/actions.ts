@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import type { Tables } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -70,12 +71,22 @@ export async function draftReconnectMessageAction(
   const t = await getTranslations();
   if (!contactId) return { ok: false, error: t('actions.invalidContact') };
   const ctx = await requireUserContext();
-  const supabase = await createServer();
   const familyId = ctx.active.familyId;
-
-  const { data: contact } = await supabase
-    .from('family_contacts').select('*')
-    .eq('id', contactId).eq('family_id', familyId).maybeSingle();
+  const historyFailure = (source: 'contact' | 'interactions' | 'communications'): ReconnectResult => {
+    // Report the failed boundary without copying private history or provider details.
+    console.error('[contacts-reconnect] required read failed', { source });
+    return { ok: false, error: t('contactTimeline.historyUnavailable') };
+  };
+  let supabase: Awaited<ReturnType<typeof createServer>>;
+  let contact: Tables<'family_contacts'> | null;
+  try {
+    supabase = await createServer();
+    const { data, error } = await supabase
+      .from('family_contacts').select('*')
+      .eq('id', contactId).eq('family_id', familyId).maybeSingle();
+    if (error) return historyFailure('contact');
+    contact = data;
+  } catch { return historyFailure('contact'); }
   if (!contact) return { ok: false, error: t('actions.contactNotFound') };
 
   if (!(await isAIConfigured())) {
@@ -83,23 +94,30 @@ export async function draftReconnectMessageAction(
   }
 
   // Ground strictly in logged history + linked communications + birthday.
-  const { data: rawInts } = await supabase
-    .from('contact_interactions').select('*')
-    .eq('contact_id', contactId).eq('family_id', familyId)
-    .order('occurred_on', { ascending: false }).limit(12);
-
-  let comms: CommunicationLike[] = [];
+  let rawInts: Tables<'contact_interactions'>[];
+  let comms: CommunicationLike[];
+  let historySource: 'interactions' | 'communications' = 'interactions';
   try {
-    const { data } = await supabase
+    const interactions = await supabase
+      .from('contact_interactions').select('*')
+      .eq('contact_id', contactId).eq('family_id', familyId)
+      .order('occurred_on', { ascending: false }).limit(12);
+    if (interactions.error || !Array.isArray(interactions.data)) return historyFailure('interactions');
+    rawInts = interactions.data;
+
+    historySource = 'communications';
+    const { data, error } = await supabase
       .from('family_communications')
       .select('id, channel, direction, subject, summary, received_at')
       .eq('contact_id', contactId).eq('family_id', familyId)
       .order('received_at', { ascending: false }).limit(8);
-    comms = (data ?? []) as CommunicationLike[];
-  } catch { /* table not present in this env */ }
+    if (error || !Array.isArray(data)) return historyFailure('communications');
+    comms = data as CommunicationLike[];
+  } catch { return historyFailure(historySource); }
 
   const timeline = buildContactTimeline({
-    interactions: (rawInts ?? []).map((i): LoggedInteraction => ({
+    t,
+    interactions: rawInts.map((i): LoggedInteraction => ({
       id: i.id, kind: i.kind as LoggedInteraction['kind'], occurred_on: i.occurred_on,
       title: i.title, note: i.note, amount: i.amount,
     })),
@@ -107,20 +125,22 @@ export async function draftReconnectMessageAction(
     birthdayMonth: contact.birthday_month,
     birthdayDay: contact.birthday_day,
   });
-  const health = contactHealth(timeline, contact.name);
+  const health = contactHealth(timeline, contact.name, t);
 
   const historyLines = timeline.slice(0, 8)
     .map((e) => `- ${e.date}: ${e.title}${e.detail ? ` (${e.detail})` : ''}`)
     .join('\n') || '- (no logged history yet)';
 
   const toneWord = tone === 'brief' ? 'short and low-key' : tone === 'playful' ? 'light and playful' : 'warm and genuine';
+  const { locale } = await getLocaleContext();
   const system =
     'You help a busy parent write a ready-to-send message to reconnect with someone in their life ' +
     '(family, friend, coach, caregiver). Ground the message ONLY in the provided history — never invent ' +
     'shared events, names, dates, plans, or feelings that aren’t there. If you need a detail the notes ' +
     'don’t give, use one brief bracketed placeholder like [day that works]. Write it from the family to ' +
     'the contact, first person. Keep it under 60 words, natural (like a real text), no subject line, no ' +
-    'sign-off block — just the message. Return ONLY the message text.';
+    'sign-off block — just the message. Return ONLY the message text. ' +
+    `Write the message in the selected locale: ${locale.code}.`;
   const user =
     `Contact: ${contact.name}${contact.relationship ? ` (${contact.relationship})` : ''}\n` +
     `Time since last contact: ${health.daysSince == null ? 'no logged history' : `${health.daysSince} days`}\n` +
@@ -133,7 +153,7 @@ export async function draftReconnectMessageAction(
     // with is not something the request ledger needs to carry.
     const message = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: 'contacts.reconnect', text: 'Draft a reconnect message' },
+      { feature: 'contacts.reconnect', text: t('contactTimeline.draftRequestTitle') },
       async (obs) => {
         const provider = await resolveProvider();
         const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 220 });

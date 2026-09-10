@@ -213,6 +213,88 @@ describe('GET /api/ai', () => {
   });
 });
 
+describe('assistant household assertions', () => {
+  const FAMILY = 'aaaaaaaa-1111-4111-8111-111111111111';
+  const OTHER_FAMILY = 'bbbbbbbb-2222-4222-8222-222222222222';
+  const scoped = { ...ctx, active: { ...ctx.active, familyId: FAMILY } };
+
+  it.each([
+    ['', 400, 'invalid_family'],
+    ['not-a-family', 400, 'invalid_family'],
+    [FAMILY + ', ' + OTHER_FAMILY, 400, 'invalid_family'],
+    [OTHER_FAMILY, 409, 'family_changed'],
+  ])('rejects POST header %s before conversation, allowance, or engine work', async (expected, status, code) => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped });
+    const from = vi.spyOn(bearerClient, 'from');
+    const { POST } = await import('@/app/api/ai/route');
+    const response = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, {
+      authorization: 'Bearer tok', 'X-Bubaly-Family-Id': expected,
+    }));
+    expect(response.status).toBe(status);
+    expect((await response.json()).code).toBe(code);
+    expect(from).not.toHaveBeenCalled();
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(rateLimitDb).not.toHaveBeenCalled();
+    expect(isAIConfigured).not.toHaveBeenCalled();
+    expect(prepareAssistantTurn).not.toHaveBeenCalled();
+    expect(runAssistantTurn).not.toHaveBeenCalled();
+    expect(createAssistantStream).not.toHaveBeenCalled();
+  });
+
+  it('accepts a matching UUID regardless of case and preserves authenticated scope', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped });
+    const { POST } = await import('@/app/api/ai/route');
+    const response = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, {
+      authorization: 'Bearer tok', 'X-Bubaly-Family-Id': FAMILY.toUpperCase(), accept: 'application/json',
+    }));
+    expect(response.status).toBe(200);
+    expect(runAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ familyId: FAMILY }), expect.anything());
+  });
+
+  it('also enforces the assertion for cookie clients', async () => {
+    getUserContext.mockResolvedValue(scoped);
+    const { POST } = await import('@/app/api/ai/route');
+    const response = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, { 'X-Bubaly-Family-Id': OTHER_FAMILY }));
+    expect(response.status).toBe(409);
+    expect(prepareAssistantTurn).not.toHaveBeenCalled();
+  });
+
+  it.each([['bad', 400], [OTHER_FAMILY, 409]])('rejects GET header %s before exposing the manifest', async (expected, status) => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped });
+    const { GET } = await import('@/app/api/ai/route');
+    const response = await GET(new NextRequest('http://localhost/api/ai', {
+      headers: { authorization: 'Bearer tok', 'X-Bubaly-Family-Id': expected },
+    }));
+    expect(response.status).toBe(status);
+    expect((await response.json()).family).toBeUndefined();
+    expect(isAIConfigured).not.toHaveBeenCalled();
+  });
+
+  it('uses the bearer-selected language despite a different geo header', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx: scoped });
+    const { POST } = await import('@/app/api/ai/route');
+    const response = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, {
+      authorization: 'Bearer tok', 'X-Bubaly-Family-Id': OTHER_FAMILY,
+      'Accept-Language': 'de-DE', 'x-vercel-ip-country': 'US',
+    }));
+    expect(await response.json()).toEqual({
+      code: 'family_changed',
+      error: 'Ihr aktiver Haushalt hat sich geändert. Kehren Sie zum Assistenten zurück und versuchen Sie es erneut.',
+    });
+  });
+
+  it('keeps unavailable authentication distinct from family mismatch and missing provider configuration', async () => {
+    getBearerUserContext.mockResolvedValue({ ok: false, reason: 'unavailable' });
+    const { POST } = await import('@/app/api/ai/route');
+    const response = await POST(post({ conversationId: CONVERSATION, message: 'hi' }, {
+      authorization: 'Bearer tok', 'X-Bubaly-Family-Id': FAMILY,
+    }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('unavailable');
+    expect(isAIConfigured).not.toHaveBeenCalled();
+  });
+});
+
 describe('wantsJsonTransport', () => {
   it('prefers SSE unless JSON is asked for explicitly', async () => {
     const { wantsJsonTransport } = await import('@/lib/ai/assistant-engine');

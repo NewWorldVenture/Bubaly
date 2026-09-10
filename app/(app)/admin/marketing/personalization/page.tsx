@@ -10,7 +10,10 @@ import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/pers
 import { createRuleAction, toggleRuleStatusAction, deleteRuleAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Personalization', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('personalization.personalization'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Rule = Tables<'marketing_personalization_rules'>;

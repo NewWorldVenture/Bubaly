@@ -85,6 +85,8 @@ export type UnifiedInboxItem = {
   dueOn: string | null;
   /** Whether "Handle it" applies: only contact-center rows enter the intake from here. */
   canHandle: boolean;
+  /** Explicit document selection is available only for received email. */
+  canImportDocument?: boolean;
   /** Where the row's own surface lives, so the queue links out rather than duplicating it. */
   href: string;
 };
@@ -223,6 +225,7 @@ function messageItem(row: InboxMessageRow, now: Date): UnifiedInboxItem {
     // Outbound rows are the concierge's own replies; there is nothing to hand
     // to the planner, and an already-handled row must not be handled twice.
     canHandle: row.direction === 'inbound' && row.ai_handled !== true,
+    canImportDocument: row.direction === 'inbound' && row.channel === 'email',
     href: '/dashboard/contact-center',
   };
 }

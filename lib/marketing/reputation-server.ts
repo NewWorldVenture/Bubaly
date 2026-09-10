@@ -1,4 +1,5 @@
 import 'server-only';
+import { CASE_STUDIES_CACHE_TAG } from './case-study';
 // lib/marketing/reputation-server.ts — the public reader for testimonials and
 // case studies. Only what an admin has PUBLISHED, used exactly as stored: the
 // social-proof band renders nothing at all when both lists are empty, and a
@@ -19,6 +20,7 @@ export type PublicTestimonial = {
 
 export type PublicCaseStudy = {
   id: string;
+  slug: string;
   title: string;
   customerName: string | null;
   summary: string | null;
@@ -75,6 +77,7 @@ export const getPublishedCaseStudies = unstable_cache(
       return publishedOnly(data ?? []).map((row) => ({
         id: row.id,
         title: row.title,
+        slug: row.slug,
         customerName: row.customer_name,
         summary: row.summary,
         resultMetric: row.result_metric,
@@ -86,5 +89,5 @@ export const getPublishedCaseStudies = unstable_cache(
     }
   },
   ['public-case-studies'],
-  { revalidate: 3600 },
+  { revalidate: 3600, tags: [CASE_STUDIES_CACHE_TAG] },
 );

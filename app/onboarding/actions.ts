@@ -19,7 +19,8 @@ import { sendReactEmail } from '@/lib/email';
 import { WelcomeEmail } from '@/lib/emails/welcome';
 import * as React from 'react';
 import { computeCompleteness } from '@/lib/onboarding/completeness';
-import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
+import { parseIcsResult, toBriefEvents, demoBriefEvents, type IcsImportDisclosure } from '@/lib/onboarding/ics';
+import { normalizedImportEvents, type IcsErrorCode } from '@/lib/onboarding/ics-time';
 import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -30,6 +31,11 @@ import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotenc
 import { captureSignupReferral } from '@/lib/referrals/signup';
 import type { OnboardingAnswers } from '@/lib/onboarding/facts';
 import { rememberOnboardingFacts } from '@/lib/onboarding/remember';
+import { readCalendarPreview } from '@/lib/onboarding/calendar-state';
+import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCalendarReceipt } from '@/lib/services/onboarding-calendar';
+import type { ServiceScope } from '@/lib/services/types';
+import type { OnboardingOwner } from '@/lib/onboarding/owner';
+import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -104,11 +110,16 @@ async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promis
  * which persists them into the real family's calendar.
  */
 export async function previewCalendarImportAction(input: {
-  source: 'paste' | 'demo'; icsText?: string;
-}): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
+  source: 'paste' | 'demo'; icsText?: string; timezone?: string;
+}): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string; disclosure?: IcsImportDisclosure }>> {
   const t = await getTranslations();
   const parsed = previewCalendarImportSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid calendar import' };
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, error: issue?.path[0] === 'timezone'
+      ? t('onboardingWizard.invalidPreviewTimezone') : issue?.path[0] === 'icsText'
+        ? t('calendarImport.tooManyEvents') : issue?.message ?? 'Invalid calendar import' };
+  }
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
@@ -117,24 +128,35 @@ export async function previewCalendarImportAction(input: {
   const now = new Date();
   let events: BriefEvent[] = [];
   let source = parsed.data.source;
+  let disclosure: IcsImportDisclosure | undefined;
 
   if (parsed.data.source === 'demo') {
-    events = demoBriefEvents(now);
+    events = demoBriefEvents(now, parsed.data.timezone);
     source = 'demo';
   } else {
     const text = (parsed.data.icsText ?? '').trim();
     if (!text) return { ok: false, error: t('actions.pasteYourCalendarSIcs') };
-    if (!text.includes('BEGIN:VEVENT')) {
-      return { ok: false, error: 'That doesn’t look like a calendar (.ics) export. Try again or use the sample week.' };
+    // Floating times require an explicitly supplied choice, not the schema's legacy UTC default.
+    const imported = parseIcsResult(text, { floatingTimezone: input.timezone });
+    if (!imported.ok) {
+      const keys: Record<IcsErrorCode, string> = {
+        invalidCalendar: 'calendarImport.invalidCalendar', invalidDate: 'calendarImport.invalidDate',
+        invalidRange: 'calendarImport.invalidRange', invalidDuration: 'calendarImport.invalidDuration',
+        unsupportedTimezone: 'calendarImport.unsupportedTimezone', floatingTimezoneRequired: 'calendarImport.floatingTimezoneRequired',
+        unsupportedRecurrence: 'calendarImport.unsupportedRecurrence', tooManyEvents: 'calendarImport.tooManyEvents',
+      };
+      return { ok: false, error: t(keys[imported.code]) };
     }
-    events = toBriefEvents(parseIcs(text)).slice(0, 1000);
+    // Paste imports listed occurrences, not managed recurring series.
+    events = toBriefEvents(imported.events).map(event => ({ ...event, recurring: false }));
+    disclosure = imported.disclosure;
     if (events.length === 0) return { ok: false, error: t('actions.noEventsFoundInThat') };
     source = 'paste';
   }
 
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
-  const brief = buildFirstBrief(events, now, dinnerCandidates);
-  return { ok: true, data: { brief, events, source } };
+  const brief = buildFirstBrief(events, now, dinnerCandidates, parsed.data.timezone);
+  return { ok: true, data: { brief, events, source, ...(disclosure ? { disclosure } : {}) } };
 }
 
 /**
@@ -570,18 +592,35 @@ export async function finalizeOnboardingAction(input: {
     | { kind: 'invite'; email: string; role: MemberRole }
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
-  calendarImport?: { source: string; events: BriefEvent[] };
-}): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+  calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
+}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
+  if (['paste', 'ics'].includes(parsed.data.calendarImport.source)
+    && !normalizedImportEvents(parsed.data.calendarImport.events)) return { ok: false, error: t('calendarImport.invalidDate') };
 
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
   if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
 
+  if (!await verifyOnboardingOwner(supabase, auth.user.id, expectedOwner)) return { ok: false, error: t('onboardingWizard.contextChanged') };
+
   const { profile, family, details, members, appearance, calendarImport } = parsed.data;
-  const runKey = onboardingRunKey(auth.user.id, parsed.data);
+  const connectedReceipt = calendarImport.receipt ? readCalendarPreview(calendarImport.receipt, auth.user.id, calendarImport.events) : null;
+  if (calendarImport.receipt && (!connectedReceipt || calendarImport.source !== 'url')) return { ok: false, error: t('connectedCalendar.unavailable') };
+  // Provider events may change after a partial Finish and a fresh preview.
+  // Managed members/invites belong to the stable wizard, not that snapshot.
+  const runKey = onboardingRunKey(auth.user.id, connectedReceipt
+    ? { ...parsed.data, calendarImport: { source: 'url', accountId: connectedReceipt.accountId, calendarExternalId: connectedReceipt.calendarExternalId } } : parsed.data);
+  const admin = createServiceClient();
+  const connectedScope: ServiceScope | null = connectedReceipt ? { db: admin, familyId: connectedReceipt.familyId,
+    userId: auth.user.id, memberId: null, actorKind: 'member', role: 'parent', tz: family.timezone } : null;
+  if (connectedReceipt && connectedScope) {
+    const verified = await validateConnectedCalendarReceipt(connectedScope, connectedReceipt);
+    if (!verified.ok) return verified;
+  }
 
   // 1. Save profile (name, phone, email, optional avatar)
   const profileRes = await saveUserProfile(auth.user.id, {
@@ -592,8 +631,6 @@ export async function finalizeOnboardingAction(input: {
     avatarUrl: profile.avatarUrl || null,
   });
   if (!profileRes.ok) return onboardingFailure('profile save', profileRes.error, 'Could not save your profile.');
-
-  const admin = createServiceClient();
 
   // 2. Resolve the family this onboarding writes to. Guard against minting a
   //    SECOND family: the wizard UI is unreachable once you're in a family (the
@@ -616,6 +653,14 @@ export async function finalizeOnboardingAction(input: {
     const progress = await getOnboardingProgress(admin, auth.user.id);
     const resumableWizard = progress?.source === 'wizard' && progress.status !== 'completed';
     if (progress?.source !== 'auto_provision' && !resumableWizard) {
+      if (connectedReceipt && connectedScope) {
+        if (existingMembership.family_id !== connectedReceipt.familyId) return { ok: false, error: t('connectedCalendar.unavailable') };
+        const refreshed = await finishConnectedCalendar(connectedScope, connectedReceipt, calendarImport.events);
+        if (!refreshed.ok) return refreshed;
+        const enabled = await enableConnectedCalendar(connectedScope, connectedReceipt);
+        if (!enabled.ok) return enabled;
+        return { ok: true, data: { familyId: existingMembership.family_id, brief: buildFirstBrief(calendarImport.events, new Date(), [], family.timezone) } };
+      }
       return { ok: true, data: { familyId: existingMembership.family_id } };
     }
     // Preserve the pre-existing marker long enough to make the resume decision
@@ -628,6 +673,7 @@ export async function finalizeOnboardingAction(input: {
       stepsCompleted: [],
     });
     familyId = existingMembership.family_id;
+    if (connectedReceipt && connectedReceipt.familyId !== familyId) return { ok: false, error: t('connectedCalendar.unavailable') };
     const { error: adoptErr } = await admin.from('families')
       .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
     if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, t('actions.couldNotFinishSettingUp2'));
@@ -789,17 +835,23 @@ export async function finalizeOnboardingAction(input: {
 
   // 6a. VALUE-FIRST (T1): persist the calendar the user imported in the value step
   //     into the real family's calendar_events, then record the first-value moment
-  //     in onboarding_imports (the seed of the TTFV metric). Both are best-effort —
-  //     a hiccup here must never block the user finishing onboarding. The brief is
+  //     in onboarding_imports (the seed of the TTFV metric). Required write failures
+  //     keep setup retryable and connected-calendar imports paused. The brief is
   //     recomputed server-side (never trust the client) for the durable summary.
   // Compute the first brief server-side (never trust the client) — with the
   // curated dinner ideas — so the Done screen ALWAYS shows a real payoff, even
   // when no calendar was imported (dinner ideas are value on their own).
   const importEvents = (calendarImport?.events ?? []).slice(0, 1000);
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
-  const finalBrief = buildFirstBrief(importEvents, new Date(), dinnerCandidates);
+  const finalBrief = buildFirstBrief(['paste', 'ics'].includes(calendarImport.source)
+    ? importEvents.map(event => ({ ...event, recurring: false })) : importEvents, new Date(), dinnerCandidates, family.timezone);
 
-  if (importEvents.length > 0) {
+  if (importEvents.length > 0 || connectedReceipt) {
+    let importedCount = importEvents.length;
+    if (connectedReceipt && connectedScope) {
+      const imported = await finishConnectedCalendar(connectedScope, connectedReceipt, importEvents);
+      if (!imported.ok) return imported;
+    } else {
     const eventRows = importEvents.map((e, index) => ({
       family_id: familyId,
       title: (e.title || 'Untitled').slice(0, 200),
@@ -813,7 +865,7 @@ export async function finalizeOnboardingAction(input: {
       created_by: auth.user.id,
       onboarding_key: onboardingItemKey(runKey, 'calendar-event', index, e),
     }));
-    let importedCount = 0;
+    importedCount = 0;
     for (let i = 0; i < eventRows.length; i += 200) {
       const chunk = eventRows.slice(i, i + 200);
       const { error: evErr } = await admin.from('calendar_events').upsert(chunk, {
@@ -821,6 +873,7 @@ export async function finalizeOnboardingAction(input: {
       });
       if (evErr) return onboardingFailure('calendar import', evErr, 'Could not import your calendar.');
       importedCount += chunk.length;
+    }
     }
 
     try {
@@ -832,9 +885,9 @@ export async function finalizeOnboardingAction(input: {
         conflict_count: finalBrief.conflicts.length,
         action_count: finalBrief.actions.length,
         time_saved_minutes: finalBrief.timeSavedMinutes,
-        brief: briefSummary(finalBrief) as never,
+        brief: { ...briefSummary(finalBrief), ...(connectedReceipt ? { calendarConnection: { provider: connectedReceipt.provider, accountId: connectedReceipt.accountId, calendarExternalId: connectedReceipt.calendarExternalId } } : {}) } as never,
         created_by: auth.user.id,
-        onboarding_key: onboardingItemKey(runKey, 'calendar-import', 0, {
+        onboarding_key: connectedReceipt ? onboardingItemKey(connectedReceipt.accountId, 'connected-calendar-import', 0, connectedReceipt.calendarExternalId) : onboardingItemKey(runKey, 'calendar-import', 0, {
           source: calendarImport?.source || 'paste',
           events: importEvents,
         }),
@@ -851,8 +904,9 @@ export async function finalizeOnboardingAction(input: {
   //     salted-SHA-256 scheme as Settings); it stays off until the user enables
   //     it, at which point they don't have to re-enter the PIN. Service-role so it
   //     persists reliably under this env's flaky RLS writes.
-  const { data: prefRow } = await admin
+  const { data: prefRow, error: prefReadError } = await admin
     .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
+  if (prefReadError) return onboardingFailure('onboarding preferences read', prefReadError, t('actions.couldNotFinishSettingUp2'));
   const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
   const mergedPrefs: Record<string, unknown> = { ...prefs, onboardingComplete: true };
   const age = normalizeAge(appearance.age);
@@ -935,6 +989,10 @@ export async function finalizeOnboardingAction(input: {
     hasPin: !!(appearance.pin && isValidPin(appearance.pin)),
     completeness,
   });
+  if (connectedReceipt && connectedScope) {
+    const enabled = await enableConnectedCalendar(connectedScope, connectedReceipt);
+    if (!enabled.ok) return enabled;
+  }
 
   // 8b. Send the branded welcome email (best-effort — the template existed but
   //     was never wired to a completion path, so no one ever received it).

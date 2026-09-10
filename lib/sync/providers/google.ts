@@ -79,6 +79,14 @@ export function googleAuthUrl(redirectUri: string, state: string): string {
   return `${AUTH_URL}?${params}`;
 }
 
+/** Calendar-import consent never requests event writes or task access. */
+export function googleCalendarReadAuthUrl(redirectUri: string, state: string): string {
+  const url = new URL(googleAuthUrl(redirectUri, state));
+  url.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly openid email');
+  url.searchParams.delete('include_granted_scopes');
+  return url.toString();
+}
+
 export async function exchangeCode(code: string, redirectUri: string): Promise<OAuthTokens> {
   const res = await fetchExternal(TOKEN_URL, {
     method: 'POST',
@@ -179,8 +187,16 @@ export type GEvent = {
 };
 
 export async function listCalendars(accessToken: string): Promise<GCalendar[]> {
-  const data = await gfetch<{ items?: GCalendar[] }>(`${CAL_BASE}/users/me/calendarList`, accessToken);
-  return data.items ?? [];
+  const calendars: GCalendar[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const query = new URLSearchParams({ maxResults: '250', ...(pageToken ? { pageToken } : {}) });
+    const data = await gfetch<{ items?: GCalendar[]; nextPageToken?: string }>(`${CAL_BASE}/users/me/calendarList?${query}`, accessToken);
+    calendars.push(...(data.items ?? []));
+    if (!data.nextPageToken) return calendars;
+    pageToken = data.nextPageToken;
+  }
+  throw new GoogleApiError(502, 'Calendar list exceeded the page limit');
 }
 
 /**
@@ -218,6 +234,21 @@ export async function pullEvents(
   } while (pageToken);
 
   return { events, nextSyncToken, gone: false };
+}
+
+/** Expand recurring appointments within the explicit onboarding import window. */
+export async function pullCalendarWindow(accessToken: string, calendarId: string, from: string, to: string): Promise<GEvent[]> {
+  const events: GEvent[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const query = new URLSearchParams({ singleEvents: 'true', showDeleted: 'true', maxResults: '250', timeMin: from, timeMax: to });
+    if (pageToken) query.set('pageToken', pageToken);
+    const data = await gfetch<{ items?: GEvent[]; nextPageToken?: string }>(`${CAL_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${query}`, accessToken);
+    events.push(...(data.items ?? []));
+    if (!data.nextPageToken) return events;
+    pageToken = data.nextPageToken;
+  }
+  throw new GoogleApiError(502, 'Calendar window exceeded the page limit');
 }
 
 export function insertEvent(accessToken: string, calendarId: string, body: Record<string, unknown>) {

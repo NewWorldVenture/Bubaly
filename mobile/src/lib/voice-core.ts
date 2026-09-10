@@ -6,6 +6,8 @@
 // /api/ai/voice/transcribe — with `Authorization: Bearer <supabase jwt>`,
 // which that route now accepts alongside the browser's cookie session.
 
+import { englishMobile, type MobileTranslator } from './mobile-i18n';
+
 /** A finished recording as expo-audio hands it over: a file:// uri plus its type. */
 export type Recording = { uri: string; mimeType?: string; name?: string };
 
@@ -43,7 +45,7 @@ export function transcribeFilePart(rec: Recording): { uri: string; name: string;
 }
 
 /** The multipart request for one recording, addressed to the transcribe route. */
-export function buildTranscribeRequest(args: { apiUrl: string; token: string; recording: Recording }): { url: string; init: RequestInit } {
+export function buildTranscribeRequest(args: { apiUrl: string; token: string; recording: Recording; expectedFamilyId?: string; locale?: string; signal?: AbortSignal }): { url: string; init: RequestInit } {
   const form = new FormData();
   form.append('audio', transcribeFilePart(args.recording) as unknown as Blob);
   return {
@@ -53,40 +55,46 @@ export function buildTranscribeRequest(args: { apiUrl: string; token: string; re
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${args.token}`,
+        ...(args.expectedFamilyId !== undefined ? { 'X-Bubaly-Family-Id': args.expectedFamilyId } : {}),
+        ...(args.locale ? { 'Accept-Language': args.locale } : {}),
         // Content-Type is deliberately absent: fetch adds the multipart
         // boundary, and setting it by hand corrupts the body.
       },
       body: form as unknown as BodyInit,
+      ...(args.signal ? { signal: args.signal } : {}),
     },
   };
 }
 
 const FRIENDLY: Record<number, string> = {
-  401: 'Your session expired. Sign in again to talk to Bubaly.',
-  403: 'Finish setting up your family on the web app first.',
-  413: 'That recording is too long. Try a shorter one.',
-  422: 'Bubaly didn’t catch that. Try again.',
-  429: 'Too many voice requests just now. Try again in a moment.',
-  503: 'Voice isn’t switched on for this workspace yet — type your request instead.',
+  401: 'mobileAssistant.sessionExpired',
+  403: 'mobileAssistant.needsFamily',
+  413: 'mobileAssistant.recordingTooLong',
+  422: 'mobileAssistant.noSpeech',
+  429: 'mobileAssistant.rateLimited',
 };
 
 /**
  * Read the transcribe response. Failure is never dressed up as an empty
- * transcript: a 503 says voice is not configured, and the caller shows that
- * rather than a silent no-op.
+ * transcript. Configuration and an unavailable family read have distinct
+ * codes even though both use 503; an unknown 503 retains its own error.
  */
-export function parseTranscribeResponse(status: number, body: unknown): TranscribeParse {
+export function parseTranscribeResponse(status: number, body: unknown, t: MobileTranslator = englishMobile): TranscribeParse {
   const obj = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (status >= 200 && status < 300) {
     const text = typeof obj.text === 'string' ? obj.text.replace(/\s+/g, ' ').trim() : '';
     if (text) return { ok: true, text };
-    return { ok: false, error: 'Bubaly didn’t catch that. Try again.', code: 'no_speech', status };
+    return { ok: false, error: t('mobileAssistant.noSpeech'), code: 'no_speech', status };
   }
   const serverError = typeof obj.error === 'string' && obj.error.trim() ? obj.error.trim() : null;
+  const code = typeof obj.code === 'string' ? obj.code : undefined;
+  const key = code === 'not_configured' ? 'mobileAssistant.voiceNotConfigured'
+    : code === 'unavailable' ? 'mobileAssistant.familyUnavailable'
+      : code === 'family_changed' || code === 'invalid_family' ? 'mobileAssistant.contextChanged' : FRIENDLY[status];
   return {
     ok: false,
-    error: FRIENDLY[status] ?? serverError ?? 'Bubaly couldn’t transcribe that. Try again.',
-    code: typeof obj.code === 'string' ? obj.code : undefined,
+    error: key ? t(key) : serverError ?? t('mobileAssistant.transcribeFailed'),
+    code,
     status,
   };
 }

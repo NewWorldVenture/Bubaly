@@ -318,10 +318,10 @@ describe('the "Moving Home" life event launches the Move Planner', () => {
 
   it('puts a moves row on file and lays out its tasks instead of a parallel checklist', () => {
     expect(moveBranch).toContain('createMove(scope, { title, moveDate: anchor })');
-    expect(moveBranch).toContain('planTasks(scope, { moveId: move.data.move.id })');
+    expect(launch).toContain('planTasks(scope, { moveId: handoff.id })');
     expect(moveBranch).toContain('href: HANDOFF_HREF.move');
     expect(moveBranch).toMatch(/if \(!move\.ok\) return move;/);
-    expect(moveBranch).toMatch(/if \(!tasks\.ok\) return tasks;/);
+    expect(launch).toMatch(/if \(!tasks\.ok\) return rollback\(tasks\);/);
     // No direct write: the service is the only way a move gets opened here.
     expect(moveBranch).not.toContain("from('moves')");
   });
@@ -332,7 +332,7 @@ describe('the "Moving Home" life event launches the Move Planner', () => {
     // unrelated failure. The flag rides on the handoff and the undo checks it.
     expect(moveBranch).toContain('created: move.data.created');
     const undo = launch.slice(launch.indexOf('async function deleteHandoff'));
-    expect(undo).toMatch(/if \(!handoff\.created\) return;/);
+    expect(undo).toMatch(/if \(!handoff\.created\) return ok\(undefined\);/);
   });
 
   it('keeps the action a thin shell rather than a second copy of the handoff', () => {

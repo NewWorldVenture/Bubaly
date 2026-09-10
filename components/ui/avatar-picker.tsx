@@ -24,18 +24,18 @@ function presetSvgUrl(from: string, to: string, id: string): string {
 
 // Preset gradient circles — stored as data URIs in profiles.avatar_url
 const PRESET_AVATARS = [
-  { id: 'violet', label: 'Violet', url: presetSvgUrl('#8b5cf6', '#6d28d9', 'a1') },
-  { id: 'indigo', label: 'Indigo', url: presetSvgUrl('#6366f1', '#4338ca', 'a2') },
-  { id: 'blue', label: 'Blue', url: presetSvgUrl('#3b82f6', '#1d4ed8', 'a3') },
-  { id: 'cyan', label: 'Cyan', url: presetSvgUrl('#06b6d4', '#0e7490', 'a4') },
-  { id: 'teal', label: 'Teal', url: presetSvgUrl('#14b8a6', '#0f766e', 'a5') },
-  { id: 'green', label: 'Green', url: presetSvgUrl('#22c55e', '#15803d', 'a6') },
-  { id: 'amber', label: 'Amber', url: presetSvgUrl('#f59e0b', '#b45309', 'a7') },
-  { id: 'orange', label: 'Orange', url: presetSvgUrl('#f97316', '#c2410c', 'a8') },
-  { id: 'red', label: 'Red', url: presetSvgUrl('#ef4444', '#b91c1c', 'a9') },
-  { id: 'pink', label: 'Pink', url: presetSvgUrl('#ec4899', '#be185d', 'aa') },
-  { id: 'rose', label: 'Rose', url: presetSvgUrl('#f43f5e', '#be123c', 'ab') },
-  { id: 'slate', label: 'Slate', url: presetSvgUrl('#64748b', '#334155', 'ac') },
+  { id: 'violet', labelKey: 'avatarPicker.colors.violet', url: presetSvgUrl('#8b5cf6', '#6d28d9', 'a1') },
+  { id: 'indigo', labelKey: 'avatarPicker.colors.indigo', url: presetSvgUrl('#6366f1', '#4338ca', 'a2') },
+  { id: 'blue', labelKey: 'avatarPicker.colors.blue', url: presetSvgUrl('#3b82f6', '#1d4ed8', 'a3') },
+  { id: 'cyan', labelKey: 'avatarPicker.colors.cyan', url: presetSvgUrl('#06b6d4', '#0e7490', 'a4') },
+  { id: 'teal', labelKey: 'avatarPicker.colors.teal', url: presetSvgUrl('#14b8a6', '#0f766e', 'a5') },
+  { id: 'green', labelKey: 'avatarPicker.colors.green', url: presetSvgUrl('#22c55e', '#15803d', 'a6') },
+  { id: 'amber', labelKey: 'avatarPicker.colors.amber', url: presetSvgUrl('#f59e0b', '#b45309', 'a7') },
+  { id: 'orange', labelKey: 'avatarPicker.colors.orange', url: presetSvgUrl('#f97316', '#c2410c', 'a8') },
+  { id: 'red', labelKey: 'avatarPicker.colors.red', url: presetSvgUrl('#ef4444', '#b91c1c', 'a9') },
+  { id: 'pink', labelKey: 'avatarPicker.colors.pink', url: presetSvgUrl('#ec4899', '#be185d', 'aa') },
+  { id: 'rose', labelKey: 'avatarPicker.colors.rose', url: presetSvgUrl('#f43f5e', '#be123c', 'ab') },
+  { id: 'slate', labelKey: 'avatarPicker.colors.slate', url: presetSvgUrl('#64748b', '#334155', 'ac') },
 ];
 
 interface AvatarPickerProps {
@@ -65,7 +65,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
+      if (!user) throw new Error(t('avatarPicker.notSignedIn'));
       const { url, error: upErr } = await uploadAvatar(supabase, user.id, file);
       if (upErr) throw new Error(upErr);
       setSelected(url ?? '');
@@ -89,7 +89,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={selected}
-              alt={t('avatarPicker.yourAvatar')}
+              alt={t('avatarPicker.currentAvatar')}
               className="h-full w-full rounded-full object-cover ring-2 ring-brand/30"
             />
           ) : (
@@ -118,12 +118,13 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
       <div className="flex flex-wrap items-center gap-2">
         {PRESET_AVATARS.map((p) => {
           const active = selected === p.url;
+          const color = t(p.labelKey);
           return (
             <button
               key={p.id}
               type="button"
               onClick={() => setSelected(p.url)}
-              aria-label={`${p.label} avatar`}
+              aria-label={t('avatarPicker.presetAvatar', { color })}
               aria-pressed={active}
               className={cn(
                 'relative h-9 w-9 rounded-full transition-transform hover:scale-110 focus:outline-none',
@@ -133,7 +134,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt={p.label} className="h-full w-full rounded-full" />
+              <img src={p.url} alt={color} className="h-full w-full rounded-full" />
               {active && (
                 <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20">
                   <Check className="h-4 w-4 text-white drop-shadow" />
@@ -148,7 +149,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          aria-label={uploading ? 'Uploading…' : 'Upload your own photo'}
+          aria-label={uploading ? t('avatarPicker.uploading') : t('avatarPicker.uploadOwnPhoto')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border bg-elevated transition hover:bg-surface disabled:opacity-60"
         >
           {uploading ? (

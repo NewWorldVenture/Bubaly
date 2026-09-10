@@ -62,8 +62,9 @@ describe('components/marketing/social-proof-band.tsx', () => {
       expect(band).toContain(key);
       expect(en[key], key).toBeTruthy();
     }
-    // Cards are not links: there is no /stories route yet.
+    // Published case studies now have a reader; use its validated path helper.
     expect(band).not.toContain('/stories');
-    expect(band).not.toContain('<Link');
+    expect(band).toContain('isCaseStudySlug(study.slug)');
+    expect(band).toContain('href={caseStudyPath(study.slug)}');
   });
 });

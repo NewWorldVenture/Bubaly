@@ -177,7 +177,7 @@ export function AdminShell({
               role="alert"
               className="mx-auto mb-5 max-w-6xl rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
             >
-              <p className="font-semibold">Admin data is unavailable: Supabase rejected this deployment’s service-role key.</p>
+              <p className="font-semibold">{t('adminCredential.heading')}</p>
               <p className="mt-1 text-xs leading-relaxed text-danger/90">{credentialFault}</p>
             </div>
           )}

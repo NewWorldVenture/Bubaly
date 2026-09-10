@@ -32,53 +32,54 @@ import {
   sanitizeShortcutKeys, resolveSavedShortcuts,
 } from '@/lib/capture/shortcuts';
 import { loadCaptureShortcuts, saveCaptureShortcutsAction } from '@/app/(app)/capture/shortcuts-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
-export type Shortcut = { key: string; icon: typeof Calendar; label: string; href: string; hint: string };
+export type Shortcut = { key: string; icon: typeof Calendar; labelKey: string; href: string; hintKey: string };
 
 /** Catalog of "jump directly to" destinations the picker draws from. Keys are
- *  stable so saved layouts survive label/icon tweaks. */
+ *  stable so saved layouts survive label/icon tweaks. Every rendered label and
+ *  hint resolves a message key using the active locale. */
 export const SHORTCUT_CATALOG: Shortcut[] = [
-  { key: 'calendar', icon: Calendar, label: 'Calendar', href: '/dashboard/calendar', hint: 'Add event' },
-  { key: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/dashboard/chores', hint: 'Create task' },
-  { key: 'grocery', icon: ShoppingCart, label: 'Grocery', href: '/dashboard/grocery', hint: 'Add to list' },
-  { key: 'home', icon: Home, label: 'Home Maintenance', href: '/dashboard/home', hint: 'Home task' },
-  { key: 'health', icon: HeartPulse, label: 'Health', href: '/dashboard/health', hint: 'Log health' },
-  { key: 'trip', icon: Plane, label: 'Trip', href: '/dashboard/trips', hint: 'Plan trip' },
-  { key: 'notes', icon: StickyNote, label: 'Notes', href: '/dashboard/notes', hint: 'Jot a note' },
-  { key: 'meals', icon: UtensilsCrossed, label: 'Meals', href: '/dashboard/meals', hint: 'Plan meals' },
-  { key: 'reminders', icon: Bell, label: 'Reminders', href: '/dashboard/reminders', hint: 'Set reminder' },
-  { key: 'documents', icon: FileText, label: 'Documents', href: '/dashboard/documents', hint: 'Add document' },
-  { key: 'wallet', icon: Wallet, label: 'Wallet', href: '/wallet', hint: 'Family wallet' },
-  { key: 'pets', icon: PawPrint, label: 'Pets', href: '/dashboard/pets', hint: 'Pet care' },
-  { key: 'closet', icon: Shirt, label: 'Closet', href: '/dashboard/closet', hint: 'Outfit today' },
-  { key: 'watchlist', icon: Clapperboard, label: 'Watchlist', href: '/dashboard/watchlist', hint: 'Movie night' },
-  { key: 'inventory', icon: PackageSearch, label: 'Inventory', href: '/dashboard/inventory', hint: 'Where is it?' },
-  { key: 'sleep', icon: MoonStar, label: 'Sleep', href: '/dashboard/sleep', hint: 'Log last night' },
-  { key: 'declutter', icon: Sparkle, label: 'Declutter', href: '/dashboard/declutter', hint: '15-minute mission' },
-  { key: 'moving', icon: Truck, label: 'Move', href: '/dashboard/moving', hint: 'Box or task' },
-  { key: 'projects', icon: Hammer, label: 'Project', href: '/dashboard/projects', hint: 'Idea or quote' },
-  { key: 'career', icon: Briefcase, label: 'Job', href: '/dashboard/career', hint: 'Application or lead' },
-  { key: 'language', icon: Languages, label: 'Language', href: '/dashboard/language', hint: 'Review or log practice' },
-  { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
-  { key: 'finances', icon: CreditCard, label: 'Finances', href: '/dashboard/billing', hint: 'Track money' },
-  { key: 'contacts', icon: Users, label: 'Contacts', href: '/dashboard/contacts', hint: 'Add contact' },
-  { key: 'photos', icon: ImageIcon, label: 'Photos', href: '/dashboard/photos', hint: 'Add photo' },
-  { key: 'school', icon: GraduationCap, label: 'School', href: '/dashboard/school', hint: 'School item' },
-  { key: 'wishlists', icon: Gift, label: 'Wish Lists', href: '/dashboard/wishlists', hint: 'Add a wish' },
-  { key: 'messages', icon: MessageCircle, label: 'Messages', href: '/dashboard/messages', hint: 'Send a message' },
-  { key: 'memories', icon: BookHeart, label: 'Memories', href: '/dashboard/memories', hint: 'Save a moment' },
-  { key: 'budgets', icon: PiggyBank, label: 'Budgets', href: '/dashboard/budgets', hint: 'Set budgets' },
-  { key: 'bills', icon: Receipt, label: 'Bills', href: '/dashboard/bills', hint: 'Manage bills' },
-  { key: 'subscriptions', icon: RefreshCw, label: 'Subscriptions', href: '/dashboard/subscriptions', hint: 'Track plans' },
-  { key: 'locator', icon: MapPin, label: 'Family Map', href: '/dashboard/locator', hint: 'Find family' },
-  { key: 'journal', icon: NotebookPen, label: 'Journal', href: '/dashboard/journal', hint: 'Write entry' },
-  { key: 'habits', icon: Repeat, label: 'Habits', href: '/dashboard/habits', hint: 'Track habit' },
-  { key: 'weather', icon: CloudSun, label: 'Weather', href: '/dashboard/weather', hint: 'Check forecast' },
-  { key: 'celebrations', icon: Cake, label: 'Celebrations', href: '/dashboard/celebrations', hint: 'Mark occasion' },
-  { key: 'announcements', icon: Megaphone, label: 'Announcements', href: '/dashboard/announcements', hint: 'Tell everyone' },
-  { key: 'recipes', icon: ChefHat, label: 'Recipes', href: '/dashboard/recipes', hint: 'Find recipe' },
-  { key: 'todos', icon: ListChecks, label: 'To-Dos', href: '/dashboard/todos', hint: 'Make a list' },
+  { key: 'calendar', icon: Calendar, labelKey: 'calendar.calendar', href: '/dashboard/calendar', hintKey: 'captureShortcuts.calendarHint' },
+  { key: 'tasks', icon: CheckSquare, labelKey: 'dashboardPlanning.tasks', href: '/dashboard/chores', hintKey: 'home.createTask' },
+  { key: 'grocery', icon: ShoppingCart, labelKey: 'kitchenDashboard.grocery', href: '/dashboard/grocery', hintKey: 'captureShortcuts.groceryHint' },
+  { key: 'home', icon: Home, labelKey: 'trustDomain.homeMaintenance', href: '/dashboard/home', hintKey: 'captureShortcuts.homeHint' },
+  { key: 'health', icon: HeartPulse, labelKey: 'health.health', href: '/dashboard/health', hintKey: 'captureShortcuts.healthHint' },
+  { key: 'trip', icon: Plane, labelKey: 'search.kindTrip', href: '/dashboard/trips', hintKey: 'captureShortcuts.tripHint' },
+  { key: 'notes', icon: StickyNote, labelKey: 'dashboardPlanning.notes', href: '/dashboard/notes', hintKey: 'captureShortcuts.notesHint' },
+  { key: 'meals', icon: UtensilsCrossed, labelKey: 'meals.meals', href: '/dashboard/meals', hintKey: 'aiHomeDashboard.planMeals' },
+  { key: 'reminders', icon: Bell, labelKey: 'dashboardPlanning.reminders', href: '/dashboard/reminders', hintKey: 'captureShortcuts.remindersHint' },
+  { key: 'documents', icon: FileText, labelKey: 'dashboardPlanning.documents', href: '/dashboard/documents', hintKey: 'taxVault.addDocument' },
+  { key: 'wallet', icon: Wallet, labelKey: 'captureShortcuts.walletLabel', href: '/wallet', hintKey: 'captureShortcuts.walletHint' },
+  { key: 'pets', icon: PawPrint, labelKey: 'pets.pets', href: '/dashboard/pets', hintKey: 'captureShortcuts.petsHint' },
+  { key: 'closet', icon: Shirt, labelKey: 'beforeYouBuy.closet', href: '/dashboard/closet', hintKey: 'captureShortcuts.closetHint' },
+  { key: 'watchlist', icon: Clapperboard, labelKey: 'captureShortcuts.watchlistLabel', href: '/dashboard/watchlist', hintKey: 'captureShortcuts.watchlistHint' },
+  { key: 'inventory', icon: PackageSearch, labelKey: 'captureShortcuts.inventoryLabel', href: '/dashboard/inventory', hintKey: 'captureShortcuts.inventoryHint' },
+  { key: 'sleep', icon: MoonStar, labelKey: 'health.sleep', href: '/dashboard/sleep', hintKey: 'sleep.logLastNight' },
+  { key: 'declutter', icon: Sparkle, labelKey: 'captureShortcuts.declutterLabel', href: '/dashboard/declutter', hintKey: 'captureShortcuts.declutterHint' },
+  { key: 'moving', icon: Truck, labelKey: 'captureShortcuts.movingLabel', href: '/dashboard/moving', hintKey: 'captureShortcuts.movingHint' },
+  { key: 'projects', icon: Hammer, labelKey: 'projects.project', href: '/dashboard/projects', hintKey: 'captureShortcuts.projectsHint' },
+  { key: 'career', icon: Briefcase, labelKey: 'captureShortcuts.careerLabel', href: '/dashboard/career', hintKey: 'captureShortcuts.careerHint' },
+  { key: 'language', icon: Languages, labelKey: 'language.language', href: '/dashboard/language', hintKey: 'captureShortcuts.languageHint' },
+  { key: 'goals', icon: Target, labelKey: 'childDetail.goals', href: '/dashboard/goals', hintKey: 'goalsView.familyGoal' },
+  { key: 'finances', icon: CreditCard, labelKey: 'finances.finances', href: '/dashboard/billing', hintKey: 'captureShortcuts.financesHint' },
+  { key: 'contacts', icon: Users, labelKey: 'dashboardPlanning.contacts', href: '/dashboard/contacts', hintKey: 'dashboardFamilyEmergency.addContact' },
+  { key: 'photos', icon: ImageIcon, labelKey: 'displayGrid.photos', href: '/dashboard/photos', hintKey: 'captureShortcuts.photosHint' },
+  { key: 'school', icon: GraduationCap, labelKey: 'school.school', href: '/dashboard/school', hintKey: 'captureShortcuts.schoolHint' },
+  { key: 'wishlists', icon: Gift, labelKey: 'wishlists.wishLists', href: '/dashboard/wishlists', hintKey: 'wishlists.addAWish' },
+  { key: 'messages', icon: MessageCircle, labelKey: 'messages.messages', href: '/dashboard/messages', hintKey: 'captureShortcuts.messagesHint' },
+  { key: 'memories', icon: BookHeart, labelKey: 'dashboardMemories.memories', href: '/dashboard/memories', hintKey: 'captureShortcuts.memoriesHint' },
+  { key: 'budgets', icon: PiggyBank, labelKey: 'billing.budgets', href: '/dashboard/budgets', hintKey: 'captureShortcuts.budgetsHint' },
+  { key: 'bills', icon: Receipt, labelKey: 'billing.bills', href: '/dashboard/bills', hintKey: 'captureShortcuts.billsHint' },
+  { key: 'subscriptions', icon: RefreshCw, labelKey: 'subscriptions.subscriptions', href: '/dashboard/subscriptions', hintKey: 'captureShortcuts.subscriptionsHint' },
+  { key: 'locator', icon: MapPin, labelKey: 'findPhone.familyMap', href: '/dashboard/locator', hintKey: 'captureShortcuts.locatorHint' },
+  { key: 'journal', icon: NotebookPen, labelKey: 'journal.journal', href: '/dashboard/journal', hintKey: 'captureShortcuts.journalHint' },
+  { key: 'habits', icon: Repeat, labelKey: 'habits.habits', href: '/dashboard/habits', hintKey: 'captureShortcuts.habitsHint' },
+  { key: 'weather', icon: CloudSun, labelKey: 'weather.weather', href: '/dashboard/weather', hintKey: 'captureShortcuts.weatherHint' },
+  { key: 'celebrations', icon: Cake, labelKey: 'celebrations.celebrations', href: '/dashboard/celebrations', hintKey: 'captureShortcuts.celebrationsHint' },
+  { key: 'announcements', icon: Megaphone, labelKey: 'announcements.announcements', href: '/dashboard/announcements', hintKey: 'captureShortcuts.announcementsHint' },
+  { key: 'recipes', icon: ChefHat, labelKey: 'dashboardFood.recipes', href: '/dashboard/recipes', hintKey: 'captureShortcuts.recipesHint' },
+  { key: 'todos', icon: ListChecks, labelKey: 'captureShortcuts.todosLabel', href: '/dashboard/todos', hintKey: 'captureShortcuts.todosHint' },
 ];
 export const SHORTCUT_BY_KEY: Record<string, Shortcut> = Object.fromEntries(SHORTCUT_CATALOG.map((s) => [s.key, s]));
 export const CATALOG_KEYS = SHORTCUT_CATALOG.map((s) => s.key);
@@ -104,6 +105,7 @@ function writeCache(keys: string[]) {
  * (instant) → background Supabase load (authoritative) → starter defaults.
  */
 export function useCaptureShortcuts(initialKeys?: string[] | null) {
+  const t = useTranslations();
   const { error: toastError } = useToast();
   const hasServerInitial = initialKeys !== undefined && initialKeys !== null;
   const [keys, setKeys] = useState<string[]>(() =>
@@ -138,15 +140,15 @@ export function useCaptureShortcuts(initialKeys?: string[] | null) {
     setKeys(clean);
     writeCache(clean);
     void saveCaptureShortcutsAction({ keys: clean }).then((res) => {
-      if (!res.ok) toastError(res.error ?? 'Could not save shortcuts');
-    });
+      if (!res.ok) toastError(t('captureShortcuts.saveFailed'));
+    }).catch(() => toastError(t('captureShortcuts.saveFailed')));
   }
 
   return { keys, persist };
 }
 
 export function CaptureShortcuts({
-  initialKeys, heading = 'Shortcuts', columns = 4, onNavigate,
+  initialKeys, heading: headingProp, columns = 4, onNavigate,
   editing: editingProp, onEditingChange, showCustomizeButton = true,
 }: {
   initialKeys?: string[] | null;
@@ -163,6 +165,8 @@ export function CaptureShortcuts({
   showCustomizeButton?: boolean;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
+  const heading = headingProp ?? t('captureShortcuts.heading');
   const { keys, persist } = useCaptureShortcuts(initialKeys);
   const [editingInternal, setEditingInternal] = useState(false);
   const editing = editingProp ?? editingInternal;
@@ -183,6 +187,9 @@ export function CaptureShortcuts({
     setPicker(null);
   }
 
+  const countLabel = t('captureShortcuts.countOfLimit', {
+    count: keys.length.toLocaleString(locale), max: MAX_CAPTURE_SHORTCUTS.toLocaleString(locale),
+  });
   const gridCols = columns === 3 ? 'grid-cols-3' : 'grid-cols-4';
 
   return (
@@ -197,7 +204,7 @@ export function CaptureShortcuts({
               className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text transition hover:bg-brand/10"
             >
               {editing
-                ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> {t('captureShortcuts.done')}</>
+                ? <><span className="text-muted">{countLabel} ·</span> <Check className="h-3.5 w-3.5" /> {t('captureShortcuts.done')}</>
                 : <><Settings2 className="h-3.5 w-3.5" /> {t('captureShortcuts.customize')}</>}
             </button>
           )}
@@ -211,7 +218,7 @@ export function CaptureShortcuts({
           onClick={() => setEditing(true)}
           className="w-full rounded-2xl border-2 border-dashed border-border px-3 py-4 text-center text-xs text-muted transition hover:border-brand/40 hover:text-brand-text"
         >
-          {t('captureShortcuts.noShortcutsYetTapToAdd')} {MAX_CAPTURE_SHORTCUTS}.
+          {t('captureShortcuts.emptyWithLimit', { max: MAX_CAPTURE_SHORTCUTS.toLocaleString(locale) })}
         </button>
       )}
 
@@ -229,13 +236,13 @@ export function CaptureShortcuts({
                   className="flex w-full flex-col items-center gap-1 rounded-2xl border border-brand/30 bg-brand/5 px-2 py-3 text-center transition hover:bg-brand/10"
                 >
                   <Icon className="h-5 w-5 text-brand-text" />
-                  <span className="w-full truncate text-xs font-semibold">{s.label}</span>
+                  <span className="w-full truncate text-xs font-semibold">{t(s.labelKey)}</span>
                   <span className="text-[10px] text-brand-text">{t('captureShortcuts.tapToChange')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => removeAt(index)}
-                  aria-label={`Remove ${s.label}`}
+                  aria-label={t('captureShortcuts.removeNamed', { name: t(s.labelKey) })}
                   className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow"
                 >
                   <X className="h-3 w-3" />
@@ -251,8 +258,8 @@ export function CaptureShortcuts({
               className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-surface/40 px-2 py-3 text-center transition hover:border-brand/30 hover:bg-elevated"
             >
               <Icon className="h-5 w-5 text-brand-text" />
-              <span className="w-full truncate text-xs font-semibold">{s.label}</span>
-              <span className="w-full truncate text-[10px] text-muted">{s.hint}</span>
+              <span className="w-full truncate text-xs font-semibold">{t(s.labelKey)}</span>
+              <span className="w-full truncate text-[10px] text-muted">{t(s.hintKey)}</span>
             </Link>
           );
         })}
@@ -266,14 +273,14 @@ export function CaptureShortcuts({
           >
             <Plus className="h-5 w-5" />
             <span className="text-xs font-semibold">{t('captureShortcuts.addShortcut')}</span>
-            <span className="text-[10px]">{keys.length}/{MAX_CAPTURE_SHORTCUTS}</span>
+            <span className="text-[10px]">{countLabel}</span>
           </button>
         )}
       </div>
 
       {/* Picker */}
       {picker && (
-        <Modal open title={picker.mode === 'replace' ? 'Change shortcut' : 'Add a shortcut'} onClose={() => setPicker(null)}>
+        <Modal open title={t(picker.mode === 'replace' ? 'captureShortcuts.changeShortcut' : 'captureShortcuts.addPickerTitle')} onClose={() => setPicker(null)}>
           <div className="grid grid-cols-3 gap-2">
             {(picker.mode === 'replace'
               ? SHORTCUT_CATALOG.filter((s) => !keys.includes(s.key) || s.key === keys[picker.index])
@@ -290,7 +297,7 @@ export function CaptureShortcuts({
                     isCurrent ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:border-brand/40 hover:bg-elevated')}
                 >
                   <Icon className="h-6 w-6 text-brand-text" />
-                  <span className="text-xs font-semibold">{s.label}</span>
+                  <span className="text-xs font-semibold">{t(s.labelKey)}</span>
                 </button>
               );
             })}

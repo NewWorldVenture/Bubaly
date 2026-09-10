@@ -24,22 +24,22 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Contact = Tables<'family_contacts'>;
 
 const CATEGORIES = [
-  { id: 'emergency', label: 'Emergency', icon: AlertTriangle, color: 'text-danger', bg: 'bg-danger/10', badge: 'danger' },
-  { id: 'family', label: 'Family', icon: Home, color: 'text-brand-text', bg: 'bg-brand/10', badge: 'brand' },
-  { id: 'doctor', label: 'Doctor', icon: Stethoscope, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
-  { id: 'dentist', label: 'Dentist', icon: Smile, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
-  { id: 'teacher', label: 'Teacher', icon: GraduationCap, color: 'text-accent', bg: 'bg-accent/10', badge: 'accent' },
-  { id: 'coach', label: 'Coach', icon: Trophy, color: 'text-warning', bg: 'bg-warning/10', badge: 'warning' },
-  { id: 'babysitter', label: 'Babysitter', icon: HeartPulse, color: 'text-pink-400', bg: 'bg-pink-400/10', badge: 'neutral' },
-  { id: 'neighbor', label: 'Neighbor', icon: Home, color: 'text-teal-400', bg: 'bg-teal-400/10', badge: 'neutral' },
-  { id: 'work', label: 'Work', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-400/10', badge: 'neutral' },
-  { id: 'friend', label: 'Friend', icon: User, color: 'text-purple-400', bg: 'bg-purple-400/10', badge: 'neutral' },
-  { id: 'other', label: 'Other', icon: User, color: 'text-muted', bg: 'bg-muted/10', badge: 'neutral' },
+  { id: 'emergency', labelKey: 'contacts.emergency', icon: AlertTriangle, color: 'text-danger', bg: 'bg-danger/10', badge: 'danger' },
+  { id: 'family', labelKey: 'family.family', icon: Home, color: 'text-brand-text', bg: 'bg-brand/10', badge: 'brand' },
+  { id: 'doctor', labelKey: 'contactsModule.categoryDoctor', icon: Stethoscope, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
+  { id: 'dentist', labelKey: 'contactsModule.categoryDentist', icon: Smile, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
+  { id: 'teacher', labelKey: 'school.teacher', icon: GraduationCap, color: 'text-accent', bg: 'bg-accent/10', badge: 'accent' },
+  { id: 'coach', labelKey: 'sports.coach', icon: Trophy, color: 'text-warning', bg: 'bg-warning/10', badge: 'warning' },
+  { id: 'babysitter', labelKey: 'contactsModule.categoryBabysitter', icon: HeartPulse, color: 'text-pink-400', bg: 'bg-pink-400/10', badge: 'neutral' },
+  { id: 'neighbor', labelKey: 'contactsModule.categoryNeighbor', icon: Home, color: 'text-teal-400', bg: 'bg-teal-400/10', badge: 'neutral' },
+  { id: 'work', labelKey: 'contactsModule.categoryWork', icon: Briefcase, color: 'text-blue-400', bg: 'bg-blue-400/10', badge: 'neutral' },
+  { id: 'friend', labelKey: 'contactsModule.categoryFriend', icon: User, color: 'text-purple-400', bg: 'bg-purple-400/10', badge: 'neutral' },
+  { id: 'other', labelKey: 'conciergeCalls.categoryOther', icon: User, color: 'text-muted', bg: 'bg-muted/10', badge: 'neutral' },
 ] as const;
 
 function categoryMeta(id: string) {
@@ -62,6 +62,7 @@ function avatarColor(name: string) {
 
 export function ContactsModule() {
   const t = useTranslations();
+  const { code: locale } = useLocale();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -129,7 +130,7 @@ export function ContactsModule() {
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('contacts.searchContacts')}
                 className="w-36 bg-transparent text-sm placeholder:text-muted outline-none sm:w-48" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button onClick={() => setSearch('')} aria-label={t('reminders.clearSearch')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('contacts.addContact')}</Button>
           </div>
@@ -172,14 +173,14 @@ export function ContactsModule() {
             {CATEGORIES.filter((c) => contacts.some((contact) => contact.category === c.id)).map((cat) => (
               <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
                 className={cn('tab-item', activeCategory === cat.id ? 'tab-item-active' : 'tab-item-inactive')}>
-                <cat.icon className="h-3.5 w-3.5" /> {cat.label}
+                <cat.icon className="h-3.5 w-3.5" /> {t(cat.labelKey)}
               </button>
             ))}
           </div>
 
           {filtered.length === 0 ? (
             <EmptyState icon={Users} title={t('contacts.noContactsFound')}
-              description={search ? 'Try a different search term.' : 'Add your family\'s important contacts.'}
+              description={t(search ? 'contactsModule.emptySearch' : 'contactsModule.emptyContacts')}
               action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('contacts.addFirstContact')}</Button>} />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border">
@@ -215,20 +216,20 @@ export function ContactsModule() {
                     </div>
 
                     {/* Category badge */}
-                    <Badge tone={cat.badge as 'neutral'}>{cat.label}</Badge>
+                    <Badge tone={cat.badge as 'neutral'}>{t(cat.labelKey)}</Badge>
 
                     {/* Quick actions */}
                     <div className="flex items-center gap-1.5">
                       {contact.phone && (
                         <button onClick={(e) => { e.stopPropagation(); callPhone(contact.phone!); }}
-                          aria-label={`Call ${contact.name}`}
+                          aria-label={t('contactsModule.callContact', { name: contact.name })}
                           className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-success sm:flex">
                           <Phone className="h-4 w-4" />
                         </button>
                       )}
                       {contact.email && (
                         <a href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()}
-                          aria-label={`Email ${contact.name}`}
+                          aria-label={t('contactsModule.emailContact', { name: contact.name })}
                           className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text sm:flex">
                           <Mail className="h-4 w-4" />
                         </a>
@@ -260,10 +261,10 @@ export function ContactsModule() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => setEditing(selected)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
+                  <button onClick={() => setEditing(selected)} aria-label={t('contacts.edit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => setSelected(null)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
+                  <button onClick={() => setSelected(null)} aria-label={t('home.close')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -273,7 +274,7 @@ export function ContactsModule() {
               <div className="mb-4 flex flex-wrap gap-2">
                 {(() => { const cat = categoryMeta(selected.category); return (
                   <span className={cn('flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium', cat.bg, cat.color)}>
-                    <cat.icon className="h-3.5 w-3.5" /> {cat.label}
+                    <cat.icon className="h-3.5 w-3.5" /> {t(cat.labelKey)}
                   </span>
                 ); })()}
                 <Link href={`/dashboard/contacts/${selected.id}`}
@@ -296,9 +297,9 @@ export function ContactsModule() {
                       <span>{selected.phone}</span>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => navigator.clipboard.writeText(selected.phone!)}
+                      <button onClick={() => navigator.clipboard.writeText(selected.phone!)} aria-label={t('family.copy')}
                         className="rounded p-1 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
-                      <button onClick={() => callPhone(selected.phone!)}
+                      <button onClick={() => callPhone(selected.phone!)} aria-label={t('contactsModule.callContact', { name: selected.name })}
                         className="rounded p-1 text-muted hover:text-success"><Phone className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
@@ -306,7 +307,7 @@ export function ContactsModule() {
                 {selected.phone_alt && (
                   <div className="flex items-center gap-2 rounded-xl bg-elevated/50 px-3 py-2.5 text-sm">
                     <Phone className="h-4 w-4 text-muted" />
-                    <span className="text-muted">{selected.phone_alt} (alt)</span>
+                    <span className="text-muted">{selected.phone_alt} {t('contactsModule.alternatePhoneSuffix')}</span>
                   </div>
                 )}
                 {selected.email && (
@@ -315,7 +316,7 @@ export function ContactsModule() {
                       <Mail className="h-4 w-4 text-brand-text" />
                       <span className="truncate">{selected.email}</span>
                     </div>
-                    <a href={`mailto:${selected.email}`}
+                    <a href={`mailto:${selected.email}`} aria-label={t('contactsModule.emailContact', { name: selected.name })}
                       className="rounded p-1 text-muted hover:text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></a>
                   </div>
                 )}
@@ -325,7 +326,7 @@ export function ContactsModule() {
                       <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                       <span className="text-muted">{selected.address}</span>
                     </div>
-                    <button onClick={() => openMaps(selected.address!)}
+                    <button onClick={() => openMaps(selected.address!)} aria-label={t('findPhoneView.openInMaps')}
                       className="rounded p-1 text-muted hover:text-accent"><ExternalLink className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
@@ -338,7 +339,7 @@ export function ContactsModule() {
                 {selected.birthday_month && selected.birthday_day && (
                   <div className="flex items-center gap-2 rounded-xl bg-elevated/50 px-3 py-2.5 text-sm">
                     <Star className="h-4 w-4 text-warning" />
-                    <span className="text-muted">Birthday: {new Date(2000, selected.birthday_month - 1, selected.birthday_day).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</span>
+                    <span className="text-muted">{t('family.birthday')}: {new Date(Date.UTC(2000, selected.birthday_month - 1, selected.birthday_day)).toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: 'UTC' })}</span>
                   </div>
                 )}
                 {selected.notes && (
@@ -367,7 +368,7 @@ export function ContactsModule() {
                 </Button>
                 <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm(t('contactsModule.deleteThisContact'))) deleteContact(selected.id); }}>
                   <Trash2 className="h-4 w-4 text-danger" />
-                  <span className="text-danger">{isPending(`delete:${selected.id}`) ? 'Deleting…' : 'Delete'}</span>
+                  <span className="text-danger">{t(isPending(`delete:${selected.id}`) ? 'vacationDisruption.working' : 'crm.delete')}</span>
                 </Button>
               </div>
             </div>
@@ -393,8 +394,13 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
+  const { code: locale } = useLocale();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const months = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' });
+    return Array.from({ length: 12 }, (_, month) => formatter.format(new Date(Date.UTC(2000, month, 1))));
+  }, [locale]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -417,8 +423,8 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     };
     // ── Validation ──
     if (!payload.name) return toastError(t('contactsModule.nameIsRequired'));
-    if (payload.name.length > 120) return toastError('Name is too long (max 120 characters)');
-    if (payload.email && !isValidEmail(payload.email)) return toastError('Enter a valid email address (e.g. name@example.com)');
+    if (payload.name.length > 120) return toastError(t('contactsModule.nameTooLong', { max: 120 }));
+    if (payload.email && !isValidEmail(payload.email)) return toastError(t('contactsModule.emailInvalid'));
     if (payload.phone && !isValidPhone(payload.phone)) return toastError(t('contactsModule.enterAValidPhoneNumber'));
     if (payload.phone_alt && !isValidPhone(payload.phone_alt)) return toastError(t('contactsModule.theAlternatePhoneNumberLooks'));
     if (payload.birthday_day != null && (payload.birthday_day < 1 || payload.birthday_day > 31)) return toastError(t('contactsModule.birthdayDayMustBeBetween'));
@@ -430,7 +436,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
         ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id)
         : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId });
       if (error) { toastError(describeDbError(error)); return; }
-      success(contact ? 'Contact updated' : 'Contact added');
+      success(t(contact ? 'contactsModule.contactUpdated' : 'contactsModule.contactAdded'));
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));
@@ -440,7 +446,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={contact ? 'Edit Contact' : 'New Contact'}>
+    <Modal open onClose={onClose} title={t(contact ? 'contactsModule.editContact' : 'contactsModule.newContact')}>
       <form onSubmit={onSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t('contacts.fullName')} required>
@@ -462,7 +468,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
                     'flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium transition',
                     'border-border hover:bg-elevated peer-checked:border-brand/60 peer-checked:bg-brand/10 peer-checked:text-brand-text',
                   )}>
-                    <cat.icon className="h-3.5 w-3.5" /> {cat.label}
+                    <cat.icon className="h-3.5 w-3.5" /> {t(cat.labelKey)}
                   </div>
                 </label>
               ))}
@@ -502,14 +508,14 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
               <select id={id} name="birthday_month" defaultValue={contact?.birthday_month ?? ''}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
                 <option value="">{t('contacts.month')}</option>
-                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
+                {months.map((month, i) => (
+                  <option key={i} value={i + 1}>{month}</option>
                 ))}
               </select>
             )}
           </Field>
           <Field label={t('contacts.birthdayDay')}>
-            {(id) => <Input id={id} name="birthday_day" type="number" min={1} max={31} defaultValue={contact?.birthday_day ?? ''} placeholder="Day" />}
+            {(id) => <Input id={id} name="birthday_day" type="number" min={1} max={31} defaultValue={contact?.birthday_day ?? ''} placeholder={t('contactsModule.day')} />}
           </Field>
         </div>
 
@@ -527,7 +533,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>{t('contacts.cancel')}</Button>
-          <Button type="submit" loading={loading}>{contact ? 'Save Changes' : 'Add Contact'}</Button>
+          <Button type="submit" loading={loading}>{t(contact ? 'family.saveChanges' : 'contacts.addContact')}</Button>
         </div>
       </form>
     </Modal>

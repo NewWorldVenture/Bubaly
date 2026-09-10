@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
+import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
   Image as ImageIcon, Plus, Upload, X, Star, StarOff, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, Edit2, Grid3X3, List,
@@ -11,7 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
+import { FAMILY_MEDIA_MAX_LABEL, partitionBySize } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -20,30 +22,45 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Album = Tables<'family_albums'>;
 type Photo = Tables<'family_photos'>;
 
 const ALBUM_KINDS = [
-  { id: 'general', label: 'General', icon: Camera, color: '#7c5dfa' },
-  { id: 'vacation', label: 'Vacation', icon: Mountain, color: '#f4996e' },
-  { id: 'school', label: 'School', icon: GraduationCap, color: '#22c55e' },
-  { id: 'sports', label: 'Sports', icon: Trophy, color: '#f59e0b' },
-  { id: 'milestones', label: 'Milestones', icon: Star, color: '#ec4899' },
-  { id: 'holiday', label: 'Holiday', icon: Calendar, color: '#3b82f6' },
-  { id: 'birthday', label: 'Birthday', icon: Heart, color: '#ef4444' },
-  { id: 'other', label: 'Other', icon: ImageIcon, color: '#6b7280' },
+  { id: 'general', labelKey: 'photosModule.kindGeneral', icon: Camera, color: '#7c5dfa' },
+  { id: 'vacation', labelKey: 'photosModule.kindVacation', icon: Mountain, color: '#f4996e' },
+  { id: 'school', labelKey: 'photosModule.kindSchool', icon: GraduationCap, color: '#22c55e' },
+  { id: 'sports', labelKey: 'photosModule.kindSports', icon: Trophy, color: '#f59e0b' },
+  { id: 'milestones', labelKey: 'photosModule.kindMilestones', icon: Star, color: '#ec4899' },
+  { id: 'holiday', labelKey: 'photosModule.kindHoliday', icon: Calendar, color: '#3b82f6' },
+  { id: 'birthday', labelKey: 'photosModule.kindBirthday', icon: Heart, color: '#ef4444' },
+  { id: 'other', labelKey: 'photosModule.kindOther', icon: ImageIcon, color: '#6b7280' },
 ] as const;
+const DATE_LOCALES = { de, en: enUS, es, fr, it, nl, pt };
 
 export function PhotosModule() {
   const tr = useTranslations();
+  const { code: locale } = useLocale();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+
+  // Preserve fmtRelative's local Today/Tomorrow/distance semantics and tolerant
+  // timestamp parsing while formatting words and clocks in the chosen locale.
+  function relativeDate(value: string | null | undefined): string {
+    if (!value) return '';
+    const parsed = parseISO(value);
+    const date = Number.isNaN(parsed.getTime()) ? new Date(value) : parsed;
+    if (Number.isNaN(date.getTime())) return '';
+    if (isToday(date) || isTomorrow(date)) return tr(isToday(date) ? 'photosModule.todayAt' : 'photosModule.tomorrowAt', {
+      time: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(date),
+    });
+    const language = locale.split('-')[0] as keyof typeof DATE_LOCALES;
+    return formatDistanceToNow(date, { addSuffix: true, locale: DATE_LOCALES[language] ?? enUS });
+  }
 
   const [activeAlbum, setActiveAlbum] = useState<Album | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -83,8 +100,7 @@ export function PhotosModule() {
     if (!media.length) { toastError(tr('photosModule.chooseImageOrVideoFiles')); return; }
     // Skip anything over the family-media bucket limit before it fails mid-upload.
     const { ok: valid, tooBig } = partitionBySize(media);
-    const overMsg = oversizeMessage(tooBig.length);
-    if (overMsg) toastError(overMsg);
+    if (tooBig.length) toastError(tr(tooBig.length === 1 ? 'photosModule.skippedFile' : 'photosModule.skippedFiles', { count: tooBig.length, limit: FAMILY_MEDIA_MAX_LABEL }));
     if (!valid.length) return;
     const supabase = createClient();
     setUploadProgress({ done: 0, total: valid.length });
@@ -102,7 +118,7 @@ export function PhotosModule() {
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (upErr) {
-        toastError(`Failed to upload ${file.name}. Please try again.`);
+        toastError(tr('photosModule.uploadFailed', { name: file.name }));
       } else {
         const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
         const { data: photo, error: insertError } = await supabase.from('family_photos').insert({
@@ -126,7 +142,7 @@ export function PhotosModule() {
     }
     setUploadProgress(null);
     if (uploaded > 0) {
-      success(`${uploaded} file${uploaded > 1 ? 's' : ''} uploaded`);
+      success(tr(uploaded === 1 ? 'photosModule.uploadedFile' : 'photosModule.uploadedFiles', { count: uploaded }));
       void refreshPhotos();
       void refreshAlbums();
     }
@@ -148,7 +164,7 @@ export function PhotosModule() {
     el.addEventListener('dragleave', onDragLeave);
     el.addEventListener('drop', onDrop);
     return () => { el.removeEventListener('dragover', onDragOver); el.removeEventListener('dragleave', onDragLeave); el.removeEventListener('drop', onDrop); };
-  }, [activeAlbum]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeAlbum, tr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggleFavorite(photo: Photo) {
     const supabase = createClient();
@@ -208,7 +224,7 @@ export function PhotosModule() {
                 placeholder={tr('photos.searchPhotos')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
             </div>
-            <Button variant="outline" size="sm" onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
+            <Button variant="outline" size="sm" aria-label={tr(view === 'grid' ? 'photosModule.showList' : 'photosModule.showGrid')} onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}>
               {view === 'grid' ? <List className="h-4 w-4" /> : <Grid3X3 className="h-4 w-4" />}
             </Button>
             <Button onClick={() => setUploadOpen(true)}>
@@ -223,10 +239,10 @@ export function PhotosModule() {
 
       {/* Tabs */}
       <div className="tab-bar">
-        {([['albums', 'Albums'], ['all', 'All Photos'], ['favorites', 'Favorites'], ['recents', 'Recents']] as const).map(([key, label]) => (
+        {([['albums', 'photos.albums'], ['all', 'photosModule.allPhotos'], ['favorites', 'photosModule.favorites'], ['recents', 'photosModule.recents']] as const).map(([key, labelKey]) => (
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
-            {label}
+            {tr(labelKey)}
             {key === 'favorites' && <span className="ml-1 rounded-full bg-current/10 px-1.5 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
@@ -261,12 +277,12 @@ export function PhotosModule() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                       <div className="absolute bottom-0 left-0 right-0 p-3">
                         <p className="truncate text-sm font-bold text-white">{album.name}</p>
-                        <p className="text-[11px] text-white/70">{album.count} photo{album.count !== 1 ? 's' : ''}</p>
+                        <p className="text-[11px] text-white/70">{tr(album.count === 1 ? 'photosModule.photoCount' : 'photosModule.photosCount', { count: album.count })}</p>
                       </div>
                       {/* Kind badge */}
                       <div className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
                         style={{ background: kind.color + 'cc' }}>
-                        {kind.label}
+                        {tr(kind.labelKey)}
                       </div>
                     </div>
                   </button>
@@ -298,13 +314,13 @@ export function PhotosModule() {
               </button>
               <span className="text-muted">/</span>
               <span className="font-semibold">{activeAlbum.name}</span>
-              <Badge tone="neutral" className="ml-1">{photos.length} photos</Badge>
+              <Badge tone="neutral" className="ml-1">{tr(photos.length === 1 ? 'photosModule.photoCount' : 'photosModule.photosCount', { count: photos.length })}</Badge>
             </div>
           )}
 
           {photos.length === 0 ? (
             <EmptyState icon={Camera} title={tr('photos.noPhotosYet')}
-              description={activeAlbum ? `This album is empty. Upload your first photo.` : `No photos to show.`}
+              description={tr(activeAlbum ? 'photosModule.emptyAlbum' : 'photosModule.emptyPhotos')}
               action={<Button onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr('photos.uploadPhotos')}</Button>} />
           ) : view === 'grid' ? (
             /* Grid */
@@ -320,7 +336,7 @@ export function PhotosModule() {
                     </div>
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt={photo.caption ?? 'Photo'}
+                    <img src={photo.url ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
                       loading="lazy" decoding="async" />
                   )}
@@ -336,7 +352,7 @@ export function PhotosModule() {
                       {photo.caption && <p className="truncate text-[11px] text-white">{photo.caption}</p>}
                       <div className="ml-auto flex gap-1.5">
                         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
-                          aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                          aria-label={tr(photo.is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}
                           className="rounded-full bg-black/40 p-1.5 text-white hover:bg-black/60">
                           {photo.is_favorite ? <Heart className="h-3.5 w-3.5 fill-red-400 text-red-400" /> : <Heart className="h-3.5 w-3.5" />}
                         </button>
@@ -372,12 +388,12 @@ export function PhotosModule() {
                     <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium">{photo.caption ?? (photo.media_type === 'video' ? 'Video' : 'Photo')}</p>
-                    <p className="text-xs text-muted">{fmtRelative(photo.created_at)}</p>
+                    <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
+                    <p className="text-xs text-muted">{relativeDate(photo.created_at)}</p>
                   </div>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
                   <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
-                    aria-label={photo.is_favorite ? 'Remove from favorites' : 'Add to favorites'}>
+                    aria-label={tr(photo.is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}>
                     {photo.is_favorite ? <Heart className="h-4 w-4 fill-red-400 text-red-400" /> : <Heart className="h-4 w-4 text-muted" />}
                   </button>
                 </div>
@@ -427,13 +443,13 @@ export function PhotosModule() {
               <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
               {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
               <div className="ml-auto flex gap-2">
-                <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer"
+                <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
                   onClick={(e) => e.stopPropagation()}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Download className="h-4 w-4" />
                 </a>
                 <button onClick={() => toggleFavorite(photos[lightboxIdx])}
-                  aria-label={photos[lightboxIdx].is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={tr(photos[lightboxIdx].is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
@@ -517,7 +533,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
                   className={cn('flex flex-col items-center gap-1.5 rounded-xl border p-2 text-xs transition',
                     kind === k.id ? 'border-brand/60 bg-brand/10' : 'border-border hover:bg-elevated')}>
                   <k.icon className="h-5 w-5" style={{ color: k.color }} />
-                  {k.label}
+                  {tr(k.labelKey)}
                 </button>
               ))}
             </div>
@@ -582,7 +598,7 @@ function UploadModal({ onClose, onUpload, progress }: {
 
         {selected.length > 0 && (
           <div>
-            <p className="mb-2 text-sm text-muted">{selected.length} file{selected.length > 1 ? 's' : ''} selected</p>
+            <p className="mb-2 text-sm text-muted">{tr(selected.length === 1 ? 'photosModule.selectedFile' : 'photosModule.selectedFiles', { count: selected.length })}</p>
             <div className="flex flex-wrap gap-2">
               {selected.slice(0, 8).map((f, i) => (
                 <div key={i} className="h-14 w-14 overflow-hidden rounded-xl border border-border bg-elevated">
@@ -599,11 +615,11 @@ function UploadModal({ onClose, onUpload, progress }: {
         {busy && progress && (
           <div aria-live="polite">
             <div className="h-1.5 overflow-hidden rounded-full bg-border"
-              {...progressBarA11y((progress.done / Math.max(progress.total, 1)) * 100, `Uploading: ${progress.done} of ${progress.total}`)}>
+              {...progressBarA11y((progress.done / Math.max(progress.total, 1)) * 100, tr('photosModule.uploadProgress', { done: progress.done, total: progress.total }))}>
               <div className="h-full rounded-full bg-brand transition-[width] duration-300"
                 style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }} />
             </div>
-            <p className="mt-1.5 text-center text-xs text-muted">{progress.done} of {progress.total} uploaded</p>
+            <p className="mt-1.5 text-center text-xs text-muted">{tr('photosModule.processedProgress', { done: progress.done, total: progress.total })}</p>
           </div>
         )}
 
@@ -615,8 +631,8 @@ function UploadModal({ onClose, onUpload, progress }: {
             onUpload(dt.files);
           }}>
             {busy && progress
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('photos.uploading')} {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
-              : <><Upload className="h-4 w-4" /> {tr('photos.upload')} {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('photosModule.uploadingFile', { current: Math.min(progress.done + 1, progress.total), total: progress.total })}</>
+              : <><Upload className="h-4 w-4" /> {selected.length > 0 ? tr(selected.length === 1 ? 'photosModule.uploadFile' : 'photosModule.uploadFiles', { count: selected.length }) : tr('photos.upload')}</>}
           </Button>
         </div>
       </div>

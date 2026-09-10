@@ -27,12 +27,21 @@ type CountQuery = PromiseLike<{ count: number | null; error: unknown }>;
  * rather than only that one did.
  */
 export async function countOrNull(query: CountQuery, label = 'metric'): Promise<MetricCount> {
-  const { count, error } = await Promise.resolve(query);
-  if (error) {
+  try {
+    const { count, error } = await Promise.resolve(query);
+    if (error) {
+      console.error(`[metric] ${label} read failed`, error);
+      return null;
+    }
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+      console.error(`[metric] ${label} read failed: exact count missing or invalid`);
+      return null;
+    }
+    return count;
+  } catch (error) {
     console.error(`[metric] ${label} read failed`, error);
     return null;
   }
-  return count ?? 0;
 }
 
 /** Narrow a metric to a number the UI may render. */

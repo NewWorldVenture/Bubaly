@@ -1,8 +1,8 @@
 'use client';
 
-// Onboarding — a guided, six-step journey that sets up the whole family space in
-// ONE atomic write at the very end (finalizeOnboardingAction). Nothing is written
-// to Supabase until "Finish", so abandoning midway leaves no half-created account.
+// Onboarding keeps form details in a resumable draft until Finish. Optional
+// calendar Connect first claims an owned family and stores a dormant connection
+// so OAuth can return to the unfinished wizard. Finish imports the reviewed data.
 //   1) Profile   — avatar, name, age, colour
 //   2) Family    — name your shared space (timezone auto-detected)
 //   3) About     — household makeup, goals, how they found us
@@ -12,7 +12,7 @@
 // All flow logic (steps, progress, validation, draft→payload) lives in the pure,
 // tested lib/onboarding/flow.ts; this file is the renderer.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -25,58 +25,120 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { trackOnboarding } from '@/lib/analytics/onboarding-track';
 import { MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES, makeLocalMember, makeInviteMember, addMember, removeMember, hasInviteEmail, draftMemberLabel, kidsNeedingLogin, type DraftMember } from '@/lib/onboarding/draft';
-import { FAMILY_GOALS, REFERRAL_SOURCES, householdSummary } from '@/lib/onboarding/family';
+import { FAMILY_GOALS, REFERRAL_SOURCES } from '@/lib/onboarding/family';
 import { normalizePin, isValidPin, isWeakPin } from '@/lib/onboarding/pin';
-import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
+import type { MemberRole } from '@/lib/constants/roles';
 import {
-  STEP_META, progressPct, stepCounter, nextStep, prevStep, isFirstStep,
+  progressPct, stepCounter, nextStep, prevStep, isFirstStep,
   isLastFormStep, canAdvance, suggestFamilyName, emptyDraft, buildFinalizePayload,
   serializeDraftState, parseDraftState, DRAFT_STORAGE_KEY,
   type OnboardingStep, type OnboardingDraft,
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { formatFirstBrief } from '@/lib/onboarding/first-brief-display';
 import { pickFirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ConnectedCalendar, type CalendarProvider } from '@/components/onboarding/connected-calendar';
+import { isReviewPlan, reviewBillingPath, type ReviewPlan } from '@/lib/billing/review-selection';
+import type { OnboardingOwner } from '@/lib/onboarding/owner';
+import type { IcsImportDisclosure } from '@/lib/onboarding/ics';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
 const isLikelyEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
 
-export function OnboardingWizard({ initialName = '', initialLastName = '' }: { initialName?: string; initialLastName?: string }) {
+// Display labels stay separate from the flow model and persisted option values.
+const STEP_COPY: Record<Exclude<OnboardingStep, 'done'>, { title: string; subtitle: string }> = {
+  profile: { title: 'onboardingWizard.createProfileTitle', subtitle: 'onboardingCopy.profileSubtitle' },
+  family: { title: 'onboardingCopy.familyTitle', subtitle: 'onboardingCopy.familySubtitle' },
+  value: { title: 'onboardingCopy.valueTitle', subtitle: 'onboardingCopy.valueSubtitle' },
+  about: { title: 'onboardingCopy.aboutTitle', subtitle: 'onboardingCopy.aboutSubtitle' },
+  members: { title: 'onboardingCopy.membersTitle', subtitle: 'onboardingCopy.membersSubtitle' },
+  pin: { title: 'onboardingCopy.pinTitle', subtitle: 'onboardingCopy.pinSubtitle' },
+};
+const GOAL_COPY: Record<string, string> = {
+  chores: 'ai.choresAllowance', calendar: 'onboardingCopy.goalCalendar', meals: 'pricingContent.mealPlanning',
+  groceries: 'onboardingCopy.goalGroceries', budget: 'onboardingCopy.goalBudget', health: 'onboardingCopy.goalHealth',
+  school: 'onboardingCopy.goalSchool', activities: 'onboardingCopy.goalActivities',
+};
+const REFERRAL_COPY: Record<string, string> = {
+  search: 'onboardingCopy.referralSearch', friend_family: 'onboardingCopy.referralFriendFamily', social: 'onboardingCopy.referralSocial',
+  app_store: 'onboardingCopy.referralAppStore', blog: 'onboardingCopy.referralBlog', ad: 'onboardingCopy.referralAd',
+  podcast: 'onboardingCopy.referralPodcast', other: 'onboardingCopy.referralOther',
+};
+const ROLE_COPY: Record<MemberRole, string> = {
+  parent: 'trustRole.parent', adult: 'trustRole.adult', teen: 'trustRole.teen', child: 'trustRole.child',
+  caregiver: 'trustRole.caregiver', guest: 'trustRole.guest',
+};
+
+export function OnboardingWizard({ initialName = '', initialLastName = '', calendarProviders = [], calendarAccountId, calendarStatus, reviewPlan, expectedOwner }: {
+  initialName?: string; initialLastName?: string; calendarProviders?: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+  reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
+}) {
   const tr = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
+  // Each owner/selection lifetime has a distinct identity, including A → B → A.
+  const screenOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId, reviewPlan }), [expectedOwner?.userId, expectedOwner?.familyId, reviewPlan]);
+  const currentScreen = useRef(screenOwner);
+  currentScreen.current = screenOwner;
+  // Imports belong to a user/family lifetime, independent of the billing query.
+  const calendarOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId }), [expectedOwner?.userId, expectedOwner?.familyId]);
+  const currentCalendarOwner = useRef(calendarOwner);
+  currentCalendarOwner.current = calendarOwner;
+  const mounted = useRef(true);
+  const finishing = useRef<typeof screenOwner | null>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const [step, setStep] = useState<OnboardingStep>('profile');
-  const [draft, setDraft] = useState<OnboardingDraft>(() =>
+  const [storedDraft, setDraft] = useState<OnboardingDraft>(() =>
     emptyDraft({ name: initialName, lastName: initialLastName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
+  const [calendarDraftOwner, setCalendarDraftOwner] = useState(calendarOwner);
+  // A new owner cannot render or submit the previous owner's imported contents,
+  // including the render before the clearing effect has committed.
+  const draft = useMemo(() => calendarDraftOwner === calendarOwner ? storedDraft : { ...storedDraft, importedEvents: [], importSource: '', calendarReceipt: undefined }, [calendarDraftOwner, calendarOwner, storedDraft]);
   const [familyNameTouched, setFamilyNameTouched] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingOwner, setSavingOwner] = useState<typeof screenOwner | null>(null);
+  const saving = savingOwner === screenOwner;
   // The server-computed first brief (timeline · clashes · dinner ideas · time
   // saved), returned by finalize and shown on the celebration screen.
-  const [doneBrief, setDoneBrief] = useState<FirstBrief | null>(null);
+  const [doneResult, setDoneResult] = useState<{ owner: typeof calendarOwner; brief: FirstBrief | null } | null>(null);
+  const doneBrief = doneResult?.owner === calendarOwner ? doneResult.brief : null;
+  // Bound to the exact owner and event array; never enters draft storage or Finish.
+  const [calendarNotice, setCalendarNotice] = useState<{
+    owner: typeof calendarOwner; events: OnboardingDraft['importedEvents']; disclosure: IcsImportDisclosure;
+  } | null>(null);
+  const noteCalendar = useCallback((events: OnboardingDraft['importedEvents'], disclosure?: IcsImportDisclosure) => {
+    if (mounted.current && currentCalendarOwner.current === calendarOwner) setCalendarNotice(disclosure ? { owner: calendarOwner, events, disclosure } : null);
+  }, [calendarOwner]);
+  useEffect(() => {
+    if (calendarDraftOwner === calendarOwner) return;
+    setDraft(previous => ({ ...previous, importedEvents: [], importSource: '', calendarReceipt: undefined }));
+    setCalendarNotice(null);
+    setCalendarDraftOwner(calendarOwner);
+  }, [calendarDraftOwner, calendarOwner]);
 
   const update = useCallback((patch: Partial<OnboardingDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
-  const firstName = draft.name.trim().split(' ')[0] || 'there';
+  const firstName = draft.name.trim().split(' ')[0];
   // Becomes true once we've attempted a sessionStorage restore, so we never
   // persist over (or race with) the restore on first paint.
   const [hydrated, setHydrated] = useState(false);
 
-  // Resume an in-progress wizard after a refresh/navigation (nothing is written
-  // to the DB until Finish, so the draft lives only in sessionStorage — minus
-  // the PIN). Runs once, before the sync effects below matter.
+  // Resume form details after navigation. PINs, calendar contents and the signed
+  // preview receipt are excluded from sessionStorage. OAuth returns re-preview.
   useEffect(() => {
     const restored = parseDraftState(typeof window !== 'undefined' ? sessionStorage.getItem(DRAFT_STORAGE_KEY) : null);
     if (restored) {
-      setStep(restored.step);
+      setStep(calendarAccountId || calendarStatus ? 'value' : restored.step);
       setDraft(restored.draft);
       setFamilyNameTouched(restored.familyNameTouched);
     }
+    else if (calendarAccountId || calendarStatus) setStep('value');
     setHydrated(true);
-  }, []);
+  }, [calendarAccountId, calendarStatus]);
 
   // Persist the resumable state whenever it changes (after the restore attempt).
   useEffect(() => {
@@ -104,6 +166,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 
   const canGo = canAdvance(step, draft);
   const { current, total } = stepCounter(step);
+  const stepTitle = step === 'done' ? '' : tr(STEP_COPY[step].title);
 
   // Accessibility: announce each step change to screen readers, and move focus
   // into the new step's heading for steps that have no auto-focused input (about
@@ -114,22 +177,30 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
   const firstStepRun = useRef(true);
   useEffect(() => {
     if (step === 'done') return;
-    setLiveMsg(`Step ${current} of ${total}: ${STEP_META[step].title}`);
+    setLiveMsg(tr('onboardingCopy.stepAnnouncement', { current, total, title: stepTitle }));
     if (!firstStepRun.current && (step === 'value' || step === 'about' || step === 'members' || step === 'pin')) {
       headingRef.current?.focus();
     }
     firstStepRun.current = false;
-  }, [step, current, total]);
+  }, [step, current, total, stepTitle, tr]);
 
   async function finish() {
-    setSaving(true);
-    const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
-    setSaving(false);
-    if (!res.ok) { toastError(res.error ?? 'Something went wrong finishing setup'); return; }
-    setDoneBrief(res.data?.brief ?? null);
+    if (!mounted.current || currentScreen.current !== screenOwner || finishing.current === screenOwner) return;
+    finishing.current = screenOwner;
+    setSavingOwner(screenOwner);
+    try {
+    const res = await finalizeOnboardingAction(buildFinalizePayload(draft), expectedOwner);
+    if (!mounted.current || currentScreen.current !== screenOwner) return;
+    if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
+    setDoneResult({ owner: calendarOwner, brief: res.data?.brief ?? null });
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
+    } catch { if (mounted.current && currentScreen.current === screenOwner) toastError(tr('actions.couldNotFinishSettingUp2')); }
+    finally {
+      if (finishing.current === screenOwner) finishing.current = null;
+      if (mounted.current && currentScreen.current === screenOwner) setSavingOwner(null);
+    }
   }
 
   function advance() {
@@ -142,12 +213,15 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 
   return (
     <div className="rounded-3xl border border-border bg-surface/40 p-6 shadow-sm sm:p-8">
+      {calendarStatus === 'unavailable' && !isReviewPlan(reviewPlan) && (
+        <Link href="/pricing" className="mb-4 block text-sm font-medium text-brand-text underline">{tr('onboardingWizard.reviewFamilyPlans')}</Link>
+      )}
       {/* Screen-reader-only live region: announces navigation between steps. */}
       <p className="sr-only" role="status" aria-live="polite">{liveMsg}</p>
       {step !== 'done' && (
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted">
-            <span>{tr('onboardingWizard.step')} {current} of {total}</span>
+            <span>{tr('onboardingCopy.stepCount', { current, total })}</span>
             <span>{progressPct(step)}%</span>
           </div>
           <div
@@ -156,7 +230,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
             aria-valuenow={progressPct(step)}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`Setup progress: step ${current} of ${total}`}
+            aria-label={tr('onboardingCopy.progressLabel', { current, total })}
           >
             <div className="h-full rounded-full bg-brand transition-all duration-500 ease-out" style={{ width: `${progressPct(step)}%` }} />
           </div>
@@ -168,21 +242,25 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
         {step !== 'done' && (
           <div className="mb-6 text-center">
             <h1 id="onboarding-step-title" ref={headingRef} tabIndex={-1}
-              className="text-2xl font-bold tracking-tight outline-none">{STEP_META[step].title}</h1>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{STEP_META[step].subtitle}</p>
+              className="text-2xl font-bold tracking-tight outline-none">{stepTitle}</h1>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{tr(STEP_COPY[step].subtitle)}</p>
           </div>
         )}
 
         {step === 'profile' && <ProfilePanel draft={draft} update={update} onEnter={advance} />}
         {step === 'family' && (
-          <FamilyPanel draft={draft} firstName={firstName} onEnter={advance}
+          <FamilyPanel draft={draft} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
-        {step === 'value' && <ValuePanel draft={draft} update={update} />}
+        {step === 'value' && <ValuePanel key={`${calendarOwner.userId}:${calendarOwner.familyId}`} draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} reviewPlan={reviewPlan} expectedOwner={expectedOwner}
+          scope={calendarOwner} consentScope={screenOwner} disclosure={calendarNotice?.owner === calendarOwner && calendarNotice.events === draft.importedEvents ? calendarNotice.disclosure : undefined}
+          onDisclosure={noteCalendar} />}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
-        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief} onGo={() => { router.push('/dashboard'); router.refresh(); }} />}
+        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief}
+          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenOwner) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
+          onGo={() => { if (mounted.current && currentScreen.current === screenOwner) { router.push('/dashboard'); router.refresh(); } }} />}
       </div>
 
       {step !== 'done' && (
@@ -195,7 +273,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
             )}
             <Button className="flex-1" onClick={advance} disabled={!canGo || saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {isLastFormStep(step) ? 'Finish setup' : 'Continue'}
+              {isLastFormStep(step) ? tr('onboardingCopy.finishSetup') : tr('phoneAuth.continue')}
               {!saving && !isLastFormStep(step) && <ArrowRight className="h-4 w-4" />}
             </Button>
           </div>
@@ -208,9 +286,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
                 const next = nextStep(step); trackOnboarding(next, 'step'); setStep(next);
               }}
               className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
-              {step === 'pin' ? 'Skip — I’ll add a PIN later'
-                : step === 'value' ? 'Skip — I’ll connect my calendar later'
-                : 'Skip for now'}
+              {step === 'pin' ? tr('onboardingCopy.skipPin')
+                : step === 'value' ? tr('onboardingCopy.skipCalendar')
+                : tr('onboardingCopy.skipForNow')}
             </button>
           )}
         </div>
@@ -225,26 +303,26 @@ function ProfilePanel({ draft, update, onEnter }: { draft: OnboardingDraft; upda
   return (
     <div>
       <div className="flex justify-center">
-        <AvatarPicker displayName={draft.name || 'You'} defaultValue={draft.avatarUrl} onChange={(v) => update({ avatarUrl: v })} />
+        <AvatarPicker displayName={draft.name || tr('onboardingCopy.you')} defaultValue={draft.avatarUrl} onChange={(v) => update({ avatarUrl: v })} />
       </div>
       <div className="mt-6 space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium">{tr('onboardingWizard.yourName')} <span className="text-brand-text">*</span></span>
+          <span className="mb-1 block text-sm font-medium">{tr('onboardingCopy.yourName')} <span className="text-brand-text">*</span></span>
           <input value={draft.name} onChange={(e) => update({ name: e.target.value })} autoFocus placeholder={tr('onboardingWizard.jordan')}
             aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium">{tr('onboardingWizard.howOldAreYou')} <span className="font-normal text-muted">(optional)</span></span>
+          <span className="mb-1 block text-sm font-medium">{tr('onboardingCopy.howOldAreYou')} <span className="font-normal text-muted">{tr('conciergeCalls.optional')}</span></span>
           <select value={draft.age} onChange={(e) => update({ age: e.target.value })} className={inputCls}>
             <option value="">{tr('onboardingWizard.preferNotToSay')}</option>
             {Array.from({ length: 99 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <div>
-          <span className="mb-2 block text-sm font-medium">{tr('onboardingWizard.chooseYourColour')}</span>
+          <span className="mb-2 block text-sm font-medium">{tr('onboardingCopy.chooseYourColour')}</span>
           <div className="flex flex-wrap gap-2.5">
             {MEMBER_COLORS.map((c) => (
-              <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={draft.color === c} onClick={() => update({ color: c })}
+              <button key={c} type="button" aria-label={tr('onboardingCopy.colourLabel', { colour: c })} aria-pressed={draft.color === c} onClick={() => update({ color: c })}
                 className={cn('grid h-9 w-9 place-items-center rounded-full transition', draft.color === c && 'ring-2 ring-white/70')}
                 style={{ backgroundColor: c }}>
                 {draft.color === c && <Check className="h-4 w-4 text-white" />}
@@ -258,9 +336,9 @@ function ProfilePanel({ draft, update, onEnter }: { draft: OnboardingDraft; upda
 }
 
 // ─── Step 2: Family ───────────────────────────────────────────────────────────
-function FamilyPanel({ draft, firstName, onChange, onEnter }: { draft: OnboardingDraft; firstName: string; onChange: (v: string) => void; onEnter: () => void }) {
+function FamilyPanel({ draft, onChange, onEnter }: { draft: OnboardingDraft; onChange: (v: string) => void; onEnter: () => void }) {
   const tr = useTranslations();
-  const tzLabel = draft.timezone && draft.timezone !== 'UTC' ? draft.timezone.replace(/_/g, ' ') : 'your local time';
+  const tzLabel = draft.timezone && draft.timezone !== 'UTC' ? draft.timezone.replace(/_/g, ' ') : tr('onboardingCopy.localTime');
   return (
     <div>
       <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl text-white" aria-hidden="true" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
@@ -268,13 +346,13 @@ function FamilyPanel({ draft, firstName, onChange, onEnter }: { draft: Onboardin
       </div>
       <label className="block">
         <span className="mb-1 block text-sm font-medium">{tr('onboardingWizard.familyName')} <span className="text-brand-text">*</span></span>
-        <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={suggestFamilyName(firstName) || 'The Smith Family'}
+        <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={tr('onboardingCopy.familyPlaceholder')}
           aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
       </label>
       <p className="mt-2 text-xs text-muted">{tr('onboardingWizard.thisIsYourSharedSpaceEveryone')}</p>
       <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-xs text-muted">
         <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
-        <span>{tr('onboardingWizard.calendarsAmpRemindersWillUse')} <span className="font-medium text-fg">{tzLabel}</span>{tr('onboardingWizard.detectedAutomatically')}</span>
+        <span>{tr('onboardingCopy.timezoneNotice', { timezone: tzLabel })}</span>
       </div>
     </div>
   );
@@ -282,16 +360,17 @@ function FamilyPanel({ draft, firstName, onChange, onEnter }: { draft: Onboardin
 
 // ─── Step 3: About your family ────────────────────────────────────────────────
 function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
+  const tr = useTranslations();
   return (
     <div className="flex items-center justify-between rounded-xl border border-border bg-bg/40 px-3 py-2.5">
       <span className="text-sm font-medium">{label}</span>
       <div className="flex items-center gap-3">
-        <button type="button" aria-label={`Fewer ${label}`} onClick={() => onChange(Math.max(min, value - 1))}
+        <button type="button" aria-label={tr('onboardingCopy.fewer', { label })} onClick={() => onChange(Math.max(min, value - 1))}
           className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:bg-elevated disabled:opacity-40" disabled={value <= min}>
           <Minus className="h-4 w-4" />
         </button>
         <span className="w-5 text-center text-sm font-semibold tabular-nums">{value}</span>
-        <button type="button" aria-label={`More ${label}`} onClick={() => onChange(Math.min(max, value + 1))}
+        <button type="button" aria-label={tr('onboardingCopy.more', { label })} onClick={() => onChange(Math.min(max, value + 1))}
           className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:bg-elevated disabled:opacity-40" disabled={value >= max}>
           <Plus className="h-4 w-4" />
         </button>
@@ -301,39 +380,89 @@ function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string;
 }
 
 // ─── Step 3: Value — import a calendar, see the instant payoff ─────────────────
-function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus, reviewPlan, expectedOwner, scope, consentScope, disclosure, onDisclosure }: {
+  draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; calendarProviders: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+  reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
+  scope: object; consentScope: object; disclosure?: IcsImportDisclosure;
+  onDisclosure: (events: OnboardingDraft['importedEvents'], disclosure?: IcsImportDisclosure) => void;
+}) {
   const tr = useTranslations();
+  const locale = useLocale();
   const { error: toastError } = useToast();
   const [ics, setIcs] = useState('');
   const [loading, setLoading] = useState<null | 'paste' | 'demo'>(null);
   // Recompute the brief locally when returning to the step (events live in the draft).
   const [brief, setBrief] = useState<FirstBrief | null>(() =>
-    draft.importedEvents.length ? buildFirstBrief(draft.importedEvents, new Date()) : null);
+    draft.importedEvents.length || draft.calendarReceipt ? buildFirstBrief(draft.importedEvents, new Date(), [], draft.timezone) : null);
+  const [ignoreConnected, setIgnoreConnected] = useState(false);
+  const [calendarName, setCalendarName] = useState('');
+  const currentScope = useRef(scope); currentScope.current = scope;
+  const currentConsentScope = useRef(consentScope); currentConsentScope.current = consentScope;
+  const previewRequest = useRef(0);
+  const previewMounted = useRef(true);
+  const pendingRequest = useRef<number | null>(null);
+  useEffect(() => { previewMounted.current = true; return () => { previewMounted.current = false; }; }, []);
+  const onConnectedPreview = useCallback((preview: { events: import('@/lib/onboarding/first-brief').BriefEvent[]; receipt: string; calendarName: string; brief: FirstBrief }) => {
+    if (!previewMounted.current || currentScope.current !== scope || currentConsentScope.current !== consentScope) return;
+    previewRequest.current++;
+    pendingRequest.current = null;
+    setLoading(null);
+    onDisclosure(preview.events);
+    setBrief(preview.brief); setCalendarName(preview.calendarName);
+    update({ importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt });
+    trackOnboarding('value', 'step');
+  }, [update, onDisclosure, scope, consentScope]);
 
   async function run(source: 'paste' | 'demo') {
+    if (!previewMounted.current || currentScope.current !== scope || pendingRequest.current !== null) return;
+    const request = ++previewRequest.current;
+    pendingRequest.current = request;
+    const current = () => previewMounted.current && currentScope.current === scope && request === previewRequest.current;
     setLoading(source);
-    const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined });
-    setLoading(null);
+    try {
+    const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined, timezone: draft.timezone });
+    if (!current()) return;
     if (!res.ok) { toastError(res.error); return; }
     if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }
     setBrief(res.data.brief);
-    update({ importedEvents: res.data.events, importSource: res.data.source });
+    update({ importedEvents: res.data.events, importSource: res.data.source, calendarReceipt: undefined });
+    onDisclosure(res.data.events, res.data.disclosure);
     trackOnboarding('value', 'step');
+    } catch {
+      if (current()) toastError(tr('onboardingWizard.couldNotReadThatCalendar'));
+    } finally {
+      if (pendingRequest.current === request) pendingRequest.current = null;
+      if (current()) setLoading(null);
+    }
   }
 
   function reset() {
+    if (!previewMounted.current || currentScope.current !== scope) return;
+    previewRequest.current++;
+    pendingRequest.current = null;
+    setLoading(null);
+    onDisclosure([]);
     setBrief(null); setIcs('');
-    update({ importedEvents: [], importSource: '' });
+    setIgnoreConnected(true);
+    update({ importedEvents: [], importSource: '', calendarReceipt: undefined });
   }
 
   if (brief) {
+    const view = formatFirstBrief(brief, { locale: locale.code, t: tr });
     return (
       <div className="space-y-4">
+        {(disclosure?.floatingTimezone || disclosure?.recurring) && <div className="space-y-1 rounded-xl border border-border p-3 text-sm text-muted">
+          {disclosure.floatingTimezone && <p>{tr('calendarImport.floatingDisclosure', { timezone: disclosure.floatingTimezone })}</p>}
+          {disclosure.recurring && <p>{tr('calendarImport.recurringDisclosure')}</p>}
+        </div>}
+        {draft.calendarReceipt && <p className="rounded-xl border border-border p-3 text-sm text-muted">{calendarName
+          ? tr('connectedCalendar.previewReady', { calendar: calendarName })
+          : tr('onboardingCopy.primaryCalendarPreview')}</p>}
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 text-center">
           <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand-text">
             <Sparkles className="h-5 w-5" />
           </div>
-          <p className="text-base font-semibold">{brief.headline}</p>
+          <p className="text-base font-semibold">{view.headline}</p>
           {brief.timeSavedMinutes > 0 && (
             <p className="mt-1 text-sm text-muted">
               {tr('onboardingWizard.estimatedPlanningTimeOfNMinutes', { minutes: brief.timeSavedMinutes })}
@@ -348,7 +477,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
               {brief.timeline.slice(0, 6).map((t, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="truncate"><span className="font-medium">{t.title}</span>{t.location ? <span className="text-muted"> · {t.location}</span> : null}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{t.timeLabel}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{view.timeline[i].timeLabel}</span>
                 </li>
               ))}
             </ul>
@@ -357,10 +486,10 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.conflicts.length > 0 && (
           <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-500" /> {brief.conflicts.length} clash{brief.conflicts.length === 1 ? '' : 'es'} {tr('onboardingWizard.toResolve')}</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-500" /> {tr(brief.conflicts.length === 1 ? 'onboardingCopy.clashToResolveOne' : 'onboardingCopy.clashToResolveOther', { count: brief.conflicts.length })}</h2>
             <ul className="space-y-1 text-sm text-muted">
               {brief.conflicts.slice(0, 3).map((c, i) => (
-                <li key={i}><span className="font-medium text-fg">{c.aTitle}</span> overlaps <span className="font-medium text-fg">{c.bTitle}</span> · {c.dayLabel} {c.overlapLabel}</li>
+                <li key={i}>{tr('onboardingCopy.overlap', { first: c.aTitle, second: c.bTitle, day: view.conflicts[i].dayLabel, time: view.conflicts[i].overlapLabel })}</li>
               ))}
             </ul>
           </section>
@@ -370,10 +499,10 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
           <section className="rounded-2xl border border-border p-4">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> {tr('onboardingWizard.firstThingsToHandle')}</h2>
             <ul className="space-y-1.5 text-sm">
-              {brief.actions.slice(0, 4).map((a) => (
+              {brief.actions.slice(0, 4).map((a, i) => (
                 <li key={a.id} className="flex items-start gap-2">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
-                  <span><span className="font-medium">{a.label}</span> — <span className="text-muted">{a.detail}</span></span>
+                  <span><span className="font-medium">{view.actions[i].label}</span> — <span className="text-muted">{view.actions[i].detail}</span></span>
                 </li>
               ))}
             </ul>
@@ -382,10 +511,10 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.opportunities.length > 0 && (
           <section className="rounded-2xl border border-border p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand-text" /> {tr('onboardingWizard.workingForYouAlready')}</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand-text" /> {tr('onboardingCopy.workingForYouAlready')}</h2>
             <ul className="space-y-1.5 text-sm">
-              {brief.opportunities.map((o) => (
-                <li key={o.id}><span className="font-medium">{o.label}</span> <span className="text-muted">· {o.detail}</span></li>
+              {brief.opportunities.map((o, i) => (
+                <li key={o.id}><span className="font-medium">{view.opportunities[i].label}</span> <span className="text-muted">· {view.opportunities[i].detail}</span></li>
               ))}
             </ul>
           </section>
@@ -398,7 +527,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
               {brief.dinnerIdeas.map((d) => (
                 <li key={d.title} className="flex items-baseline justify-between gap-3">
                   <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
-                  <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
+                  <span className="shrink-0 text-xs text-muted">{tr('onboardingCopy.prepMinutes', { minutes: d.prepMinutes })}</span>
                 </li>
               ))}
             </ul>
@@ -414,12 +543,15 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
   return (
     <div className="space-y-4">
+      <ConnectedCalendar providers={calendarProviders} accountId={ignoreConnected ? undefined : calendarAccountId}
+        reviewPlan={reviewPlan} expectedOwner={expectedOwner}
+        status={ignoreConnected ? undefined : calendarStatus} family={{ name: draft.familyName, timezone: draft.timezone }} displayName={draft.name} onPreview={onConnectedPreview} />
       <div className="rounded-2xl border border-border p-4">
         <label htmlFor="ics-paste" className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Clipboard className="h-4 w-4 text-brand-text" /> {tr('onboardingWizard.pasteYourCalendarExportIcs')}
         </label>
         <p className="mb-2 text-xs text-muted">
-          {tr('onboardingWizard.inGoogleAppleOutlookCalendarExport')} <code className="rounded bg-surface px-1">.ics</code> {tr('onboardingWizard.fileAndPasteItsContentsHere')}
+          {tr('onboardingCopy.calendarPasteHelp')}
         </p>
         <textarea
           id="ics-paste" value={ics} onChange={(e) => setIcs(e.target.value)}
@@ -432,7 +564,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
       </div>
 
       <div className="flex items-center gap-3 text-xs text-muted">
-        <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+        <span className="h-px flex-1 bg-border" /> {tr('onboardingCopy.or')} <span className="h-px flex-1 bg-border" />
       </div>
 
       <button type="button" onClick={() => run('demo')} disabled={loading !== null}
@@ -446,6 +578,8 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
 function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
   const tr = useTranslations();
+  const adultCount = Math.max(0, draft.adults);
+  const childCount = Math.max(0, draft.children);
   const setChildren = (n: number) => {
     const childAges = Array.from({ length: n }, (_, i) => draft.childAges[i] ?? 0);
     update({ children: n, childAges });
@@ -455,18 +589,19 @@ function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Stepper label={tr('onboardingWizard.adults')} value={draft.adults} onChange={(n) => update({ adults: n })} min={1} />
         <Stepper label={tr('onboardingWizard.kids')} value={draft.children} onChange={setChildren} />
       </div>
-      <p className="-mt-2 text-center text-xs text-muted">{householdSummary(draft.adults, draft.children)}</p>
+      <p className="-mt-2 text-center text-xs text-muted">{tr(adultCount === 1 ? 'onboardingCopy.adultCountOne' : 'onboardingCopy.adultCountOther', { count: adultCount })}
+        {childCount > 0 && <> · {tr(childCount === 1 ? 'onboardingCopy.childCountOne' : 'onboardingCopy.childCountOther', { count: childCount })}</>}</p>
 
       {draft.children > 0 && (
         <div>
-          <span className="mb-2 block text-sm font-medium">{tr('onboardingWizard.kidsAges')} <span className="font-normal text-muted">(optional)</span></span>
+          <span className="mb-2 block text-sm font-medium">{tr('onboardingWizard.kidsAges')} <span className="font-normal text-muted">{tr('conciergeCalls.optional')}</span></span>
           <div className="flex flex-wrap gap-2">
             {Array.from({ length: draft.children }, (_, i) => (
-              <input key={i} inputMode="numeric" placeholder="Age" aria-label={`Child ${i + 1} age`}
+              <input key={i} inputMode="numeric" placeholder={tr('onboardingCopy.age')} aria-label={tr('onboardingCopy.childAge', { number: i + 1 })}
                 value={draft.childAges[i] ? String(draft.childAges[i]) : ''}
                 onChange={(e) => {
                   const n = Math.min(21, Math.max(0, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0));
@@ -479,8 +614,8 @@ function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
       )}
 
       <div>
-        <span className="mb-2 block text-sm font-medium">{tr('onboardingWizard.whatDoYouWantHelpWith')} <span className="font-normal text-muted">{tr('onboardingWizard.pickAny')}</span></span>
-        <div className="grid grid-cols-2 gap-2">
+        <span className="mb-2 block text-sm font-medium">{tr('onboardingCopy.whatDoYouWantHelpWith')} <span className="font-normal text-muted">{tr('onboardingWizard.pickAny')}</span></span>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {FAMILY_GOALS.map((g) => {
             const on = draft.goals.includes(g.value);
             return (
@@ -488,7 +623,7 @@ function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
                 className={cn('flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition',
                   on ? 'border-brand bg-brand/10 text-fg' : 'border-border bg-bg/40 text-muted hover:border-brand/40')}>
                 <span className="text-base">{g.icon}</span>
-                <span className="flex-1 truncate font-medium">{g.label}</span>
+                <span className="min-w-0 flex-1 font-medium">{tr(GOAL_COPY[g.value])}</span>
                 {on && <Check className="h-4 w-4 text-brand-text" />}
               </button>
             );
@@ -497,10 +632,10 @@ function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-medium">{tr('onboardingWizard.howDidYouHearAboutUs')} <span className="font-normal text-muted">(optional)</span></span>
+        <span className="mb-1 block text-sm font-medium">{tr('onboardingCopy.howDidYouHearAboutUs')} <span className="font-normal text-muted">{tr('conciergeCalls.optional')}</span></span>
         <select value={draft.referralSource} onChange={(e) => update({ referralSource: e.target.value })} className={inputCls}>
           <option value="">{tr('onboardingWizard.selectOne')}</option>
-          {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{tr(REFERRAL_COPY[r.value])}</option>)}
         </select>
       </label>
     </div>
@@ -539,7 +674,7 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{draftMemberLabel(m)}</p>
-                <p className="text-xs text-muted">{m.kind === 'invite' ? 'Invite' : ROLE_LABELS[m.role]}{m.kind === 'invite' ? ` · ${ROLE_LABELS[m.role]}` : ''}</p>
+                <p className="text-xs text-muted">{m.kind === 'invite' ? tr('onboardingCopy.invitation') : tr(ROLE_COPY[m.role])}{m.kind === 'invite' ? ` · ${tr(ROLE_COPY[m.role])}` : ''}</p>
               </div>
               <button type="button" aria-label={tr('onboardingWizard.remove')} onClick={() => update({ members: removeMember(draft.members, m.id) })}
                 className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-danger">
@@ -566,9 +701,9 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } }} />
             <div className="flex gap-2">
               <select value={role} onChange={(e) => setRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
-                {LOCAL_MEMBER_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {LOCAL_MEMBER_ROLES.map((r) => <option key={r} value={r}>{tr(ROLE_COPY[r])}</option>)}
               </select>
-              <Button type="button" variant="secondary" onClick={addPerson} disabled={!name.trim()}><Plus className="h-4 w-4" /> Add</Button>
+              <Button type="button" variant="secondary" onClick={addPerson} disabled={!name.trim()}><Plus className="h-4 w-4" /> {tr('onboardingCopy.add')}</Button>
             </div>
           </div>
         ) : (
@@ -577,11 +712,11 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInvite(); } }} />
             <div className="flex gap-2">
               <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
-                {INVITE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {INVITE_ROLES.map((r) => <option key={r} value={r}>{tr(ROLE_COPY[r])}</option>)}
               </select>
               <Button type="button" variant="secondary" onClick={addInvite} disabled={!isLikelyEmail(email.trim())}><Plus className="h-4 w-4" /> {tr('onboardingWizard.invite')}</Button>
             </div>
-            <p className="text-xs text-muted">{tr('onboardingWizard.theyllGetAnEmailWithA')} {draft.familyName || 'your family'}.</p>
+            <p className="text-xs text-muted">{tr('onboardingCopy.inviteEmailNotice', { family: draft.familyName || tr('onboardingCopy.yourFamily') })}</p>
           </div>
         )}
       </div>
@@ -602,7 +737,7 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
           <div className="relative">
             <input value={draft.pin} onChange={(e) => update({ pin: normalizePin(e.target.value) })} inputMode="numeric" type={show ? 'text' : 'password'} placeholder="••••"
               className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
-            <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide PIN' : 'Show PIN'} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+            <button type="button" onClick={() => setShow((v) => !v)} aria-label={tr(show ? 'onboardingCopy.hidePin' : 'onboardingCopy.showPin')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
               {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
@@ -619,7 +754,7 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
         <div className="rounded-xl border border-border bg-bg/50 p-3">
           <p className="mb-1.5 text-xs font-semibold text-muted">{tr('onboardingWizard.whyAPin')}</p>
           <ul className="space-y-1 text-xs text-muted">
-            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> {tr('onboardingWizard.keeps')} {firstName}{tr('onboardingWizard.sProfilePrivateOnSharedDevices')}</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> {firstName ? tr('onboardingCopy.pinPrivacy', { name: firstName }) : tr('onboardingCopy.pinPrivacyUnnamed')}</li>
             <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> {tr('onboardingWizard.storedSecurelyAppLockStaysOff')}</li>
             <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> {tr('onboardingWizard.totallyOptionalYouCanAddOne')}</li>
           </ul>
@@ -630,8 +765,10 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 }
 
 // ─── Step 6: Done ─────────────────────────────────────────────────────────────
-function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void }) {
+function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void; onReview?: () => void }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const briefHeadline = brief ? formatFirstBrief(brief, { locale: locale.code, t: tr }).headline : '';
   const hasBrief = !!brief && (brief.todayCount > 0 || brief.dinnerIdeas.length > 0 || brief.timeSavedMinutes > 0 || brief.conflicts.length > 0);
   const memberCount = draft.members.length;
   const goalCount = draft.goals.length;
@@ -639,36 +776,36 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
   // them a username + PIN login (the feature lives at /dashboard/family-access).
   const kids = kidsNeedingLogin(draft.members);
   const kidNames = kids.map((k) => k.name.trim().split(' ')[0]).filter(Boolean);
-  const kidLabel = kidNames.length === 0 ? 'the kids'
+  const kidLabel = kidNames.length === 0 ? tr('onboardingCopy.kids')
     : kidNames.length === 1 ? kidNames[0]
-    : kidNames.length === 2 ? `${kidNames[0]} & ${kidNames[1]}`
-    : 'the kids';
+    : kidNames.length === 2 ? tr('onboardingCopy.twoNames', { first: kidNames[0], second: kidNames[1] })
+    : tr('onboardingCopy.kids');
   return (
     <div className="text-center">
       <div className="relative mx-auto h-24 w-24">
         <span className="grid h-24 w-24 place-items-center rounded-full text-3xl font-bold text-white" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
-          {firstName.slice(0, 1).toUpperCase()}
+          {firstName.slice(0, 1).toUpperCase() || '?'}
         </span>
         <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-white ring-4 ring-surface">
           <Check className="h-4 w-4" />
         </span>
       </div>
-      <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">{tr('onboardingWizard.youreAllSet')} {firstName}! <PartyPopper className="h-6 w-6 text-brand-text" /></h1>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{draft.familyName || 'Your family'} {tr('onboardingWizard.isReadyWelcomeToBubaly')}</p>
+      <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">{firstName ? tr('onboardingCopy.allSet', { name: firstName }) : tr('onboardingCopy.allSetUnnamed')} <PartyPopper className="h-6 w-6 text-brand-text" /></h1>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{tr('onboardingCopy.familyReady', { family: draft.familyName || tr('onboardingCopy.yourFamily') })}</p>
 
       {hasBrief && brief && (
         <div className="mt-6 space-y-3 text-left">
           <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {brief.headline}</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {briefHeadline}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {brief.timeSavedMinutes > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand-text"><Clock className="h-3 w-3" /> {tr('onboardingWizard.nMinPlanningEstimated', { minutes: brief.timeSavedMinutes })}</span>
               )}
               {brief.todayCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand-text" /> {brief.todayCount} today</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand-text" /> {tr('onboardingCopy.todayCount', { count: brief.todayCount })}</span>
               )}
               {brief.conflicts.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600"><AlertTriangle className="h-3 w-3" /> {brief.conflicts.length} clash{brief.conflicts.length === 1 ? '' : 'es'}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600"><AlertTriangle className="h-3 w-3" /> {tr(brief.conflicts.length === 1 ? 'onboardingCopy.clashCountOne' : 'onboardingCopy.clashCountOther', { count: brief.conflicts.length })}</span>
               )}
             </div>
           </div>
@@ -680,7 +817,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
                 {brief.dinnerIdeas.map((d) => (
                   <li key={d.title} className="flex items-baseline justify-between gap-3">
                     <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
-                    <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
+                    <span className="shrink-0 text-xs text-muted">{tr('onboardingCopy.prepMinutes', { minutes: d.prepMinutes })}</span>
                   </li>
                 ))}
               </ul>
@@ -691,9 +828,13 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
 
       <div className="mt-6 space-y-3 text-left">
         {[
-          { icon: Home, title: draft.familyName || 'Your family', body: `Your shared space is live${goalCount ? ` — set up for ${goalCount} focus area${goalCount === 1 ? '' : 's'}` : ''}.` },
-          { icon: Users, title: memberCount ? `${memberCount} ${memberCount === 1 ? 'person' : 'people'} added` : 'Invite your family', body: memberCount ? 'They’re in your space (invites are on their way).' : 'Add family members anytime from Settings.' },
-          { icon: Sparkles, title: 'Let’s begin', body: 'Your dashboard is personalized and ready to explore.' },
+          { icon: Home, title: draft.familyName || tr('onboardingCopy.yourFamily'), body: goalCount
+            ? tr(goalCount === 1 ? 'onboardingCopy.sharedSpaceFocusOne' : 'onboardingCopy.sharedSpaceFocusOther', { count: goalCount })
+            : tr('onboardingCopy.sharedSpaceReady') },
+          { icon: Users, title: memberCount
+            ? tr(memberCount === 1 ? 'onboardingCopy.membersAddedOne' : 'onboardingCopy.membersAddedOther', { count: memberCount })
+            : tr('onboardingCopy.inviteYourFamily'), body: memberCount ? tr('onboardingCopy.membersReady') : tr('onboardingCopy.addMembersLater') },
+          { icon: Sparkles, title: tr('onboardingCopy.letsBegin'), body: tr('onboardingCopy.dashboardReady') },
         ].map(({ icon: Icon, title, body }) => (
           <div key={title} className="flex items-start gap-3 rounded-xl border border-border bg-bg/40 p-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><Icon className="h-4 w-4" /></div>
@@ -708,7 +849,8 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
         <DoOneThingCard thing={pickFirstThing({ eventsToday: brief?.todayCount ?? 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 })} />
       </div>
 
-      <Button className="mt-3 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
+      {onReview && <Button className="mt-3 w-full" onClick={onReview}>{tr('onboardingWizard.reviewSelectedPlan')} <ArrowRight className="ml-1 h-4 w-4" /></Button>}
+      <Button className="mt-3 w-full" variant={onReview ? 'secondary' : 'primary'} onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
 
       {kids.length > 0 && (
         <Link
@@ -716,7 +858,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
           className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm font-semibold text-brand-text transition hover:bg-brand/15"
         >
           <KeyRound className="h-4 w-4 shrink-0" />
-          {tr('onboardingWizard.give')} {kidLabel} {tr('onboardingWizard.aLoginUsernameAmpPinNo')}
+          {tr('onboardingCopy.kidLogin', { names: kidLabel })}
         </Link>
       )}
 

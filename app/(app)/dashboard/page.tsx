@@ -1,3 +1,4 @@
+import { getTranslations } from '@/lib/i18n/server';
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -6,7 +7,10 @@ import { FamilyDashboard } from '@/components/dashboard/family-dashboard';
 import { PersonalDashboard } from '@/components/dashboard/personal-dashboard';
 import { AiHomeDashboard } from '@/components/dashboard/ai-home-dashboard';
 
-export const metadata: Metadata = { title: 'Home' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboard.home') };
+}
 
 export default async function DashboardPage({
   searchParams,

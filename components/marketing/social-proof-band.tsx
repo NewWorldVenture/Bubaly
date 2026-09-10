@@ -7,6 +7,8 @@
 // no invented names, no "coming soon". The "Verified outcome" badge is gated
 // on a case study's verified_at, which only an admin can set.
 import { Gift, Quote, ShieldCheck, Star } from 'lucide-react';
+import Link from 'next/link';
+import { caseStudyPath, isCaseStudySlug } from '@/lib/marketing/case-study';
 import { getTranslations } from '@/lib/i18n/server';
 import { BandHeader, Container } from '@/components/marketing/visual-mocks';
 import { getPublishedCaseStudies, getPublishedTestimonials } from '@/lib/marketing/reputation-server';
@@ -69,7 +71,9 @@ export async function SocialProofBand() {
             {caseStudies.map((study) => (
               <li key={study.id} className="showcase-card flex flex-col p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <h4 className="text-base font-semibold">{study.title}</h4>
+                  <h4 className="text-base font-semibold">{isCaseStudySlug(study.slug)
+                    ? <Link href={caseStudyPath(study.slug)} className="underline decoration-white/30 underline-offset-4 hover:decoration-white focus-ring">{study.title}</Link>
+                    : study.title}</h4>
                   {study.verifiedAt && (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-white/85">
                       <ShieldCheck className="h-3 w-3 text-emerald-400" aria-hidden />

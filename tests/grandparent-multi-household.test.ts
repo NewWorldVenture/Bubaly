@@ -47,6 +47,7 @@ const FAMILIES: Record<string, { name: string; members: Rows; photos: Rows; mile
 };
 
 let failingFamilies: Set<string>;
+let failingReads: Map<string, 'query' | 'transport'>;
 
 function fakeClient() {
   return {
@@ -58,7 +59,14 @@ function fakeClient() {
         eq: (column: string, value: string) => { if (column === 'family_id') familyId = value; return query; },
         order: () => query,
         limit: () => query,
-        then: (resolve: (value: unknown) => unknown) => {
+        then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+          const failure = failingReads.get(`${familyId}:${table}`);
+          if (failure === 'transport') {
+            return Promise.reject(new Error('connection timed out')).then(resolve, reject);
+          }
+          if (failure === 'query') {
+            return Promise.resolve({ data: null, error: { code: '42501', message: 'permission denied' } }).then(resolve);
+          }
           if (table === 'family_members' && failingFamilies.has(familyId)) {
             return Promise.resolve({ data: null, error: { code: '42501', message: 'permission denied' } }).then(resolve);
           }
@@ -99,6 +107,7 @@ const render = async () => renderToStaticMarkup(await GrandparentPortalPage());
 
 beforeEach(() => {
   failingFamilies = new Set();
+  failingReads = new Map();
   mocks.createServer.mockResolvedValue(fakeClient());
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -178,6 +187,57 @@ describe('a grandparent in two households', () => {
     const notices = html.split('Could not load your family portal').length - 1;
     expect(notices).toBe(2);
     expect(html).not.toContain('Ada Rivera');
+  });
+
+  describe.each(['query', 'transport'] as const)('%s failures in a household source', (mode) => {
+    it.each([
+      ['family_members', 'member roster'],
+      ['family_photos', 'photos'],
+      ['family_milestones', 'milestones'],
+      ['family_announcements', 'announcements'],
+      ['family_dates', 'dates'],
+    ])('fails only the affected household when %s is unavailable', async (table, source) => {
+      failingReads.set(`fam-rivera:${table}`, mode);
+      mocks.requireUserContext.mockResolvedValue(context(['fam-rivera', 'fam-chen']));
+
+      const html = await render();
+
+      expect(html.split('Could not load your family portal').length - 1).toBe(1);
+      expect(html).toContain('Refresh and try again.');
+      expect(html).not.toContain('Ada Rivera');
+      expect(html).not.toContain('Bo lost a tooth');
+      expect(html).not.toContain('2 family members');
+      expect(html).toContain('Cy Chen');
+      expect(console.error).toHaveBeenCalledWith(
+        `[dashboard/grandparent-portal] ${source} read failed`,
+        expect.objectContaining(mode === 'query' ? { code: '42501' } : { message: 'connection timed out' }),
+      );
+
+      // A retry reads the recovered source and restores the full digest.
+      failingReads.clear();
+      const recovered = await render();
+      expect(recovered).not.toContain('Could not load your family portal');
+      expect(recovered).toContain('Ada Rivera');
+      expect(recovered).toContain('Bo lost a tooth');
+      expect(recovered).toContain('Cy Chen');
+    });
+  });
+
+  it('logs every failed source while rendering one error for that household', async () => {
+    failingReads.set('fam-rivera:family_photos', 'query');
+    failingReads.set('fam-rivera:family_dates', 'transport');
+    mocks.requireUserContext.mockResolvedValue(context(['fam-rivera', 'fam-chen']));
+
+    const html = await render();
+
+    expect(html.split('Could not load your family portal').length - 1).toBe(1);
+    expect(html).toContain('Cy Chen');
+    expect(console.error).toHaveBeenCalledWith(
+      '[dashboard/grandparent-portal] photos read failed', expect.objectContaining({ code: '42501' }),
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      '[dashboard/grandparent-portal] dates read failed', expect.objectContaining({ message: 'connection timed out' }),
+    );
   });
 });
 

@@ -16,8 +16,8 @@ describe('ttvSeconds', () => {
   it('is null for an unfinished run', () => {
     expect(ttvSeconds(row({}))).toBeNull();
   });
-  it('clamps a negative gap to 0', () => {
-    expect(ttvSeconds(row({ created_at: '2026-07-01T00:01:00Z', completed_at: '2026-07-01T00:00:00Z', status: 'completed' }))).toBe(0);
+  it('rejects a negative gap rather than recording instant completion', () => {
+    expect(ttvSeconds(row({ created_at: '2026-07-01T00:01:00Z', completed_at: '2026-07-01T00:00:00Z', status: 'completed' }))).toBeNull();
   });
 });
 
@@ -77,6 +77,20 @@ describe('analyzeOnboarding', () => {
   it('handles an empty dataset without dividing by zero', () => {
     const z = analyzeOnboarding([]);
     expect(z).toMatchObject({ total: 0, completionRate: 0, valueEngagedRate: 0, medianTtvSec: null, under90Rate: null });
+  });
+
+  it('counts the inclusive 30-minute threshold without rounding late completions into success', () => {
+    const a = analyzeOnboarding([
+      row({ status: 'completed', completed_at: '2026-07-01T00:00:00Z' }),
+      row({ status: 'completed', completed_at: '2026-07-01T00:30:00Z' }),
+      row({ status: 'completed', completed_at: '2026-07-01T00:30:00.001Z' }),
+      row({ status: 'completed', completed_at: '2026-06-30T23:59:59Z' }),
+      row({ status: 'completed', completed_at: 'invalid' }),
+      row({ status: 'completed' }), row({}),
+    ]);
+    expect(a).toMatchObject({ completed: 6, timedCompletions: 3, untimedCompletions: 3, under30MinCount: 2, under30MinRate: 66.7 });
+    expect(analyzeOnboarding([row({ status: 'completed' })]).under30MinRate).toBeNull();
+    expect(analyzeOnboarding([row({ completed_at: '2026-07-01T01:00:00Z' })]).under30MinRate).toBe(0);
   });
 });
 

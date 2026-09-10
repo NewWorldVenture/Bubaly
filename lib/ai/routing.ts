@@ -28,6 +28,8 @@ import {
 } from '@/lib/ai/models';
 import { OpenAIProvider, type AIProvider } from '@/lib/ai/provider';
 import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
 
 export type { AITask } from '@/lib/ai/models';
 export { AI_TASKS, DEFAULT_TASK_MODELS, TASK_REQUIREMENTS } from '@/lib/ai/models';
@@ -97,26 +99,33 @@ export function resolveModelForTask(
 }
 
 type StoredAIProvider = { model?: string | null; openaiKey?: string | null; models?: Partial<Record<AITask, string | null>> };
+type ConfigReadOptions = { db?: SupabaseClient<Database>; failClosed?: boolean; signal?: AbortSignal };
 
 /**
  * Read the stored per-task model map. `getAIConfig` (lib/ai/settings.ts) does not
  * expose `models`, so the row is read directly here; it is the same
  * `app_settings.ai_provider` value the admin form writes.
  */
-async function readStoredConfig(): Promise<StoredAIProvider> {
+async function readStoredConfig(options: ConfigReadOptions = {}): Promise<StoredAIProvider> {
   try {
     const { createServiceClient } = await import('@/lib/supabase/server');
-    const { data, error } = await createServiceClient()
+    let query = (options.db ?? createServiceClient())
       .from('app_settings')
       .select('value')
-      .eq('key', 'ai_provider')
-      .maybeSingle();
+      .eq('key', 'ai_provider');
+    if (options.signal) query = query.abortSignal(options.signal);
+    const { data, error } = await query.maybeSingle();
     if (error) {
+      if (options.failClosed) throw error;
       console.error('[ai-routing] app_settings read failed; using env + defaults', error);
       return {};
     }
     return (data?.value ?? {}) as StoredAIProvider;
   } catch (error) {
+    if (options.failClosed) {
+      console.error('[ai-routing] app_settings read failed', error);
+      throw new Error('AI settings are temporarily unavailable');
+    }
     console.error('[ai-routing] app_settings unavailable; using env + defaults', error);
     return {};
   }
@@ -132,11 +141,11 @@ export async function resolveModelForTaskFromSettings(task: AITask): Promise<Mod
  * The provider every task-aware call site should use. The API key still comes
  * from the single admin setting (or `OPENAI_API_KEY`); only the model varies.
  */
-export async function resolveProviderForTask(task: AITask): Promise<AIProvider> {
+export async function resolveProviderForTask(task: AITask, options: ConfigReadOptions = {}): Promise<AIProvider> {
   // CI and e2e runs script the model (lib/ai/provider-stub.ts). The guard
   // inside `isProviderStubEnabled` is what keeps this out of production.
   if (isProviderStubEnabled()) return scriptedProvider();
-  const stored = await readStoredConfig();
+  const stored = await readStoredConfig(options);
   const { model } = resolveModelForTask(task, { configured: stored.models?.[task] ?? null });
   return new OpenAIProvider(model, stored.openaiKey || process.env.OPENAI_API_KEY || '');
 }

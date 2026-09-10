@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 // `lib/i18n/server.ts` imports `next/headers`. A CLIENT module that reaches it
 // fails `next build` with "You're importing a component that needs next/headers"
@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 // carries no `'use client'` of its own — its dispatcher, `cards/index.tsx`,
 // does — and it is a browser module all the same.
 const ROOT = process.cwd();
-const SOURCE_DIRS = ['app', 'components', 'lib', 'hooks'];
+const SOURCE_DIRS = ['app', 'components', 'lib', 'hooks', 'shared'];
 const SERVER_I18N = resolve(ROOT, 'lib/i18n/server.ts');
 
 function sourceFiles(): string[] {
@@ -104,6 +104,17 @@ for (const [file, { imports }] of sources) {
   }
 }
 
+function sourceEntry(file: string): Entry {
+  const entry = sources.get(file);
+  if (!entry) {
+    throw new Error(
+      `The i18n module graph has no indexed source for ${relative(ROOT, file)}. `
+        + 'Add its directory to SOURCE_DIRS so the server/client audit can inspect it.',
+    );
+  }
+  return entry;
+}
+
 const clientCache = new Map<string, boolean>();
 function isClientModule(file: string, seen = new Set<string>()): boolean {
   const abs = resolve(ROOT, file);
@@ -111,8 +122,9 @@ function isClientModule(file: string, seen = new Set<string>()): boolean {
   if (seen.has(abs)) return false;          // an import cycle proves nothing
   seen.add(abs);
 
-  if (sources.get(abs)?.declaresServer) { clientCache.set(abs, false); return false; }
-  let answer = Boolean(sources.get(abs)?.declaresClient);
+  const entry = sourceEntry(abs);
+  if (entry.declaresServer) { clientCache.set(abs, false); return false; }
+  let answer = entry.declaresClient;
   if (!answer) {
     for (const importer of importers.get(abs) ?? []) {
       if (isClientModule(importer, seen)) { answer = true; break; }
@@ -189,22 +201,22 @@ describe('lib/i18n/server never reaches the browser', () => {
  * entry and STOPS at the first `'use client'`. A module the server can still
  * reach when it stops may not call a hook.
  */
-const ROUTE_ENTRY = /(^|\/)(page|layout|template|default|not-found|loading|route)\.tsx?$/;
+const ROUTE_ENTRY = /^(page|layout|template|default|not-found|loading|route)\.tsx?$/;
 
 function serverRenderedModules(): Set<string> {
   const roots = files.filter(
     (file) =>
       file.startsWith(join(ROOT, 'app'))
-      && ROUTE_ENTRY.test(file)
-      && !sources.get(file)!.declaresClient,
+      && ROUTE_ENTRY.test(basename(file))
+      && !sourceEntry(file).declaresClient,
   );
   const reached = new Set(roots);
   const queue = [...roots];
   while (queue.length) {
-    for (const target of sources.get(queue.shift()!)!.imports) {
+    for (const target of sourceEntry(queue.shift()!).imports) {
       // `'use client'` is where the server stops; everything under it is the
       // browser's problem and may hold as many hooks as it likes.
-      if (reached.has(target) || sources.get(target)?.declaresClient) continue;
+      if (reached.has(target) || sourceEntry(target).declaresClient) continue;
       reached.add(target);
       queue.push(target);
     }
@@ -213,9 +225,33 @@ function serverRenderedModules(): Set<string> {
 }
 
 describe('useTranslations never runs on the server', () => {
+  it('indexes every resolved local import instead of silently excluding another source root', () => {
+    const missing = [...sources].flatMap(([file, entry]) => entry.imports
+      .filter((target) => !sources.has(target))
+      .map((target) => `${relative(ROOT, file)} imports ${relative(ROOT, target)}`));
+    expect(missing, 'add these source directories to SOURCE_DIRS so their module boundaries are audited').toEqual([]);
+  });
+
+  it('inspects the shared auth transport through both server and browser import paths', () => {
+    const transport = resolve(ROOT, 'shared/auth/refresh-fetch.ts');
+    expect(sourceEntry(resolve(ROOT, 'lib/supabase/server.ts')).imports).toContain(transport);
+    expect(sourceEntry(resolve(ROOT, 'lib/supabase/client.ts')).imports).toContain(transport);
+    expect(sourceEntry(transport).declaresClient).toBe(false);
+    expect(isClientModule(transport)).toBe(true);
+    expect(serverRenderedModules().has(transport)).toBe(true);
+  });
+
+  it('explains an unindexed graph node instead of skipping its server/client audit', () => {
+    const missing = resolve(ROOT, 'unindexed-fixture', 'module.ts');
+    expect(() => sourceEntry(missing)).toThrow(
+      `The i18n module graph has no indexed source for ${relative(ROOT, missing)}. `
+        + 'Add its directory to SOURCE_DIRS so the server/client audit can inspect it.',
+    );
+  });
+
   it('is called only from modules the server render cannot reach', () => {
     const offenders = [...serverRenderedModules()]
-      .filter((file) => sources.get(file)!.callsHook)
+      .filter((file) => sourceEntry(file).callsHook)
       .map((file) => relative(ROOT, file))
       .sort();
 

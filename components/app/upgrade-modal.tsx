@@ -14,6 +14,7 @@ import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 
 /**
  * Stripe checkout — same endpoint the billing module uses.
@@ -109,6 +110,7 @@ export function UpgradeModal({
       description={t('upgradeModal.availableOnPlan', { plan: plan.name })}
     >
       <div className="space-y-5">
+        {open && <FamilyDeliveredValue />}
         <div className="flex items-start gap-3 rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-4">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15">
             <Sparkles className="h-5 w-5 text-brand-text" />
@@ -167,6 +169,7 @@ export function UpgradeModal({
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('upgradeModal.save17')}</span>
               </div>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-0.5 text-xs font-medium text-fg/80">{t('upgradeModal.billedAnnually', { amount: dollars(tier.annualCents) })}</p>
               <p className="mt-0.5 text-xs text-muted">{annualPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.annualPlan ? t('upgradeModal.redirecting') : t('upgradeModal.chooseAnnual')}

@@ -1,0 +1,28 @@
+{
+  "currency": "usd",
+  "annualSavingsPercent": 17,
+  "basic": { "monthlyCents": 1204, "annualCents": 11988 },
+  "plus": { "monthlyCents": 3011, "annualCents": 29988 },
+  "stripePrices": {
+    "basic_monthly": {
+      "id": "price_1UDvdiBrwQtGmNLkX5z9qCVv",
+      "previousIds": ["price_1TkNo7BrwQtGmNLk9eb1evnm"],
+      "product": "prod_UjrXOMxV7D7ffG"
+    },
+    "basic_annual": {
+      "id": "price_1UDvdiBrwQtGmNLkVBshMLgK",
+      "previousIds": ["price_1TkNoNBrwQtGmNLksqSsGKRW"],
+      "product": "prod_UjrXv7BB5fgQHR"
+    },
+    "plus_monthly": {
+      "id": "price_1UDvdjBrwQtGmNLkZmtkzTMJ",
+      "previousIds": ["price_1TkNokBrwQtGmNLkEckGL5J2"],
+      "product": "prod_UjrXNc7bSBzq8c"
+    },
+    "plus_annual": {
+      "id": "price_1UDvdjBrwQtGmNLkpBdccLge",
+      "previousIds": ["price_1TkNoxBrwQtGmNLkHFzLFCsO"],
+      "product": "prod_UjrYK34Dx9Htrk"
+    }
+  }
+}

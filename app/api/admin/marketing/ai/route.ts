@@ -7,6 +7,8 @@ import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/custo
 import { fmtMoney } from '@/lib/utils/format';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import { annualSavingsPct } from '@/lib/billing/plans';
 
 export const runtime = 'nodejs';
 
@@ -62,7 +64,8 @@ export async function POST(req: NextRequest) {
 
     const context = [
       `Product: Bubaly — an AI family operating system (calendar, chores, meals, school, health, documents, AI assistant).`,
-      `Pricing: one Family plan, $9.99/mo or $95.99/yr.`,
+      `Pricing (USD): Family Basic ${fmtMoney(BASIC_MONTHLY_CENTS)}/month or ${fmtMoney(BASIC_ANNUAL_CENTS)}/year (${fmtMoney(BASIC_ANNUAL_CENTS / 12)}/month equivalent, billed annually; saves about ${annualSavingsPct(1)}% compared with monthly billing).`,
+      `Family+ ${fmtMoney(PLUS_MONTHLY_CENTS)}/month or ${fmtMoney(PLUS_ANNUAL_CENTS)}/year (${fmtMoney(PLUS_ANNUAL_CENTS / 12)}/month equivalent, billed annually; saves about ${annualSavingsPct(2)}% compared with monthly billing).`,
       `Customers: ${m.total} total, ${m.paying} paying, ${m.newThisMonth} new this month, ${m.lapsed} lapsed/churned.`,
       `Lifecycle: new ${m.byLifecycle.new}, active ${m.byLifecycle.active}, lapsed ${m.byLifecycle.lapsed}, churned ${m.byLifecycle.churned}, free ${m.byLifecycle.free}.`,
       `Est. MRR ${fmtMoney(m.estMrrCents)}, est. lifetime value ${fmtMoney(m.estLtvCents)}.`,

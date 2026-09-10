@@ -15,6 +15,7 @@ import { SyncApiError } from '@/lib/sync/adapter';
 import {
   isGoogleSyncConfigured, googleAuthUrl, exchangeCode, refreshAccessToken, revokeToken,
   getGoogleUserEmail, listCalendars as gListCalendars, pullEvents as gPullEvents,
+  pullCalendarWindow as gPullCalendarWindow,
   insertEvent as gInsertEvent, patchEvent as gPatchEvent, deleteEvent as gDeleteEvent,
   listTasks as gListTasks, insertTask as gInsertTask, patchTask as gPatchTask, deleteTask as gDeleteTask,
   googleEventToRow, rowToGoogleEvent, eventContentHash as gEventHash,
@@ -59,6 +60,20 @@ export const googleAdapter: SyncProviderAdapter = {
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
     return { events, nextCursor: pull.nextSyncToken, expired: pull.gone };
+  },
+
+  async pullCalendarWindow(accessToken, calendarExternalId, from, to) {
+    const events = await wrap(gPullCalendarWindow(accessToken, calendarExternalId, from, to));
+    return events.map((event) => {
+      // Cancelled instances may contain only their identity. Keep the tombstone
+      // so an imported occurrence can be removed without inventing a date.
+      if (event.status === 'cancelled') return { external_id: event.id, uid: null, title: '', description: null,
+        location: null, starts_at: '', ends_at: null, all_day: false, recurrence_rule: null,
+        status: 'cancelled', etag: event.etag ?? null, cancelled: true };
+      const row = googleEventToRow(event);
+      if (!row) throw new SyncApiError(502, 'Calendar event timing unavailable');
+      return { ...row, title: event.summary ?? '', updated_at: event.updated ?? null };
+    });
   },
 
   async insertEvent(accessToken, calendarExternalId, body) {

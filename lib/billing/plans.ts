@@ -10,6 +10,11 @@ export type BillingInterval = 'monthly' | 'annual';
 /** The four purchasable plans (also the Stripe price keys in lib/stripe.ts). */
 export type StripePlan = 'basic_monthly' | 'basic_annual' | 'plus_monthly' | 'plus_annual';
 
+/** Only a live provider subscription can be changed or resumed in place. */
+export function canChangeSubscriptionInPlace<T extends { status: string; provider_ref: string | null }>(subscription: T | null | undefined): subscription is T & { provider_ref: string } {
+  return !!subscription?.provider_ref && ['active', 'trialing', 'past_due'].includes(subscription.status);
+}
+
 export const STRIPE_PLAN_KEYS: StripePlan[] = ['basic_monthly', 'basic_annual', 'plus_monthly', 'plus_annual'];
 
 export type PlanMeta = {

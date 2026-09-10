@@ -1,187 +1,50 @@
-// ONE handled-this-week definition.
-//
-// Before S-15 there were three: the Autopilot panel counted runs with
-// `trigger_type = 'plan_accepted'` and the legacy `status = 'executed'`; the
-// Daily Brief counted the length of a list capped at six; time-saved counted
-// three other tables and no runs at all. This suite pins the one definition and
-// the two properties that used to be wrong — a run is counted once, and a
-// failed read is not zero.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { countHandledThisWeek, loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { HANDLED_LEGACY_RUN_STATUSES, HANDLED_RUN_STATES, isHandledRun } from '@/lib/metric/time-saved';
-import { legacyStatusFor, type RunState } from '@/lib/ai/runs/states';
 import { buildBrief, type BriefInput } from '@/lib/briefing/build';
 
 const FAMILY = 'family-1';
-const OTHER = 'family-2';
 const NOW = new Date('2026-03-15T12:00:00.000Z');
 const inWindow = '2026-03-12T09:00:00.000Z';
-const beforeWindow = '2026-02-01T09:00:00.000Z';
-
 let db: ReturnType<typeof createInMemorySupabase<SupabaseClient<Database>>>;
+beforeEach(() => { db = createInMemorySupabase<SupabaseClient<Database>>(); });
+afterEach(() => vi.restoreAllMocks());
 
-beforeEach(() => {
-  db = createInMemorySupabase<SupabaseClient<Database>>();
-});
-afterEach(() => { vi.restoreAllMocks(); });
-
-/**
- * A run row with BOTH state columns filled in the way a real writer fills them:
- * `legacyStatusFor` is the repo's own translation, so a seeded `failed` run
- * does not accidentally carry `status = 'executed'` and count itself.
- */
-const run = (id: string, state: string, extra: Record<string, unknown> = {}) => ({
-  id, family_id: FAMILY, state, status: legacyStatusFor(state as RunState), trigger_type: 'plan_accepted',
-  created_at: inWindow, ...extra,
-});
-
-describe('countHandledThisWeek', () => {
-  it('counts runs in the handled states under ANY trigger', async () => {
+describe('shared recorded-plan metric', () => {
+  it('keeps client counts and the planning-time model on the same dated subset', async () => {
     db.seed('family_automation_runs', [
-      run('r1', 'completed', { trigger_type: 'plan_accepted' }),
-      run('r2', 'partially_completed', { trigger_type: 'routine' }),
-      run('r3', 'completed', { trigger_type: null }),
-      // Not handled: still going, or ended badly.
-      run('r4', 'executing'),
-      run('r5', 'failed'),
-      run('r6', 'cancelled'),
+      { id: 'done', family_id: FAMILY, state: 'completed', status: 'executed', completed_at: inWindow, created_at: '2026-01-01T12:00:00.000Z' },
+      { id: 'partial', family_id: FAMILY, state: 'partially_completed', status: 'executed', completed_at: inWindow, created_at: inWindow },
+      { id: 'undated', family_id: FAMILY, state: 'awaiting_approval', status: 'executed', completed_at: null, created_at: inWindow },
     ]);
-
-    const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.run).toBe(3);
-    expect(total).toBe(3);
+    db.seed('agent_activity', [{ id: 'same-plan-step', family_id: FAMILY, status: 'done', created_at: inWindow }]);
+    db.seed('autopilot_suggestions', [{ id: 'legacy-auto', family_id: FAMILY, status: 'auto_executed', created_at: inWindow }]);
+    db.seed('family_reminders', [{ id: 'human-completed', family_id: FAMILY, status: 'completed', updated_at: inWindow }]);
+    const result = await countHandledThisWeek(db, FAMILY, NOW);
+    expect(result).toMatchObject({ available: true, parts: { run: 1 }, total: 1, undatedCompletedRuns: 1 });
+    expect(Object.keys(result.parts)).toEqual(['run']);
+    expect(await loadTimeSaved(db, FAMILY, NOW)).toMatchObject({ available: true, data: { actions: 1, minutes: 12, undatedCompletedRuns: 1, rows: [{ kind: 'run' }] } });
   });
 
-  it('counts the run a manager approved by hand, whose `state` never moved', async () => {
-    // THE REGRESSION THIS PINS: `executeQueuedRunAction` materialises the plan
-    // and stamps only the legacy `status = 'executed'`, leaving the row at the
-    // `state = 'awaiting_approval'` it was inserted with. The Autopilot panel
-    // lists exactly this row under "Done for you"; a count filtered on `state`
-    // alone read zero directly above it.
-    db.seed('family_automation_runs', [
-      { id: 'approved', family_id: FAMILY, state: 'awaiting_approval', status: 'executed', trigger_type: 'plan_accepted', created_at: inWindow },
-    ]);
-    const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.run).toBe(1);
-    expect(total).toBe(1);
+  it('retains undated coverage when no completed plan can be placed in this week', async () => {
+    db.seed('family_automation_runs', [{ id: 'undated', family_id: FAMILY, state: 'completed', status: 'executed', completed_at: null, created_at: inWindow }]);
+    expect(await loadTimeSaved(db, FAMILY, NOW)).toMatchObject({ available: true, data: { actions: 0, minutes: 0, undatedCompletedRuns: 1, show: true } });
   });
 
-  it('counts a pre-0250 row that only ever had a `status`', async () => {
-    // 0250 added `state` beside `status`; every row written before it keeps the
-    // default 'queued' and says what happened in the old column.
-    db.seed('family_automation_runs', [
-      { id: 'legacy', family_id: FAMILY, state: 'queued', status: 'executed', trigger_type: 'routine', created_at: inWindow },
-      { id: 'legacy-pending', family_id: FAMILY, state: 'queued', status: 'pending', trigger_type: 'routine', created_at: inWindow },
-    ]);
-    const { parts } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.run).toBe(1);
+  it('returns unavailable for a client read failure without claiming an empty week', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(db, 'from').mockImplementation(() => { throw new Error('client unavailable'); });
+    expect(await countHandledThisWeek(db, FAMILY, NOW)).toMatchObject({ available: false, total: null, undatedCompletedRuns: null, parts: { run: null } });
+    expect(await loadTimeSaved(db, FAMILY, NOW)).toEqual({ available: false });
   });
 
-  it('counts a run whose two columns BOTH say handled exactly once', async () => {
-    db.seed('family_automation_runs', [
-      { id: 'both', family_id: FAMILY, state: 'completed', status: 'executed', trigger_type: 'plan_accepted', created_at: inWindow },
-    ]);
-    const { parts } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.run).toBe(1);
-  });
-
-  it('counts each run exactly once', async () => {
-    // The old panel matched on trigger_type AND the legacy status column; a run
-    // that satisfied both definitions could be added twice by a naive union.
-    db.seed('family_automation_runs', [run('r1', 'completed')]);
-    db.seed('agent_activity', []);
-    const { total } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(total).toBe(1);
-  });
-
-  it('ignores runs outside the week and other households', async () => {
-    db.seed('family_automation_runs', [
-      run('r1', 'completed'),
-      run('old', 'completed', { created_at: beforeWindow }),
-      run('theirs', 'completed', { family_id: OTHER }),
-    ]);
-    const { parts } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.run).toBe(1);
-  });
-
-  it('adds the runs to the three existing sources', async () => {
-    db.seed('family_automation_runs', [run('r1', 'completed'), run('r2', 'partially_completed')]);
-    db.seed('autopilot_suggestions', [
-      { id: 'a1', family_id: FAMILY, status: 'auto_executed', created_at: inWindow },
-      { id: 'a2', family_id: FAMILY, status: 'open', created_at: inWindow },
-    ]);
-    db.seed('agent_activity', [{ id: 'g1', family_id: FAMILY, status: 'done', created_at: inWindow }]);
-    db.seed('family_reminders', [
-      { id: 'm1', family_id: FAMILY, status: 'completed', updated_at: inWindow },
-      { id: 'm2', family_id: FAMILY, status: 'completed', updated_at: inWindow },
-    ]);
-
-    const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts).toEqual({ run: 2, autopilot: 1, assistant: 1, reminder: 2 });
-    expect(total).toBe(6);
-  });
-
-  it('is unavailable — not zero — when a source fails to read', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    db.seed('family_automation_runs', [run('r1', 'completed')]);
-    const original = db.from.bind(db);
-    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
-      if (table === 'agent_activity') {
-        return { select: () => ({ eq: () => ({ eq: () => ({ gte: () => Promise.resolve({ count: null, error: { message: 'boom' } }) }) }) }) };
-      }
-      return original(table as never);
-    }) as typeof db.from);
-
-    const { parts, total } = await countHandledThisWeek(db, FAMILY, NOW);
-    expect(parts.assistant).toBeNull();
-    expect(total).toBeNull();
-    expect(parts.run).toBe(1);       // the readable parts are still readable
-    expect(spy).toHaveBeenCalled();
+  it('keeps a true empty subset distinct from unreadable history', async () => {
+    expect(await loadTimeSaved(db, FAMILY, NOW)).toMatchObject({ available: true, data: { actions: 0, minutes: 0, undatedCompletedRuns: 0, show: false } });
   });
 });
-
-describe('loadTimeSaved', () => {
-  it('is the single time-saved definition, and includes runs', async () => {
-    db.seed('family_automation_runs', [run('r1', 'completed')]);           // 12 min
-    db.seed('autopilot_suggestions', [{ id: 'a1', family_id: FAMILY, status: 'auto_executed', created_at: inWindow }]); // 5
-    db.seed('agent_activity', [{ id: 'g1', family_id: FAMILY, status: 'done', created_at: inWindow }]);                 // 4
-    db.seed('family_reminders', [{ id: 'm1', family_id: FAMILY, status: 'completed', updated_at: inWindow }]);          // 2
-
-    const result = await loadTimeSaved(db, FAMILY, NOW);
-    expect(result.available).toBe(true);
-    if (!result.available) return;
-    expect(result.data.actions).toBe(4);
-    expect(result.data.minutes).toBe(23);
-    expect(result.data.rows.map((r) => r.kind)).toEqual(['run', 'autopilot', 'assistant', 'reminder']);
-  });
-
-  it('reports unavailable rather than a zero week when a read fails', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const original = db.from.bind(db);
-    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
-      if (table === 'family_automation_runs') {
-        return { select: () => ({ eq: () => ({ or: () => ({ gte: () => Promise.resolve({ count: null, error: { message: 'boom' } }) }) }) }) };
-      }
-      return original(table as never);
-    }) as typeof db.from);
-
-    const result = await loadTimeSaved(db, FAMILY, NOW);
-    expect(result.available).toBe(false);
-    expect(spy).toHaveBeenCalled();
-  });
-
-  it('is available and empty when the family genuinely had a quiet week', async () => {
-    const result = await loadTimeSaved(db, FAMILY, NOW);
-    expect(result.available).toBe(true);
-    if (!result.available) return;
-    expect(result.data.actions).toBe(0);
-    expect(result.data.show).toBe(false);
-  });
-});
-
 describe('the shared vocabulary', () => {
   it('names exactly the two states that mean Bubaly finished something', () => {
     expect([...HANDLED_RUN_STATES]).toEqual(['completed', 'partially_completed']);
@@ -223,15 +86,15 @@ describe('the brief consumes the same number', () => {
     const brief = buildBrief(input({ completedRuns: sevenRuns, handledThisWeek: 11 }), 'UTC');
     expect(brief.handled).toHaveLength(6);      // the LIST is still capped
     expect(brief.counts.handled).toBe(11);      // the COUNT is the shared one
-    expect(brief.counts.handledSource).toBe('ledger');
+    expect(brief.counts.handledSource).toBe('completed_plans');
   });
 
-  it('falls back to what it can see itself when the ledger read failed', () => {
-    // Under-reporting is acceptable; inventing a number is not, and neither is
-    // silently passing a zero off as the ledger's answer.
+  it('keeps a failed completion metric unavailable despite listed activity', () => {
+    // A capped history list contains a different subset and cannot answer a
+    // failed completed-plan count.
     const brief = buildBrief(input({ completedRuns: sevenRuns, handledThisWeek: null }), 'UTC');
-    expect(brief.counts.handled).toBe(6);
-    expect(brief.counts.handledSource).toBe('listed');
+    expect(brief.counts.handled).toBeNull();
+    expect(brief.counts.handledSource).toBe('unavailable');
   });
 
   it('marks the source as listed when no ledger count was supplied at all', () => {

@@ -1,9 +1,9 @@
 // lib/onboarding/flow.ts — pure, unit-tested logic for the world-class onboarding
 // wizard. Owns the step model (order, metadata, navigation, progress), the
 // per-step "can advance" gate, the family-name suggestion, and the mapping from
-// the in-memory draft to the single atomic finalize payload. DB-free and
+// the in-memory draft to the replayable finalize payload. DB-free and
 // deterministic so the whole flow is tested without React or Supabase; the wizard
-// is a thin renderer over this, and the server action does the one write.
+// is a thin renderer over this, and server services persist the approved setup.
 
 import type { MemberRole } from '@/lib/constants/roles';
 import type { DraftMember } from './draft';
@@ -103,6 +103,7 @@ export interface OnboardingDraft {
   importedEvents: BriefEvent[];
   /** How the events were brought in: 'ics' | 'paste' | 'url' | 'demo' | '' (skipped). */
   importSource: string;
+  calendarReceipt?: string;
 }
 
 /** A blank draft (the wizard seeds `name`/`color` on top of this). */
@@ -158,7 +159,7 @@ export function serializeDraftState(step: OnboardingStep, draft: OnboardingDraft
   // Never stash the PIN in web storage; and drop imported events (they can be
   // large — a full calendar — and are trivially re-imported, so persisting them
   // would risk the sessionStorage quota for no real benefit).
-  const safeDraft: OnboardingDraft = { ...draft, pin: '', confirmPin: '', importedEvents: [], importSource: '' };
+  const safeDraft: OnboardingDraft = { ...draft, pin: '', confirmPin: '', importedEvents: [], importSource: '', calendarReceipt: undefined };
   return JSON.stringify({ v: 1, step, familyNameTouched, draft: safeDraft });
 }
 
@@ -181,7 +182,7 @@ export function parseDraftState(raw: string | null | undefined): PersistedDraftS
       members: Array.isArray(d.members) ? d.members : [],
       childAges: Array.isArray(d.childAges) ? d.childAges : [],
       goals: Array.isArray(d.goals) ? d.goals : [],
-      importedEvents: [], importSource: '',
+      importedEvents: [], importSource: '', calendarReceipt: undefined,
       pin: '', confirmPin: '',
     };
     return { step, draft, familyNameTouched: !!o.familyNameTouched };
@@ -205,7 +206,7 @@ export interface FinalizePayload {
   >;
   appearance: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   /** Calendar imported in the value step — persisted to calendar_events at finalize. */
-  calendarImport: { source: string; events: BriefEvent[] };
+  calendarImport: { source: string; events: BriefEvent[]; receipt?: string };
 }
 
 /**
@@ -249,6 +250,7 @@ export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
       source: draft.importSource || '',
       // Cap what we ship to finalize so a giant paste can't bloat the request.
       events: (draft.importedEvents ?? []).slice(0, 1000),
+      ...(draft.calendarReceipt ? { receipt: draft.calendarReceipt } : {}),
     },
   };
 }

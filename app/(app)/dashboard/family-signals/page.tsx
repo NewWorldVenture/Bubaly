@@ -5,8 +5,13 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { FamilySignalsModule, type SignalView } from '@/components/modules/family-signals-module';
 import { ErrorState } from '@/components/ui/states';
+import { SignalPrecisionCard } from '@/components/metrics/signal-precision-card';
+import { loadSignalPrecision } from '@/lib/metric/signal-precision-server';
 
-export const metadata: Metadata = { title: 'Family Intelligence' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('familySignals.familyIntelligence') };
+}
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -45,10 +50,12 @@ export default async function FamilySignalsPage() {
 
   const active = rows.filter((r) => r.status === 'active').map(toView);
   const hidden = rows.filter((r) => r.status !== 'active').map(toView);
+  const precision = await loadSignalPrecision(supabase, { familyId: ctx.active.familyId });
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <FamilySignalsModule active={active} hidden={hidden} />
+      <SignalPrecisionCard result={precision} retryHref="/dashboard/family-signals" />
     </div>
   );
 }

@@ -1,8 +1,13 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { AppState } from 'react-native';
+import { supabase, signOutThisDevice } from './supabase';
 import { resolveActiveFamily, type ActiveFamily } from './family';
-import { friendlyAuthError, isRetryableAuthError } from './auth-core';
+import { friendlyAuthError } from './auth-core';
+import { connectAuthSession } from './auth-session';
+import { FamilySession } from './family-session';
+import type { FreshFamily } from './voice-session';
+import { deviceLocale, mobileTranslate } from './mobile-i18n';
 
 export type AuthState = {
   /** Session bootstrap finished (so the splash can hide + routes can gate). */
@@ -23,82 +28,75 @@ export type AuthState = {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshFamily: () => Promise<void>;
+  freshFamily: () => Promise<FreshFamily>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
+type FamilyState = { owner: string | null; family: ActiveFamily | null; loading: boolean; error: string | null };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [family, setFamily] = useState<ActiveFamily | null>(null);
-  const [familyLoading, setFamilyLoading] = useState(false);
-  const [familyError, setFamilyError] = useState<string | null>(null);
+  const [familyState, setFamilyState] = useState<FamilyState>({ owner: null, family: null, loading: false, error: null });
 
   useEffect(() => {
-    let alive = true;
-    supabase.auth.getSession()
-      .then(({ data, error }) => {
-        if (!alive) return;
-        setSession(data.session);
-        // No session AND a transient error means one is stored but could not be
-        // refreshed right now — getSession() answers `null, null` when the
-        // device is genuinely signed out. Hold in `restoring` so a plane-mode
-        // launch doesn't hand a signed-in user the sign-in screen.
-        setRestoring(!data.session && isRetryableAuthError(error));
-      })
-      .catch((error: unknown) => {
-        if (alive) setRestoring(isRetryableAuthError(error));
-      })
-      .finally(() => { if (alive) setReady(true); });
-    // The ticker recovers the session on its own once the network is back; this
-    // is where that arrives, and it is also the only thing that ends `restoring`.
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      if (next) setRestoring(false);
+    const connection = connectAuthSession<Session>({
+      read: async () => { const { data, error } = await supabase.auth.getSession(); return { session: data.session, error }; },
+      subscribe: (listener) => {
+        const { data } = supabase.auth.onAuthStateChange(listener);
+        return () => data.subscription.unsubscribe();
+      },
+      session: setSession, restoring: setRestoring, ready: setReady,
     });
-    return () => { alive = false; listener.subscription.unsubscribe(); };
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void connection.retry();
+    });
+    return () => { foreground.remove(); connection.dispose(); };
   }, []);
 
   const userId = session?.user.id ?? null;
-
-  const loadFamily = useCallback(async (id: string) => {
-    setFamilyLoading(true);
-    try {
-      setFamily(await resolveActiveFamily(supabase, id));
-      setFamilyError(null);
-    } catch (e) {
-      setFamily(null);
-      setFamilyError(e instanceof Error ? e.message : 'Could not load your family.');
-    } finally {
-      setFamilyLoading(false);
-    }
+  const userRef = useRef(userId); userRef.current = userId;
+  const family = familyState.owner === userId ? familyState.family : null;
+  const familyLoading = !!userId && (familyState.owner !== userId || familyState.loading);
+  const familyError = familyState.owner === userId ? familyState.error : null;
+  const updateFamily = useCallback((patch: Partial<Omit<FamilyState, 'owner'>>) => {
+    const owner = userRef.current;
+    setFamilyState((previous) => userRef.current !== owner ? previous : {
+      ...(previous.owner === owner ? previous : { owner, family: null, loading: false, error: null }), ...patch,
+    });
   }, []);
+  const loader = useRef<FamilySession | null>(null);
+  if (!loader.current) loader.current = new FamilySession({ user: () => userRef.current,
+    read: (id) => resolveActiveFamily(supabase, id), loading: (loading) => updateFamily({ loading }),
+    result: (next, failed) => updateFamily({ family: next, error: failed ? mobileTranslate(deviceLocale(), 'mobileAssistant.familyUnavailable') : null }) });
+  const freshFamily = useCallback(() => loader.current!.refresh(), []);
 
   useEffect(() => {
-    if (userId) void loadFamily(userId);
-    else { setFamily(null); setFamilyError(null); }
-  }, [userId, loadFamily]);
+    loader.current!.invalidate(); updateFamily({ family: null, error: null, loading: false });
+    if (userId) void freshFamily();
+    return () => loader.current!.invalidate();
+  }, [userId, freshFamily, updateFamily]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error?.code === 'session_write_blocked') return { error: mobileTranslate(deviceLocale(), 'mobileAssistant.signInRetry') };
     return { error: error ? friendlyAuthError(error.message) : null };
   }, []);
 
   const signOut = useCallback(async () => {
     // Local scope: signing out of the phone must not revoke the session on the
     // web or a tablet. Matches app/auth/signout/route.ts.
-    setRestoring(false);
-    await supabase.auth.signOut({ scope: 'local' });
+    await signOutThisDevice();
   }, []);
 
   const refreshFamily = useCallback(async () => {
-    if (userId) await loadFamily(userId);
-  }, [userId, loadFamily]);
+    await freshFamily();
+  }, [freshFamily]);
 
   const value = useMemo<AuthState>(() => ({
-    ready, restoring, session, accessToken: session?.access_token ?? null, family, familyLoading, familyError, signIn, signOut, refreshFamily,
-  }), [ready, restoring, session, family, familyLoading, familyError, signIn, signOut, refreshFamily]);
+    ready, restoring, session, accessToken: session?.access_token ?? null, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily,
+  }), [ready, restoring, session, family, familyLoading, familyError, signIn, signOut, refreshFamily, freshFamily]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

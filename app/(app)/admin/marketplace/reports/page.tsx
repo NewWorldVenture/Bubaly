@@ -21,7 +21,10 @@ const FILTERS: { key: ReportFilter; label: string }[] = [
   { key: 'dismissed', label: 'Dismissed' },
 ];
 
-export const metadata: Metadata = { title: 'Marketplace reports', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('reports.marketplaceReports'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 const STATUS_CHIP: Record<string, string> = {

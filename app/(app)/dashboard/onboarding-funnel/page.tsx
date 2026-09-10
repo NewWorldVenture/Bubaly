@@ -10,49 +10,48 @@ import {
   type OnboardingEventLike,
 } from '@/lib/analytics/onboarding';
 import { summarizeActivation, type ActivationEventLike } from '@/lib/analytics/activation';
+import { loadActivationEvents, loadOnboardingEvents } from '@/lib/analytics/onboarding-server';
+import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Onboarding Funnel' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardOnboardingFunnel.onboardingFunnel'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingFunnelPage() {
-  const t = await getTranslations();
   await requireUserContext();
   // Cross-user pre-family telemetry — admin-only, read via the service role.
   if (!(await isSuperAdmin())) notFound();
+  const t = await getTranslations();
 
   const supabase = createServiceClient();
-  const { data, error: funnelError } = await supabase
-    .from('onboarding_events')
-    .select('session_id, step, phase, duration_ms, created_at')
-    .order('created_at', { ascending: false })
-    .limit(10000);
+  const cutoff = new Date();
+  const [{ data, error: funnelError }, { data: actData, error: actError }] = await Promise.all([
+    loadOnboardingEvents(supabase, cutoff), loadActivationEvents(supabase, cutoff),
+  ]);
 
   const funnel = summarizeOnboardingFunnel((data ?? []) as OnboardingEventLike[]);
   const stepLabel = (key: string | null) =>
     ONBOARDING_STEPS.find((s) => s.key === key)?.label ?? key ?? '—';
 
   // TTFV / activation — the value half of the funnel (T10).
-  const { data: actData, error: actError } = await supabase
-    .from('activation_events')
-    .select('session_id, milestone, session_index, ms_since_signup, created_at')
-    .order('created_at', { ascending: false })
-    .limit(20000);
   const activation = summarizeActivation((actData ?? []) as ActivationEventLike[]);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('dashboardOnboardingFunnel.onboardingFunnel')}
-        description="Pre-family telemetry: where new users reach, drop off, and how long sign-up takes. Real onboarding_events, all sessions."
+        description={t('thirtyMinute.funnelDescription')}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {!funnelError && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label={t('dashboardOnboardingFunnel.sessionsStarted')} value={funnel.startedSessions} icon={Activity} accent="bg-blue-600" />
         <StatTile label={t('dashboardOnboardingFunnel.completed')} value={funnel.completedSessions} icon={CheckCircle2} accent="bg-emerald-600" />
         <StatTile label={t('dashboardOnboardingFunnel.completion')} value={formatRate(funnel.completionRate)} icon={Timer} accent="bg-violet-600" />
         <StatTile label={t('dashboardOnboardingFunnel.medianTime')} value={formatDuration(funnel.medianCompletionMs)} icon={Timer} accent="bg-amber-600" />
-      </div>
+      </div>}
 
       <SectionCard title={t('dashboardOnboardingFunnel.stepByStepFunnel')}>
         {funnelError ? (
@@ -85,19 +84,22 @@ export default async function OnboardingFunnelPage() {
         )}
       </SectionCard>
 
-      {funnel.biggestDropStep && (
+      {!funnelError && funnel.biggestDropStep && (
         <p className="text-sm text-muted">
           {t('dashboardOnboardingFunnel.mostUsersWhoLeaveDoSo')} <strong>{stepLabel(funnel.biggestDropStep)}</strong> {t('dashboardOnboardingFunnel.theHighestLeverageStepToSimplify')}
         </p>
       )}
 
       {/* ── Time to First Value (T10) ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {!actError && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label={t('dashboardOnboardingFunnel.ttfvMedian')} value={formatDuration(activation.ttfvMedianMs)} icon={Zap} accent="bg-fuchsia-600" />
         <StatTile label={t('dashboardOnboardingFunnel.ttfvP90')} value={formatDuration(activation.ttfvP90Ms)} icon={Timer} accent="bg-fuchsia-700" />
         <StatTile label={t('dashboardOnboardingFunnel.activationRate')} value={formatRate(activation.activationRate)} icon={Rocket} accent="bg-emerald-600" />
         <StatTile label={t('dashboardOnboardingFunnel.newFamilies')} value={activation.cohorts} icon={Activity} accent="bg-blue-600" />
-      </div>
+      </div>}
+
+      {!actError && <ThirtyMinuteSummary kind="activation" rate={activation.under30MinRate === null ? null : activation.under30MinRate * 100}
+        within={activation.under30MinCohorts} timed={activation.timedValueCohorts} untimed={activation.untimedValueCohorts} t={t} />}
 
       <SectionCard title={t('dashboardOnboardingFunnel.timeToFirstValue')}>
         {actError ? (
@@ -125,7 +127,7 @@ export default async function OnboardingFunnelPage() {
               ))}
             </ul>
             <p className="text-sm text-muted">
-              TTFV is measured from sign-up to the first outcome a family views. It&rsquo;s the number every onboarding change is trying to move.
+              {t('thirtyMinute.activationMethod')}
             </p>
           </div>
         )}

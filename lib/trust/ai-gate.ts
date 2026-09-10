@@ -48,6 +48,8 @@ export type AiGateRequest = {
   payload: Record<string, unknown>;
   confidence?: number;
   capability?: Capability;
+  /** A proposal-only surface may require review even when family settings allow execution. */
+  requireApprovalReason?: string;
 };
 
 export type AiGateOutcome =
@@ -88,6 +90,7 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
     agent: req.agent,
     title: req.title,
     payload: req.payload,
+    onBehalfOfMemberId: req.onBehalfOfMemberId ?? null,
     context: {
       confidence: req.confidence ?? 0.85,
       // The tool's name rides along as a tag so a policy scoped by
@@ -121,6 +124,9 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
   }
 
   if (decision.effect === 'deny') return { effect: 'deny', reason: decision.reason };
+  if (decision.effect === 'allow' && req.requireApprovalReason) {
+    decision = { effect: 'require_approval', reason: req.requireApprovalReason, basis: 'fallback' };
+  }
   if (decision.effect === 'require_approval') {
     // The engine files its own approval row; a tier that tightened an `allow`
     // into an approval has to file one too, or "sent for parent approval" names

@@ -36,6 +36,8 @@ import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/servic
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
+import { loadFamilyValue } from '@/lib/metric/value-server';
+import { FamilyValueComparison } from '@/components/billing/family-value-comparison';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
@@ -46,6 +48,8 @@ import {
 } from '@/lib/home/home-data';
 import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
+import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
+import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getTranslations } from '@/lib/i18n/server';
@@ -161,8 +165,8 @@ export default async function HomePage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [
-    { data: members },
-    { data: todayEvents },
+    { data: members, count: memberCount, error: membersError },
+    { data: todayEvents, count: todayEventsCount, error: todayEventsError },
     { data: upcomingEvents },
     { data: tasks },
     { data: choreRows },
@@ -172,12 +176,13 @@ export default async function HomePage() {
     { data: messages },
     { count: choresToday },
     { count: choresDone },
-    { count: tasksOverdue },
+    { count: tasksOverdue, error: tasksOverdueError },
     { count: overdueReminders },
+    { count: openGrocery, error: groceryError },
   ] = await settleAll([
-    supabase.from('family_members').select('id, display_name, color, role, birthday, user_id')
+    supabase.from('family_members').select('id, display_name, color, role, birthday, user_id', { count: 'exact' })
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(12),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', todayStart.toISOString()).lt('starts_at', todayEnd.toISOString())
       .order('starts_at').limit(8),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
@@ -204,10 +209,28 @@ export default async function HomePage() {
       .eq('family_id', familyId).eq('is_done', false).lt('due_date', todayIso),
     supabase.from('family_reminders').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString()),
+    supabase.from('grocery_items').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('is_checked', false),
   ]);
 
   const memberList = (members ?? []) as Member[];
   const memberById = new Map(memberList.map((m) => [m.id, m]));
+  const birthdaysSoon = countMatchingResult({ data: memberList, count: memberCount, error: membersError }, (member) => {
+    if (!member.birthday) return false;
+    const next = nextBirthdayDate(member.birthday, now);
+    if (!next) return false;
+    const days = daysUntil(next, now);
+    return days >= 0 && days <= 14;
+  });
+  const outcomeSnapshot = {
+    eventsToday: countFromResult({ count: todayEventsCount, error: todayEventsError }),
+    overdueTasks: countFromResult({ count: tasksOverdue, error: tasksOverdueError }),
+    openGrocery: countFromResult({ count: openGrocery, error: groceryError }),
+    birthdaysSoon,
+  };
+  if (Object.values(outcomeSnapshot).some((count) => count === null)) {
+    console.error('[home] outcome discovery read failed or incomplete', { membersError, todayEventsError, tasksOverdueError, groceryError });
+  }
 
   // M8 — the composed schedule model for today's events (leave-by, driver, car,
   // dinner and care constraints), so the Today strip says WHY an event needs
@@ -353,6 +376,7 @@ export default async function HomePage() {
 
   // R11 — the category metric: how much family admin the system removed this week.
   const timeSaved = await loadTimeSaved(supabase, familyId, now);
+  const valueComparison = await loadFamilyValue(supabase, familyId, now);
 
   // Setup nudge — the ONLY route into /dashboard/setup (the re-onboarding
   // surface was otherwise unreachable). Managers only, and gated cheaply: one
@@ -363,8 +387,8 @@ export default async function HomePage() {
   // yet. The milestone is read PER PERSON, not per family, which is both what
   // `activation_events` RLS allows (a row is readable only by the user who
   // recorded it) and the right reading: a second parent joining a settled
-  // household is still on their own first session. The snapshot is already in
-  // hand except the open-grocery count, read only for that cohort. A failed
+  // household is still on their own first session. The outcome snapshot is
+  // already loaded for the discovery cards above. A failed
   // read hides the card and logs — the card is an offer, so withholding it says
   // nothing false, while showing it on a guess would claim they are new.
   let firstThing: FirstThing | null = null;
@@ -373,23 +397,12 @@ export default async function HomePage() {
     .eq('family_id', familyId).eq('user_id', ctx.user.id)
     .eq('milestone', FIRST_VALUE_MILESTONE).limit(1);
   if (activationError) console.error('[home] activation milestone read failed', activationError);
-  else if ((activated ?? []).length === 0) {
-    const { count: openGrocery, error: groceryError } = await supabase
-      .from('grocery_items').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('is_checked', false);
-    if (groceryError) console.error('[home] open grocery count read failed', groceryError);
-    const birthdaysSoon = memberList.filter((m) => {
-      if (!m.birthday) return false;
-      const next = nextBirthdayDate(m.birthday, now);
-      if (!next) return false;
-      const days = daysUntil(next, now);
-      return days >= 0 && days <= 14;
-    }).length;
+  else if ((activated ?? []).length === 0 && Object.values(outcomeSnapshot).every((count) => count !== null)) {
     firstThing = pickFirstThing({
-      eventsToday: (todayEvents ?? []).length,
+      eventsToday: outcomeSnapshot.eventsToday!,
       overdueTasks: tasksOverdue ?? 0,
       openGrocery: openGrocery ?? 0,
-      birthdaysSoon,
+      birthdaysSoon: birthdaysSoon!,
     });
   }
 
@@ -461,6 +474,7 @@ export default async function HomePage() {
 
       {/* M30 — one real next step for a family that has not reached first value. */}
       {firstThing && <DoOneThingCard thing={firstThing} />}
+      <OutcomesStrip href="/home" snapshot={outcomeSnapshot} />
 
       {/* Finish-setup nudge → /dashboard/setup (needs-setup / reset cohort). */}
       {setupNudge && (
@@ -585,6 +599,7 @@ export default async function HomePage() {
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner result={timeSaved} retryHref="/home" />
+      <FamilyValueComparison initial={{ familyId, result: valueComparison }} />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}

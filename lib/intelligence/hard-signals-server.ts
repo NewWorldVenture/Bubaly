@@ -1,7 +1,7 @@
 // lib/intelligence/hard-signals-server.ts — service-callable detection for the
 // hard family-intelligence signals (R10). Reads the family's real data, runs the
 // pure engines (hard-signals.ts), and upserts the results into family_signals —
-// PRESERVING any signal the family has dismissed (so a dismissed pattern never
+// PRESERVING any signal the family has acknowledged or dismissed (so a resolved pattern never
 // nags again). Callable on-demand (the Family Intelligence page's Refresh) and
 // from the model-refresh cron (always-learning). This is the only place raw rows
 // are read; the engines stay pure.
@@ -95,22 +95,25 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   };
   const signals = buildHardSignals(inputs, now);
 
-  // ── Persist (preserve dismissals) ──
+  // Preserve both decisions and their updated_at timestamp for X6. A scan is
+  // not a new family decision; only the explicit Restore action reopens one.
   const { data: existing, error: existingError } = await sb.from('family_signals')
     .select('kind, subject_key, status').eq('family_id', familyId);
   if (existingError) {
     console.error('[signals] existing signal read failed:', existingError);
     return { ok: false, error: describeActionError(existingError, 'Could not refresh family signals.'), signals: 0 };
   }
-  const dismissed = new Set((existing ?? []).filter((r) => r.status === 'dismissed').map((r) => `${r.kind}:${r.subject_key}`));
+  const decided = new Set((existing ?? []).filter((r) => r.status === 'dismissed' || r.status === 'acknowledged').map((r) => `${r.kind}:${r.subject_key}`));
 
   const toUpsert = signals
-    .filter((s) => !dismissed.has(`${s.kind}:${s.subjectKey}`))
+    .filter((s) => !decided.has(`${s.kind}:${s.subjectKey}`))
     .map((s) => ({
       family_id: familyId, kind: s.kind, subject_key: s.subjectKey,
       title: s.title, detail: s.detail, score: s.score,
       evidence: s.evidence as Database['public']['Tables']['family_signals']['Insert']['evidence'],
-      member_id: s.memberId ?? null, status: 'active', last_seen_at: now.toISOString(),
+      // Omit status so a concurrent acknowledgement is not reset to active by
+      // the upsert; new rows receive the schema's active default.
+      member_id: s.memberId ?? null, last_seen_at: now.toISOString(),
     }));
 
   if (toUpsert.length > 0) {

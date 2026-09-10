@@ -51,6 +51,7 @@ import {
 import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { getAISettings } from '@/lib/services/ai-settings';
+import { getTranslations } from '@/lib/i18n/server';
 import { getTool } from './registry';
 import type { ToolDefinition, ToolOutcome } from './types';
 
@@ -334,6 +335,7 @@ async function gate(
 
   const { decision: engineDecision, approvalId: engineApprovalId } = await evaluateTrust(scope.db, scope.familyId, {
     actor: { kind: actorKind, id: actorId, role },
+    onBehalfOfMemberId: scope.memberId,
     domain: tool.domain,
     capability,
     agent: 'Bubaly',
@@ -399,6 +401,10 @@ async function gate(
 
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };
   if (decision.effect === 'require_approval') {
+    if (tool.name === 'finances.advisePurchase' && (!approvalId || !await associatePurchaseRequest(scope, approvalId))) {
+      const t = await getTranslations();
+      return { kind: 'denied', reason: t('purchaseAdvice.privateUnavailable') };
+    }
     return {
       kind: 'pending',
       approvalId,
@@ -440,6 +446,40 @@ async function trustWriter(scope: ServiceScope): Promise<ServiceScope['db']> {
     return createServiceClient();
   } catch {
     return scope.db;
+  }
+}
+
+/** Both engine and risk-tier approvals need the original, owned request for
+ * private delivery. A repeated question may reuse an existing pending card;
+ * preserve its first valid association instead of moving its answer. */
+async function associatePurchaseRequest(scope: ServiceScope, approvalId: string): Promise<boolean> {
+  if (!scope.requestId || !scope.userId || !scope.memberId) return false;
+  const writer = await trustWriter(scope);
+  const ownsRequest = async (requestId: string) => {
+    const result = await writer.from('ai_requests').select('id').eq('id', requestId)
+      .eq('family_id', scope.familyId).eq('requested_by', scope.userId!).eq('requested_by_member_id', scope.memberId!);
+    if (result.error) throw result.error;
+    return result.data?.length === 1;
+  };
+  try {
+    if (!await ownsRequest(scope.requestId)) return false;
+    const approval = await writer.from('approval_requests').select('request_id').eq('id', approvalId)
+      .eq('family_id', scope.familyId).eq('requested_by_kind', 'ai').eq('requested_by_member_id', scope.memberId).maybeSingle();
+    if (approval.error) throw approval.error;
+    if (!approval.data) return false;
+    if (approval.data.request_id) return await ownsRequest(approval.data.request_id);
+    const attached = await writer.from('approval_requests').update({ request_id: scope.requestId, payload_kind: 'tool' })
+      .eq('id', approvalId).eq('family_id', scope.familyId).eq('requested_by_kind', 'ai')
+      .eq('requested_by_member_id', scope.memberId).is('request_id', null).select('request_id').maybeSingle();
+    if (attached.error) throw attached.error;
+    if (attached.data?.request_id) return await ownsRequest(attached.data.request_id);
+    const raced = await writer.from('approval_requests').select('request_id').eq('id', approvalId)
+      .eq('family_id', scope.familyId).eq('requested_by_kind', 'ai').eq('requested_by_member_id', scope.memberId).maybeSingle();
+    if (raced.error) throw raced.error;
+    return !!raced.data?.request_id && await ownsRequest(raced.data.request_id);
+  } catch (error) {
+    console.error('[tool-exec] could not associate a private purchase request', error);
+    return false;
   }
 }
 

@@ -10,14 +10,8 @@ import fs from 'node:fs';
 // aria-label. This guard locks the labels in.
 
 const src = readUiSource('components/modules/photos-module.tsx');
-const contacts = readUiSource('components/modules/contacts-module.tsx');
-
-describe('contacts module icon-only controls have accessible names (A-05 a11y)', () => {
-  it('call/email quick-actions are labeled with the contact name', () => {
-    expect(contacts).toContain('aria-label={`Call ${contact.name}`}');
-    expect(contacts).toContain('aria-label={`Email ${contact.name}`}');
-  });
-});
+// Contact action names are exercised through the real component and all seven
+// catalogues in contacts-localization.test.ts, including name interpolation.
 
 describe('photos module icon-only controls have accessible names (A-05 a11y)', () => {
   it('lightbox navigation + close are labeled', () => {
@@ -29,8 +23,8 @@ describe('photos module icon-only controls have accessible names (A-05 a11y)', (
   it('photo actions (favorite/edit/delete) are labeled', () => {
     expect(src).toContain(`aria-label="Delete photo"`);
     expect(src).toContain(`aria-label="Edit photo details"`);
-    // Favorite toggles use a dynamic add/remove label.
-    expect(src).toContain(`? 'Remove from favorites' : 'Add to favorites'`);
+    // Both favorite states are checked on the actual rendered controls in all
+    // seven locales by photos-localization.test.ts, including click behavior.
   });
 
   it('upload dropzone is keyboard-operable (role/tabindex/keydown + name)', () => {

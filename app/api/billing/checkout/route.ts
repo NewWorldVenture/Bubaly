@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { stripeFromKey, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
+import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
+import { isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
@@ -32,8 +33,9 @@ export async function POST(req: NextRequest) {
         { status: body.reason === 'too_large' ? 413 : 400 },
       );
     }
-    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: StripePlan };
-    const priceId = plan ? STRIPE_PLANS[plan] : undefined;
+    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: unknown };
+    if (!isStripePlanKey(plan)) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
+    const priceId = STRIPE_PLANS[plan];
     if (!priceId) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
 
     const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });
@@ -41,6 +43,11 @@ export async function POST(req: NextRequest) {
       { error: t('checkout.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+
+    if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
+      console.error('[billing-checkout] Configured Stripe price is unavailable or does not match the plan');
+      return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
+    }
 
     // Get or create Stripe customer
     const { data: existing, error: existingError } = await supabase

@@ -25,6 +25,7 @@
 // `scope.tz`; passing an ISO instant would shift the last hours of every day
 // into the wrong month for any family west of UTC.
 import 'server-only';
+import { readAllPages } from '@/lib/supabase/read-all-pages';
 import type { BudgetPeriod, Json, Tables, TransactionType } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -166,23 +167,22 @@ export function budgetWindow(period: BudgetPeriod, refDay: string): DateRange {
 async function loadTransactions(
   scope: ServiceScope,
   range: DateRange,
-  opts?: { type?: TransactionType | null; category?: string | null; memberId?: string | null; limit?: number },
+  opts?: { type?: TransactionType | null; category?: string | null; memberId?: string | null; limit?: number; complete?: boolean },
 ): Promise<ServiceResult<TransactionRow[]>> {
-  let query = scope.db
-    .from('transactions')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .gte('date', range.from)
-    .lte('date', range.to)
-    .order('date', { ascending: false })
-    .limit(Math.min(Math.max(opts?.limit ?? MAX_ROWS, 1), MAX_ROWS));
-  if (opts?.type) query = query.eq('type', opts.type);
-  if (opts?.memberId) query = query.eq('member_id', opts.memberId);
-  if (opts?.category?.trim()) {
-    const term = opts.category.trim().replace(/[%_]/g, (m) => `\\${m}`);
-    query = query.ilike('category', term);
-  }
-  const { data, error } = await query;
+  const query = () => {
+    let q = scope.db.from('transactions').select('*').eq('family_id', scope.familyId)
+      .gte('date', range.from).lte('date', range.to).order('date', { ascending: false });
+    if (opts?.type) q = q.eq('type', opts.type);
+    if (opts?.memberId) q = q.eq('member_id', opts.memberId);
+    if (opts?.category?.trim()) {
+      const term = opts.category.trim().replace(/[%_]/g, (m) => `\\${m}`);
+      q = q.ilike('category', term);
+    }
+    return q;
+  };
+  const { data, error } = opts?.complete
+    ? await readAllPages((from, to) => query().order('id').range(from, to))
+    : await query().limit(Math.min(Math.max(opts?.limit ?? MAX_ROWS, 1), MAX_ROWS));
   if (error) {
     console.error('[service:finances] transactions read failed', error);
     return fail(describeDbError(error, 'Could not load your transactions.'), { code: SERVICE_CODES.db });
@@ -504,7 +504,7 @@ export type BudgetLine = {
  */
 export async function budgetVsActual(
   scope: ServiceScope,
-  input: { month?: string | null } = {},
+  input: { month?: string | null; complete?: boolean } = {},
 ): Promise<ServiceResult<{ month: string; budgets: BudgetLine[]; totalLimit: number; totalSpent: number; overCount: number }>> {
   const access = assertFinanceReader(scope);
   if (!access.ok) return access;
@@ -514,11 +514,14 @@ export async function budgetVsActual(
   const bounds = monthBounds(month);
   const refDay = month === today.slice(0, 7) ? today : bounds.to;
 
-  const { data: budgets, error } = await scope.db
+  const budgetQuery = () => scope.db
     .from('budgets')
     .select('*')
     .eq('family_id', scope.familyId)
     .order('category', { ascending: true });
+  const { data: budgets, error } = input.complete
+    ? await readAllPages((from, to) => budgetQuery().order('id').range(from, to))
+    : await budgetQuery();
   if (error) {
     console.error('[service:finances] budgets read failed', error);
     return fail(describeDbError(error, 'Could not load your budgets.'), { code: SERVICE_CODES.db });
@@ -533,7 +536,7 @@ export async function budgetVsActual(
     from: windows.reduce((min, w) => (w.from < min ? w.from : min), windows[0].from),
     to: windows.reduce((max, w) => (w.to > max ? w.to : max), windows[0].to),
   };
-  const txns = await loadTransactions(scope, wide, { type: 'expense' });
+  const txns = await loadTransactions(scope, wide, { type: 'expense', complete: input.complete });
   if (!txns.ok) return txns;
 
   const lines: BudgetLine[] = rows.map((budget, i) => {

@@ -167,11 +167,18 @@ export const importedEventSchema = z.object({
 export const onboardingCalendarImportSchema = z.object({
   source: z.enum(['ics', 'paste', 'url', 'demo', '']).optional().default(''),
   events: z.array(importedEventSchema).max(1000).optional().default([]),
+  receipt: z.string().max(150_000).optional(),
 });
 
 export const previewCalendarImportSchema = z.object({
   source: z.enum(['paste', 'demo']),
   icsText: z.string().max(200_000).optional(),
+  // Presentation only: use the wizard's selected zone without reading a family.
+  // Omitted legacy input keeps UTC; malformed supplied input must not guess.
+  timezone: z.string().min(1).max(100).refine((timezone) => {
+    try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }); return true; }
+    catch { return false; }
+  }, 'Invalid timezone').default('UTC'),
 });
 
 export const completeProfileOnboardingSchema = z.object({

@@ -65,6 +65,17 @@ function parseFilterValue(raw: string): unknown {
   return raw;
 }
 
+/** PostgreSQL jsonb @> contains nested objects, not object reference identities. */
+function jsonContains(value: unknown, wanted: unknown): boolean {
+  if (Array.isArray(value)) {
+    return (Array.isArray(wanted) ? wanted : [wanted]).every((needle) => value.some((item) => jsonContains(item, needle)));
+  }
+  if (value && typeof value === 'object' && wanted && typeof wanted === 'object') {
+    return Object.entries(wanted).every(([key, item]) => jsonContains((value as Row)[key], item));
+  }
+  return looseEq(value, wanted);
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   switch (op) {
     case 'eq': return (row) => looseEq(row[column], wanted);
@@ -95,7 +106,7 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
           return needles.every((n) => value.some((v) => looseEq(v, n)));
         }
         if (value && typeof value === 'object' && wanted && typeof wanted === 'object') {
-          return Object.entries(wanted as Row).every(([k, v]) => looseEq((value as Row)[k], v));
+          return jsonContains(value, wanted);
         }
         return false;
       };
@@ -113,22 +124,34 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
   }
 }
 
-/** `a.eq.1,b.is.null,c.in.(x,y)` — the flat form `.or()` is called with in this repository. */
-function parseOr(expression: string): Predicate {
+/** `a.eq.1,b.is.null,c.in.(x,y)`, plus the nested `and(...)` groups used to
+ *  filter typed calendar windows. A nested `or(...)` stays unsupported and
+ *  throws — PostgREST's `.or()` already IS the or, and in-memory-supabase-logic
+ *  pins that. */
+function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
   for (const ch of expression) {
     if (ch === '(') depth += 1;
     if (ch === ')') depth -= 1;
+    if (depth < 0) throw new Error('[in-memory-supabase] unbalanced or() group');
     if (ch === ',' && depth === 0) { parts.push(current); current = ''; continue; }
     current += ch;
   }
+  if (depth !== 0) throw new Error('[in-memory-supabase] unbalanced or() group');
   if (current) parts.push(current);
+  if (!current.trim() || parts.some(part => !part.trim())) throw new Error('[in-memory-supabase] empty or() clause');
   const predicates = parts.map((part) => {
     const trimmed = part.trim();
+    if (trimmed.startsWith('and(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(4, -1), 'and');
     const negated = trimmed.startsWith('not.');
     const body = negated ? trimmed.slice(4) : trimmed;
+    if (body.startsWith('and(') && body.endsWith(')')) {
+      const predicate = parseOr(body.slice(4, -1), 'and');
+      return negated ? (row: Row) => !predicate(row) : predicate;
+    }
+    if (body.startsWith('or(')) throw new Error('[in-memory-supabase] nested or() is unsupported');
     const first = body.indexOf('.');
     const second = body.indexOf('.', first + 1);
     if (first < 0 || second < 0) throw new Error(`[in-memory-supabase] cannot parse or() clause "${part}"`);
@@ -139,7 +162,7 @@ function parseOr(expression: string): Predicate {
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
-  return (row) => predicates.some((p) => p(row));
+  return (row) => mode === 'and' ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
 }
 
 /** Split a select list on top-level commas; `a, b:c, d(e,f)` → three parts. */
@@ -192,6 +215,7 @@ class QueryBuilder implements PromiseLike<Reply> {
   private op: Op = 'select';
   private payload: Row[] = [];
   private upsertOn: string[] | null = null;
+  private ignoreDuplicates = false;
   private readonly predicates: Predicate[] = [];
   private selectList: string | null = null;
   private countMode: 'exact' | 'planned' | 'estimated' | null = null;
@@ -210,10 +234,11 @@ class QueryBuilder implements PromiseLike<Reply> {
     return this;
   }
   insert(rows: Row | Row[]) { this.op = 'insert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
-  upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
+  upsert(rows: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.op = 'upsert';
     this.payload = Array.isArray(rows) ? rows : [rows];
     this.upsertOn = opts?.onConflict ? opts.onConflict.split(',').map((c) => c.trim()) : ['id'];
+    this.ignoreDuplicates = opts?.ignoreDuplicates === true;
     return this;
   }
   update(patch: Row) { this.op = 'update'; this.payload = [patch]; return this; }
@@ -340,6 +365,7 @@ class QueryBuilder implements PromiseLike<Reply> {
             ? table.find((other) => keys.every((k) => looseEq(other[k], raw[k])))
             : undefined;
           if (existing) {
+            if (this.ignoreDuplicates) continue;
             Object.assign(existing, raw, { updated_at: new Date().toISOString() });
             touched.push(existing);
           } else {

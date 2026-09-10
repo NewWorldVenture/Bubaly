@@ -32,7 +32,9 @@ export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60
     const start = Date.parse(e.starts_at);
     if (!Number.isFinite(start)) continue;
     let end = e.ends_at ? Date.parse(e.ends_at) : NaN;
-    if (!Number.isFinite(end) || end <= start) end = start + defaultDurationMin * 60_000;
+    if (!Number.isFinite(end) || end < start) end = start + defaultDurationMin * 60_000;
+    // A point event stays on the schedule but occupies no interval to clash.
+    if (end <= start) continue;
     const arr = byAssignee.get(e.assignee_id) ?? [];
     arr.push({ id: e.id, start, end, startIso: e.starts_at });
     byAssignee.set(e.assignee_id, arr);

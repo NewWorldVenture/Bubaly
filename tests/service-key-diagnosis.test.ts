@@ -32,13 +32,13 @@ async function describeWith(service: string | undefined, anon: string) {
 }
 
 describe('describeConfiguredServiceKey', () => {
-  // bubaly.com's actual state: the bundle ships an sb_publishable_ key, so the
-  // project moved schemes; a legacy JWT service key is no longer registered.
-  it('names the scheme migration when a legacy JWT is paired with a new-format project', async () => {
+  it('does not infer legacy-key revocation from a publishable key', async () => {
     const note = await describeWith(LEGACY_JWT, PUBLISHABLE);
     expect(note).toContain('legacy JWT');
-    expect(note).toContain('sb_secret_');
-    expect(note).toContain('no longer registered');
+    expect(note).toContain('can coexist');
+    expect(note).toContain('still enabled');
+    expect(note).not.toContain('no longer registered');
+    expect(note).toBe(await describeWith(LEGACY_JWT, LEGACY_JWT));
   });
 
   it('catches the publishable key pasted into the secret slot', async () => {

@@ -44,8 +44,8 @@ import { BriefDecisionSchema } from './response-schema';
 
 export type BriefKind = HomeBriefKind;
 
-/** Where `counts.handled` came from — the shared ledger, or this brief's list. */
-export type HandledSource = 'ledger' | 'listed';
+/** Recorded completed plans, an unavailable metric, or a legacy history list. */
+export type HandledSource = 'ledger' | 'listed' | 'completed_plans' | 'unavailable';
 
 export type BriefInput = {
   kind: BriefKind;
@@ -80,12 +80,13 @@ export type BriefInput = {
   /** Counts the home brief already tracks, for the stored row. */
   counts?: { choresPending?: number; openTodos?: number; groceryOpen?: number; memberCount?: number };
   /**
-   * The ONE handled-this-week number, from `countHandledThisWeek`. `null` means
-   * the ledger read failed and the brief falls back to what it can see itself
-   * (the listed items), which under-reports rather than inventing a number.
-   * Omitted entirely by callers that have not read it.
+   * Dated recorded completed plans from `countHandledThisWeek`. A failed read
+   * stays null; the broader history list never substitutes for this metric.
+   * Omitted entirely by legacy callers that have not requested the metric.
    */
   handledThisWeek?: MetricCount;
+  /** All-time completed records without a completion date, excluded from this week. */
+  undatedCompletedRuns?: MetricCount;
 };
 
 /** One row of `public.notifications`, reduced to what a brief needs. */
@@ -142,16 +143,17 @@ export type Brief = {
     week: number;
     conflicts: number;
     overdue: number;
-    handled: number;
+    handled: MetricCount;
+    undatedCompletedRuns?: MetricCount;
     decisions: number;
     alsoToday: number;
-    /** Where `handled` came from: the shared ledger count, or this brief's own list. */
+    /** The subset/source is explicit because a history list is not the metric. */
     handledSource: HandledSource;
     /**
      * An ESTIMATE of planning time, derived from the calendar by
      * `buildFirstBrief` — not a measurement of work Bubaly did. The surfaces
-     * that render it must label it as an estimate; the measured number is
-     * `lib/metric/time-saved-server.ts`.
+     * that render it must label it as an estimate. The completed-plan model
+     * in `lib/metric/time-saved-server.ts` is also an assumption, not measured time.
      */
     timeSavedMinutes: number;
   };
@@ -198,11 +200,12 @@ export const briefSchema = z.object({
   })).optional().default([]),
   counts: z.object({
     today: z.number(), week: z.number(), conflicts: z.number(),
-    overdue: z.number(), handled: z.number(), decisions: z.number(), timeSavedMinutes: z.number(),
+    overdue: z.number(), handled: z.number().nullable(), decisions: z.number(), timeSavedMinutes: z.number(),
     alsoToday: z.number().optional().default(0),
     // Optional: briefs stored before the shared handled accounting existed have
     // no source recorded, and rejecting them would break the history.
-    handledSource: z.enum(['ledger', 'listed']).optional(),
+    handledSource: z.enum(['ledger', 'listed', 'completed_plans', 'unavailable']).optional(),
+    undatedCompletedRuns: z.number().nullable().optional(),
   }),
   isSparse: z.boolean(),
 });
@@ -312,7 +315,7 @@ export function foldAlsoToday(
  * without a database and identical for the page, the route and the cron.
  */
 export function buildBrief(input: BriefInput, tz: string): Brief {
-  const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? []);
+  const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? [], tz);
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? [], { evidence: input.evidence });
   // Ranked the way Home ranks them (urgency, then newest) so the brief and the
@@ -326,8 +329,9 @@ export function buildBrief(input: BriefInput, tz: string): Brief {
     week: calendar.weekCount,
     conflicts: calendar.conflicts.length,
     overdue: digest.counts.overdue,
-    handled: typeof ledgerHandled === 'number' ? ledgerHandled : handled.length,
-    handledSource: (typeof ledgerHandled === 'number' ? 'ledger' : 'listed') as HandledSource,
+    handled: ledgerHandled === undefined ? handled.length : ledgerHandled,
+    handledSource: (ledgerHandled === undefined ? 'listed' : ledgerHandled === null ? 'unavailable' : 'completed_plans') as HandledSource,
+    ...(input.undatedCompletedRuns === undefined ? {} : { undatedCompletedRuns: input.undatedCompletedRuns }),
     decisions: decisions.length,
     alsoToday: alsoToday.length,
     timeSavedMinutes: calendar.timeSavedMinutes,
@@ -380,7 +384,7 @@ export function briefRow(brief: Brief, familyId: string, createdBy: string | nul
  */
 export function readinessPct(brief: Brief): number {
   const problems = brief.counts.conflicts * 2 + brief.counts.overdue;
-  const credits = brief.counts.handled;
+  const credits = brief.counts.handled ?? 0;
   if (problems === 0) return 100;
   const score = Math.round(100 - (problems * 12) + Math.min(credits, 5) * 4);
   return Math.max(0, Math.min(100, score));

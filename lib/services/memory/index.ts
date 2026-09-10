@@ -40,6 +40,7 @@ import type { Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
 import { describeDbError } from '@/lib/supabase/errors';
+import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
 import { getAISettings } from '../ai-settings';
 import { scopeNow } from '../scope';
@@ -378,7 +379,7 @@ async function rememberUnconfirmed(
   return ok({ kind: 'suggestion', suggestion: data, duplicate: false });
 }
 
-export type RecallInput = { query?: string | null; category?: FactCategory | string | null; memberId?: string | null; limit?: number };
+export type RecallInput = { query?: string | null; category?: FactCategory | string | null; memberId?: string | null; limit?: number; complete?: boolean };
 
 /** Shared visibility rule for recall and review; expiry is handled separately. */
 function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'>>(scope: ServiceScope, rows: T[]): T[] {
@@ -397,17 +398,23 @@ function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' |
  * that ran out, greyed, so they can update it — see `listMemories`.
  */
 export async function recallFacts(scope: ServiceScope, input: RecallInput = {}): Promise<ServiceResult<FamilyFact[]>> {
-  let q = scope.db
-    .from('family_facts')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('is_pinned', { ascending: false })
-    .order('updated_at', { ascending: false })
-    .limit(500);
-  if (isCategory(input.category)) q = q.eq('category', input.category);
-  if (input.memberId) q = q.eq('member_id', input.memberId);
+  const query = () => {
+    let q = scope.db
+      .from('family_facts')
+      .select('*')
+      .eq('family_id', scope.familyId)
+      .order('is_pinned', { ascending: false })
+      .order('updated_at', { ascending: false });
+    if (isCategory(input.category)) q = q.eq('category', input.category);
+    if (input.memberId) q = q.eq('member_id', input.memberId);
+    return q;
+  };
 
-  const { data, error } = await q;
+  // A purchase check must inspect older preferences too before saying that
+  // nothing saved argues against a purchase. Ordinary recall stays bounded.
+  const { data, error } = input.complete
+    ? await readAllPages((from, to) => query().order('id').range(from, to))
+    : await query().limit(500);
   if (error) {
     console.error('[service:memory] recall failed', error);
     return fail(describeDbError(error, 'Could not read what I remember.'), { code: SERVICE_CODES.db });
@@ -417,7 +424,7 @@ export async function recallFacts(scope: ServiceScope, input: RecallInput = {}):
   const visible = filterVisibleMemories(scope, (data ?? [])
     .filter((f) => !isExpiredFact(f, scope.now ?? new Date())));
   const matched = filterFacts(visible, { q: input.query ?? '' });
-  return ok(matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
+  return ok(input.complete ? matched : matched.slice(0, Math.min(Math.max(input.limit ?? 50, 1), 200)));
 }
 
 /**

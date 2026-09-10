@@ -72,10 +72,10 @@ describe('marketing handled-count formatters', () => {
   it.each([
     [0, ''],
     [24, ''],
-    [25, '25 things finished by Bubaly for real families so far'],
-    [999, '999 things finished by Bubaly for real families so far'],
-    [1000, '1,000+ things finished by Bubaly for real families so far'],
-    [12_345, '12,000+ things finished by Bubaly for real families so far'],
+    [25, '25 automation runs marked complete or partly complete across households'],
+    [999, '999 automation runs marked complete or partly complete across households'],
+    [1000, '1,000+ automation runs marked complete or partly complete across households'],
+    [12_345, '12,000+ automation runs marked complete or partly complete across households'],
   ])('handledNote(%i) → %j', (n, expected) => {
     expect(handledNote(t, n)).toBe(expected);
   });

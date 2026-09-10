@@ -51,6 +51,12 @@ describe('the surfaces whose reminder create was rejected', () => {
 
   it.each(CONVERTED)('%s creates through the service instead', (file) => {
     const src = code(file);
+    if (file === 'components/modules/autopilot-module.tsx') {
+      expect(src).toContain('resolveAutopilotSuggestionAction(');
+      expect(code('app/(app)/dashboard/autopilot/actions.ts')).toContain('resolveSuggestion(scopeFromUserContext(ctx, db)');
+      expect(code('lib/services/autopilot/index.ts')).toContain('await createReminder(');
+      return;
+    }
     // The three client modules go through the action; the paperwork server
     // action already had a scope and calls the service directly.
     expect(
@@ -59,8 +65,17 @@ describe('the surfaces whose reminder create was rejected', () => {
     ).toBe(true);
   });
 
-  it.each(CONVERTED.filter((f) => f.endsWith('.tsx')))('%s mints a submission id for each create', (file) => {
+  it.each(CONVERTED.filter((f) => f.endsWith('.tsx')))('%s supplies a stable identity for each create', (file) => {
     const src = code(file);
+    if (file === 'components/modules/autopilot-module.tsx') {
+      // Reload and concurrent-race behavior is exercised through the real
+      // service in autopilot-resolution.test.ts. The browser sends only source
+      // identity; the server, not a mutable component ref, derives the key.
+      expect(src).toContain('suggestionId: s.id');
+      expect(src).not.toContain('newSubmissionId');
+      expect(code('lib/services/autopilot/index.ts')).toContain("makeKey(['autopilot.createReminder', familyId, suggestionId])");
+      return;
+    }
     const creates = (src.match(/createReminderAction\(/g) ?? []).length;
     expect(creates).toBeGreaterThan(0);
     expect(src).toMatch(/from '@\/lib\/utils\/submission-id'/);

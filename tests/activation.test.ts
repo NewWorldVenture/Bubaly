@@ -90,4 +90,18 @@ describe('summarizeActivation', () => {
     expect(signup.rate).toBe(1);
     expect(s.milestoneReach.find((m) => m.key === 'first_capture')!.cohorts).toBe(0);
   });
+
+  it('measures earliest valid first-view times per cohort with an explicit timed denominator', () => {
+    const s = summarizeActivation([
+      ev('a', 'first_outcome_viewed', 1_800_001), ev('a', 'first_outcome_viewed', 1_800_000),
+      ev('a', 'first_outcome_viewed', 1_800_000), ev('b', 'first_outcome_viewed', 1_800_001),
+      ev('c', 'first_outcome_viewed', 0), ev('d', 'first_outcome_viewed', null),
+      ev('e', 'first_outcome_viewed', Infinity), ev('f', 'first_outcome_viewed', NaN),
+      ev('g', 'first_outcome_viewed', -1), ev('h', 'first_brief_viewed', 100), ev('i', 'signup', 0),
+    ]);
+    expect(s).toMatchObject({ cohorts: 9, activatedCohorts: 7, timedValueCohorts: 3, untimedValueCohorts: 4, under30MinCohorts: 2 });
+    expect(s.under30MinRate).toBeCloseTo(2 / 3);
+    expect(summarizeActivation([ev('a', 'first_outcome_viewed', null)]).under30MinRate).toBeNull();
+    expect(summarizeActivation([ev('a', 'first_outcome_viewed', 1_800_001)]).under30MinRate).toBe(0);
+  });
 });

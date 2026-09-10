@@ -5,11 +5,14 @@ import { exchangeCode, getGoogleUserEmail, googleSyncRedirectUri } from '@/lib/s
 import { connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
+import { finishOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
+import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
 
 // Google redirects here after consent. Exchanges the code for tokens, fetches the
 // account email, and stores everything (tokens AES-256-GCM encrypted) via
 // connectAccount. Fails closed if SYNC_TOKEN_KEY is missing.
 export async function GET(req: NextRequest) {
+  if (req.cookies.has(calendarContinuationCookie('google')) || req.nextUrl.searchParams.get('state')?.startsWith('onboarding.')) return finishOnboardingCalendarOAuth(req, 'google');
   const url = new URL(req.url);
   const origin = req.nextUrl.origin;
   const code = url.searchParams.get('code');

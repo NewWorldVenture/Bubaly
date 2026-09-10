@@ -44,7 +44,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   // live session rather than a login page.
   return (
     <>
-      <SessionKeeper />
+      <SessionKeeper userId={user.id} />
       {appLock?.enabled
         ? (
           <AppLockGate enabled salt={appLock.salt} hash={appLock.hash} userId={user.id}>

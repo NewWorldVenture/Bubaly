@@ -1,28 +1,11 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from '../src/theme/theme';
-import { AppText } from '../src/components/AppText';
+import { ReconnectingScreen } from '../src/components/ReconnectingScreen';
 import { AuthProvider, useAuth } from '../src/lib/auth';
-
-/**
- * Shown when a session IS stored on this device but could not be verified yet
- * (cold start with no network). Sending a signed-in person to the sign-in
- * screen here would be wrong: their refresh token is still in the Keychain and
- * the auto-refresh ticker retries every 30s, so this clears itself.
- */
-function ReconnectingScreen() {
-  const { colors, spacing } = useTheme();
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[4], backgroundColor: colors.bg }}>
-      <ActivityIndicator color={colors.brand} />
-      <AppText variant="muted">Reconnecting…</AppText>
-    </View>
-  );
-}
 
 SplashScreen.preventAutoHideAsync().catch(() => { /* already hidden */ });
 

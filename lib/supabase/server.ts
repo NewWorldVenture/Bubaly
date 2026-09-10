@@ -3,7 +3,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createAdmin } from '@supabase/supabase-js';
 import { durableCookieOptions, isSecureOrigin } from '../auth/session';
+import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import type { Database } from '../database.types';
+import { SOURCE_MESSAGES, translate } from '../i18n/messages';
 
 export async function createServer() {
   const cookieStore = await cookies();
@@ -21,6 +23,7 @@ export async function createServer() {
       // on the server keeps the cookie the browser already has instead of
       // shadowing it with a differently-scoped one.
       cookieOptions: durableCookieOptions(secure),
+      global: { fetch: createSessionRefreshFetch(cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL)) },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {
@@ -67,35 +70,25 @@ export function createServiceClient() {
  * publishable key it ships to every browser), but the key itself must never
  * leave the server, so nothing here returns or interpolates it.
  *
- * This exists because "Unregistered API key" does not distinguish the two very
- * different mistakes it covers. Supabase projects that moved to the new API-key
- * scheme keep working for anyone holding an `sb_publishable_…` key while every
- * legacy `eyJ…` service key stops being registered — so the deployment reads
- * fine for signed-in families and returns nothing at all for admin. Naming the
- * mismatch turns "the key is wrong somehow" into one specific replacement.
+ * A key's format identifies what to check; it cannot establish why the project
+ * rejected it. New and legacy keys can coexist until explicitly disabled.
  */
-export function describeConfiguredServiceKey(): string | null {
-  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!raw || raw.trim() === '') return 'SUPABASE_SERVICE_ROLE_KEY is empty on this deployment.';
+type ServiceTranslate = (key: string, params?: Record<string, string | number>) => string;
+const defaultServiceTranslate: ServiceTranslate = (key, params) => translate(SOURCE_MESSAGES, key, params);
 
-  const key = cleanEnv(raw);
-  const anon = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const projectUsesNewScheme = anon.startsWith('sb_publishable_');
-
+export function describeConfiguredServiceKey(t: ServiceTranslate = defaultServiceTranslate): string | null {
+  const key = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!key) return t('adminCredential.empty');
   if (key.startsWith('sb_publishable_')) {
-    return 'The configured key is a PUBLISHABLE key (sb_publishable_…) — that is the public key. Use the secret key (sb_secret_…) instead.';
+    return t('adminCredential.publishable');
   }
   if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(key)) {
-    return projectUsesNewScheme
-      ? 'The configured key is a legacy JWT (eyJ…), but this project has moved to the new API-key scheme — legacy keys are no longer registered. Replace it with the secret key (sb_secret_…).'
-      : 'The configured key is a legacy JWT (eyJ…) that this project no longer accepts.';
+    return t('adminCredential.legacy');
   }
   if (key.startsWith('sb_secret_')) {
-    return 'The configured key has the right shape (sb_secret_…) but this project does not accept it — it is likely from a different project, or has been revoked.';
+    return t('adminCredential.secret');
   }
-  return projectUsesNewScheme
-    ? 'The configured key matches no known Supabase key format. This project uses sb_secret_… service keys.'
-    : 'The configured key matches no known Supabase key format.';
+  return t('adminCredential.unknown');
 }
 
 /**
@@ -107,11 +100,13 @@ export function describeConfiguredServiceKey(): string | null {
  * key is a valid secret key for some OTHER project: the operator needs to know
  * which of their projects to open, and a dashboard link removes the guess.
  */
-export function serviceKeyRemedy(): string {
+export function serviceKeyRemedy(t: ServiceTranslate = defaultServiceTranslate): string {
   const url = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const ref = /^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(url)?.[1] ?? null;
-  const where = ref
-    ? `Copy the secret key for project ${ref} from https://supabase.com/dashboard/project/${ref}/settings/api-keys`
-    : 'Copy this project’s secret key from Supabase → Project Settings → API → Secret keys';
-  return `${where}, set it as SUPABASE_SERVICE_ROLE_KEY under Vercel → Settings → Environment Variables (Production), then redeploy.`;
+  let ref: string | null = null;
+  try {
+    const parsed = new URL(url);
+    ref = parsed.protocol === 'https:' ? /^([a-z0-9]+)\.supabase\.co$/.exec(parsed.hostname)?.[1] ?? null : null;
+  } catch { /* Custom or missing endpoints cannot establish a hosted project ref. */ }
+  return ref ? t('adminCredential.remedyProject', { project: ref, url: `https://supabase.com/dashboard/project/${ref}/settings/api-keys` })
+    : t('adminCredential.remedyGeneric');
 }

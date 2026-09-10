@@ -1,5 +1,7 @@
 import 'server-only';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { resolveInboundEntityContext } from '@/lib/graph/resolve-server';
+import type { ServiceScope } from '@/lib/services/types';
 import {
   classifyIntent, summarizeInbound, autoReplyText,
   type InboundIntent, type InboundChannel,
@@ -13,6 +15,12 @@ export type ConciergeResult = {
 };
 
 const INTENTS: InboundIntent[] = ['urgent', 'appointment', 'delivery', 'sales', 'spam', 'personal', 'other'];
+
+/** Internal filing context only. Known household names and aliases are never
+ * added to the externally addressed auto-reply prompt below. */
+export function resolveConciergeEntities(scope: ServiceScope, input: { text: string; sender?: string | null }) {
+  return resolveInboundEntityContext(scope, input);
+}
 
 const SYSTEM = `You are the Bubaly Family Operations Center — an AI concierge answering a family's central phone/email line.
 For each inbound message, respond with STRICT JSON only (no prose, no code fences):
