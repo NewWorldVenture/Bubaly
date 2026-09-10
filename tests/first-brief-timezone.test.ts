@@ -13,7 +13,8 @@ describe('first brief in the household timezone', () => {
     expect(brief.todayCount).toBe(2);
     expect(brief.timeline.map((row) => row.timeLabel)).toEqual(['7:30 PM', '8:15 PM']);
     expect(brief.headline).toContain('Wednesday');
-    expect(brief.conflicts).toEqual([{ aTitle: 'Practice', bTitle: 'Appointment', dayLabel: 'Today', overlapLabel: '8:15 PM–9:00 PM' }]);
+    expect(brief.conflicts).toEqual([{ aTitle: 'Practice', bTitle: 'Appointment', dayLabel: 'Today', overlapLabel: '8:15 PM–9:00 PM',
+      display: { dayKey: '2026-09-09', overlapStart: '2026-09-10T00:15:00.000Z', overlapEnd: '2026-09-10T01:00:00.000Z' } }]);
     expect(brief.actions.find((action) => action.id.startsWith('location:Tomorrow'))?.detail).toContain('tomorrow');
   });
   it('honors explicit offsets and a household ahead of UTC', () => {
