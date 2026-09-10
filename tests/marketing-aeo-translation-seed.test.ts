@@ -34,6 +34,11 @@ const LOCALES = ['de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
 const statements = SEED.split(/\n(?=insert into public\.marketing_aeo_question_translations)/)
   .filter((chunk) => chunk.trimStart().startsWith('insert into'));
 
+const CORRECTION = readFileSync(
+  join(ROOT, 'supabase/migrations/0280_aeo_answers_agree_in_number.sql'),
+  'utf8',
+);
+
 describe('AEO translation seed — 0279', () => {
   it('seeds every published question in every locale the site speaks', () => {
     expect(statements).toHaveLength(360);
@@ -84,5 +89,55 @@ describe('AEO translation seed — 0279', () => {
     expect(header).not.toMatch(/matches nothing and inserts nothing/);
     expect(header).toMatch(/0229 has already/);
     expect(header).toMatch(/all 360 rows insert/);
+  });
+});
+
+// 0279's "what is X" frame hard-codes a singular copula and `Reminders` is a
+// plural noun phrase in all six languages, so six rows read as broken grammar.
+// The templates now carry number, and 0280 is what carries the six rows that
+// regeneration changed to a database 0279 has already run on.
+//
+// Proven against real Postgres (16.13) at authoring time: 0277, then the 60
+// published English parents, then 0279 and 0280 in order.
+//   after 0279 -> 'O que é os Lembretes?' / 'Os Lembretes é a parte'
+//   after 0280 -> 'O que são os Lembretes?' / 'Os Lembretes são a parte',
+//                 and the same in de, es, fr, it, nl; still 360 rows
+//   fixture: pt-PT set to source='human' + reviewed_at, es-ES stamped
+//            reviewed_at while still machine
+//   replayed -> both kept their text; the other four corrected
+//   third pass -> zero rows differing from the snapshot
+describe('AEO number agreement — 0280', () => {
+  const statements = CORRECTION.split(/\n(?=update public\.marketing_aeo_question_translations)/)
+    .filter((chunk) => chunk.trimStart().startsWith('update public.'));
+
+  it('corrects one row per locale and nothing else', () => {
+    expect(statements).toHaveLength(6);
+    const locales = statements.map((s) => /and t\.locale = '([a-z]{2}-[A-Z]{2})'/.exec(s)?.[1]);
+    expect(locales).toEqual(['de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']);
+    // One English parent — the only brand term that reaches a copula frame.
+    const parents = new Set(statements.map((s) => /and q\.question = '([^']*)'/.exec(s)?.[1]));
+    expect([...parents]).toEqual(['What is Reminders?']);
+  });
+
+  it('leaves a row a native speaker has touched exactly as they left it', () => {
+    for (const statement of statements) {
+      expect(statement).toContain("and t.source = 'machine'");
+      expect(statement).toContain('and t.reviewed_at is null;');
+    }
+  });
+
+  it('writes the plural copula each language actually needs', () => {
+    // Number agreement is per language, not a search-and-replace of one word.
+    expect(CORRECTION).toContain('Was sind Erinnerungen?');
+    expect(CORRECTION).toContain('¿Qué son los Recordatorios?');
+    expect(CORRECTION).toContain('Les Rappels désignent');
+    expect(CORRECTION).toContain('Che cosa sono i Promemoria?');
+    expect(CORRECTION).toContain('Wat zijn Herinneringen?');
+    expect(CORRECTION).toContain('O que são os Lembretes?');
+    // And none of the singular forms survive anywhere in it.
+    for (const singular of ['O que é os', 'Os Lembretes é', '¿Qué es los', 'I Promemoria è',
+                            'Was ist Erinnerungen', 'Wat is Herinneringen', 'Les Rappels désigne ']) {
+      expect(CORRECTION).not.toContain(singular);
+    }
   });
 });
