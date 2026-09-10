@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -23,24 +23,33 @@ type Reminder = Tables<'reminders'>;
 type SymptomLog = Tables<'symptom_logs'>;
 type HealthGoal = Tables<'health_goals'>;
 
-const SEVERITY_LABELS = ['', 'Mild', 'Mild', 'Moderate', 'Severe', 'Severe'];
+const SEVERITY_KEYS = ['', 'healthDashboard.mild', 'healthDashboard.mild', 'healthDashboard.moderate', 'healthDashboard.severe', 'healthDashboard.severe'];
 const SEVERITY_COLORS = ['', 'text-emerald-300', 'text-emerald-300', 'text-amber-300', 'text-orange-300', 'text-rose-300'];
 
-const TABS = ['Overview', 'Activity', 'Nutrition', 'Sleep', 'Checkups', 'Medications', 'Documents', 'Vitals'] as const;
-type Tab = (typeof TABS)[number];
+const TABS = [
+  { value: 'Overview', labelKey: 'healthDashboard.overview' },
+  { value: 'Activity', labelKey: 'health.activity' },
+  { value: 'Nutrition', labelKey: 'healthDashboard.nutrition' },
+  { value: 'Sleep', labelKey: 'health.sleep' },
+  { value: 'Checkups', labelKey: 'healthDashboard.checkups' },
+  { value: 'Medications', labelKey: 'healthDashboard.medications' },
+  { value: 'Documents', labelKey: 'healthDashboard.documents' },
+  { value: 'Vitals', labelKey: 'healthDashboard.vitals' },
+] as const;
+type Tab = (typeof TABS)[number]['value'];
 
-const METRIC_TYPES: { value: MetricType; label: string; unit: string }[] = [
-  { value: 'steps', label: 'Steps', unit: 'steps' },
-  { value: 'sleep_hours', label: 'Sleep', unit: 'hours' },
-  { value: 'heart_rate', label: 'Heart Rate', unit: 'bpm' },
-  { value: 'calories', label: 'Calories', unit: 'kcal' },
-  { value: 'active_minutes', label: 'Active Minutes', unit: 'min' },
-  { value: 'distance', label: 'Distance', unit: 'miles' },
-  { value: 'weight', label: 'Weight', unit: 'lbs' },
-  { value: 'water_cups', label: 'Water', unit: 'cups' },
+const METRIC_TYPES: { value: MetricType; label: string; labelKey: string; unit: string; unitKey: string }[] = [
+  { value: 'steps', label: 'Steps', labelKey: 'health.steps', unit: 'steps', unitKey: 'healthDashboard.unitSteps' },
+  { value: 'sleep_hours', label: 'Sleep', labelKey: 'health.sleep', unit: 'hours', unitKey: 'healthDashboard.unitHours' },
+  { value: 'heart_rate', label: 'Heart Rate', labelKey: 'health.heartRate', unit: 'bpm', unitKey: 'healthDashboard.unitBpm' },
+  { value: 'calories', label: 'Calories', labelKey: 'health.calories', unit: 'kcal', unitKey: 'healthDashboard.unitKcal' },
+  { value: 'active_minutes', label: 'Active Minutes', labelKey: 'healthDashboard.activeMinutes', unit: 'min', unitKey: 'healthDashboard.unitMinutes' },
+  { value: 'distance', label: 'Distance', labelKey: 'healthDashboard.distance', unit: 'miles', unitKey: 'healthDashboard.unitMiles' },
+  { value: 'weight', label: 'Weight', labelKey: 'healthDashboard.weight', unit: 'lbs', unitKey: 'healthDashboard.unitPounds' },
+  { value: 'water_cups', label: 'Water', labelKey: 'healthDashboard.water', unit: 'cups', unitKey: 'healthDashboard.unitCups' },
 ];
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+type Translator = ReturnType<typeof useTranslations>;
 
 function todayStart() {
   const d = new Date();
@@ -55,23 +64,25 @@ function daysAgo(n: number) {
   return d.toISOString();
 }
 
-function formatDuration(mins: number | null) {
-  if (!mins) return '0 min';
-  if (mins < 60) return `${mins} min`;
+function formatDuration(mins: number | null, locale: string, tr: Translator) {
+  if (!mins) return tr('healthDashboard.durationMinutes', { minutes: 0 });
+  if (mins < 60) return tr('healthDashboard.durationMinutes', { minutes: mins.toLocaleString(locale) });
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return m > 0
+    ? tr('healthDashboard.durationHoursMinutes', { hours: h.toLocaleString(locale), minutes: m.toLocaleString(locale) })
+    : tr('healthDashboard.durationHours', { hours: h.toLocaleString(locale) });
 }
 
-function formatRelativeTime(iso: string) {
+function formatRelativeTime(iso: string, locale: string, tr: Translator) {
   const d = new Date(iso);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / 86400000);
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  if (diffDays === 0) return `Today ${time}`;
-  if (diffDays === 1) return `Yesterday ${time}`;
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${time}`;
+  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  if (diffDays === 0) return tr('healthDashboard.todayAt', { time });
+  if (diffDays === 1) return tr('healthDashboard.yesterdayAt', { time });
+  return d.toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 const WORKOUT_ICONS: Record<string, string> = {
@@ -94,6 +105,7 @@ function workoutIcon(activity: string) {
 
 export function HealthModule() {
   const tr = useTranslations();
+  const { code: locale } = useLocale();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
@@ -181,27 +193,29 @@ export function HealthModule() {
   }, [todayMetrics]);
   const totalActiveMinToday = useMemo(() => todayMetrics.filter((m) => m.type === 'active_minutes').reduce((s, m) => s + m.value, 0), [todayMetrics]);
 
-  const formatSleepHours = (h: number) => {
-    if (h === 0) return '0h';
+  const formatSleepHours = useCallback((h: number) => {
+    if (h === 0) return tr('healthDashboard.durationHours', { hours: 0 });
     const hrs = Math.floor(h);
     const mins = Math.round((h - hrs) * 60);
-    return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-  };
+    return mins > 0
+      ? tr('healthDashboard.durationHoursMinutes', { hours: hrs.toLocaleString(locale), minutes: mins.toLocaleString(locale) })
+      : tr('healthDashboard.durationHours', { hours: hrs.toLocaleString(locale) });
+  }, [locale, tr]);
 
   // Stats grid
   const statsGrid = useMemo(() => [
-    { icon: Heart, label: 'Family Members', value: members.length, sub: 'Tracking health', bg: 'bg-rose-600/20 text-rose-300' },
-    { icon: Activity, label: 'Steps Today', value: totalStepsToday.toLocaleString(), sub: 'Family combined', bg: 'bg-brand/15 text-brand-text' },
-    { icon: Zap, label: 'Active Calories', value: totalCaloriesToday.toLocaleString(), sub: 'Today combined', bg: 'bg-orange-600/20 text-orange-300' },
-    { icon: Activity, label: 'Avg Sleep', value: formatSleepHours(avgSleepToday), sub: 'Last night', bg: 'bg-blue-600/20 text-blue-300' },
-  ], [members.length, totalStepsToday, totalCaloriesToday, avgSleepToday]);
+    { icon: Heart, label: tr('healthDashboard.familyMembers'), value: members.length.toLocaleString(locale), sub: tr('healthDashboard.trackingHealth'), bg: 'bg-rose-600/20 text-rose-300' },
+    { icon: Activity, label: tr('healthDashboard.stepsToday'), value: totalStepsToday.toLocaleString(locale), sub: tr('healthDashboard.familyCombined'), bg: 'bg-brand/15 text-brand-text' },
+    { icon: Zap, label: tr('healthDashboard.activeCalories'), value: totalCaloriesToday.toLocaleString(locale), sub: tr('healthDashboard.todayCombined'), bg: 'bg-orange-600/20 text-orange-300' },
+    { icon: Activity, label: tr('healthDashboard.avgSleep'), value: formatSleepHours(avgSleepToday), sub: tr('healthDashboard.lastNight'), bg: 'bg-blue-600/20 text-blue-300' },
+  ], [members.length, totalStepsToday, totalCaloriesToday, avgSleepToday, locale, tr, formatSleepHours]);
 
   // Activity summary progress bars
   const activityProgress = useMemo(() => [
-    { label: 'Steps', val: totalStepsToday.toLocaleString(), goal: familyStepsGoal.toLocaleString(), pct: Math.min(100, Math.round((totalStepsToday / familyStepsGoal) * 100)) },
-    { label: 'Calories', val: totalCaloriesToday.toLocaleString(), goal: '2,000', pct: Math.min(100, Math.round((totalCaloriesToday / 2000) * 100)) },
-    { label: 'Active Min', val: totalActiveMinToday.toString(), goal: '60', pct: Math.min(100, Math.round((totalActiveMinToday / 60) * 100)) },
-  ], [totalStepsToday, totalCaloriesToday, totalActiveMinToday, familyStepsGoal]);
+    { label: tr('health.steps'), val: totalStepsToday.toLocaleString(locale), goal: familyStepsGoal.toLocaleString(locale), pct: Math.min(100, Math.round((totalStepsToday / familyStepsGoal) * 100)) },
+    { label: tr('health.calories'), val: totalCaloriesToday.toLocaleString(locale), goal: (2000).toLocaleString(locale), pct: Math.min(100, Math.round((totalCaloriesToday / 2000) * 100)) },
+    { label: tr('healthDashboard.activeMinutes'), val: totalActiveMinToday.toLocaleString(locale), goal: (60).toLocaleString(locale), pct: Math.min(100, Math.round((totalActiveMinToday / 60) * 100)) },
+  ], [totalStepsToday, totalCaloriesToday, totalActiveMinToday, familyStepsGoal, locale, tr]);
 
   const goalPct = useMemo(() => {
     if (activityProgress.length === 0) return 0;
@@ -222,11 +236,11 @@ export function HealthModule() {
       const daySteps = metrics
         .filter((m) => m.type === 'steps' && m.recorded_at >= d.toISOString() && m.recorded_at < nextD.toISOString())
         .reduce((s, m) => s + m.value, 0);
-      days.push({ day: DAY_NAMES[d.getDay()], val: daySteps });
+      days.push({ day: d.toLocaleDateString(locale, { weekday: 'short' }), val: daySteps });
     }
     const max = Math.max(...days.map((d) => d.val), 1);
     return days.map((d) => ({ ...d, pct: Math.round((d.val / max) * 100) }));
-  }, [metrics]);
+  }, [metrics, locale]);
 
   // Member stats (steps, sleep, heart rate for today)
   const memberStats = useMemo(() => {
@@ -257,12 +271,12 @@ export function HealthModule() {
       }
     });
     return [
-      { label: 'Avg Steps', value: avgSteps.toLocaleString(), sub: 'Family average', color: 'text-brand-text' },
-      { label: 'Avg Sleep', value: formatSleepHours(avgSleep), sub: 'Per night', color: 'text-blue-300' },
-      { label: 'Calories Burned', value: totalCals.toLocaleString(), sub: 'This week total', color: 'text-emerald-300' },
-      { label: 'Active Days', value: `${activeDaySet.size} / 7`, sub: 'This week', color: 'text-orange-300' },
+      { label: tr('healthDashboard.avgSteps'), value: avgSteps.toLocaleString(locale), sub: tr('healthDashboard.familyAverage'), color: 'text-brand-text' },
+      { label: tr('healthDashboard.avgSleep'), value: formatSleepHours(avgSleep), sub: tr('healthDashboard.perNight'), color: 'text-blue-300' },
+      { label: tr('healthDashboard.caloriesBurned'), value: totalCals.toLocaleString(locale), sub: tr('healthDashboard.weekTotal'), color: 'text-emerald-300' },
+      { label: tr('healthDashboard.activeDays'), value: `${activeDaySet.size.toLocaleString(locale)} / 7`, sub: tr('health.thisWeek'), color: 'text-orange-300' },
     ];
-  }, [metrics]);
+  }, [metrics, locale, tr, formatSleepHours]);
 
   // Health insights (derived programmatically)
   const insights = useMemo(() => {
@@ -287,7 +301,7 @@ export function HealthModule() {
       if (consecutive >= 3) {
         result.push({
           icon: '💡',
-          text: `${m.display_name} has hit their step goal for ${consecutive} days in a row!`,
+          text: tr('healthDashboard.stepStreak', { name: m.display_name, count: consecutive.toLocaleString(locale) }),
           color: 'bg-violet-500/15 border-violet-400/20',
         });
       }
@@ -299,7 +313,7 @@ export function HealthModule() {
     if (avgThisWeek >= 8) {
       result.push({
         icon: '😴',
-        text: `Family is averaging ${formatSleepHours(avgThisWeek)} of sleep this week. Great rest!`,
+        text: tr('healthDashboard.sleepInsight', { duration: formatSleepHours(avgThisWeek) }),
         color: 'bg-blue-500/15 border-blue-400/20',
       });
     }
@@ -312,7 +326,9 @@ export function HealthModule() {
       if (daysUntil <= 7) {
         result.push({
           icon: '⚠️',
-          text: `${member ? member.display_name + ' has' : 'There is'} a checkup in ${daysUntil} day${daysUntil === 1 ? '' : 's'}: ${next.title}`,
+          text: member
+            ? tr(daysUntil === 1 ? 'healthDashboard.memberCheckupDay' : 'healthDashboard.memberCheckupDays', { name: member.display_name, count: daysUntil.toLocaleString(locale), title: next.title })
+            : tr(daysUntil === 1 ? 'healthDashboard.checkupDay' : 'healthDashboard.checkupDays', { count: daysUntil.toLocaleString(locale), title: next.title }),
           color: 'bg-orange-500/15 border-orange-400/20',
         });
       }
@@ -323,7 +339,7 @@ export function HealthModule() {
     if (todayWater > 0 && todayWater < 8) {
       result.push({
         icon: '💧',
-        text: `Family has logged ${todayWater} cups of water today. Keep hydrating!`,
+        text: tr(todayWater === 1 ? 'healthDashboard.waterInsightOne' : 'healthDashboard.waterInsight', { count: todayWater.toLocaleString(locale) }),
         color: 'bg-cyan-500/15 border-cyan-400/20',
       });
     }
@@ -331,13 +347,13 @@ export function HealthModule() {
     if (result.length === 0) {
       result.push({
         icon: '📊',
-        text: 'Start logging health metrics to see personalized insights for your family.',
+        text: tr('healthDashboard.insightsEmpty'),
         color: 'bg-violet-500/15 border-violet-400/20',
       });
     }
 
     return result;
-  }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor]);
+  }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor, locale, tr, formatSleepHours]);
 
   // ── CRUD handlers ──────────────────────────────────────────
   async function saveAppointment() {
@@ -474,10 +490,10 @@ export function HealthModule() {
         body: JSON.stringify({ question: coachForm.question.trim(), memberId: coachForm.member_id || null }),
       });
       const json = await res.json();
-      if (!res.ok) { setCoachError(json.error || 'The coach is unavailable right now.'); return; }
+      if (!res.ok) { setCoachError(json.error || tr('healthDashboard.coachUnavailable')); return; }
       setCoachAnswer(json.text || '');
     } catch {
-      setCoachError('Network error. Please try again.');
+      setCoachError(tr('healthDashboard.networkError'));
     } finally {
       setCoachLoading(false);
     }
@@ -494,7 +510,7 @@ export function HealthModule() {
 
   // ── Loading / Error ──────────────────────────────────────
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (error) return <ErrorState message={tr('healthDashboard.loadError')} onRetry={refresh} />;
 
   const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
 
@@ -516,7 +532,7 @@ export function HealthModule() {
         <div className="flex items-center justify-between border-b border-border">
           <div className="tab-bar">
             {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
+              <button key={t.value} onClick={() => setTab(t.value)} className={cn('tab-item', tab === t.value ? 'tab-item-active' : 'tab-item-inactive')}>{tr(t.labelKey)}</button>
             ))}
           </div>
         </div>
@@ -601,14 +617,14 @@ export function HealthModule() {
                       <Avatar name={m.display_name} color={m.color} size={32} />
                       <div className="flex-1">
                         <p className="text-sm font-semibold">{m.display_name}</p>
-                        <p className="text-xs text-muted">{m.role}</p>
+                        <p className="text-xs text-muted">{tr(`trustRole.${m.role}`)}</p>
                       </div>
                       <span className="text-xs font-bold" style={{ color: m.color ?? undefined }}>{pct}%</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div><p className="font-bold">{steps.toLocaleString()}</p><p className="text-muted">{tr('health.steps')}</p></div>
+                      <div><p className="font-bold">{steps.toLocaleString(locale)}</p><p className="text-muted">{tr('health.steps')}</p></div>
                       <div><p className="font-bold">{formatSleepHours(sleep)}</p><p className="text-muted">{tr('health.sleep')}</p></div>
-                      <div><p className="font-bold">{hr > 0 ? `${hr} bpm` : '--'}</p><p className="text-muted">{tr('health.heartRate')}</p></div>
+                      <div><p className="font-bold">{hr > 0 ? `${hr.toLocaleString(locale)} ${tr('healthDashboard.unitBpm')}` : '--'}</p><p className="text-muted">{tr('health.heartRate')}</p></div>
                     </div>
                     <div className="mt-2.5 h-1.5 rounded-full bg-border">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.color ?? undefined }} />
@@ -640,14 +656,14 @@ export function HealthModule() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold">{w.activity}</p>
                         <p className="text-xs text-muted">
-                          {member?.display_name ?? 'Unknown'}
-                          {w.distance ? ` · ${w.distance} mi` : ''}
-                          {w.duration_minutes ? ` · ${formatDuration(w.duration_minutes)}` : ''}
+                          {member?.display_name ?? tr('healthDashboard.unknownMember')}
+                          {w.distance ? ` · ${w.distance.toLocaleString(locale)} ${tr('healthDashboard.unitMiles')}` : ''}
+                          {w.duration_minutes ? ` · ${formatDuration(w.duration_minutes, locale, tr)}` : ''}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories} cal</p> : null}
-                        <p className="text-xs text-muted/60">{formatRelativeTime(w.recorded_at)}</p>
+                        {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories.toLocaleString(locale)} {tr('healthDashboard.unitCalories')}</p> : null}
+                        <p className="text-xs text-muted/60">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
                       </div>
                     </div>
                   );
@@ -660,7 +676,7 @@ export function HealthModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{tr('health.healthInsights')}</h2>
-              <span className="flex items-center gap-1 text-xs text-brand-text"><Sparkles className="h-3 w-3" /> Data-driven</span>
+              <span className="flex items-center gap-1 text-xs text-brand-text"><Sparkles className="h-3 w-3" /> {tr('healthDashboard.dataDriven')}</span>
             </div>
             <div className="space-y-3">
               {insights.map((insight, i) => (
@@ -680,7 +696,7 @@ export function HealthModule() {
               <Thermometer className="h-4 w-4 text-rose-300" />
               <h2 className="font-semibold">{tr('health.symptomJournal')}</h2>
               {activeSymptomCount > 0 && (
-                <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{activeSymptomCount} active</span>
+                <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{tr('healthDashboard.activeCount', { count: activeSymptomCount.toLocaleString(locale) })}</span>
               )}
             </div>
             <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
@@ -697,13 +713,13 @@ export function HealthModule() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-semibold">{s.symptom}</p>
-                        <span className={cn('text-[10px] font-bold uppercase', SEVERITY_COLORS[s.severity] ?? 'text-muted')}>{SEVERITY_LABELS[s.severity] ?? `Lvl ${s.severity}`}</span>
+                        <span className={cn('text-[10px] font-bold uppercase', SEVERITY_COLORS[s.severity] ?? 'text-muted')}>{SEVERITY_KEYS[s.severity] ? tr(SEVERITY_KEYS[s.severity]) : tr('healthDashboard.severityLevel', { level: s.severity.toLocaleString(locale) })}</span>
                         {s.status === 'resolved' && <span className="text-[10px] font-semibold text-emerald-300">{tr('health.resolved')}</span>}
                       </div>
                       <p className="truncate text-xs text-muted">
-                        {member?.display_name ?? 'Unknown'}
+                        {member?.display_name ?? tr('healthDashboard.unknownMember')}
                         {s.body_area ? ` · ${s.body_area}` : ''}
-                        {` · since ${formatRelativeTime(s.started_at)}`}
+                        {` · ${tr('healthDashboard.since', { time: formatRelativeTime(s.started_at, locale, tr) })}`}
                         {s.notes ? ` · ${s.notes}` : ''}
                       </p>
                     </div>
@@ -752,7 +768,7 @@ export function HealthModule() {
                   <div key={a.id} className="flex items-start gap-3">
                     <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
-                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
+                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale, { month: 'short' })}</p>
                         <p className="text-sm font-black leading-none">{d.getDate()}</p>
                       </div>
                     </div>
@@ -810,14 +826,14 @@ export function HealthModule() {
       <Modal open={apptOpen} title={tr('health.addAppointment')} onClose={() => setApptOpen(false)}>
         <div className="space-y-4">
           <Field label={tr('health.title')}>{(id) => <Input id={id} value={apptForm.title} onChange={(e) => setApptForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('health.eGAnnualPhysical')} />}</Field>
-          <Field label={tr('health.member')}>{(id) => <Select id={id} value={apptForm.member_id} onChange={(e) => setApptForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.member')}>{(id) => <Select id={id} value={apptForm.member_id} onChange={(e) => setApptForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('healthDashboard.allMembers')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={tr('health.dateTime')}>{(id) => <Input id={id} type="datetime-local" value={apptForm.starts_at} onChange={(e) => setApptForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('health.provider')}>{(id) => <Input id={id} value={apptForm.provider} onChange={(e) => setApptForm((f) => ({ ...f, provider: e.target.value }))} placeholder={tr('health.eGDrMartinez')} />}</Field>
             <Field label={tr('health.location')}>{(id) => <Input id={id} value={apptForm.location} onChange={(e) => setApptForm((f) => ({ ...f, location: e.target.value }))} placeholder={tr('health.eGOakMedical')} />}</Field>
           </div>
           <Field label={tr('health.notes')}>{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.optionalDetails')} />}</Field>
-          <Button onClick={saveAppointment} disabled={saving || !apptForm.title || !apptForm.starts_at} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Appointment'}</Button>
+          <Button onClick={saveAppointment} disabled={saving || !apptForm.title || !apptForm.starts_at} loading={saving} className="w-full">{saving ? tr('healthDashboard.saving') : tr('health.addAppointment')}</Button>
         </div>
       </Modal>
 
@@ -825,10 +841,10 @@ export function HealthModule() {
       <Modal open={metricOpen} title={tr('health.logHealthMetric')} onClose={() => setMetricOpen(false)}>
         <div className="space-y-4">
           <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={metricForm.member_id} onChange={(e) => setMetricForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label={tr('health.metricType')}>{(id) => <Select id={id} value={metricForm.type} onChange={(e) => setMetricForm((f) => ({ ...f, type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label} ({t.unit})</option>)}</Select>}</Field>
-          <Field label={tr('health.value')}>{(id) => <Input id={id} type="number" value={metricForm.value} onChange={(e) => setMetricForm((f) => ({ ...f, value: e.target.value }))} placeholder={`e.g. ${metricForm.type === 'steps' ? '10000' : metricForm.type === 'sleep_hours' ? '7.5' : '72'}`} />}</Field>
+          <Field label={tr('health.metricType')}>{(id) => <Select id={id} value={metricForm.type} onChange={(e) => setMetricForm((f) => ({ ...f, type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{tr(t.labelKey)} ({tr(t.unitKey)})</option>)}</Select>}</Field>
+          <Field label={tr('health.value')}>{(id) => <Input id={id} type="number" value={metricForm.value} onChange={(e) => setMetricForm((f) => ({ ...f, value: e.target.value }))} placeholder={tr('healthDashboard.numberExample', { value: metricForm.type === 'steps' ? '10000' : metricForm.type === 'sleep_hours' ? '7.5' : '72' })} />}</Field>
           <Field label={tr('health.dateTimeOptional')}>{(id) => <Input id={id} type="datetime-local" value={metricForm.recorded_at} onChange={(e) => setMetricForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
-          <Button onClick={saveMetric} disabled={saving || !metricForm.member_id || !metricForm.value} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Metric'}</Button>
+          <Button onClick={saveMetric} disabled={saving || !metricForm.member_id || !metricForm.value} loading={saving} className="w-full">{saving ? tr('healthDashboard.saving') : tr('health.logMetric')}</Button>
         </div>
       </Modal>
 
@@ -846,7 +862,7 @@ export function HealthModule() {
             <Field label={tr('health.dateTime')}>{(id) => <Input id={id} type="datetime-local" value={workoutForm.recorded_at} onChange={(e) => setWorkoutForm((f) => ({ ...f, recorded_at: e.target.value }))} />}</Field>
           </div>
           <Field label={tr('health.notesOptional')}>{(id) => <Input id={id} value={workoutForm.notes} onChange={(e) => setWorkoutForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.eGFeltGreatPrPace')} />}</Field>
-          <Button onClick={saveWorkout} disabled={saving || !workoutForm.member_id || !workoutForm.activity} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Workout'}</Button>
+          <Button onClick={saveWorkout} disabled={saving || !workoutForm.member_id || !workoutForm.activity} loading={saving} className="w-full">{saving ? tr('healthDashboard.saving') : tr('health.logWorkout')}</Button>
         </div>
       </Modal>
 
@@ -861,7 +877,7 @@ export function HealthModule() {
           </div>
           <Field label={tr('health.startedOptional')}>{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>
           <Field label={tr('health.notesOptional')}>{(id) => <Textarea id={id} value={symptomForm.notes} onChange={(e) => setSymptomForm((f) => ({ ...f, notes: e.target.value }))} placeholder={tr('health.eGStartedAfterLunchTook')} />}</Field>
-          <Button onClick={saveSymptom} disabled={saving || !symptomForm.member_id || !symptomForm.symptom.trim()} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Symptom'}</Button>
+          <Button onClick={saveSymptom} disabled={saving || !symptomForm.member_id || !symptomForm.symptom.trim()} loading={saving} className="w-full">{saving ? tr('healthDashboard.saving') : tr('health.logSymptom')}</Button>
         </div>
       </Modal>
 
@@ -871,22 +887,22 @@ export function HealthModule() {
           <p className="text-xs text-muted">{tr('healthModule.setAPerMemberDaily')}</p>
           <Field label={tr('health.familyMember')}>{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.selectMember')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={tr('health.metric')}>{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
+            <Field label={tr('health.metric')}>{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{tr(t.labelKey)}</option>)}</Select>}</Field>
             <Field label={tr('health.period')}>{(id) => <Select id={id} value={goalForm.period} onChange={(e) => setGoalForm((f) => ({ ...f, period: e.target.value as 'daily' | 'weekly' }))}><option value="daily">{tr('health.daily')}</option><option value="weekly">{tr('health.weekly')}</option></Select>}</Field>
           </div>
-          <Field label={tr('health.target')}>{(id) => <Input id={id} type="number" value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: e.target.value }))} placeholder={`e.g. ${goalForm.metric_type === 'steps' ? '10000' : goalForm.metric_type === 'sleep_hours' ? '8' : '60'}`} />}</Field>
-          <Button onClick={saveGoal} disabled={saving || !goalForm.member_id || !goalForm.target} loading={saving} className="w-full">{saving ? 'Saving...' : 'Save Goal'}</Button>
+          <Field label={tr('health.target')}>{(id) => <Input id={id} type="number" value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: e.target.value }))} placeholder={tr('healthDashboard.numberExample', { value: goalForm.metric_type === 'steps' ? '10000' : goalForm.metric_type === 'sleep_hours' ? '8' : '60' })} />}</Field>
+          <Button onClick={saveGoal} disabled={saving || !goalForm.member_id || !goalForm.target} loading={saving} className="w-full">{saving ? tr('healthDashboard.saving') : tr('healthDashboard.saveGoal')}</Button>
         </div>
       </Modal>
 
       {/* AI Health Coach Modal */}
       <Modal open={coachOpen} title={tr('health.aiHealthCoach')} onClose={() => setCoachOpen(false)}>
         <div className="space-y-4">
-          <p className="text-xs leading-5 text-muted">Ask a wellness question. The coach uses your family&rsquo;s own health data (profile, active meds, recent symptoms) to give grounded, safety-first guidance. This is general wellness information, not medical advice.</p>
+          <p className="text-xs leading-5 text-muted">{tr('healthDashboard.coachDescription')}</p>
           <Field label={tr('health.aboutOptional')}>{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.generalWholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={tr('health.question')}>{(id) => <Textarea id={id} value={coachForm.question} onChange={(e) => setCoachForm((f) => ({ ...f, question: e.target.value }))} placeholder={tr('health.eGWhatCanHelpWith')} />}</Field>
           <Button onClick={askCoach} disabled={coachLoading || !coachForm.question.trim()} loading={coachLoading} className="w-full">
-            {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Thinking...</> : <><Sparkles className="h-4 w-4" /> {tr('health.askTheCoach')}</>}
+            {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('healthDashboard.thinking')}</> : <><Sparkles className="h-4 w-4" /> {tr('health.askTheCoach')}</>}
           </Button>
           {coachError && <p className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">{coachError}</p>}
           {coachAnswer && (
