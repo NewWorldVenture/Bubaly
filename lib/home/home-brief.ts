@@ -18,6 +18,8 @@ export interface HomeStep {
 }
 
 export interface HomeBriefInput {
+  /** The already-resolved family timezone; legacy callers default to UTC. */
+  timezone?: string;
   /** Events in the next ~7 days (already family-scoped). */
   upcomingEvents: BriefEvent[];
   dinnerCandidates: DinnerIdea[];
@@ -48,7 +50,7 @@ export function buildHomeBrief(input: HomeBriefInput, now: Date): HomeBrief {
   const upcoming = input.upcomingEvents ?? [];
   // Reuse the onboarding engine for conflicts / time-saved / dinner ideas so the
   // home and the first-run screen compute value the same way.
-  const fb = buildFirstBrief(upcoming, now, input.dinnerCandidates ?? []);
+  const fb = buildFirstBrief(upcoming, now, input.dinnerCandidates ?? [], input.timezone);
 
   const weekCount = upcoming.length;
   const hasChores = input.choresPending > 0;

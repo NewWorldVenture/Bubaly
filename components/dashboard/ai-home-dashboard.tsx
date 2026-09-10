@@ -344,6 +344,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       title: r.title, cuisine: r.cuisine, effort: r.effort as DinnerEffort, prepMinutes: r.prep_minutes, description: r.description ?? null,
     }));
     homeBrief = buildHomeBrief({
+      timezone: tz,
       upcomingEvents: ((upcomingEvents ?? []) as { title: string; starts_at: string; all_day: boolean }[])
         .map((e) => ({ title: e.title, start: e.starts_at, allDay: e.all_day })),
       dinnerCandidates,

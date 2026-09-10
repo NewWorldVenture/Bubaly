@@ -312,7 +312,7 @@ export function foldAlsoToday(
  * without a database and identical for the page, the route and the cron.
  */
 export function buildBrief(input: BriefInput, tz: string): Brief {
-  const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? []);
+  const calendar = buildFirstBrief(input.events ?? [], input.now, input.dinnerCandidates ?? [], tz);
   const digest = buildConciergeDigest({ ...input.snapshot, now: input.now });
   const handled = mergeCompletedByBubaly(input.completedRuns ?? [], input.activity ?? [], { evidence: input.evidence });
   // Ranked the way Home ranks them (urgency, then newest) so the brief and the
