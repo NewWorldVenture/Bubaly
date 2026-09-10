@@ -541,12 +541,6 @@ export function PricingContent({
           </div>
         </section>
 
-        {/* What you're paying for — the tier matrix and the three-source
-            panel, directly above the plan cards so the value is read before
-            the price. Case studies (at most two, admin-published) sit with it. */}
-        <PricingValueBlock handled={handledStats} sample={sampleNumbers} />
-        <CaseStudyCards caseStudies={caseStudies} />
-
         {/* Plan cards — responsive 1 / 2 / 3 columns */}
         <section className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           <PlanCard
@@ -593,6 +587,16 @@ export function PricingContent({
             featureSections={PLUS_FEATURES}
           />
         </section>
+
+        {/* What you're paying for — the tier matrix and the three-source
+            panel, now BELOW the plan cards: the prices are what a visitor
+            comes to /pricing for, so they lead, and the supporting evidence
+            (sample week, own-numbers panel, and at most two admin-published
+            case studies) reads as backing for a price already seen. The pair
+            moves together; each carries its own top margin, so the spacing
+            holds in the new position. */}
+        <PricingValueBlock handled={handledStats} sample={sampleNumbers} />
+        <CaseStudyCards caseStudies={caseStudies} />
 
         {/* How the 5-day free trial works — the model, in plain language. */}
         <HowTrialWorks />

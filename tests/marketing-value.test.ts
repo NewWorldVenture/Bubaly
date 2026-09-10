@@ -166,11 +166,21 @@ describe('pricing-content.tsx mounts the block and keeps the toggle intact', () 
     return [pricing.slice(starts[0], starts[1]), pricing.slice(starts[1], starts[2]), pricing.slice(starts[2], end)];
   }
 
-  it('renders PricingValueBlock above the plan cards', () => {
-    const blockAt = pricing.indexOf('<PricingValueBlock');
+  // The order was deliberately reversed: the value block and case studies used
+  // to sit ABOVE the plan cards so the value was read before the price. A
+  // visitor arriving at /pricing is there for the prices, so the plans lead now
+  // and the supporting evidence reads as backing for a figure already seen.
+  // Pinned in both directions because the two move as a pair — the case studies
+  // must not be left stranded above the cards on their own.
+  it('renders PricingValueBlock and the case studies BELOW the plan cards', () => {
     const cardsAt = pricing.indexOf('<PlanCard');
-    expect(blockAt).toBeGreaterThan(-1);
-    expect(cardsAt).toBeGreaterThan(blockAt);
+    const blockAt = pricing.indexOf('<PricingValueBlock');
+    const studiesAt = pricing.indexOf('<CaseStudyCards');
+    expect(cardsAt).toBeGreaterThan(-1);
+    expect(blockAt).toBeGreaterThan(cardsAt);
+    expect(studiesAt).toBeGreaterThan(cardsAt);
+    // …and the block still leads the pair.
+    expect(studiesAt).toBeGreaterThan(blockAt);
   });
 
   it('keeps coarse:min-h-11 beside each setPeriod call', () => {
