@@ -3,7 +3,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
-import { isRetryableAuthError } from '@/lib/auth/session';
+import { hasAuthCookies, isRetryableAuthError } from '@/lib/auth/session';
 import { landingPathForRole } from '@/lib/auth/landing';
 
 const VID_COOKIE = 'bubaly_vid';
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createServer();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) console.error('[auth-callback] code exchange failed', error);
     if (!error) {
       // Super admins land on the admin console; everyone else on the dashboard.
       // Check the env/code allowlist as well as the DB RPC, so this works even
@@ -96,5 +97,33 @@ export async function GET(request: Request) {
       return res;
     }
   }
+  // Nothing above ever signed anyone OUT. Landing here means a sign-in did not
+  // HAPPEN — no code at all (a bookmark, a back-navigation, `?error=access_denied`
+  // from a provider the user cancelled at), or a code that is expired, already
+  // spent, or replayed from an old email.
+  //
+  // A sign-in that did not happen must not end the session the visitor already
+  // has. Tapping a stale magic link while signed in used to answer with a login
+  // page that contradicted their own cookies, which is the same "logged out for
+  // doing something ordinary" this route exists to prevent. So ask first, and
+  // send a visitor who IS signed in where they were going.
+  const supabase = await createServer();
+  const { data: { user }, error: lookupError } = await supabase.auth.getUser();
+  if (user) return NextResponse.redirect(new URL(next, url.origin));
+  // Same rule the middleware applies: an unreachable auth server reports the
+  // same empty user a signed-out visitor does, so a stored session plus a
+  // transient failure is not evidence of a logout.
+  if (isRetryableAuthError(lookupError) && hasAuthCookies(cookieNames(request))) {
+    console.warn('[auth-callback] auth lookup failed transiently; keeping the session', lookupError);
+    return NextResponse.redirect(new URL(next, url.origin));
+  }
   return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+}
+
+/** Cookie names on the incoming request, for the has-a-session check above. */
+function cookieNames(request: Request): string[] {
+  return (request.headers.get('cookie') ?? '')
+    .split(';')
+    .map((part) => part.split('=')[0]?.trim() ?? '')
+    .filter(Boolean);
 }
