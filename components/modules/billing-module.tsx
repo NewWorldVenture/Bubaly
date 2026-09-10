@@ -26,6 +26,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { FamilyValueComparison } from '@/components/billing/family-value-comparison';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -1389,7 +1390,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <CreditCard className="h-5 w-5 text-brand-text" />
             <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
           </div>
+          {/* #437 states the recorded measure; #446 derives the price
+              comparison from it and hides itself when ineligible. Both PRs
+              mount their own card here and test for it, so both stay. */}
           <div className="mb-4"><FamilyDeliveredValue /></div>
+          <div className="mb-4"><FamilyValueComparison /></div>
           {subLoading ? <SkeletonList /> : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

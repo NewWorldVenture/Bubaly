@@ -36,6 +36,8 @@ import { dayKeyInTz, scopeFromUserContext, zonedDayBoundsMs } from '@/lib/servic
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
+import { loadFamilyValue } from '@/lib/metric/value-server';
+import { FamilyValueComparison } from '@/components/billing/family-value-comparison';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
@@ -374,6 +376,7 @@ export default async function HomePage() {
 
   // R11 — the category metric: how much family admin the system removed this week.
   const timeSaved = await loadTimeSaved(supabase, familyId, now);
+  const valueComparison = await loadFamilyValue(supabase, familyId, now);
 
   // Setup nudge — the ONLY route into /dashboard/setup (the re-onboarding
   // surface was otherwise unreachable). Managers only, and gated cheaply: one
@@ -596,6 +599,7 @@ export default async function HomePage() {
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner result={timeSaved} retryHref="/home" />
+      <FamilyValueComparison initial={{ familyId, result: valueComparison }} />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
