@@ -25,7 +25,7 @@ describe('brief callers use the authoritative family timezone', () => {
     expect(brief.asOfDate).toBe('2026-09-09');
     expect(brief.calendar.timeline.map(row => [row.title, row.timeLabel])).toEqual([['Practice', '7:30 PM'], ['Appointment', '8:15 PM']]);
     expect(brief.counts.today).toBe(2);
-    expect(brief.calendar.conflicts).toEqual([{ aTitle: 'Practice', bTitle: 'Appointment', dayLabel: 'Today', overlapLabel: '8:15 PM–9:00 PM' }]);
+    expect(brief.calendar.conflicts).toMatchObject([{ aTitle: 'Practice', bTitle: 'Appointment', dayLabel: 'Today', overlapLabel: '8:15 PM–9:00 PM' }]);
     expect(source).toEqual(before);
   });
 

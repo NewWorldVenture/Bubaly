@@ -109,7 +109,7 @@ async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promis
  * which persists them into the real family's calendar.
  */
 export async function previewCalendarImportAction(input: {
-  source: 'paste' | 'demo'; icsText?: string;
+  source: 'paste' | 'demo'; icsText?: string; timezone?: string;
 }): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
   const t = await getTranslations();
   const parsed = previewCalendarImportSchema.safeParse(input);
@@ -138,7 +138,7 @@ export async function previewCalendarImportAction(input: {
   }
 
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
-  const brief = buildFirstBrief(events, now, dinnerCandidates);
+  const brief = buildFirstBrief(events, now, dinnerCandidates, parsed.data.timezone);
   return { ok: true, data: { brief, events, source } };
 }
 

@@ -31,7 +31,7 @@ vi.mock('@/lib/referrals/signup', () => ({ captureSignupReferral: async () => {}
 vi.mock('@/lib/onboarding/remember', () => ({ rememberOnboardingFacts: async () => {} }));
 
 const { startCalendarConnectionAction, previewConnectedCalendarAction } = await import('@/app/onboarding/calendar-actions');
-const { finalizeOnboardingAction } = await import('@/app/onboarding/actions');
+const { finalizeOnboardingAction, previewCalendarImportAction } = await import('@/app/onboarding/actions');
 const { default: OnboardingPage } = await import('@/app/onboarding/page');
 const { GET: googleStart } = await import('@/app/api/sync/google/auth/route');
 const { GET: googleFinish } = await import('@/app/api/sync/google/callback/route');
@@ -67,7 +67,70 @@ beforeEach(() => {
     pullCalendarWindow: async () => [{ external_id: 'school', title: 'School meeting', starts_at: '2026-09-10T10:00:00Z', ends_at: '2026-09-10T11:00:00Z',
       location: 'School', all_day: false, recurrence_rule: null, cancelled: false }] };
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+describe('paste/demo preview uses the selected family timezone', () => {
+  it.each([
+    { name: 'evening across UTC midnight', now: '2026-09-10T00:00:00Z', timezone: 'America/New_York',
+      rows: ['DTSTART:20260909T233000Z\nDTEND:20260910T010000Z\nSUMMARY:Practice', 'DTSTART:20260910T001500Z\nDTEND:20260910T013000Z\nSUMMARY:Appointment'], today: 2, firstTime: '7:30 PM' },
+    { name: 'all-day original date', now: '2026-09-10T02:00:00Z', timezone: 'America/Los_Angeles',
+      rows: ['DTSTART;VALUE=DATE:20260909\nSUMMARY:School closed', 'DTSTART;VALUE=DATE:20260910\nSUMMARY:Next holiday'], today: 1, firstTime: 'All day' },
+    { name: 'spring DST evening', now: '2026-03-09T02:00:00Z', timezone: 'America/New_York',
+      rows: ['DTSTART:20260309T020000Z\nDTEND:20260309T030000Z\nSUMMARY:Practice', 'DTSTART:20260309T023000Z\nDTEND:20260309T033000Z\nSUMMARY:Appointment'], today: 2, firstTime: '10:00 PM' },
+    { name: 'morning ahead of UTC', now: '2026-09-09T22:30:00Z', timezone: 'Asia/Tokyo',
+      rows: ['DTSTART:20260909T230000Z\nSUMMARY:Morning', 'DTSTART:20260910T160000Z\nSUMMARY:Tomorrow'], today: 1, firstTime: '8:00 AM' },
+  ])('$name matches the actual finalized brief and stored summary', async ({ now, timezone, rows, today, firstTime }) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(now));
+    const icsText = ['BEGIN:VCALENDAR', ...rows.map(row => `BEGIN:VEVENT\n${row}\nEND:VEVENT`), 'END:VCALENDAR'].join('\n');
+    const request = { source: 'paste' as const, icsText, timezone };
+    const from = vi.spyOn(db, 'from');
+    const preview = await previewCalendarImportAction(request);
+    expect(preview.ok).toBe(true); if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
+    expect(from.mock.calls.map(([table]) => table)).toEqual(['meal_ideas']);
+    expect(db.table('calendar_events')).toHaveLength(0); expect(db.table('onboarding_imports')).toHaveLength(0);
+    const payload = buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone }), importSource: 'paste', importedEvents: preview.data.events });
+    const result = await finalizeOnboardingAction(payload, { userId, familyId });
+    expect(result.ok).toBe(true); if (!result.ok || !result.data?.brief) throw new Error('Finish unavailable');
+    expect(result.data.brief.todayCount).toBe(today);
+    expect(result.data.brief.timeline[0].timeLabel).toBe(firstTime);
+    expect(db.table('onboarding_imports')[0]).toMatchObject({ family_id: familyId, today_count: today });
+    expect(preview.data.brief).toEqual(result.data.brief);
+    expect(db.table('calendar_events').map(row => row.starts_at)).toEqual(preview.data.events.map(event => event.start));
+  });
+
+  it('demo preview agrees with finalization without changing the generated sample events', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
+    const request = { source: 'demo' as const, timezone: 'America/New_York' };
+    const preview = await previewCalendarImportAction(request);
+    expect(preview.ok).toBe(true); if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
+    const legacy = await previewCalendarImportAction({ source: 'demo' });
+    expect(legacy.ok).toBe(true); if (!legacy.ok || !legacy.data) throw new Error('Legacy preview unavailable');
+    expect(preview.data.events).toEqual(legacy.data.events);
+    const result = await finalizeOnboardingAction(buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: request.timezone }), importSource: 'demo', importedEvents: preview.data.events }), { userId, familyId });
+    expect(result.ok).toBe(true); if (!result.ok || !result.data?.brief) throw new Error('Finish unavailable');
+    expect(preview.data.brief).toEqual(result.data.brief);
+  });
+
+  it.each(['', ' ', 'Invalid/Zone', null, false, 42, {}, [], 'x'.repeat(101)].map(timezone => ({ timezone })))('rejects malformed supplied timezone $timezone before auth or calendar work', async ({ timezone }) => {
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    const result = await previewCalendarImportAction({ source: 'demo', timezone } as never);
+    expect(result.ok).toBe(false); expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it('omitted timezone retains the legacy UTC presentation default', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
+    const explicit = { source: 'demo' as const, timezone: 'UTC' };
+    expect(await previewCalendarImportAction({ source: 'demo' })).toEqual(await previewCalendarImportAction(explicit));
+  });
+
+  it('a valid presentation timezone never bypasses the existing signed-in requirement', async () => {
+    vi.spyOn(db.auth, 'getUser').mockResolvedValue({ data: { user: null }, error: null } as never);
+    const from = vi.spyOn(db, 'from');
+    const request = { source: 'demo' as const, timezone: 'America/New_York' };
+    expect((await previewCalendarImportAction(request)).ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+});
 function request(path: string, values = mock.cookies) {
   return new NextRequest(`https://bubaly.test${path}`, { headers: { cookie: [...values].map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('; ') } });
 }
