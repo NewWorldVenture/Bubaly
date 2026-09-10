@@ -24,7 +24,14 @@ vi.mock('react', async original => ({ ...await original<typeof import('react')>(
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.error }) }));
-vi.mock('@/components/i18n/locale-provider', async () => { const {getMessages,translate}=await import('@/lib/i18n/messages'); return { useTranslations: () => (key:string,params?:Record<string,string|number>)=>translate(getMessages(mock.locale),key,params) }; });
+vi.mock('@/components/i18n/locale-provider', async () => {
+  const { getMessages, translate } = await import('@/lib/i18n/messages');
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    useLocale: () => localeOrDefault(mock.locale),
+    useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mock.locale), key, params),
+  };
+});
 vi.mock('@/app/onboarding/actions', () => ({ previewCalendarImportAction: mock.preview, finalizeOnboardingAction: mock.finish }));
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: vi.fn(), previewConnectedCalendarAction: vi.fn() }));
 vi.mock('@/lib/analytics/onboarding-track', () => ({ trackOnboarding: vi.fn() }));
