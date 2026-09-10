@@ -1,4 +1,11 @@
 {
+  "automaticCapture.title": "Percentagem verificada de captura automática",
+  "automaticCapture.minimumShare": "Pelo menos {percent}%",
+  "automaticCapture.counts": "{automatic} de {total} registos suportados têm captura automática verificada.",
+  "automaticCapture.unknown": "A origem da captura de {unknown} registos é desconhecida; não são considerados manuais por defeito.",
+  "automaticCapture.noData": "Não foram criados registos suportados nos últimos sete dias.",
+  "automaticCapture.unavailable": "A percentagem de captura está indisponível. Atualize a página para tentar novamente.",
+  "automaticCapture.methodology": "Inclui eventos do calendário, tarefas, faturas e lembretes familiares a que tem acesso, criados nos últimos sete dias. A criação verificada por IA (incluindo pedidos aprovados) e os calendários associados contam como automáticos. As mensagens e os documentos de origem são excluídos para evitar contar o mesmo trabalho duas vezes.",
   "App.couldNotSetTheDefaultDashboard": "Não foi possível definir o painel predefinido.",
   "App.couldNotSwitchActiveFamily": "Não foi possível mudar de família ativa.",
   "App.couldNotVerifyFamilyMembership": "Não foi possível verificar a pertença à família.",

@@ -1,4 +1,11 @@
 {
+  "automaticCapture.title": "Verified automatic capture share",
+  "automaticCapture.minimumShare": "At least {percent}%",
+  "automaticCapture.counts": "{automatic} of {total} supported records have verified automatic capture.",
+  "automaticCapture.unknown": "{unknown} records have an unknown capture source; they are not assumed manual.",
+  "automaticCapture.noData": "No supported records were created in the last seven days.",
+  "automaticCapture.unavailable": "Capture share is unavailable. Refresh to try again.",
+  "automaticCapture.methodology": "Based on calendar events, tasks, bills, and family reminders you can access, created in the last seven days. Verified AI creation (including approved requests) and linked calendar feeds count as automatic. Source messages and paperwork are excluded to avoid counting the same work twice.",
   "App.couldNotSetTheDefaultDashboard": "Could not set the default dashboard.",
   "App.couldNotSwitchActiveFamily": "Could not switch active family.",
   "App.couldNotVerifyFamilyMembership": "Could not verify family membership.",

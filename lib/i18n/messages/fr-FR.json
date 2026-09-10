@@ -1,4 +1,11 @@
 {
+  "automaticCapture.title": "Part vérifiée de saisie automatique",
+  "automaticCapture.minimumShare": "Au moins {percent}%",
+  "automaticCapture.counts": "La saisie automatique est vérifiée pour {automatic} des {total} enregistrements pris en charge.",
+  "automaticCapture.unknown": "L’origine de la saisie de {unknown} enregistrements est inconnue ; ils ne sont pas considérés comme manuels par défaut.",
+  "automaticCapture.noData": "Aucun enregistrement pris en charge n’a été créé au cours des sept derniers jours.",
+  "automaticCapture.unavailable": "La part de saisie est indisponible. Actualisez la page pour réessayer.",
+  "automaticCapture.methodology": "Sont pris en compte les événements du calendrier, tâches, factures et rappels familiaux accessibles, créés au cours des sept derniers jours. La création vérifiée par IA (y compris les demandes approuvées) et les calendriers liés comptent comme automatiques. Les messages et documents sources sont exclus pour éviter de compter deux fois le même travail.",
   "App.couldNotSetTheDefaultDashboard": "Impossible de définir le tableau de bord par défaut.",
   "App.couldNotSwitchActiveFamily": "Impossible de changer de famille active.",
   "App.couldNotVerifyFamilyMembership": "Impossible de vérifier l’appartenance à la famille.",

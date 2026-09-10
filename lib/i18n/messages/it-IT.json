@@ -1,4 +1,11 @@
 {
+  "automaticCapture.title": "Quota verificata di acquisizione automatica",
+  "automaticCapture.minimumShare": "Almeno il {percent}%",
+  "automaticCapture.counts": "{automatic} su {total} voci supportate hanno un’acquisizione automatica verificata.",
+  "automaticCapture.unknown": "Per {unknown} voci l’origine dell’acquisizione è sconosciuta; non vengono considerate manuali per impostazione predefinita.",
+  "automaticCapture.noData": "Non sono state create voci supportate negli ultimi sette giorni.",
+  "automaticCapture.unavailable": "La quota di acquisizione non è disponibile. Aggiorna la pagina per riprovare.",
+  "automaticCapture.methodology": "Sono inclusi eventi del calendario, attività, fatture e promemoria familiari accessibili, creati negli ultimi sette giorni. La creazione verificata tramite IA (incluse le richieste approvate) e i calendari collegati contano come automatici. Messaggi e documenti di origine sono esclusi per evitare di contare due volte lo stesso lavoro.",
   "App.couldNotSetTheDefaultDashboard": "Impossibile impostare la dashboard predefinita.",
   "App.couldNotSwitchActiveFamily": "Impossibile cambiare la famiglia attiva.",
   "App.couldNotVerifyFamilyMembership": "Impossibile verificare l’appartenenza alla famiglia.",
