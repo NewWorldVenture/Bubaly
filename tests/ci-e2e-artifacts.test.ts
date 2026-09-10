@@ -43,6 +43,7 @@ test('CI failure evidence has only the DOM/screenshot allowlist and explicit pri
   ], 'Do not upload whole directories, traces, state, logs, or reports');
   assert.deepEqual(paths.filter((path) => path.startsWith('!')), [
     '!test-results/**/trace.zip',
+    '!test-results/*durable-session*/**',
     '!test-results/**/storageState*',
     '!test-results/**/storage-state*',
     '!test-results/**/auth.json',
