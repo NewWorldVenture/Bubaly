@@ -7,8 +7,9 @@ const page = fs.readFileSync('app/(app)/dashboard/grandparent-portal/page.tsx', 
 // PLA-0781: the Grandparent Portal's member roster is its spine — the family
 // grid, milestone/announcement author names, and birthday celebrations all
 // build off it. If the roster read fails, the page must fail closed rather than
-// render an empty portal for a grandparent. The family name + photo/milestone/
-// announcement/date enrichment reads intentionally stay best-effort.
+// render an empty portal for a grandparent. Photo/milestone/announcement/date
+// failures must also fail that household's card closed; runtime cases for each
+// source and transport failures live in grandparent-multi-household.test.ts.
 describe('grandparent-portal read boundary', () => {
   it('captures the roster read result rather than dropping its error', () => {
     expect(page).toContain('membersRes,');
