@@ -50,7 +50,9 @@ type AuthState = { ready: boolean; restoring: boolean; session: Session | null; 
   signIn: unknown; signOut: unknown; refreshFamily: unknown; freshFamily: () => Promise<{ ok: true; family: typeof family | null }> };
 let auth: AuthState;
 let authEvent: (event: string, session: unknown) => void = () => {};
+const passwordSignIn = vi.fn();
 vi.doMock('../mobile/src/lib/supabase', () => ({ supabase: { auth: {
+  signInWithPassword: passwordSignIn,
   getSession: async () => ({ data: { session: auth.session }, error: null }),
   onAuthStateChange: (listener: typeof authEvent) => { authEvent = listener; return { data: { subscription: { unsubscribe: vi.fn() } } }; },
 } } }));
@@ -83,8 +85,15 @@ const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(
 beforeEach(() => {
   slots.length = 0; cursor = 0; effects = []; queued = []; holdUpdates = false; nextId = 0;
   ask.mockReset().mockResolvedValue({ conversationId: 'server-conversation', content: 'Private answer A', actions: [], persisted: true });
+  passwordSignIn.mockReset().mockResolvedValue({ error: null });
   auth = { ready: true, restoring: false, session: session('user-a'), accessToken: 'token-user-a', family: { ...family }, familyLoading: false, familyError: null,
     signIn: vi.fn(), signOut: vi.fn(), refreshFamily: vi.fn(), freshFamily: async () => ({ ok: true, family: auth.family }) };
+});
+
+it('explains an overlapping sign-in failure without exposing SDK storage diagnostics', async () => {
+  passwordSignIn.mockResolvedValue({ error: { code: 'session_write_blocked', message: 'internal session write diagnostic' } });
+  const signIn = provider().signIn as (email: string, password: string) => Promise<{ error: string | null }>;
+  expect(await signIn('fixture@example.test', 'synthetic-password')).toEqual({ error: 'Sign-out is finishing. Please try signing in again.' });
 });
 
 describe('assistant ownership at render time', () => {

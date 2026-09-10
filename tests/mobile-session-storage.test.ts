@@ -121,6 +121,31 @@ describe('durable mobile secure storage', () => {
     expect(await f.store.getItem('session')).toBe('old-session-value');
   });
 
+  it.each(['current session', 'chunks:0'])('checks deletion ownership after reading header %s, including damaged storage', async header => {
+    const f = fixture(); f.map.set('session', header);
+    const entered = deferred(); const release = deferred(); let current = true;
+    vi.mocked(f.backing.getItem).mockImplementation(async key => {
+      entered.resolve(); await release.promise; return f.map.get(key) ?? null;
+    });
+    const removing = f.store.removeItemIf('session', () => current);
+    await entered.promise; current = false; release.resolve();
+    expect(await removing).toBe(false); expect(f.map.get('session')).toBe(header);
+    expect(f.backing.removeItem).not.toHaveBeenCalled();
+  });
+
+  it('shares write blocks and revisions across adapters while allowing sign-out reads and removals', async () => {
+    const f = fixture(); const other = createChunkedStore(f.backing, 10);
+    await f.store.setItem('session', 'old session');
+    const revision = f.store.writeRevision('session'); const resume = f.store.blockWrites('session');
+    const writing = other.setItem('session', 'new account session');
+    await expect(writing).rejects.toMatchObject({ code: 'session_write_blocked' });
+    expect(f.store.writeRevision('session')).toBe(revision);
+    expect(await f.store.getItem('session')).toBe('old session');
+    await f.store.removeItem('session'); expect(await other.getItem('session')).toBeNull();
+    resume(); await other.setItem('session', 'new account session');
+    expect(await f.store.getItem('session')).toBe('new account session');
+  });
+
   it.each(['chunks:0', 'chunks:nope', 'chunks:99999999', 'chunks-v2:bad:0'])('allows explicit new sign-in or sign-out after damaged header %s', async header => {
     const f = fixture(); f.map.set('session', header);
     await expect(f.store.getItem('session')).rejects.toBeInstanceOf(SessionStorageUnavailableError);

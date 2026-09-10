@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
-import { supabase } from './supabase';
+import { supabase, signOutThisDevice } from './supabase';
 import { resolveActiveFamily, type ActiveFamily } from './family';
 import { friendlyAuthError } from './auth-core';
 import { connectAuthSession } from './auth-session';
@@ -80,14 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error?.code === 'session_write_blocked') return { error: mobileTranslate(deviceLocale(), 'mobileAssistant.signInRetry') };
     return { error: error ? friendlyAuthError(error.message) : null };
   }, []);
 
   const signOut = useCallback(async () => {
     // Local scope: signing out of the phone must not revoke the session on the
     // web or a tablet. Matches app/auth/signout/route.ts.
-    setRestoring(false);
-    await supabase.auth.signOut({ scope: 'local' });
+    await signOutThisDevice();
   }, []);
 
   const refreshFamily = useCallback(async () => {

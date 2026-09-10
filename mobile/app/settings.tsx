@@ -9,6 +9,7 @@ import { GlassCard } from '../src/components/GlassCard';
 import { Divider, ListRow } from '../src/components/ListRow';
 import { Screen } from '../src/components/Screen';
 import { useAuth } from '../src/lib/auth';
+import { deviceLocale, mobileTranslate } from '../src/lib/mobile-i18n';
 import { webUrl } from '../src/lib/config';
 import { THEME_PREFERENCES, type ThemePreference } from '../src/theme/theme-core';
 import { useTheme } from '../src/theme/theme';
@@ -20,6 +21,8 @@ export default function SettingsScreen() {
   const { colors, spacing, radius } = theme;
   const { session, family, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
+  const t = (key: string) => mobileTranslate(deviceLocale(), key);
 
   return (
     <Screen>
@@ -62,7 +65,11 @@ export default function SettingsScreen() {
         <ListRow title="Terms" leading={<Ionicons name="document-text-outline" size={24} color={colors.muted} />} onPress={() => Linking.openURL(webUrl('/terms'))} />
       </GlassCard>
 
-      <Button title="Sign out" variant="danger" loading={signingOut} onPress={async () => { setSigningOut(true); try { await signOut(); } finally { setSigningOut(false); } }} />
+      {signOutFailed ? <AppText accessibilityRole="alert" color={colors.danger}>{t('mobileAssistant.signOutFailed')}</AppText> : null}
+      <Button title={t('mobileAssistant.signOutDevice')} variant="danger" loading={signingOut} onPress={async () => {
+        setSigningOut(true); setSignOutFailed(false);
+        try { await signOut(); } catch { setSignOutFailed(true); } finally { setSigningOut(false); }
+      }} />
     </Screen>
   );
 }

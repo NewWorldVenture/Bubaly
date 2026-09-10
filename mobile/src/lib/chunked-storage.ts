@@ -6,6 +6,7 @@
 // Each large write gets its own generation. The header commits only after all
 // chunks exist, so an interrupted refresh cannot overwrite the previous session.
 // Legacy `chunks:N` values remain readable. Pure TypeScript, including byte sizing.
+import { AuthRetryableFetchError } from '@supabase/supabase-js';
 
 export const SECURE_CHUNK_SIZE = 1800;
 const HEADER_PREFIX = 'chunks:';
@@ -13,6 +14,14 @@ const GENERATION_PREFIX = 'chunks-v2:';
 const MAX_CHUNKS = 4096;
 let generationSequence = 0;
 const queues = new WeakMap<KeyValueStore, Map<string, Promise<unknown>>>();
+const writeStates = new WeakMap<KeyValueStore, { revisions: Map<string, number>; blocks: Map<string, number> }>();
+
+export class SessionWriteBlockedError extends AuthRetryableFetchError {
+  constructor() {
+    super('Session sign-out is in progress.', 0);
+    this.code = 'session_write_blocked';
+  }
+}
 
 export class SessionStorageUnavailableError extends Error {
   readonly code = 'session_storage_unavailable';
@@ -61,9 +70,15 @@ function chunkKeys(key: string, raw: string | null): string[] | null {
   return Array.from({ length: count }, (_, index) => legacy ? chunkKey(key, index) : `${key}.${generation![1]}.${index}`);
 }
 
-export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_SIZE): KeyValueStore {
+export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_SIZE): KeyValueStore & {
+  removeItemIf(key: string, shouldRemove: () => boolean): Promise<boolean>;
+  writeRevision(key: string): number;
+  blockWrites(key: string): () => void;
+} {
   const pending = queues.get(backing) ?? new Map<string, Promise<unknown>>();
   queues.set(backing, pending);
+  const writes = writeStates.get(backing) ?? { revisions: new Map<string, number>(), blocks: new Map<string, number>() };
+  writeStates.set(backing, writes);
   function serialize<T>(key: string, run: () => Promise<T>): Promise<T> {
     const result = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(run).catch(() => {
       // A locked/unavailable Keychain is not an absent or rejected session.
@@ -76,6 +91,16 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
   // Cleanup happens only after the logical commit. Failure to remove obsolete
   // encrypted chunks must not turn a successful session save into a failed one.
   const cleanup = (keys: string[]) => Promise.allSettled(keys.map(name => backing.removeItem(name)));
+  const removeItemIf = (key: string, shouldRemove: () => boolean) => serialize(key, async () => {
+    let previous: string[] = [];
+    try { previous = chunkKeys(key, await backing.getItem(key)) ?? []; } catch { /* Still clear a damaged session explicitly. */ }
+    // A newer sign-in can arrive while this deletion waits behind a save or
+    // while native storage is being read. Check ownership at the commit point.
+    if (!shouldRemove()) return false;
+    await backing.removeItem(key);
+    await cleanup(previous);
+    return true;
+  });
   return {
     getItem(key) {
       return serialize(key, async () => {
@@ -93,6 +118,11 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
       });
     },
     setItem(key, value) {
+      // Do not park and replay writes during explicit sign-out: a delayed old
+      // refresh could overwrite a newer login after the transaction finishes.
+      // The SDK returns this recognized retryable error without claiming success.
+      if (writes.blocks.has(key)) return Promise.reject(new SessionWriteBlockedError());
+      writes.revisions.set(key, (writes.revisions.get(key) ?? 0) + 1);
       return serialize(key, async () => {
         const raw = await backing.getItem(key);
         let previous: string[] = [];
@@ -123,12 +153,18 @@ export function createChunkedStore(backing: KeyValueStore, size = SECURE_CHUNK_S
       });
     },
     removeItem(key) {
-      return serialize(key, async () => {
-        let previous: string[] = [];
-        try { previous = chunkKeys(key, await backing.getItem(key)) ?? []; } catch { /* Still clear a damaged session explicitly. */ }
-        await backing.removeItem(key);
-        await cleanup(previous);
-      });
+      return removeItemIf(key, () => true).then(() => {});
+    },
+    removeItemIf,
+    writeRevision: key => writes.revisions.get(key) ?? 0,
+    blockWrites(key) {
+      writes.blocks.set(key, (writes.blocks.get(key) ?? 0) + 1);
+      let released = false;
+      return () => {
+        if (released) return; released = true;
+        const owners = (writes.blocks.get(key) ?? 1) - 1;
+        if (owners) writes.blocks.set(key, owners); else writes.blocks.delete(key);
+      };
     },
   };
 }
