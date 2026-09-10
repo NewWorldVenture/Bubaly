@@ -47,7 +47,7 @@ function household(db: InMemorySupabase, timezone = 'America/New_York') {
     { id: 'run-old', family_id: 'fam-1', summary: 'Last week', state: 'completed', progress: { total: 2, completed: 2 }, completed_at: '2026-08-30T06:00:00Z', updated_at: '2026-08-30T06:00:00Z' },
   ]);
   db.seed('calendar_events', [
-    { id: 'ev-1', family_id: 'fam-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00Z', ends_at: '2026-09-07T15:00:00Z', location: null },
+    { id: 'ev-1', family_id: 'fam-1', title: 'Dentist', starts_at: '2026-09-07T14:00:00Z', ends_at: '2026-09-07T15:00:00Z', all_day: false, location: null },
   ]);
   db.seed('bills', [
     { id: 'b-1', family_id: 'fam-1', name: 'Electric bill', amount: 120, due_date: '2026-09-05', status: 'unpaid' },

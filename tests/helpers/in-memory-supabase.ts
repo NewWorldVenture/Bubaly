@@ -113,22 +113,30 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
   }
 }
 
-/** `a.eq.1,b.is.null,c.in.(x,y)` — the flat form `.or()` is called with in this repository. */
-function parseOr(expression: string): Predicate {
+/** OR clauses, including nested AND groups used to filter typed calendar windows. */
+function parseOr(expression: string, conjunction = false): Predicate {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
   for (const ch of expression) {
     if (ch === '(') depth += 1;
     if (ch === ')') depth -= 1;
+    if (depth < 0) throw new Error('[in-memory-supabase] unbalanced or() group');
     if (ch === ',' && depth === 0) { parts.push(current); current = ''; continue; }
     current += ch;
   }
+  if (depth !== 0) throw new Error('[in-memory-supabase] unbalanced or() group');
   if (current) parts.push(current);
+  if (!current.trim() || parts.some(part => !part.trim())) throw new Error('[in-memory-supabase] empty or() clause');
   const predicates = parts.map((part) => {
     const trimmed = part.trim();
     const negated = trimmed.startsWith('not.');
     const body = negated ? trimmed.slice(4) : trimmed;
+    if (body.startsWith('and(') && body.endsWith(')')) {
+      const predicate = parseOr(body.slice(4, -1), true);
+      return negated ? (row: Row) => !predicate(row) : predicate;
+    }
+    if (body.startsWith('or(')) throw new Error('[in-memory-supabase] nested or() is unsupported');
     const first = body.indexOf('.');
     const second = body.indexOf('.', first + 1);
     if (first < 0 || second < 0) throw new Error(`[in-memory-supabase] cannot parse or() clause "${part}"`);
@@ -139,7 +147,7 @@ function parseOr(expression: string): Predicate {
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
-  return (row) => predicates.some((p) => p(row));
+  return (row) => conjunction ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
 }
 
 /** Split a select list on top-level commas; `a, b:c, d(e,f)` → three parts. */
