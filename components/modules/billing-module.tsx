@@ -53,6 +53,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -1388,6 +1389,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <CreditCard className="h-5 w-5 text-brand-text" />
             <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
           </div>
+          <div className="mb-4"><FamilyDeliveredValue /></div>
           {subLoading ? <SkeletonList /> : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

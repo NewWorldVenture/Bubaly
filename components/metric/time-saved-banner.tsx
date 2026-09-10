@@ -1,15 +1,9 @@
-// R11 — the category metric on-surface. Renders "N hours saved this week" with a
-// transparent breakdown. A server component (no hooks) so it can translate its
-// own copy; Home and the Experience Scorecard both render it.
-//
-// THREE states, and they are three different facts:
-//   * unavailable — a count could not be read. Says so, and offers a retry.
-//     Never 0, never hidden: an outage must not read as a quiet week.
-//   * nothing handled yet — hides.
-//   * handled — the number, from `loadTimeSaved` and nowhere else.
+// Modeled planning time for dated recorded completed plans. Missing-date
+// coverage remains visible even when the measured subset is empty.
 import { Clock } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 import type { TimeSavedResult } from '@/lib/metric/time-saved';
+import { MODELED_MINUTES_PER_COMPLETED_PLAN } from '@/lib/metric/completed-plans-model';
 
 export async function TimeSavedBanner({ result, retryHref }: { result: TimeSavedResult; retryHref: string }) {
   const t = await getTranslations();
@@ -44,7 +38,8 @@ export async function TimeSavedBanner({ result, retryHref }: { result: TimeSaved
               {t('timeSaved.nThingsHandledForYou', { count: data.actions })}
             </span>
           </p>
-          <p className="mt-0.5 text-xs text-muted">{t('timeSaved.timeYouDidntSpendOnFamilyAdmin')}</p>
+          <p className="mt-0.5 text-xs text-muted">{t('timeSaved.timeYouDidntSpendOnFamilyAdmin', { minutes: MODELED_MINUTES_PER_COMPLETED_PLAN })}</p>
+          <p className="mt-1 text-xs text-muted">{t('timeSaved.undatedCompletedPlans', { count: data.undatedCompletedRuns })}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {data.rows.map((r) => (
               <span key={r.kind} className="rounded-full border border-border bg-surface/60 px-2.5 py-1 text-xs text-muted">

@@ -14,6 +14,7 @@ import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 
 /**
  * Stripe checkout — same endpoint the billing module uses.
@@ -109,6 +110,7 @@ export function UpgradeModal({
       description={t('upgradeModal.availableOnPlan', { plan: plan.name })}
     >
       <div className="space-y-5">
+        {open && <FamilyDeliveredValue />}
         <div className="flex items-start gap-3 rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-4">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15">
             <Sparkles className="h-5 w-5 text-brand-text" />
