@@ -73,10 +73,10 @@ describe('first brief semantic display', () => {
       [`prep:${TITLE}`, { kind: 'prep', timelineIndex: 1 }],
     ]);
     expect(brief.opportunities.map(o => [o.id, o.minutes, o.display])).toEqual([
-      ['conflicts', 15, { kind: 'conflicts', count: 1 }], ['week', 6, { kind: 'week', count: 3 }], ['recurring', 5, { kind: 'recurring', count: 1 }],
+      ['conflicts', 15, { kind: 'conflicts', count: 1 }], ['week', 6, { kind: 'week', count: 4 }], ['recurring', 5, { kind: 'recurring', count: 1 }],
     ]);
     expect(briefSummary(brief)).toEqual({
-      headline: "Here's your Wednesday — 3 events, 1 clash to resolve.", todayCount: 3, weekCount: 3, conflictCount: 1, actionCount: 3, dinnerCount: 1, timeSavedMinutes: 26,
+      headline: "Here's your Wednesday — 3 events, 1 clash to resolve.", todayCount: 3, weekCount: 4, conflictCount: 1, actionCount: 3, dinnerCount: 1, timeSavedMinutes: 26,
       opportunities: [{ label: '1 clash caught for you', minutes: 15 }, { label: 'Your week, already organized', minutes: 6 }, { label: '1 recurring event on autopilot', minutes: 5 }],
     });
     expect(JSON.stringify(briefSummary(brief))).toBe(JSON.stringify(briefSummary(canonical(brief))));

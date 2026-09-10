@@ -19,7 +19,8 @@ import { sendReactEmail } from '@/lib/email';
 import { WelcomeEmail } from '@/lib/emails/welcome';
 import * as React from 'react';
 import { computeCompleteness } from '@/lib/onboarding/completeness';
-import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
+import { parseIcsResult, toBriefEvents, demoBriefEvents, type IcsImportDisclosure } from '@/lib/onboarding/ics';
+import { normalizedImportEvents, type IcsErrorCode } from '@/lib/onboarding/ics-time';
 import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -110,13 +111,14 @@ async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promis
  */
 export async function previewCalendarImportAction(input: {
   source: 'paste' | 'demo'; icsText?: string; timezone?: string;
-}): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
+}): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string; disclosure?: IcsImportDisclosure }>> {
   const t = await getTranslations();
   const parsed = previewCalendarImportSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { ok: false, error: issue?.path[0] === 'timezone'
-      ? t('onboardingWizard.invalidPreviewTimezone') : issue?.message ?? 'Invalid calendar import' };
+      ? t('onboardingWizard.invalidPreviewTimezone') : issue?.path[0] === 'icsText'
+        ? t('calendarImport.tooManyEvents') : issue?.message ?? 'Invalid calendar import' };
   }
 
   const supabase = await createServer();
@@ -126,24 +128,35 @@ export async function previewCalendarImportAction(input: {
   const now = new Date();
   let events: BriefEvent[] = [];
   let source = parsed.data.source;
+  let disclosure: IcsImportDisclosure | undefined;
 
   if (parsed.data.source === 'demo') {
-    events = demoBriefEvents(now);
+    events = demoBriefEvents(now, parsed.data.timezone);
     source = 'demo';
   } else {
     const text = (parsed.data.icsText ?? '').trim();
     if (!text) return { ok: false, error: t('actions.pasteYourCalendarSIcs') };
-    if (!text.includes('BEGIN:VEVENT')) {
-      return { ok: false, error: 'That doesn’t look like a calendar (.ics) export. Try again or use the sample week.' };
+    // Floating times require an explicitly supplied choice, not the schema's legacy UTC default.
+    const imported = parseIcsResult(text, { floatingTimezone: input.timezone });
+    if (!imported.ok) {
+      const keys: Record<IcsErrorCode, string> = {
+        invalidCalendar: 'calendarImport.invalidCalendar', invalidDate: 'calendarImport.invalidDate',
+        invalidRange: 'calendarImport.invalidRange', invalidDuration: 'calendarImport.invalidDuration',
+        unsupportedTimezone: 'calendarImport.unsupportedTimezone', floatingTimezoneRequired: 'calendarImport.floatingTimezoneRequired',
+        unsupportedRecurrence: 'calendarImport.unsupportedRecurrence', tooManyEvents: 'calendarImport.tooManyEvents',
+      };
+      return { ok: false, error: t(keys[imported.code]) };
     }
-    events = toBriefEvents(parseIcs(text)).slice(0, 1000);
+    // Paste imports listed occurrences, not managed recurring series.
+    events = toBriefEvents(imported.events).map(event => ({ ...event, recurring: false }));
+    disclosure = imported.disclosure;
     if (events.length === 0) return { ok: false, error: t('actions.noEventsFoundInThat') };
     source = 'paste';
   }
 
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
   const brief = buildFirstBrief(events, now, dinnerCandidates, parsed.data.timezone);
-  return { ok: true, data: { brief, events, source } };
+  return { ok: true, data: { brief, events, source, ...(disclosure ? { disclosure } : {}) } };
 }
 
 /**
@@ -584,6 +597,8 @@ export async function finalizeOnboardingAction(input: {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
+  if (['paste', 'ics'].includes(parsed.data.calendarImport.source)
+    && !normalizedImportEvents(parsed.data.calendarImport.events)) return { ok: false, error: t('calendarImport.invalidDate') };
 
   const supabase = await createServer();
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -828,7 +843,8 @@ export async function finalizeOnboardingAction(input: {
   // when no calendar was imported (dinner ideas are value on their own).
   const importEvents = (calendarImport?.events ?? []).slice(0, 1000);
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
-  const finalBrief = buildFirstBrief(importEvents, new Date(), dinnerCandidates, family.timezone);
+  const finalBrief = buildFirstBrief(['paste', 'ics'].includes(calendarImport.source)
+    ? importEvents.map(event => ({ ...event, recurring: false })) : importEvents, new Date(), dinnerCandidates, family.timezone);
 
   if (importEvents.length > 0 || connectedReceipt) {
     let importedCount = importEvents.length;
