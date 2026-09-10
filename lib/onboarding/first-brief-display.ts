@@ -62,6 +62,8 @@ export function formatFirstBrief(brief: FirstBrief, { locale, t }: { locale: Loc
   if (!metadata.success) return view;
   const display = metadata.data;
   const time = new Intl.DateTimeFormat(locale, { timeZone: display.timezone, hour: 'numeric', minute: '2-digit' });
+  const timeWithOffset = new Intl.DateTimeFormat(locale, { timeZone: display.timezone, hour: 'numeric', minute: '2-digit', timeZoneName: 'shortOffset' });
+  const offset = new Intl.DateTimeFormat('en-US', { timeZone: display.timezone, timeZoneName: 'longOffset' });
   const weekday = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', weekday: 'long' });
   const numbers = new Intl.NumberFormat(locale);
   const plurals = new Intl.PluralRules(locale);
@@ -70,6 +72,12 @@ export function formatFirstBrief(brief: FirstBrief, { locale, t }: { locale: Loc
   const day = (value: string) => value === display.dayKey ? t('firstBriefDisplay.today')
     : value === tomorrow ? t('firstBriefDisplay.tomorrow') : weekday.format(new Date(`${value}T12:00:00Z`));
   const at = (value: string) => time.format(new Date(value));
+  const offsetAt = (value: string) => offset.formatToParts(new Date(value)).find(part => part.type === 'timeZoneName')?.value;
+  // Clock changes can make a positive overlap look backward in wall time.
+  // Show each endpoint's offset only when the overlap crosses that change.
+  const range = (start: string, end: string) => offsetAt(start) === offsetAt(end)
+    ? `${at(start)}–${at(end)}`
+    : `${timeWithOffset.format(new Date(start))}–${timeWithOffset.format(new Date(end))}`;
 
   const headline = headlineSchema.safeParse(display.headline);
   if (headline.success) view.headline = headline.data === 'empty' ? t('firstBriefDisplay.headlineEmpty')
@@ -86,7 +94,7 @@ export function formatFirstBrief(brief: FirstBrief, { locale, t }: { locale: Loc
     const parsed = conflicts[i];
     return parsed.success ? {
       dayLabel: day(parsed.data.dayKey),
-      overlapLabel: `${at(parsed.data.overlapStart)}–${at(parsed.data.overlapEnd)}`,
+      overlapLabel: range(parsed.data.overlapStart, parsed.data.overlapEnd),
     } : { dayLabel: item.dayLabel, overlapLabel: item.overlapLabel };
   });
   view.actions = brief.actions.map((item) => {

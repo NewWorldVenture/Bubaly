@@ -30,7 +30,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, refres
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mocks.error }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
  const { getMessages, translate } = await import('@/lib/i18n/messages');
- return { useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, vars) };
+ return { useLocale: () => ({ code: mocks.locale }), useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, vars) };
 });
 vi.mock('@/app/onboarding/actions', () => ({ finalizeOnboardingAction: mocks.finish, previewCalendarImportAction: mocks.preview }));
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: vi.fn(), previewConnectedCalendarAction: vi.fn() }));
