@@ -65,6 +65,17 @@ function parseFilterValue(raw: string): unknown {
   return raw;
 }
 
+/** PostgreSQL jsonb @> contains nested objects, not object reference identities. */
+function jsonContains(value: unknown, wanted: unknown): boolean {
+  if (Array.isArray(value)) {
+    return (Array.isArray(wanted) ? wanted : [wanted]).every((needle) => value.some((item) => jsonContains(item, needle)));
+  }
+  if (value && typeof value === 'object' && wanted && typeof wanted === 'object') {
+    return Object.entries(wanted).every(([key, item]) => jsonContains((value as Row)[key], item));
+  }
+  return looseEq(value, wanted);
+}
+
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
   switch (op) {
     case 'eq': return (row) => looseEq(row[column], wanted);
@@ -95,7 +106,7 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
           return needles.every((n) => value.some((v) => looseEq(v, n)));
         }
         if (value && typeof value === 'object' && wanted && typeof wanted === 'object') {
-          return Object.entries(wanted as Row).every(([k, v]) => looseEq((value as Row)[k], v));
+          return jsonContains(value, wanted);
         }
         return false;
       };

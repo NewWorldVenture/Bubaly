@@ -190,24 +190,13 @@ describe('the desk card only claims what a row says', () => {
     expect(deskCard).toContain('await loadDesk();');
   });
 
-  it('says "marked handled" only when the write came back saying so', () => {
-    // `proposeFrontDeskAction` returns `handled` — computed from the row the
-    // service-role update returned — precisely so the toast can tell "the
-    // action ran AND ai_handled is now true" from "the action ran but the mark
-    // failed". The desk used to toast the first for every executed outcome,
-    // and the loadDesk() on the very next line then rendered that same row
-    // WITHOUT the Handled badge.
+  it('keeps pending approval separate from repaired source bookkeeping', () => {
     const fn = /async function proposeFromDesk\([\s\S]*?\n  \}/.exec(deskCard);
     expect(fn).not.toBeNull();
-    expect(fn![0]).toContain('} else if (result.handled) {');
-    const branchAt = fn![0].indexOf('result.handled');
-    const appliedAt = fn![0].indexOf("tr('schoolDesk.proposalApplied')");
-    expect(branchAt).toBeGreaterThan(-1);
-    expect(appliedAt).toBeGreaterThan(branchAt);
-    // The other half of the branch says something the row can stand behind.
-    expect(fn![0]).toContain("tr('schoolDesk.proposalNotMarked')");
-    // And exactly one place makes the stronger claim.
-    expect((deskCard.match(/schoolDesk\.proposalApplied/g) ?? []).length).toBe(1);
+    expect(fn![0]).toContain("tr('schoolDesk.sentForApproval')");
+    expect(fn![0]).toContain('schoolDesk.proposalApplied');
+    expect(deskAction).toContain("if (previous === 'handled')");
+    expect(fn![0]).not.toContain('result.handled');
   });
 
   it('never leaves Propose stuck on "Proposing…" when the server action rejects', () => {
@@ -230,24 +219,11 @@ describe('proposals go through the approval spine', () => {
     expect(deskAction).toContain("actorId: 'school_front_desk'");
   });
 
-  it('executes only on allow, through runAction', () => {
-    const gateAt = deskAction.indexOf('await gateAiAction(');
-    const denyAt = deskAction.indexOf("if (outcome.effect === 'deny')");
-    const approvalAt = deskAction.indexOf("if (outcome.effect === 'require_approval')");
-    const runAt = deskAction.indexOf('await runAction(');
-    expect(gateAt).toBeGreaterThan(-1);
-    expect(denyAt).toBeGreaterThan(gateAt);
-    expect(approvalAt).toBeGreaterThan(denyAt);
-    expect(runAt).toBeGreaterThan(approvalAt);
-  });
-
-  it('marks handled only AFTER the action reported success', () => {
-    const runFailedAt = deskAction.indexOf('if (!ran.ok) return');
-    const markAt = deskAction.indexOf('await markInboxMessageHandled(');
-    expect(runFailedAt).toBeGreaterThan(-1);
-    expect(markAt).toBeGreaterThan(runFailedAt);
-    // There is exactly one such write, so no branch can sneak a second one in.
-    expect((deskAction.match(/markInboxMessageHandled\(/g) ?? []).length).toBe(1);
+  it('requires approval even when settings would allow automatic execution', () => {
+    expect(deskAction).toContain("requireApprovalReason: t('schoolDesk.approvalRequired')");
+    expect(deskAction).not.toContain('runAction(');
+    expect(deskAction).not.toContain('markInboxMessageHandled(');
+    expect(deskAction).toContain('source: schoolProposalSource(message.data.id)');
   });
 
   it('does not mark a message handled when it is only waiting for a parent', () => {
@@ -257,8 +233,7 @@ describe('proposals go through the approval spine', () => {
     expect(approvalReturn![1]).toContain("outcome: 'pending_approval'");
   });
 
-  it('uses the service role for the one privileged write, and the caller for reads', () => {
-    expect(deskAction).toContain('markInboxMessageHandled({ ...scope, db: createServiceClient() }');
+  it('uses the caller for source reads before opening an approval', () => {
     expect(deskAction).toContain('await loadInboxMessage(scope, messageId)');
   });
 
@@ -382,7 +357,7 @@ describe('every string the desk shows is translated', () => {
 // queue, which is the one thing this desk must never say.
 describe('a proposal held for approval says so only when an approval exists', () => {
   const module = readFileSync(new URL('../components/modules/school-module.tsx', import.meta.url), 'utf8');
-  const branch = module.slice(module.indexOf("if (result.outcome === 'pending_approval')"), module.indexOf("} else if (result.handled)"));
+  const branch = module.slice(module.indexOf("if (result.outcome === 'pending_approval')"), module.indexOf('    // Re-read rather than patch state'));
 
   it('reads approvalId before claiming a parent was asked', () => {
     expect(branch).toContain('result.approvalId');

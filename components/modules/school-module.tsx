@@ -260,17 +260,9 @@ export function SchoolModule() {
       // arrive. Nothing ran either way — that half is true in both branches.
       if (result.approvalId) success(tr('schoolDesk.sentForApproval'));
       else toastError(tr('schoolDesk.approvalNotRecorded'));
-    } else if (result.handled) {
-      // `handled` is true only because `family_inbox_messages.ai_handled` came
-      // back true from the write. That is the ONLY thing that entitles this
-      // toast to say the message is marked handled.
-      success(tr('schoolDesk.proposalApplied'));
     } else {
-      // The action ran and something durable exists, but the message could not
-      // be marked — the service-role write failed, or the row was archived out
-      // from under us. The re-read below will render this row WITHOUT the
-      // Handled badge, so the toast must not have promised otherwise.
-      toast(tr('schoolDesk.proposalNotMarked'), 'info');
+      // Propose repaired the source of work that had already executed.
+      success(tr('schoolDesk.proposalApplied'));
     }
     // Re-read rather than patch state: "Handled" is whatever `ai_handled` says
     // after the write, not what this browser hoped it would say.
