@@ -26,10 +26,14 @@ export async function GET(req: NextRequest) {
   const errorParam = url.searchParams.get('error');
   const cookieState = req.cookies.get(STATE_COOKIE)?.value ?? null;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  // The request's own origin, like the sync callbacks use: always populated, so
+  // it cannot collapse to a relative URL the way an unset NEXT_PUBLIC_APP_URL
+  // did — NextResponse.redirect throws on those, and EVERY exit here is this
+  // redirect, so a missing variable turned the whole route into a 500.
+  const origin = req.nextUrl.origin;
   // Always clear the single-use state cookie on the way out.
   const redirect = (status: 'connected' | 'error') => {
-    const res = NextResponse.redirect(`${appUrl}/dashboard/calendar?gcal=${status}`);
+    const res = NextResponse.redirect(new URL(`/dashboard/calendar?gcal=${status}`, origin));
     res.cookies.set(STATE_COOKIE, '', { path: '/api/google/calendar', maxAge: 0 });
     return res;
   };
