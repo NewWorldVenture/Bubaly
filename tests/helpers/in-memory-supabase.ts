@@ -124,8 +124,10 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
   }
 }
 
-/** `a.eq.1,b.is.null,c.in.(x,y)`, plus the nested `and(...)`/`or(...)` groups
- *  used to filter typed calendar windows. */
+/** `a.eq.1,b.is.null,c.in.(x,y)`, plus the nested `and(...)` groups used to
+ *  filter typed calendar windows. A nested `or(...)` stays unsupported and
+ *  throws — PostgREST's `.or()` already IS the or, and in-memory-supabase-logic
+ *  pins that. */
 function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   const parts: string[] = [];
   let depth = 0;
@@ -143,7 +145,6 @@ function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   const predicates = parts.map((part) => {
     const trimmed = part.trim();
     if (trimmed.startsWith('and(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(4, -1), 'and');
-    if (trimmed.startsWith('or(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(3, -1));
     const negated = trimmed.startsWith('not.');
     const body = negated ? trimmed.slice(4) : trimmed;
     if (body.startsWith('and(') && body.endsWith(')')) {

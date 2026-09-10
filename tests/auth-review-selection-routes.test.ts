@@ -66,7 +66,12 @@ describe.each(plans)('callback retains %s without browser storage', (reviewPlan)
     const query = new URLSearchParams({ next });
     if (failure !== 'cancelled') query.set('code', 'synthetic-code');
     if (failure === 'exchange-failed') mock.exchange.mockResolvedValueOnce({ error: { message: 'Try again' } });
-    if (failure === 'missing-user') mock.user.mockResolvedValueOnce({ data: { user: null }, error: null });
+    // Someone making "the next sign-in attempt" is by definition NOT signed in,
+    // and this file's shared fixture returns a user for every test. Queue ONE
+    // signed-out answer for the failing call — the successful sign-in asserted
+    // at the end of this test falls back to that signed-in default. A signed-in
+    // visitor is deliberately never sent to a login page; covered separately.
+    mock.user.mockResolvedValueOnce({ data: { user: null }, error: null });
     const retry = location(await callback(query));
     expect(retry.pathname).toBe('/login');
     expect(retry.searchParams.get('error')).toBe('auth');
@@ -92,6 +97,7 @@ describe('callback precedence and unchanged landing defaults', () => {
     const destination = location(await callback(query));
     expect(destination.pathname + destination.search + destination.hash).toBe(next);
     mock.exchange.mockResolvedValueOnce({ error: { message: 'Try again' } });
+    mock.user.mockResolvedValue({ data: { user: null }, error: null });   // signed out; see above
     const retry = location(await callback(query));
     expect(resolveAuthSelection(retry.searchParams)).toEqual({ next, reviewPlan: null });
     expect(retry.searchParams.has('reviewPlan')).toBe(false);
@@ -147,12 +153,25 @@ describe('protected review link middleware', () => {
     expect(response.cookies.getAll()).toEqual([]);
   });
   it('forwards wrong-path OAuth codes with their flat choice to the existing callback', async () => {
-    const response = await middleware(new NextRequest('https://bubaly.test/?code=synthetic-code&reviewPlan=plus_annual'));
+    // The forward only fires for a browser mid-PKCE — without a verifier no
+    // exchange could succeed, and forwarding a stranger's ?code= answered a
+    // signed-in visitor with a login page (see oauth-code-not-a-logout).
+    const response = await middleware(new NextRequest('https://bubaly.test/?code=synthetic-code&reviewPlan=plus_annual', {
+      headers: { cookie: 'sb-fixture-auth-token-code-verifier=synthetic-verifier' },
+    }));
     const forwarded = location(response);
     expect(forwarded.pathname).toBe('/auth/callback');
     expect(forwarded.searchParams.get('code')).toBe('synthetic-code');
     const destination = location(await callback(forwarded.searchParams));
     expect(destination.pathname + destination.search).toBe('/onboarding?reviewPlan=plus_annual');
+  });
+  it('sends a signed-in visitor on instead of showing them a login page', async () => {
+    // A stale link, a back-navigation, or cancelling at the provider is a
+    // sign-in that did not HAPPEN — it must not end the session the visitor
+    // already has. Their plan choice rides along in `next`.
+    const next = '/onboarding?reviewPlan=plus_annual';
+    const destination = location(await callback(new URLSearchParams({ next })));
+    expect(destination.pathname + destination.search).toBe(next);
   });
   it('does not weaken encoded-slash rejection to preserve an unsafe query', async () => {
     const response = await middleware(new NextRequest('https://bubaly.test/dashboard/billing?next=%2Fadmin&view=manage'));
