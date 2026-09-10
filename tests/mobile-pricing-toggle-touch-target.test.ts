@@ -22,7 +22,7 @@ describe('pricing billing-period toggle meets the 44px touch target (M-038)', ()
     }
   });
 
-  // The value block landed directly above the plan cards. Its per-tier matrix
+  // The value block sits below the plan cards. Its per-tier matrix
   // is the one piece that would be tempting to draw as a wide table — which on
   // a phone means either a sideways scroller or a page that scrolls
   // horizontally (tests/e2e/overflow.spec.ts, tests/e2e/mobile.spec.ts). It
