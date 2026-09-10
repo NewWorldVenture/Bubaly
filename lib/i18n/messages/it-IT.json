@@ -6798,6 +6798,7 @@
   "licensesClient.state": "Stato",
   "licensesClient.storeEachDriverSLicense": "Conserva ogni patente con la sua data di rinnovo, così nessuno guida con una scaduta.",
   "lifeEventActions.invalidPlan": "Piano non valido",
+  "lifeEventActions.rollbackIncomplete": "Non è stato possibile avviare il piano e alcuni elementi creati durante l’avvio non sono stati rimossi. Controlla i tuoi piani, le attività, i promemoria e il trasloco, il progetto o il viaggio collegato prima di riprovare.",
   "lifeEventActions.unknownLifeEvent": "Evento della vita sconosciuto",
   "lifeEvents.aboutUs": "Chi siamo",
   "lifeEvents.archive": "Archivia",

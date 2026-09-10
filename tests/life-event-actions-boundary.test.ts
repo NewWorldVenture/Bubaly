@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { launchLifeEvent, refsInNote, noteWithRef, reminderItemsFor, todoItemsFor, resolveAnchor } from '@/lib/life-events/launch';
+import { launchLifeEvent, LIFE_EVENT_ROLLBACK_INCOMPLETE, refsInNote, noteWithRef, reminderItemsFor, todoItemsFor, resolveAnchor } from '@/lib/life-events/launch';
 import { buildPlanItems, getTemplate } from '@/lib/life-events/templates';
 import type { ServiceScope } from '@/lib/services/types';
 
@@ -53,6 +53,37 @@ function breakInsert(table: string) {
     }) as never;
     return builder;
   });
+}
+
+/** Fail a compensating delete without changing the stored rows. */
+function breakDelete(table: string, mode: 'result' | 'reject' = 'result') {
+  // Capture the existing implementation, not the spy wrapper that spyOn will
+  // replace, so insert and delete failures can be combined in the same launch.
+  const original = vi.isMockFunction(db.from) ? vi.mocked(db.from).getMockImplementation()! : db.from.bind(db);
+  vi.spyOn(db, 'from').mockImplementation((name: string) => {
+    const builder = original(name);
+    if (name !== table) return builder;
+    const failure = { data: null, error: { message: `${table} delete rejected` } };
+    const failing = {
+      eq: () => failing, in: () => failing, select: () => failing,
+      maybeSingle: async () => {
+        if (mode === 'reject') throw new Error('delete transport failed');
+        return failure;
+      },
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+        (mode === 'reject' ? Promise.reject(new Error('delete transport failed')) : Promise.resolve(failure)).then(resolve, reject),
+    };
+    builder.delete = (() => failing) as never;
+    return builder;
+  });
+}
+
+function seedExistingMove() {
+  const move = { id: 'existing-move', family_id: FAMILY, move_date: '2026-04-20', title: 'Our actual move', status: 'packing', move_kind: 'local', has_kids: false, has_pets: false };
+  const task = { id: 'existing-task', family_id: FAMILY, move_id: move.id, title: 'Keep my task', status: 'doing', template_key: null, due_date: '2026-04-10' };
+  db.seed('moves', [move]);
+  db.seed('move_tasks', [task]);
+  return { move: structuredClone(db.table('moves')[0]), task: structuredClone(db.table('move_tasks')[0]) };
 }
 
 beforeEach(() => {
@@ -157,6 +188,7 @@ describe('a launch that succeeds', () => {
     const result = await launchLifeEvent(scope(), { templateKey: 'emergency_prep', eventDate: '2026-05-01' });
     expect(result.ok && result.data.handoff).toBeNull();
     expect(db.table('moves')).toHaveLength(0);
+    expect(db.table('move_tasks')).toHaveLength(0);
     expect(db.table('home_projects')).toHaveLength(0);
     expect(db.table('vacations')).toHaveLength(0);
   });
@@ -177,6 +209,7 @@ describe('a launch that fails rolls all the way back', () => {
     expect(db.table('life_event_plans')).toHaveLength(0);
     expect(db.table('life_event_plan_items')).toHaveLength(0);
     expect(db.table('moves')).toHaveLength(0);
+    expect(db.table('move_tasks')).toHaveLength(0);
     expect(db.table('todo_items')).toHaveLength(0);
     expect(db.table('family_reminders')).toHaveLength(0);
   });
@@ -198,6 +231,100 @@ describe('a launch that fails rolls all the way back', () => {
     expect(db.table('life_event_plans')).toHaveLength(0);
     expect(db.table('life_event_plan_items')).toHaveLength(0);
     expect(db.table('todo_items')).toHaveLength(0);
+  });
+
+  it('removes the new move when its task insert fails before handoff finishes', async () => {
+    breakInsert('move_tasks');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-05-01' });
+    expect(result.ok).toBe(false);
+    expect(db.table('moves')).toEqual([]);
+    expect(db.table('move_tasks')).toEqual([]);
+    expect(db.table('life_event_plans')).toEqual([]);
+  });
+
+  it('preserves an existing move and its original tasks when task insertion fails', async () => {
+    const { move, task } = seedExistingMove();
+    breakInsert('move_tasks');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-05-01' });
+    expect(result.ok).toBe(false);
+    expect(db.table('moves')).toEqual([move]);
+    expect(db.table('move_tasks')).toEqual([task]);
+    expect(db.table('life_event_plans')).toEqual([]);
+  });
+
+  it('removes only this launch’s new tasks from an existing move after a later failure', async () => {
+    const { move, task } = seedExistingMove();
+    breakInsert('life_event_plan_items');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-05-01' });
+    expect(result.ok).toBe(false);
+    expect(db.table('moves')).toEqual([move]);
+    expect(db.table('move_tasks')).toEqual([task]);
+    expect(db.table('life_event_plans')).toEqual([]);
+    expect(db.table('todo_items')).toEqual([]);
+  });
+
+  it('rolls back a newly created move when planning throws instead of returning an error', async () => {
+    const original = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation((table: string) => {
+      if (table === 'move_tasks') throw new Error('task client failed');
+      return original(table);
+    });
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-05-01' });
+    expect(result.ok).toBe(false);
+    expect(db.table('moves')).toEqual([]);
+    expect(db.table('life_event_plans')).toEqual([]);
+  });
+
+  it.each(['todo_items', 'family_reminders', 'life_event_plans', 'moves'])('reports an incomplete rollback when %s refuses deletion and continues the other undos', async (table) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    breakInsert('life_event_plan_items');
+    breakDelete(table);
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-04-01' });
+    expect(result).toMatchObject({ ok: false, code: LIFE_EVENT_ROLLBACK_INCOMPLETE, retryable: false });
+    if (!result.ok) expect(result.error).toContain('could not be removed');
+    expect(db.table(table).length).toBeGreaterThan(0);
+    for (const other of ['todo_items', 'family_reminders', 'life_event_plans', 'moves', 'move_tasks'].filter((name) => name !== table)) {
+      expect(db.table(other), other).toEqual([]);
+    }
+  });
+
+  it('reports a rejected cleanup request and still removes the plan and new move tasks', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    breakInsert('life_event_plan_items');
+    breakDelete('moves', 'reject');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-04-01' });
+    expect(result).toMatchObject({ ok: false, code: LIFE_EVENT_ROLLBACK_INCOMPLETE, retryable: false });
+    expect(db.table('moves')).toHaveLength(1);
+    expect(db.table('move_tasks')).toEqual([]);
+    expect(db.table('life_event_plans')).toEqual([]);
+    expect(db.table('todo_items')).toEqual([]);
+    expect(db.table('family_reminders')).toEqual([]);
+  });
+
+  it('reports failed new-task cleanup while preserving the existing move and original task', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { move, task } = seedExistingMove();
+    breakInsert('life_event_plan_items');
+    breakDelete('move_tasks');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-05-01' });
+    expect(result).toMatchObject({ ok: false, code: LIFE_EVENT_ROLLBACK_INCOMPLETE });
+    expect(db.table('moves')).toEqual([move]);
+    expect(db.table('move_tasks')).toContainEqual(task);
+    expect(db.table('move_tasks').length).toBeGreaterThan(1);
+    expect(db.table('life_event_plans')).toEqual([]);
+    expect(db.table('todo_items')).toEqual([]);
+  });
+
+  it.each([['renovation', 'home_projects'], ['vacation', 'vacations']])('reports incomplete %s handoff deletion', async (templateKey, table) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    breakInsert('life_event_plan_items');
+    breakDelete(table);
+    const result = await launchLifeEvent(scope(), { templateKey, eventDate: '2026-04-01' });
+    expect(result).toMatchObject({ ok: false, code: LIFE_EVENT_ROLLBACK_INCOMPLETE });
+    expect(db.table(table)).toHaveLength(1);
+    expect(db.table('life_event_plans')).toEqual([]);
+    expect(db.table('todo_items')).toEqual([]);
+    expect(db.table('family_reminders')).toEqual([]);
   });
 });
 

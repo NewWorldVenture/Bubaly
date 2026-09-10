@@ -6798,6 +6798,7 @@
   "licensesClient.state": "Staat",
   "licensesClient.storeEachDriverSLicense": "Bewaar elk rijbewijs met de verloopdatum, zodat niemand met een verlopen rijbewijs rijdt.",
   "lifeEventActions.invalidPlan": "Ongeldig abonnement",
+  "lifeEventActions.rollbackIncomplete": "Het plan kon niet worden gestart en sommige onderdelen die tijdens het starten zijn aangemaakt, konden niet worden verwijderd. Controleer je plannen, taken, herinneringen en de gekoppelde verhuizing, het project of de reis voordat je het opnieuw probeert.",
   "lifeEventActions.unknownLifeEvent": "Onbekende levensgebeurtenis",
   "lifeEvents.aboutUs": "Over ons",
   "lifeEvents.archive": "Archiveren",

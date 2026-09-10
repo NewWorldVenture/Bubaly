@@ -6798,6 +6798,7 @@
   "licensesClient.state": "State",
   "licensesClient.storeEachDriverSLicense": "Store each driver's license with its renewal date so nobody drives on an expired one.",
   "lifeEventActions.invalidPlan": "Invalid plan",
+  "lifeEventActions.rollbackIncomplete": "The playbook could not start, and some items created during launch could not be removed. Review your plans, tasks, reminders and linked move, project or trip before trying again.",
   "lifeEventActions.unknownLifeEvent": "Unknown life event",
   "lifeEvents.aboutUs": "About us",
   "lifeEvents.archive": "Archive",

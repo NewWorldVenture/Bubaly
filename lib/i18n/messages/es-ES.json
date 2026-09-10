@@ -6798,6 +6798,7 @@
   "licensesClient.state": "Estado",
   "licensesClient.storeEachDriverSLicense": "Guarda cada carnet de conducir con su fecha de renovación para que nadie conduzca con uno caducado.",
   "lifeEventActions.invalidPlan": "Plan no válido",
+  "lifeEventActions.rollbackIncomplete": "No se pudo iniciar el plan y no se pudieron eliminar algunos elementos creados al iniciarlo. Revisa tus planes, tareas, recordatorios y la mudanza, el proyecto o el viaje vinculado antes de volver a intentarlo.",
   "lifeEventActions.unknownLifeEvent": "Acontecimiento vital desconocido",
   "lifeEvents.aboutUs": "Sobre nosotros",
   "lifeEvents.archive": "Archivar",

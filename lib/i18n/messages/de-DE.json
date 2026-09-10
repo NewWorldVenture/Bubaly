@@ -6798,6 +6798,7 @@
   "licensesClient.state": "Bundesland",
   "licensesClient.storeEachDriverSLicense": "Hinterlegen Sie jeden Führerschein mit seinem Verlängerungsdatum, damit niemand mit einem abgelaufenen fährt.",
   "lifeEventActions.invalidPlan": "Ungültiger Tarif",
+  "lifeEventActions.rollbackIncomplete": "Der Ablaufplan konnte nicht gestartet werden, und einige dabei erstellte Einträge konnten nicht entfernt werden. Prüfen Sie Ihre Pläne, Aufgaben, Erinnerungen und den verknüpften Umzug, das Projekt oder die Reise, bevor Sie es erneut versuchen.",
   "lifeEventActions.unknownLifeEvent": "Unbekanntes Lebensereignis",
   "lifeEvents.aboutUs": "Über uns",
   "lifeEvents.archive": "Archivieren",

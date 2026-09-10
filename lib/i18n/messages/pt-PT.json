@@ -6798,6 +6798,7 @@
   "licensesClient.state": "Estado",
   "licensesClient.storeEachDriverSLicense": "Guarde cada carta de condução com a data de renovação, para ninguém conduzir com uma caducada.",
   "lifeEventActions.invalidPlan": "Plano inválido",
+  "lifeEventActions.rollbackIncomplete": "Não foi possível iniciar o plano nem remover alguns dos elementos criados durante o início. Reveja os seus planos, tarefas, lembretes e a mudança, o projeto ou a viagem associados antes de tentar novamente.",
   "lifeEventActions.unknownLifeEvent": "Acontecimento de vida desconhecido",
   "lifeEvents.aboutUs": "Sobre nós",
   "lifeEvents.archive": "Arquivar",
