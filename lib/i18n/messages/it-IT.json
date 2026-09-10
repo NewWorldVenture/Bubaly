@@ -12713,5 +12713,11 @@
   "workspace.conversation": "Conversazione",
   "workspace.planAndResults": "Piano e risultati",
   "signup.reviewSelectedPlanAfterSetup": "Potrai rivedere il piano selezionato dopo la configurazione. Non verrà addebitato alcun pagamento ora.",
-  "signup.freeToStartNoCreditCard": "Inizia gratis. Non serve una carta di credito."
+  "signup.freeToStartNoCreditCard": "Inizia gratis. Non serve una carta di credito.",
+  "signup.familyHomeTitle": "Un posto sicuro per la tua famiglia",
+  "signup.existingAccountPrompt": "Hai già un account?",
+  "signup.checkEmailTitle": "Controlla la tua e-mail",
+  "signup.nameLabel": "Il tuo nome",
+  "phoneAuth.codeEntryTitle": "Inserisci il codice che ti abbiamo inviato",
+  "signup.or": "o"
 }

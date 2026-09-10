@@ -12713,5 +12713,11 @@
   "workspace.conversation": "Unterhaltung",
   "workspace.planAndResults": "Plan und Ergebnisse",
   "signup.reviewSelectedPlanAfterSetup": "Nach der Einrichtung können Sie Ihren ausgewählten Tarif prüfen. Jetzt wird keine Zahlung fällig.",
-  "signup.freeToStartNoCreditCard": "Der Einstieg ist kostenlos. Keine Kreditkarte erforderlich."
+  "signup.freeToStartNoCreditCard": "Der Einstieg ist kostenlos. Keine Kreditkarte erforderlich.",
+  "signup.familyHomeTitle": "Ein sicherer Ort für Ihre Familie",
+  "signup.existingAccountPrompt": "Haben Sie bereits ein Konto?",
+  "signup.checkEmailTitle": "Prüfen Sie Ihr E-Mail-Postfach",
+  "signup.nameLabel": "Ihr Name",
+  "phoneAuth.codeEntryTitle": "Geben Sie den Code ein, den wir Ihnen gesendet haben",
+  "signup.or": "oder"
 }

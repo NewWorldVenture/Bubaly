@@ -93,7 +93,7 @@ export function SignupForm() {
     return (
       <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
         <MailCheck className="h-12 w-12 text-brand-text" />
-        <h1 className="mt-4 text-xl font-semibold">{t('signup.checkYourEmail')}</h1>
+        <h1 className="mt-4 text-xl font-semibold">{t('signup.checkEmailTitle')}</h1>
         <p className="mt-2 text-sm text-muted">
           {t('signup.weSentAConfirmationLinkTo')}
         </p>
@@ -111,7 +111,7 @@ export function SignupForm() {
         <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
           <Sparkles className="h-7 w-7 text-brand-text" />
         </span>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{t('signup.aSafePlaceForYourFamily')}</h1>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{t('signup.familyHomeTitle')}</h1>
         <p className="mt-2 text-sm text-muted">
           {t('signup.oneCalmHomeForYourCalendar')}.
           {' '}{selection.reviewPlan ? t('signup.reviewSelectedPlanAfterSetup') : t('signup.freeToStartNoCreditCard')}
@@ -137,7 +137,7 @@ export function SignupForm() {
 
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
-        <span className="text-xs text-muted">or</span>
+        <span className="text-xs text-muted">{t('signup.or')}</span>
         <div className="flex-1 border-t border-border" />
       </div>
 
@@ -167,7 +167,7 @@ export function SignupForm() {
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
-          <Field label={t('signup.yourName')} error={errors.fullName} required>
+          <Field label={t('signup.nameLabel')} error={errors.fullName} required>
             {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder={t('signupForm.jordanRivera')} autoFocus />}
           </Field>
           <Field label={t('signup.email')} error={errors.email} required>
@@ -185,7 +185,7 @@ export function SignupForm() {
       <LegalConsent />
 
       <p className="mt-5 text-center text-sm text-muted">
-        {t('signup.alreadyHaveAnAccount')}{' '}
+        {t('signup.existingAccountPrompt')}{' '}
         <Link href={loginHref} className="font-medium text-brand-text hover:underline">{t('signup.signIn')}</Link>
       </p>
     </div>

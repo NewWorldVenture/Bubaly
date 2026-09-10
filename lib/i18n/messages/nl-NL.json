@@ -12713,5 +12713,11 @@
   "workspace.conversation": "Gesprek",
   "workspace.planAndResults": "Plan en resultaten",
   "signup.reviewSelectedPlanAfterSetup": "Na het instellen kun je je gekozen abonnement bekijken. Er wordt nu niets in rekening gebracht.",
-  "signup.freeToStartNoCreditCard": "Gratis beginnen. Geen creditcard nodig."
+  "signup.freeToStartNoCreditCard": "Gratis beginnen. Geen creditcard nodig.",
+  "signup.familyHomeTitle": "Een veilige plek voor je gezin",
+  "signup.existingAccountPrompt": "Heb je al een account?",
+  "signup.checkEmailTitle": "Controleer je e-mail",
+  "signup.nameLabel": "Je naam",
+  "phoneAuth.codeEntryTitle": "Voer de code in die we je hebben gestuurd",
+  "signup.or": "of"
 }
