@@ -57,6 +57,9 @@ const KNOWN_FORKS: Record<string, string> = {
   family_announcements: 'not yet converted',
   family_conversations: 'not yet converted',
   family_messages: 'not yet converted',
+  // Connected-calendar onboarding adds service-owned parent provisioning. The
+  // existing Family and Settings membership editors remain a separate tranche.
+  family_members: 'onboarding service now provisions the owner; family-module.tsx and settings-module.tsx still own their existing membership CRUD',
   family_recipes: 'not yet converted',
   home_assets: 'not yet converted',
   // M13/M14 gave these four a service so the ASSISTANT could reach them

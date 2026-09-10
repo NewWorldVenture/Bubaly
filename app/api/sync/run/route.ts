@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `${adapter.label} sync isn’t configured yet.` }, { status: 503 });
   }
 
-  const { data: account } = await admin
+  const { data: account, error: accountError } = await admin
     .from('sync_accounts')
     .select('id, user_id, family_id, external_id')
     .eq('family_id', ctx.active.familyId)
@@ -54,6 +54,10 @@ export async function POST(req: Request) {
     .eq('user_id', ctx.user.id)
     .maybeSingle();
 
+  if (accountError) {
+    console.error('[sync] account read failed', accountError);
+    return NextResponse.json({ error: t('sync.syncFailed') }, { status: 503 });
+  }
   if (!account) return NextResponse.json({ error: `${adapter.label} is not connected for this account.` }, { status: 400 });
 
   const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:${provider}`, { limit: 10 });

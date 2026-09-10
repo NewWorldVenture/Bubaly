@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const generic = readFileSync('lib/sync/engine/generic.ts', 'utf8');
 const google = readFileSync('lib/sync/engine/google.ts', 'utf8');
+const tokens = readFileSync('lib/sync/access-token.ts', 'utf8');
 
 describe('sync job persistence boundaries', () => {
   it('requires job and run creation before provider work begins', () => {
@@ -24,7 +25,8 @@ describe('sync job persistence boundaries', () => {
   });
 
   it('does not return a refreshed generic token before encrypted persistence', () => {
-    expect(generic).toContain('Failed to persist the refreshed sync token');
-    expect(generic).toContain(".select('account_id').maybeSingle()");
+    expect(generic).toContain('getProviderAccessToken');
+    expect(tokens).toContain('if (result.error || !result.data) throw');
+    expect(tokens).toContain(".select('account_id').maybeSingle()");
   });
 });

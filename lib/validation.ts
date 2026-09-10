@@ -167,6 +167,7 @@ export const importedEventSchema = z.object({
 export const onboardingCalendarImportSchema = z.object({
   source: z.enum(['ics', 'paste', 'url', 'demo', '']).optional().default(''),
   events: z.array(importedEventSchema).max(1000).optional().default([]),
+  receipt: z.string().max(150_000).optional(),
 });
 
 export const previewCalendarImportSchema = z.object({

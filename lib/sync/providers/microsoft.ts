@@ -57,6 +57,13 @@ function authUrl(redirectUri: string, state: string): string {
   return `${AUTHORITY}/authorize?${params}`;
 }
 
+const CALENDAR_READ_SCOPES = 'Calendars.Read User.Read offline_access openid email';
+export function microsoftCalendarReadAuthUrl(redirectUri: string, state: string): string {
+  const url = new URL(authUrl(redirectUri, state));
+  url.searchParams.set('scope', CALENDAR_READ_SCOPES);
+  return url.toString();
+}
+
 async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> {
   const res = await fetchExternal(`${AUTHORITY}/token`, {
     method: 'POST',
@@ -64,7 +71,9 @@ async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> 
     body: new URLSearchParams({
       client_id: microsoftClientId(),
       client_secret: microsoftClientSecret(),
-      scope: microsoftScopes(),
+      // A refresh preserves the original grant; requesting the default write
+      // scopes here would escalate an onboarding calendar-read connection.
+      ...(body.grant_type === 'refresh_token' ? {} : { scope: microsoftScopes() }),
       ...body,
     }),
   }, 15_000);
@@ -82,6 +91,8 @@ async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> 
 
 const exchangeCode = (code: string, redirectUri: string) =>
   tokenRequest({ code, redirect_uri: redirectUri, grant_type: 'authorization_code' });
+export const exchangeMicrosoftCalendarReadCode = (code: string, redirectUri: string) =>
+  tokenRequest({ code, redirect_uri: redirectUri, grant_type: 'authorization_code', scope: CALENDAR_READ_SCOPES });
 
 async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
   const t = await tokenRequest({ refresh_token: refreshToken, grant_type: 'refresh_token' });
@@ -134,6 +145,8 @@ type MsEvent = {
   end?: MsDateTime;
   isAllDay?: boolean;
   isCancelled?: boolean;
+  originalStartTimeZone?: string;
+  originalEndTimeZone?: string;
   recurrence?: unknown;
   changeKey?: string;
   lastModifiedDateTime?: string;
@@ -152,8 +165,16 @@ type MsTask = {
 
 // ── Calendar API ──────────────────────────────────────────────────────────────
 async function listCalendars(accessToken: string): Promise<NormalizedCalendar[]> {
-  const data = await gfetch<{ value?: MsCalendar[] }>('/me/calendars', accessToken);
-  return (data.value ?? []).map((c) => ({
+  const calendars: MsCalendar[] = [];
+  let url = '/me/calendars';
+  for (let page = 0; page < 50; page++) {
+    const data = await gfetch<{ value?: MsCalendar[]; '@odata.nextLink'?: string }>(url, accessToken);
+    calendars.push(...(data.value ?? []));
+    if (!data['@odata.nextLink']) break;
+    if (page === 49) throw new SyncApiError(502, 'Calendar list exceeded the page limit');
+    url = data['@odata.nextLink'];
+  }
+  return calendars.map((c) => ({
     externalId: c.id,
     name: c.name ?? 'Outlook Calendar',
     primary: c.isDefaultCalendar === true,
@@ -173,7 +194,10 @@ async function pullEvents(accessToken: string, calendarExternalId: string, curso
     for (let guard = 0; guard < 50; guard++) {
       const page = await gfetch<{ value?: MsEvent[]; '@odata.nextLink'?: string; '@odata.deltaLink'?: string }>(url, accessToken);
       for (const ev of page.value ?? []) events.push(msEventToRow(ev));
-      if (page['@odata.nextLink']) { url = page['@odata.nextLink']; continue; }
+      if (page['@odata.nextLink']) {
+        if (guard === 49) throw new SyncApiError(502, 'Calendar read exceeded the page limit');
+        url = page['@odata.nextLink']; continue;
+      }
       nextCursor = page['@odata.deltaLink'] ?? null;
       break;
     }
@@ -183,6 +207,48 @@ async function pullEvents(accessToken: string, calendarExternalId: string, curso
     throw e;
   }
   return { events, nextCursor, expired: false };
+}
+
+/** Graph calendarView expands series into occurrences in the requested window. */
+async function pullCalendarWindow(accessToken: string, calendarExternalId: string, from: string, to: string): Promise<NormalizedEvent[]> {
+  const events: NormalizedEvent[] = [];
+  let allDayReads = 0;
+  const query = new URLSearchParams({ startDateTime: from, endDateTime: to, '$top': '250' });
+  let url = `/me/calendars/${encodeURIComponent(calendarExternalId)}/calendarView?${query}`;
+  for (let page = 0; page < 50; page++) {
+    const data = await gfetch<{ value?: MsEvent[]; '@odata.nextLink'?: string }>(url, accessToken, { headers: { Prefer: 'outlook.timezone="UTC"' } });
+    for (let event of data.value ?? []) {
+      if (!event['@removed'] && event.isCancelled !== true && event.isAllDay) {
+        if (++allDayReads > 1000) throw new SyncApiError(502, 'Calendar all-day read exceeded the limit');
+        event = await readFloatingAllDay(accessToken, event);
+      }
+      if (!event['@removed'] && event.isCancelled !== true && !event.start?.dateTime) throw new SyncApiError(502, 'Calendar event timing unavailable');
+      events.push({ ...msEventToRow(event), title: event.subject ?? '' });
+    }
+    if (!data['@odata.nextLink']) return events;
+    url = data['@odata.nextLink'];
+  }
+  throw new SyncApiError(502, 'Calendar window exceeded the page limit');
+}
+
+/** UTC calendarView times lose an all-day event's civil date. Ask Graph to
+ * resolve its original (often Windows-named) zone, then preserve the midnight
+ * dates as floating dates. Never guess a zone or shift an all-day appointment. */
+async function readFloatingAllDay(accessToken: string, event: MsEvent): Promise<MsEvent> {
+  const zone = event.originalStartTimeZone;
+  if (!event.id || !zone || !/^[A-Za-z0-9._+:/ -]{1,100}$/.test(zone) || event.originalEndTimeZone !== zone) throw new SyncApiError(502, 'Calendar all-day source timezone unavailable');
+  const source = await gfetch<MsEvent>(`/me/events/${encodeURIComponent(event.id)}`, accessToken, { headers: { Prefer: `outlook.timezone="${zone}"` } });
+  if (source.id !== event.id) throw new SyncApiError(502, 'Calendar all-day identity unavailable');
+  if (source.isCancelled || source['@removed']) return source;
+  if (!source.isAllDay) throw new SyncApiError(502, 'Calendar all-day timing changed');
+  const floating = (value: MsDateTime | undefined): MsDateTime => {
+    const match = value?.dateTime?.match(/^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.0+)?$/);
+    if (!match || value?.timeZone !== zone) throw new SyncApiError(502, 'Calendar all-day source timing unavailable');
+    const iso = `${match[1]}T00:00:00Z`;
+    if (new Date(iso).toISOString().slice(0, 10) !== match[1]) throw new SyncApiError(502, 'Calendar all-day source timing unavailable');
+    return { dateTime: iso, timeZone: 'UTC' };
+  };
+  return { ...source, start: floating(source.start), end: floating(source.end) };
 }
 
 async function insertEvent(accessToken: string, calendarExternalId: string, body: Record<string, unknown>) {
@@ -318,6 +384,7 @@ export const microsoftAdapter: SyncProviderAdapter = {
   getAccountIdentity,
   listCalendars,
   pullEvents,
+  pullCalendarWindow,
   insertEvent,
   patchEvent,
   deleteEvent,

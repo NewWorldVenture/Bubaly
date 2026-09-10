@@ -203,6 +203,7 @@ class QueryBuilder implements PromiseLike<Reply> {
   private op: Op = 'select';
   private payload: Row[] = [];
   private upsertOn: string[] | null = null;
+  private ignoreDuplicates = false;
   private readonly predicates: Predicate[] = [];
   private selectList: string | null = null;
   private countMode: 'exact' | 'planned' | 'estimated' | null = null;
@@ -221,10 +222,11 @@ class QueryBuilder implements PromiseLike<Reply> {
     return this;
   }
   insert(rows: Row | Row[]) { this.op = 'insert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
-  upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
+  upsert(rows: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.op = 'upsert';
     this.payload = Array.isArray(rows) ? rows : [rows];
     this.upsertOn = opts?.onConflict ? opts.onConflict.split(',').map((c) => c.trim()) : ['id'];
+    this.ignoreDuplicates = opts?.ignoreDuplicates === true;
     return this;
   }
   update(patch: Row) { this.op = 'update'; this.payload = [patch]; return this; }
@@ -351,6 +353,7 @@ class QueryBuilder implements PromiseLike<Reply> {
             ? table.find((other) => keys.every((k) => looseEq(other[k], raw[k])))
             : undefined;
           if (existing) {
+            if (this.ignoreDuplicates) continue;
             Object.assign(existing, raw, { updated_at: new Date().toISOString() });
             touched.push(existing);
           } else {

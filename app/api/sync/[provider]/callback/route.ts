@@ -6,6 +6,8 @@ import { connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 import type { SyncProviderEnum } from '@/lib/database.types';
+import { finishOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
+import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
 
 // Provider-generic OAuth callback (R9): exchanges the code via the registry
 // adapter, resolves the account identity, and stores everything (tokens
@@ -14,6 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   const url = new URL(req.url);
   const origin = req.nextUrl.origin;
   const { provider: raw } = await params;
+  if (raw === 'microsoft' && (req.cookies.has(calendarContinuationCookie(raw)) || req.nextUrl.searchParams.get('state')?.startsWith('onboarding.'))) return finishOnboardingCalendarOAuth(req, 'microsoft');
   const provider = raw as SyncProviderEnum;
   const back = (q: string) => NextResponse.redirect(new URL(`/dashboard/sync/accounts/${raw}?${q}`, origin));
 

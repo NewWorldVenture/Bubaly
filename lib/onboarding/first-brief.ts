@@ -66,8 +66,8 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MS = 86_400_000;
 
-function utcDayKey(iso: string): string {
-  return iso.slice(0, 10);
+function calendarDayAfter(key: string): string {
+  return new Date(Date.parse(`${key}T12:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 }
 
 /** Minutes since midnight UTC for an ISO datetime (for same-day ordering/labels). */
@@ -77,28 +77,25 @@ function endOf(ev: BriefEvent): number {
   return Number.isFinite(end) && end > start ? end : start + 60 * 60_000; // default 1h
 }
 
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  let h = d.getUTCHours();
-  const m = d.getUTCMinutes();
+function fmtTime(iso: string, formatter: Intl.DateTimeFormat): string {
+  const parts = formatter.formatToParts(new Date(iso));
+  let h = Number(parts.find((p) => p.type === 'hour')!.value);
+  const m = Number(parts.find((p) => p.type === 'minute')!.value);
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12; if (h === 0) h = 12;
   return `${h}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function fmtRange(startIso: string, endMs: number): string {
-  const a = fmtTime(startIso);
-  const b = fmtTime(new Date(endMs).toISOString());
+function fmtRange(startIso: string, endMs: number, formatter: Intl.DateTimeFormat): string {
+  const a = fmtTime(startIso, formatter);
+  const b = fmtTime(new Date(endMs).toISOString(), formatter);
   return `${a}–${b}`;
 }
 
-function dayLabel(iso: string, now: Date): string {
-  const todayKey = now.toISOString().slice(0, 10);
-  const tomorrow = new Date(now.getTime() + DAY_MS).toISOString().slice(0, 10);
-  const k = utcDayKey(iso);
+function dayLabel(k: string, todayKey: string, tomorrow: string): string {
   if (k === todayKey) return 'Today';
   if (k === tomorrow) return 'Tomorrow';
-  return WEEKDAYS[new Date(iso).getUTCDay()];
+  return WEEKDAYS[new Date(`${k}T12:00:00Z`).getUTCDay()];
 }
 
 /**
@@ -107,17 +104,27 @@ function dayLabel(iso: string, now: Date): string {
  * `dinnerCandidates` (the curated meal_ideas catalog) is optional — omit it and
  * the brief simply carries no dinner ideas (keeps the engine pure + DB-free).
  */
-export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidates: DinnerIdea[] = []): FirstBrief {
+export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidates: DinnerIdea[] = [], timezone = 'UTC'): FirstBrief {
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const timeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hourCycle: 'h23' });
+  const dayKey = (instant: string | Date) => {
+    const parts = dateFormatter.formatToParts(typeof instant === 'string' ? new Date(instant) : instant);
+    return ['year', 'month', 'day'].map((type) => parts.find((part) => part.type === type)!.value).join('-');
+  };
+  // All-day dates are calendar dates, even when transport normalized them to
+  // UTC midnight. Timed events are instants and belong to the family's zone.
+  const eventDayKey = (event: BriefEvent) => event.allDay ? event.start.slice(0, 10) : dayKey(event.start);
   const valid = (events ?? []).filter((e) => e && typeof e.start === 'string' && Number.isFinite(Date.parse(e.start)));
   const nowMs = now.getTime();
   const weekEndMs = nowMs + 7 * DAY_MS;
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = dayKey(now);
+  const tomorrowKey = calendarDayAfter(todayKey);
 
   // Sort by start so timelines and conflict scans are stable.
   const sorted = [...valid].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 
   // Today's timeline (all-day first, then chronological).
-  const today = sorted.filter((e) => utcDayKey(e.start) === todayKey);
+  const today = sorted.filter((e) => eventDayKey(e) === todayKey);
   const timeline: TimelineItem[] = [
     ...today.filter((e) => e.allDay),
     ...today.filter((e) => !e.allDay),
@@ -127,7 +134,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
     end: e.end ?? null,
     allDay: !!e.allDay,
     location: e.location ?? null,
-    timeLabel: e.allDay ? 'All day' : fmtTime(e.start),
+    timeLabel: e.allDay ? 'All day' : fmtTime(e.start, timeFormatter),
   }));
 
   // Events within the next 7 days (the planning horizon for conflicts/actions).
@@ -141,15 +148,15 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   for (let i = 0; i < week.length; i++) {
     for (let j = i + 1; j < week.length; j++) {
       const a = week[i], b = week[j];
-      if (utcDayKey(a.start) !== utcDayKey(b.start)) continue;
+      if (eventDayKey(a) !== eventDayKey(b)) continue;
       const aStart = Date.parse(a.start), aEnd = endOf(a);
       const bStart = Date.parse(b.start), bEnd = endOf(b);
       if (aStart < bEnd && bStart < aEnd) {
         conflicts.push({
           aTitle: a.title,
           bTitle: b.title,
-          dayLabel: dayLabel(a.start, now),
-          overlapLabel: fmtRange(new Date(Math.max(aStart, bStart)).toISOString(), Math.min(aEnd, bEnd)),
+          dayLabel: dayLabel(eventDayKey(a), todayKey, tomorrowKey),
+          overlapLabel: fmtRange(new Date(Math.max(aStart, bStart)).toISOString(), Math.min(aEnd, bEnd), timeFormatter),
         });
       }
     }
@@ -165,14 +172,13 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       detail: `${c.aTitle} overlaps ${c.bTitle} (${c.overlapLabel}). Decide who covers what.`,
     });
   }
-  const tomorrowKey = new Date(nowMs + DAY_MS).toISOString().slice(0, 10);
-  const missingLocation = week.filter((e) => !e.location && (utcDayKey(e.start) === todayKey || utcDayKey(e.start) === tomorrowKey));
+  const missingLocation = week.filter((e) => !e.location && (eventDayKey(e) === todayKey || eventDayKey(e) === tomorrowKey));
   for (const e of missingLocation.slice(0, 3)) {
     actions.push({
       id: `location:${e.title}:${e.start}`,
       kind: 'location',
       label: `Add a location`,
-      detail: `“${e.title}” ${dayLabel(e.start, now).toLowerCase()} has no place set.`,
+      detail: `“${e.title}” ${dayLabel(eventDayKey(e), todayKey, tomorrowKey).toLowerCase()} has no place set.`,
     });
   }
   if (timeline.length > 0 && actions.length < 6) {
@@ -216,7 +222,8 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   const timeSavedMinutes = top.reduce((s, o) => s + o.minutes, 0);
 
   // Headline.
-  const dow = WEEKDAYS_LONG[now.getUTCDay()];
+  const localCalendarDate = new Date(`${todayKey}T12:00:00Z`);
+  const dow = WEEKDAYS_LONG[localCalendarDate.getUTCDay()];
   let headline: string;
   if (timeline.length === 0 && week.length === 0) {
     headline = "You're set up — add your first plans and Bubaly takes it from here.";
@@ -228,7 +235,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
 
   // 3 dinner ideas that fit the day (quick when today is busy, more involved on
   // the weekend). Drawn from the curated catalog passed in by the caller.
-  const dinnerIdeas = pickDinnerIdeas(dinnerCandidates, { now, busyCount: timeline.length });
+  const dinnerIdeas = pickDinnerIdeas(dinnerCandidates, { now: localCalendarDate, busyCount: timeline.length });
 
   return {
     now: now.toISOString(),
