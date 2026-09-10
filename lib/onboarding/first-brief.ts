@@ -70,11 +70,11 @@ function calendarDayAfter(key: string): string {
   return new Date(Date.parse(`${key}T12:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 }
 
-/** Minutes since midnight UTC for an ISO datetime (for same-day ordering/labels). */
+/** End instant; explicit point events retain zero duration. */
 function endOf(ev: BriefEvent): number {
   const start = Date.parse(ev.start);
   const end = ev.end ? Date.parse(ev.end) : NaN;
-  return Number.isFinite(end) && end > start ? end : start + 60 * 60_000; // default 1h
+  return Number.isFinite(end) && end >= start ? end : start + 60 * 60_000; // default 1h
 }
 
 function fmtTime(iso: string, formatter: Intl.DateTimeFormat): string {
@@ -151,7 +151,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       if (eventDayKey(a) !== eventDayKey(b)) continue;
       const aStart = Date.parse(a.start), aEnd = endOf(a);
       const bStart = Date.parse(b.start), bEnd = endOf(b);
-      if (aStart < bEnd && bStart < aEnd) {
+      if (aStart < aEnd && bStart < bEnd && aStart < bEnd && bStart < aEnd) {
         conflicts.push({
           aTitle: a.title,
           bTitle: b.title,
