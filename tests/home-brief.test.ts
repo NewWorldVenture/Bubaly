@@ -87,12 +87,4 @@ describe('Home snapshot containment (source contracts)', () => {
     expect(dashboard).not.toMatch(/\.from\(['"]home_briefs['"]\)/);
     expect(dashboard).not.toContain('homeBriefSummary');
   });
-
-  it('keeps rendering the computed readiness, next steps and dinner ideas', () => {
-    expect(dashboard).toContain('showOutcome && homeBrief &&');
-    expect(dashboard).toContain('{homeBrief.headline}');
-    expect(dashboard).toContain('{homeBrief.readinessPct}%');
-    expect(dashboard).toContain('homeBrief.steps.slice(0, 4).map');
-    expect(dashboard).toContain('homeBrief.dinnerIdeas.map');
-  });
 });

@@ -39,10 +39,11 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
-import { CircleCheck, Circle, Utensils } from 'lucide-react';
+import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
 import { InsightHero } from '@/components/dashboard/insight-hero';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext } from '@/lib/i18n/server';
+import { translate } from '@/lib/i18n/messages';
 
 function greeting() {
   const h = new Date().getHours();
@@ -56,7 +57,8 @@ function todayLabel() {
 }
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
-  const t = await getTranslations();
+  const { locale, messages } = await getLocaleContext();
+  const t = (key: string, params?: Record<string, string | number>) => translate(messages, key, params);
   const familyId = ctx.active.familyId;
   const me = ctx.active.member;
   const myMemberId = me.id;
@@ -663,62 +665,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       {/* T3: Outcome-first home — a real "here's your week + next steps + dinners"
           instead of an empty "all caught up" card. */}
       {showOutcome && homeBrief && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> {homeBrief.isSparse ? 'Your first wins' : 'Your week'}</p>
-                <p className="mt-1 text-sm text-fg/85">{homeBrief.headline}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-2xl font-black leading-none">{homeBrief.readinessPct}%</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted">ready</p>
-              </div>
-            </div>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-border">
-              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${homeBrief.readinessPct}%` }} />
-            </div>
-            {homeBrief.timeSavedMinutes > 0 && (
-              <p className="mt-2 text-xs text-muted">{t('aiHomeDashboard.estimatedPlanningTimeNMinThisWeek', { minutes: homeBrief.timeSavedMinutes })}</p>
-            )}
-          </div>
-
-          {/* Next best steps — real outcomes, unfinished first */}
-          <div className="space-y-2">
-            {homeBrief.steps.slice(0, 4).map((s) => (
-              <Link key={s.id} href={s.href}
-                className={cn('flex items-center gap-3 rounded-2xl border p-4 transition hover:bg-elevated',
-                  s.done ? 'border-border/60 bg-surface/20' : 'border-border bg-surface/40')}>
-                {s.done
-                  ? <CircleCheck className="h-5 w-5 shrink-0 text-emerald-400" />
-                  : <Circle className="h-5 w-5 shrink-0 text-brand-text" />}
-                <div className="min-w-0 flex-1">
-                  <p className={cn('truncate text-sm font-semibold', s.done && 'text-muted line-through')}>{s.label}</p>
-                  <p className="truncate text-xs text-muted">{s.detail}</p>
-                </div>
-                {!s.done && <ChevronRight className="h-4 w-4 shrink-0 text-brand-text" />}
-              </Link>
-            ))}
-          </div>
-
-          {/* Dinner ideas — value even on a blank week */}
-          {homeBrief.dinnerIdeas.length > 0 && (
-            <div className="rounded-2xl border border-border bg-surface/40 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> {t('aiHomeDashboard.dinnerIdeasForThisWeek')}</p>
-                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.planMeals')}</Link>
-              </div>
-              <ul className="space-y-1.5 text-sm">
-                {homeBrief.dinnerIdeas.map((d) => (
-                  <li key={d.title} className="flex items-baseline justify-between gap-3">
-                    <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
-                    <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+        <HomeOutcomeCard homeBrief={homeBrief} locale={locale.code} t={t} />
       )}
 
       {/* AI nudge */}
