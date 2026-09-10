@@ -89,3 +89,90 @@ The available deployment credential does not reach Bubaly's Vercel project, so
 production deployment and environment read-back are still pending owner access.
 The separately supplied webhook endpoint belongs to another application and was
 not changed. No credential or webhook signing secret belongs in this runbook.
+
+## Vercel Production rollout checklist
+
+The deployment status above records the September 9 checkpoint. Use this checklist
+for the production rollout; record each completed check against the actual deployed
+commit and timestamp.
+
+1. Open the **Bubaly** Vercel project, then **Settings → Environment Variables**,
+   and select **Production**. Set both `NEXT_PUBLIC_APP_URL` and
+   `NEXT_PUBLIC_SITE_URL` to `https://www.bubaly.com`. `APP_URL` supplies billing
+   and auth return URLs; `SITE_URL` determines the server auth cookie's Secure
+   setting. Preserve the existing correct `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` and server-only `SUPABASE_SERVICE_ROLE_KEY`.
+2. Set these four Production values. The annual amounts already include the
+   advertised saving; do not apply another 17% discount.
+
+   | Variable | Value | Recurring USD amount |
+   | --- | --- | --- |
+   | `STRIPE_PRICE_BASIC_MONTHLY` | `price_1UDvdiBrwQtGmNLkX5z9qCVv` | $12.04/month |
+   | `STRIPE_PRICE_BASIC_ANNUAL` | `price_1UDvdiBrwQtGmNLkVBshMLgK` | $119.88/year ($9.99/month equivalent) |
+   | `STRIPE_PRICE_PLUS_MONTHLY` | `price_1UDvdjBrwQtGmNLkZmtkzTMJ` | $30.11/month |
+   | `STRIPE_PRICE_PLUS_ANNUAL` | `price_1UDvdjBrwQtGmNLkpBdccLge` | $299.88/year ($24.99/month equivalent) |
+
+   If `STRIPE_PRICE_FAMILY_MONTHLY` or `STRIPE_PRICE_FAMILY_ANNUAL` exists,
+   align it with the corresponding new Basic ID, or remove that optional alias
+   so it falls back to Basic. Legacy `family_*` requests prefer these aliases;
+   an unrelated custom/test ID is not translated by the historical-ID mapping.
+3. Verify `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` belong to
+   the live Stripe account containing these prices. Also inspect **Super Admin →
+   Stripe Setup**: nonempty `stripe_settings.secret_key` and `publishable_key`
+   override their environment fallbacks. `/api/billing/checkout` uses the
+   effective admin/env secret; change-plan, cancellation and portal routes use
+   the environment secret. Both paths must reach the same account. Record the
+   verified account ID, never key values.
+4. In that Stripe account, verify Bubaly's billing webhook endpoint is
+   `https://www.bubaly.com/api/webhooks/stripe`. Set Vercel's Production
+   `STRIPE_WEBHOOK_SECRET` to the signing secret for **that endpoint**. The route
+   reads this environment value directly; an admin `stripe_settings.webhook_secret`
+   does not override it. A signing secret for another application's endpoint
+   cannot configure Bubaly's webhook. Verify signed event delivery and processing
+   without placing secrets or event payloads containing customer data in the
+   rollout record.
+5. Integrate the reviewed pricing [#472](https://github.com/NewWorldVenture/Bubaly/pull/472)
+   and persistent-session [#470](https://github.com/NewWorldVenture/Bubaly/pull/470)
+   changes with their prerequisites. When shipping pricing-selection continuity,
+   include its linked [#479](https://github.com/NewWorldVenture/Bubaly/pull/479),
+   [#480](https://github.com/NewWorldVenture/Bubaly/pull/480) and
+   [#481](https://github.com/NewWorldVenture/Bubaly/pull/481) stack with its
+   prerequisites. Create a new Production deployment from the reviewed integrated
+   commit after saving the variables. Confirm `www.bubaly.com` serves that
+   deployment. Environment edits only apply to new deployments, as documented in
+   [Vercel environment variables](https://vercel.com/docs/environment-variables).
+6. Read back the non-secret Production values and Stripe account, price amounts,
+   currency, intervals, active flags and product defaults. Check both periods on
+   `/pricing`, the upgrade modal and `/dashboard/billing` in every supported
+   locale. Check the selected checkout price/interval and configured success,
+   cancel and portal return URLs use `https://www.bubaly.com`. Verify completed
+   payment returns in an isolated test-mode environment; do not complete a live
+   payment merely to validate configuration. For the continuity stack, verify
+   signup/login and onboarding retain the selected plan through to explicit
+   Billing review, with no payment request until confirmation.
+7. Verify the first-invoice total for the actual entry point, including any tax
+   or promotion: `/api/billing/checkout` can add the configured one-time service
+   fee; `/api/billing/change-plan` checkout fallback does not. The portal follows
+   its Stripe-side configuration. Preserve this existing fee policy. Recheck all
+   references to the four previous IDs, including subscriptions, payment links
+   and portal configurations, exhausting pagination. Only after production code
+   and checkout mapping pass acceptance, archive those previous prices. Read
+   back their inactive state while preserving historical webhook recognition.
+   Record deployment, UI, checkout, webhook and retirement outcomes separately;
+   leave inaccessible or failed checks pending.
+
+## Session acceptance outside Vercel
+
+The persistent-session change adds no `SESSION_*` Vercel variable. In the Supabase
+project, separately verify that session timebox, inactivity timeout and
+single-session restrictions allow the intended persistent sessions. Hosted
+overrides can still end sessions during refresh; see
+[Supabase session configuration](https://supabase.com/docs/guides/auth/sessions).
+Verify browser restart, refresh after token expiry, temporary outage recovery
+and explicit sign-out on the deployed web app. Revoked tokens and definitive
+authentication rejection must still end the affected session.
+
+Native secure-storage and lifecycle changes require a separate mobile build and
+release; deploying Vercel does not update installed apps. Complete physical-device
+cold-start, resume, storage/network recovery and explicit sign-out acceptance for
+that release, using the persistent-session runbook introduced by #470.
