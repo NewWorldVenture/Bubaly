@@ -121,10 +121,9 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   // UTC midnight. Timed events are instants and belong to the family's zone.
   const eventDayKey = (event: BriefEvent) => event.allDay ? event.start.slice(0, 10) : dayKey(event.start);
   const valid = (events ?? []).filter((e) => e && typeof e.start === 'string' && Number.isFinite(Date.parse(e.start)));
-  const nowMs = now.getTime();
-  const weekEndMs = nowMs + 7 * DAY_MS;
   const todayKey = dayKey(now);
   const tomorrowKey = calendarDayAfter(todayKey);
+  const weekEndKey = new Date(Date.parse(`${todayKey}T12:00:00Z`) + 7 * DAY_MS).toISOString().slice(0, 10);
 
   // Sort by start so timelines and conflict scans are stable.
   const sorted = [...valid].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
@@ -143,11 +142,14 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
     timeLabel: e.allDay ? 'All day' : fmtTime(e.start, timeFormatter),
   }));
 
-  // Events within the next 7 days (the planning horizon for conflicts/actions).
-  const week = sorted.filter((e) => {
-    const t = Date.parse(e.start);
-    return t >= nowMs - DAY_MS && t <= weekEndMs && !e.allDay;
+  // Seven family calendar dates, including all of today. All-day dates count
+  // toward the organized calendar, but only timed events drive clashes and
+  // modeled planning minutes. An elapsed-hour window drifts at DST boundaries.
+  const weekEvents = sorted.filter((e) => {
+    const key = eventDayKey(e);
+    return key >= todayKey && key < weekEndKey;
   });
+  const week = weekEvents.filter((e) => !e.allDay);
 
   // Conflicts: overlapping timed events on the same day.
   const conflicts: BriefConflict[] = [];
@@ -226,13 +228,13 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       display: { kind: 'conflicts', count: conflicts.length },
     });
   }
-  if (week.length > 0) {
+  if (weekEvents.length > 0) {
     opportunities.push({
       id: 'week',
       label: 'Your week, already organized',
-      detail: `${week.length} event${week.length === 1 ? '' : 's'} sorted into one shared timeline.`,
+      detail: `${weekEvents.length} event${weekEvents.length === 1 ? '' : 's'} sorted into one shared timeline.`,
       minutes: Math.min(week.length, 40) * 2,
-      display: { kind: 'week', count: week.length },
+      display: { kind: 'week', count: weekEvents.length },
     });
   }
   const top = opportunities.sort((a, b) => b.minutes - a.minutes).slice(0, 3);
@@ -243,7 +245,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   const dow = WEEKDAYS_LONG[localCalendarDate.getUTCDay()];
   let headline: string;
   let headlineDisplay: FirstBriefDisplay['headline'];
-  if (timeline.length === 0 && week.length === 0) {
+  if (timeline.length === 0 && weekEvents.length === 0) {
     headline = "You're set up — add your first plans and Bubaly takes it from here.";
     headlineDisplay = 'empty';
   } else if (conflicts.length > 0) {
@@ -262,7 +264,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
     now: now.toISOString(),
     headline,
     todayCount: timeline.length,
-    weekCount: week.length,
+    weekCount: weekEvents.length,
     timeline,
     conflicts,
     actions: actions.slice(0, 6),
