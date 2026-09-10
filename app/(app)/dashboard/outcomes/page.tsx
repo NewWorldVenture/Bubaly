@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -6,27 +7,32 @@ import { createServer } from '@/lib/supabase/server';
 import { OutcomesLauncher, type OutcomePlan } from '@/components/modules/outcomes-launcher';
 import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 import {
-  OUTCOMES, buildOutcomePlan, outcomeUrgencyCount, type OutcomeContext,
+  OUTCOMES, buildOutcomePlan, outcomeUrgencyCount, outcomeFromParam, type OutcomeContext,
 } from '@/lib/outcomes/launcher';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 import { ErrorState } from '@/components/ui/states';
+import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
 export const dynamic = 'force-dynamic';
 
-export default async function OutcomesPage() {
+export default async function OutcomesPage({ searchParams }: { searchParams?: Promise<{ outcome?: string }> }) {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
+  const selectedOutcome = outcomeFromParam((await searchParams)?.outcome);
   const supabase = await createServer();
 
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
-  const dayStart = `${todayKey}T00:00:00Z`;
-  const dayEnd = `${new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10)}T00:00:00Z`;
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const day = zonedDayBoundsMs(todayKey, tz);
+  const dayStart = new Date(day.start).toISOString();
+  const dayEnd = new Date(day.end).toISOString();
 
   // Real, focused snapshot — all family-scoped, count-only where possible.
   const [eventsRes, overdueRes, groceryRes, membersRes] = await settleAll([
@@ -36,22 +42,26 @@ export default async function OutcomesPage() {
       .eq('family_id', familyId).eq('is_done', false).lt('due_date', todayKey),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
-    supabase.from('family_members').select('birthday').eq('family_id', familyId),
+    supabase.from('family_members').select('birthday', { count: 'exact' }).eq('family_id', familyId).eq('is_active', true),
   ]);
 
-  const birthdaysSoon = (membersRes.data ?? []).filter((m) => {
+  const birthdaysSoon = countMatchingResult(membersRes, (m) => {
     if (!m.birthday) return false;
     const next = nextBirthdayDate(m.birthday, now);
     if (!next) return false;
     const d = daysUntil(next, now);
     return d >= 0 && d <= 14;
-  }).length;
+  });
+
+  const counts = { eventsToday: countFromResult(eventsRes), overdueTasks: countFromResult(overdueRes), openGrocery: countFromResult(groceryRes), birthdaysSoon };
+  const countsUnavailable = Object.values(counts).some((count) => count === null);
+  if (countsUnavailable) console.error('[dashboard/outcomes] outcome counts read failed or incomplete', { events: eventsRes.error, tasks: overdueRes.error, grocery: groceryRes.error, members: membersRes.error });
 
   const context: OutcomeContext = {
-    eventsToday: eventsRes.count ?? 0,
-    overdueTasks: overdueRes.count ?? 0,
-    openGrocery: groceryRes.count ?? 0,
-    birthdaysSoon,
+    eventsToday: counts.eventsToday ?? 0,
+    overdueTasks: counts.overdueTasks ?? 0,
+    openGrocery: counts.openGrocery ?? 0,
+    birthdaysSoon: counts.birthdaysSoon ?? 0,
   };
 
   const plans: OutcomePlan[] = OUTCOMES.map((outcome) => ({
@@ -73,6 +83,7 @@ export default async function OutcomesPage() {
 
   return (
     <>
+      {countsUnavailable && <p role="status" className="mx-auto mb-4 max-w-5xl px-4 text-sm text-muted">{t('outcomeDiscovery.unavailable')}{' '}<Link href="/dashboard/outcomes" className="underline">{t('outcomeDiscovery.refresh')}</Link></p>}
       {reasoningError && (
         <div className="mx-auto mb-4 max-w-5xl px-4 pt-2">
           <ErrorState message={t('outcomes.relationshipInsightsAreTemporarilyUnavailable')} />
@@ -84,7 +95,7 @@ export default async function OutcomesPage() {
           <RelationshipInsights insights={insights} />
         </div>
       )}
-      <OutcomesLauncher plans={plans} />
+      <OutcomesLauncher key={selectedOutcome ?? 'default'} plans={plans} initialOutcomeId={selectedOutcome} />
     </>
   );
 }

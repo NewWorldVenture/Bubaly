@@ -13,6 +13,9 @@ import { fmtTime, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
+import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
+import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -32,19 +35,21 @@ export default async function CommandCenterPage() {
   const supabase = await createServer();
 
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(start); weekEnd.setDate(weekEnd.getDate() + 7);
-  const in30 = new Date(start); in30.setDate(in30.getDate() + 30);
+  const tz = ctx.active.family.timezone || 'UTC';
+  const familyToday = dayKeyInTz(now, tz);
+  const weekDays = Array.from({ length: 8 }, (_, index) => new Date(Date.parse(`${familyToday}T12:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10));
+  const weekEnd = new Date(zonedDayBoundsMs(weekDays[7], tz).start);
+  const in30 = new Date(now.getTime() + 30 * 86_400_000);
 
   const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
-    supabase.from('chore_assignments').select('id, due_at, status, member_id')
+    supabase.from('chore_assignments').select('id, due_at, status, member_id', { count: 'exact' })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
-    supabase.from('meal_plans').select('plan_date, meal_type').eq('family_id', familyId)
-      .gte('plan_date', start.toISOString().slice(0, 10)).lt('plan_date', weekEnd.toISOString().slice(0, 10)),
-    supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId)
+    supabase.from('meal_plans').select('plan_date, meal_type', { count: 'exact' }).eq('family_id', familyId)
+      .gte('plan_date', weekDays[0]).lt('plan_date', weekDays[7]),
+    supabase.from('documents').select('id, title, expires_at', { count: 'exact' }).eq('family_id', familyId)
       .not('expires_at', 'is', null).gte('expires_at', now.toISOString()).lte('expires_at', in30.toISOString()),
   ]);
 
@@ -104,11 +109,18 @@ export default async function CommandCenterPage() {
   // ── Other real signals ──
   const overdue = (openChores ?? []).filter((c) => c.due_at && new Date(c.due_at) < now);
   const plannedDinnerDays = new Set((mealPlans ?? []).filter((m) => m.meal_type === 'dinner').map((m) => m.plan_date));
-  const unplannedDinners = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start); d.setDate(d.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  }).filter((day) => !plannedDinnerDays.has(day));
+  const unplannedDinners = weekDays.slice(0, 7).filter((day) => !plannedDinnerDays.has(day));
   const unassignedEvents = (events ?? []).filter((e) => !e.assignee_id);
+  const todayEnd = zonedDayBoundsMs(familyToday, tz).end;
+  const outcomeSnapshot = {
+    eventsRemaining: countMatchingResult(eventsResult, (event) => new Date(event.starts_at).getTime() < todayEnd),
+    overdueChores: countMatchingResult(openChoresResult, (chore) => !!chore.due_at && new Date(chore.due_at) < now),
+    unplannedDinners: countMatchingResult(mealPlansResult, () => true) === null ? null : unplannedDinners.length,
+    expiringDocuments: countFromResult(expiringDocsResult),
+  };
+  if (Object.values(outcomeSnapshot).some((count) => count === null)) {
+    console.error('[dashboard/command-center] outcome discovery read failed or incomplete', { readFailures });
+  }
 
   // ── Family Readiness Score (0–100), deterministic from the signals above ──
   const penalties =
@@ -140,6 +152,7 @@ export default async function CommandCenterPage() {
 
       {/* Since yesterday — the evening "what changed" recap (pillar #5) */}
       {change && <ChangeRecap change={change} />}
+      <OutcomesStrip href="/dashboard/command-center" snapshot={outcomeSnapshot} />
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Readiness score */}

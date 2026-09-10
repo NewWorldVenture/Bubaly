@@ -33,6 +33,7 @@ export const EMPTY_CONTEXT: OutcomeContext = { eventsToday: 0, overdueTasks: 0, 
 export type Outcome = {
   id: OutcomeId;
   title: string;
+  titleKey: string;
   tagline: string;
   /** icon key resolved to a lucide icon in the UI layer. */
   icon: string;
@@ -48,14 +49,14 @@ export type OutcomeStep = {
 
 /** The eight outcomes, in priority order. */
 export const OUTCOMES: Outcome[] = [
-  { id: 'run_today',          title: 'Run Today',                 tagline: "Everything today needs, in order.",        icon: 'sun' },
-  { id: 'feed_family',        title: 'Feed the Family',           tagline: 'Plan meals, shop, and cook with less thinking.', icon: 'utensils' },
-  { id: 'plan_trip',          title: 'Plan a Trip',               tagline: 'From idea to packed bags.',                icon: 'plane' },
-  { id: 'prepare_school',     title: 'Prepare for School',        tagline: 'Homework, timetables, and sign-ups handled.', icon: 'graduation' },
-  { id: 'manage_money',       title: 'Manage Money',              tagline: 'Bills, budgets, and the family wallet.',   icon: 'wallet' },
-  { id: 'stay_healthy',       title: 'Keep Everyone Healthy',     tagline: 'Appointments, meds, and records.',         icon: 'heart-pulse' },
-  { id: 'celebrate',          title: 'Celebrate Together',        tagline: 'Birthdays, gifts, and memories.',          icon: 'cake' },
-  { id: 'prepare_unexpected', title: 'Prepare for the Unexpected', tagline: 'Emergencies, documents, and readiness.',  icon: 'shield' },
+  { id: 'run_today',          title: 'Run Today', titleKey: 'outcomeDiscovery.runToday',                 tagline: "Everything today needs, in order.",        icon: 'sun' },
+  { id: 'feed_family',        title: 'Feed the Family', titleKey: 'outcomeDiscovery.feedFamily',           tagline: 'Plan meals, shop, and cook with less thinking.', icon: 'utensils' },
+  { id: 'plan_trip',          title: 'Plan a Trip', titleKey: 'outcomeDiscovery.planTrip',               tagline: 'From idea to packed bags.',                icon: 'plane' },
+  { id: 'prepare_school',     title: 'Prepare for School', titleKey: 'outcomeDiscovery.prepareSchool',     tagline: 'Homework, timetables, and sign-ups handled.', icon: 'graduation' },
+  { id: 'manage_money',       title: 'Manage Money', titleKey: 'outcomeDiscovery.manageMoney',       tagline: 'Bills, budgets, and the family wallet.',   icon: 'wallet' },
+  { id: 'stay_healthy',       title: 'Keep Everyone Healthy', titleKey: 'outcomeDiscovery.stayHealthy',     tagline: 'Appointments, meds, and records.',         icon: 'heart-pulse' },
+  { id: 'celebrate',          title: 'Celebrate Together', titleKey: 'outcomeDiscovery.celebrate',        tagline: 'Birthdays, gifts, and memories.',          icon: 'cake' },
+  { id: 'prepare_unexpected', title: 'Prepare for the Unexpected', titleKey: 'outcomeDiscovery.prepareUnexpected', tagline: 'Emergencies, documents, and readiness.',  icon: 'shield' },
 ];
 
 export const OUTCOMES_BY_ID: Record<OutcomeId, Outcome> = Object.fromEntries(
@@ -139,6 +140,24 @@ export function buildOutcomePlan(id: OutcomeId, ctx: OutcomeContext = EMPTY_CONT
 /** Total live-urgency badges across an outcome — for a summary count on the card. */
 export function outcomeUrgencyCount(id: OutcomeId, ctx: OutcomeContext): number {
   return buildOutcomePlan(id, ctx).filter((s) => s.badge).length;
+}
+
+/** Related outcomes come from the existing plan's real destinations. A nested
+ * module route inherits its parent; similar prefixes and external URLs do not. */
+export function outcomesForRoute(href: string): Outcome[] {
+  if (!href.startsWith('/') || href.startsWith('//')) return [];
+  const path = href.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/';
+  if (path === '/home' || path === '/dashboard/command-center') return [...OUTCOMES];
+  return OUTCOMES.filter((outcome) => buildOutcomePlan(outcome.id).some((step) =>
+    path === step.href || path.startsWith(`${step.href}/`)));
+}
+
+export function outcomeFromParam(value: unknown): OutcomeId | null {
+  return typeof value === 'string' && OUTCOMES.some((outcome) => outcome.id === value) ? value as OutcomeId : null;
+}
+
+export function outcomePath(id: OutcomeId): string {
+  return `/dashboard/outcomes?outcome=${encodeURIComponent(id)}`;
 }
 
 // ── "Do one thing now" (M30) ─────────────────────────────────────────────────

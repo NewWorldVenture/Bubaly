@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { BillsView } from '@/components/finance/bills-view';
 export const metadata: Metadata = { title: 'Bill Manager' };
-export default async function Page() { const ctx = await requireUserContext(); await requireAal2(ctx, 'money', '/dashboard/bills'); return <BillsView mode="all" />; }
+export default async function Page() { const ctx = await requireUserContext(); await requireAal2(ctx, 'money', '/dashboard/bills'); return <><RelatedOutcomes href="/dashboard/bills" /><BillsView mode="all" /></>; }
