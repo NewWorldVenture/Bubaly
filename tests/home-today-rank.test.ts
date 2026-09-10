@@ -25,6 +25,16 @@ describe('dayKeyInZone', () => {
 });
 
 describe('buildToday', () => {
+  it.each(['America/New_York', 'Asia/Tokyo', 'UTC'])('keeps all-day calendar dates separate from timed membership in %s', tz => {
+    const events = [{ id: 'today', title: 'Holiday {literal}', starts_at: '2026-09-05T00:00:00Z', all_day: true },
+      { id: 'tomorrow', title: 'Tomorrow holiday', starts_at: '2026-09-06T00:00:00Z', all_day: true },
+      { id: 'timed', title: 'Timed', starts_at: '2026-09-05T12:00:00Z', all_day: false }];
+    const before = structuredClone(events); const view = buildToday({ ...base, tz, events });
+    expect(view.schedule.map(item => item.key)).toEqual(['event:today', 'event:timed']);
+    expect(view.schedule[0]).toMatchObject({ title: 'Holiday {literal}', at: '2026-09-05T00:00:00Z', allDay: true });
+    expect(events).toEqual(before);
+  });
+
   it('is empty on a clear day', () => {
     expect(buildToday(base)).toEqual({ schedule: [], tasks: [], overdue: 0 });
   });

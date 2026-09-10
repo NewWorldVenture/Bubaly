@@ -109,7 +109,7 @@ export function buildToday(input: TodayInput): TodayView {
 
   const schedule: TodayItem[] = [];
   for (const e of input.events) {
-    if (dayKeyInZone(e.starts_at, tz) !== todayKey) continue;
+    if ((e.all_day ? e.starts_at.slice(0, 10) : dayKeyInZone(e.starts_at, tz)) !== todayKey) continue;
     const insight = e.all_day ? null : topInsight(input.insights?.[e.id]);
     schedule.push({
       key: `event:${e.id}`, kind: 'event', id: e.id, title: e.title, href: '/dashboard/calendar',

@@ -377,7 +377,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
 
   async function run(source: 'paste' | 'demo') {
     setLoading(source);
-    const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined });
+    const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined, timezone: draft.timezone });
     setLoading(null);
     if (!res.ok) { toastError(res.error); return; }
     if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }

@@ -8,7 +8,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Effect = { deps: unknown[]; cleanup?: () => void };
 const mocks = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[],
-  finish: vi.fn(), push: vi.fn(), refresh: vi.fn(), error: vi.fn(), locale: 'en-US' as LocaleCode }));
+  finish: vi.fn(), preview: vi.fn(), push: vi.fn(), refresh: vi.fn(), error: vi.fn(), locale: 'en-US' as LocaleCode }));
 // Actual wizard callbacks with persistent hook slots and storage; no browser claim.
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
@@ -32,7 +32,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
  const { getMessages, translate } = await import('@/lib/i18n/messages');
  return { useLocale: () => ({ code: mocks.locale }), useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, vars) };
 });
-vi.mock('@/app/onboarding/actions', () => ({ finalizeOnboardingAction: mocks.finish, previewCalendarImportAction: vi.fn() }));
+vi.mock('@/app/onboarding/actions', () => ({ finalizeOnboardingAction: mocks.finish, previewCalendarImportAction: mocks.preview }));
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: vi.fn(), previewConnectedCalendarAction: vi.fn() }));
 vi.mock('@/lib/analytics/onboarding-track', () => ({ trackOnboarding: vi.fn() }));
 vi.mock('@/components/outcomes/do-one-thing-card', () => ({ DoOneThingCard: () => null }));
@@ -54,11 +54,30 @@ function control(tree: ReactNode, key: string) { const label=translate(getMessag
 beforeEach(()=>{
  mocks.slots=[];mocks.cursor=0;mocks.effects=[];mocks.locale='en-US';
  mocks.finish.mockReset().mockResolvedValue({ok:true,data:{familyId}});mocks.push.mockReset();mocks.refresh.mockReset();mocks.error.mockReset();
+ mocks.preview.mockReset().mockResolvedValue({ok:false,error:'Preview unavailable'});
  storage=new Map([[DRAFT_STORAGE_KEY,serializeDraftState('pin',draft,true)]]);
  vi.stubGlobal('sessionStorage',{getItem:(k:string)=>storage.get(k)??null,setItem:(k:string,v:string)=>storage.set(k,v),removeItem:(k:string)=>storage.delete(k)});
  vi.stubGlobal('window',{});
 });
 afterEach(()=>vi.unstubAllGlobals());
+
+it.each(['demo', 'paste'] as const)('forwards the selected draft timezone through the actual %s preview control', async source => {
+ storage.set(DRAFT_STORAGE_KEY, serializeDraftState('value', draft, true)); render();
+ const timezone = 'America/New_York';
+ const renderValue = () => {
+  const panel = nodes(render()).find(node => typeof node.type === 'function' && node.type.name === 'ValuePanel')!;
+  return (panel.type as (props: unknown) => ReactNode)({ ...panel.props, draft: { ...(panel.props.draft as object), timezone } });
+ };
+ let panel = renderValue();
+ const icsText = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20260909T233000Z\nSUMMARY:Practice\nEND:VEVENT\nEND:VCALENDAR';
+ if (source === 'paste') {
+  const textarea = nodes(panel).find(node => node.type === 'textarea')!;
+  (textarea.props.onChange as (event: {target:{value:string}}) => void)({target:{value:icsText}}); panel = renderValue();
+ }
+ await control(panel, source === 'demo' ? 'onboardingWizard.seeItWithASampleFamily' : 'onboardingWizard.buildMyDay')();
+ expect(mocks.preview).toHaveBeenCalledExactlyOnceWith({ source, icsText: source === 'paste' ? icsText : undefined, timezone });
+ expect(mocks.finish).not.toHaveBeenCalled(); expect(mocks.push).not.toHaveBeenCalled();
+});
 
 describe('explicit selected-plan review after successful onboarding',()=>{
  it.each(['basic_monthly','basic_annual','plus_monthly','plus_annual'] as const)('keeps %s separate from restored draft, business payload and run keys',async(reviewPlan)=>{

@@ -5,16 +5,18 @@ import { calendarContinuationCookie, readCalendarContinuation, sealCalendarConti
 import { syncOAuthStateCookie } from '@/lib/sync/oauth-state';
 import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
 import type { ReviewPlan } from '@/lib/billing/review-selection';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { getMessages, translate } from '@/lib/i18n/messages';
 
 const mock = vi.hoisted(() => ({ db: null as unknown, cookies: new Map<string, string>(), saveProfile: vi.fn(), exchange: vi.fn(), identity: vi.fn(), legacyContext: vi.fn(),
-  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn() }));
+  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn(), locale: 'en-US' as LocaleCode }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: (name: string, value: string) => mock.cookies.set(name, value), get: (name: string) => mock.cookies.has(name) ? { value: mock.cookies.get(name) } : undefined }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => mock.db, createServiceClient: () => mock.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mock.legacyContext, getUserContext: mock.context }));
 vi.mock('next/navigation', () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); }, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  const { getMessages, translate } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string) => translate(getMessages(mock.locale), key) };
 });
 vi.mock('@/lib/sync/registry', () => ({ getAdapter: () => mock.adapter, configuredAdapters: () => mock.adapter ? [mock.adapter] : [] }));
 vi.mock('@/lib/sync/providers/google', async (original) => ({ ...await original<typeof import('@/lib/sync/providers/google')>(), exchangeCode: mock.exchange }));
@@ -31,7 +33,7 @@ vi.mock('@/lib/referrals/signup', () => ({ captureSignupReferral: async () => {}
 vi.mock('@/lib/onboarding/remember', () => ({ rememberOnboardingFacts: async () => {} }));
 
 const { startCalendarConnectionAction, previewConnectedCalendarAction } = await import('@/app/onboarding/calendar-actions');
-const { finalizeOnboardingAction } = await import('@/app/onboarding/actions');
+const { finalizeOnboardingAction, previewCalendarImportAction } = await import('@/app/onboarding/actions');
 const { default: OnboardingPage } = await import('@/app/onboarding/page');
 const { GET: googleStart } = await import('@/app/api/sync/google/auth/route');
 const { GET: googleFinish } = await import('@/app/api/sync/google/callback/route');
@@ -42,6 +44,7 @@ const familyId = '20000000-0000-4000-8000-000000000001';
 const otherUser = '10000000-0000-4000-8000-000000000002';
 let db: InMemorySupabase;
 beforeEach(() => {
+  mock.locale = 'en-US';
   vi.stubEnv('SYNC_TOKEN_KEY', '12'.repeat(32));
   vi.stubEnv('GOOGLE_SYNC_CLIENT_ID', 'configured-client');
   vi.stubEnv('MICROSOFT_SYNC_CLIENT_ID', 'configured-client');
@@ -67,7 +70,92 @@ beforeEach(() => {
     pullCalendarWindow: async () => [{ external_id: 'school', title: 'School meeting', starts_at: '2026-09-10T10:00:00Z', ends_at: '2026-09-10T11:00:00Z',
       location: 'School', all_day: false, recurrence_rule: null, cancelled: false }] };
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+describe('paste/demo preview uses the selected family timezone', () => {
+  it.each([
+    { name: 'evening across UTC midnight', now: '2026-09-10T00:00:00Z', timezone: 'America/New_York',
+      rows: ['DTSTART:20260909T233000Z\nDTEND:20260910T010000Z\nSUMMARY:Practice', 'DTSTART:20260910T001500Z\nDTEND:20260910T013000Z\nSUMMARY:Appointment'], today: 2, firstTime: '7:30 PM' },
+    { name: 'all-day original date', now: '2026-09-10T02:00:00Z', timezone: 'America/Los_Angeles',
+      rows: ['DTSTART;VALUE=DATE:20260909\nSUMMARY:School closed', 'DTSTART;VALUE=DATE:20260910\nSUMMARY:Next holiday'], today: 1, firstTime: 'All day' },
+    { name: 'spring DST evening', now: '2026-03-09T02:00:00Z', timezone: 'America/New_York',
+      rows: ['DTSTART:20260309T020000Z\nDTEND:20260309T030000Z\nSUMMARY:Practice', 'DTSTART:20260309T023000Z\nDTEND:20260309T033000Z\nSUMMARY:Appointment'], today: 2, firstTime: '10:00 PM' },
+    { name: 'morning ahead of UTC', now: '2026-09-09T22:30:00Z', timezone: 'Asia/Tokyo',
+      rows: ['DTSTART:20260909T230000Z\nSUMMARY:Morning', 'DTSTART:20260910T160000Z\nSUMMARY:Tomorrow'], today: 1, firstTime: '8:00 AM' },
+  ])('$name matches the actual finalized brief and stored summary', async ({ now, timezone, rows, today, firstTime }) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(now));
+    const icsText = ['BEGIN:VCALENDAR', ...rows.map(row => `BEGIN:VEVENT\n${row}\nEND:VEVENT`), 'END:VCALENDAR'].join('\n');
+    const request = { source: 'paste' as const, icsText, timezone };
+    const from = vi.spyOn(db, 'from');
+    const preview = await previewCalendarImportAction(request);
+    expect(preview.ok).toBe(true); if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
+    expect(from.mock.calls.map(([table]) => table)).toEqual(['meal_ideas']);
+    expect(db.table('calendar_events')).toHaveLength(0); expect(db.table('onboarding_imports')).toHaveLength(0);
+    const payload = buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone }), importSource: 'paste', importedEvents: preview.data.events });
+    const result = await finalizeOnboardingAction(payload, { userId, familyId });
+    expect(result.ok).toBe(true); if (!result.ok || !result.data?.brief) throw new Error('Finish unavailable');
+    expect(result.data.brief.todayCount).toBe(today);
+    expect(result.data.brief.timeline[0].timeLabel).toBe(firstTime);
+    expect(db.table('onboarding_imports')[0]).toMatchObject({ family_id: familyId, today_count: today });
+    expect(preview.data.brief).toEqual(result.data.brief);
+    expect(db.table('calendar_events').map(row => row.starts_at)).toEqual(preview.data.events.map(event => event.start));
+  });
+
+  it('demo preview agrees with finalization without changing the generated sample events', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
+    const request = { source: 'demo' as const, timezone: 'America/New_York' };
+    const preview = await previewCalendarImportAction(request);
+    expect(preview.ok).toBe(true); if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
+    const legacy = await previewCalendarImportAction({ source: 'demo' });
+    expect(legacy.ok).toBe(true); if (!legacy.ok || !legacy.data) throw new Error('Legacy preview unavailable');
+    expect(preview.data.events).toEqual(legacy.data.events);
+    const result = await finalizeOnboardingAction(buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: request.timezone }), importSource: 'demo', importedEvents: preview.data.events }), { userId, familyId });
+    expect(result.ok).toBe(true); if (!result.ok || !result.data?.brief) throw new Error('Finish unavailable');
+    expect(preview.data.brief).toEqual(result.data.brief);
+  });
+
+  it.each(['', ' ', 'Invalid/Zone', null, false, 42, {}, [], 'x'.repeat(101)].map(timezone => ({ timezone })))('rejects malformed supplied timezone $timezone before auth or calendar work', async ({ timezone }) => {
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    const result = await previewCalendarImportAction({ source: 'demo', timezone } as never);
+    expect(result).toEqual({ ok: false, error: translate(getMessages(mock.locale), 'onboardingWizard.invalidPreviewTimezone') });
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['en-US', 'Choose a valid time zone.'], ['de-DE', 'Wählen Sie eine gültige Zeitzone.'],
+    ['es-ES', 'Elige una zona horaria válida.'], ['fr-FR', 'Choisissez un fuseau horaire valide.'],
+    ['it-IT', 'Scegli un fuso orario valido.'], ['nl-NL', 'Kies een geldige tijdzone.'],
+    ['pt-PT', 'Escolha um fuso horário válido.'],
+  ] as const)('%s returns a localized timezone validation response before auth or reads', async (locale, error) => {
+    mock.locale = locale;
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    expect(await previewCalendarImportAction({ source: 'demo', timezone: 'Invalid/Zone' })).toEqual({ ok: false, error });
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each([{ source: 'unsupported' }, { source: 'paste', icsText: 'x'.repeat(200_001) }])('preserves earlier source/text validation precedence', async input => {
+    mock.locale = 'de-DE';
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    const original = await previewCalendarImportAction(input as never);
+    expect(original.ok).toBe(false);
+    expect(await previewCalendarImportAction({ ...input, timezone: 'Invalid/Zone' } as never)).toEqual(original);
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it('omitted timezone retains the legacy UTC presentation default', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
+    const explicit = { source: 'demo' as const, timezone: 'UTC' };
+    expect(await previewCalendarImportAction({ source: 'demo' })).toEqual(await previewCalendarImportAction(explicit));
+  });
+
+  it('a valid presentation timezone never bypasses the existing signed-in requirement', async () => {
+    vi.spyOn(db.auth, 'getUser').mockResolvedValue({ data: { user: null }, error: null } as never);
+    const from = vi.spyOn(db, 'from');
+    const request = { source: 'demo' as const, timezone: 'America/New_York' };
+    expect((await previewCalendarImportAction(request)).ok).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+});
 function request(path: string, values = mock.cookies) {
   return new NextRequest(`https://bubaly.test${path}`, { headers: { cookie: [...values].map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('; ') } });
 }

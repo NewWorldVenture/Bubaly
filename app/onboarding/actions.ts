@@ -109,11 +109,15 @@ async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promis
  * which persists them into the real family's calendar.
  */
 export async function previewCalendarImportAction(input: {
-  source: 'paste' | 'demo'; icsText?: string;
+  source: 'paste' | 'demo'; icsText?: string; timezone?: string;
 }): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
   const t = await getTranslations();
   const parsed = previewCalendarImportSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid calendar import' };
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, error: issue?.path[0] === 'timezone'
+      ? t('onboardingWizard.invalidPreviewTimezone') : issue?.message ?? 'Invalid calendar import' };
+  }
 
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
@@ -138,7 +142,7 @@ export async function previewCalendarImportAction(input: {
   }
 
   const dinnerCandidates = await fetchDinnerCandidates(supabase);
-  const brief = buildFirstBrief(events, now, dinnerCandidates);
+  const brief = buildFirstBrief(events, now, dinnerCandidates, parsed.data.timezone);
   return { ok: true, data: { brief, events, source } };
 }
 
