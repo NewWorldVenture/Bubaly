@@ -7,7 +7,8 @@ describe('auth callback boundary', () => {
   it('still sends a visitor with no session to the login page', () => {
     expect(source).toContain('error: userError');
     expect(source).toContain('if (!user) {');
-    expect(source).toContain("return NextResponse.redirect(new URL('/login?error=auth', url.origin));");
+    expect(source).toContain("const retryHref = authScreenHref('/login', selection, true);");
+    expect(source).toContain('return NextResponse.redirect(new URL(retryHref, url.origin));');
   });
 
   it('does not bounce a just-signed-in user to /login over a transient read', () => {
@@ -20,7 +21,7 @@ describe('auth callback boundary', () => {
     // that routing decision needs a user this branch could not read.
     const retryableBranch = source.slice(
       source.indexOf('if (!user) {'),
-      source.indexOf("return NextResponse.redirect(new URL('/login?error=auth', url.origin));"),
+      source.indexOf('return NextResponse.redirect(new URL(retryHref, url.origin));'),
     );
     expect(retryableBranch).not.toContain("'/admin'");
   });
@@ -48,7 +49,7 @@ describe('auth callback boundary', () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const exchanged = source.slice(start, end);
-    const loginRedirects = exchanged.match(/\/login\?error=auth/g) ?? [];
+    const loginRedirects = exchanged.match(/new URL\(retryHref, url.origin\)/g) ?? [];
     expect(loginRedirects).toHaveLength(1);
   });
 });

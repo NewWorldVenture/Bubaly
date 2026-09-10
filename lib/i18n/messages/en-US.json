@@ -12711,5 +12711,7 @@
   "workspace.assistantWorkspace": "Assistant workspace",
   "workspace.context": "Context",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan and results"
+  "workspace.planAndResults": "Plan and results",
+  "signup.reviewSelectedPlanAfterSetup": "You can review your selected plan after setup. No payment is taken now.",
+  "signup.freeToStartNoCreditCard": "Free to start. No credit card required."
 }

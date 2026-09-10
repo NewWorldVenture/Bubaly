@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
-import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { isRetryableAuthError } from '@/lib/auth/session';
 import { landingPathForRole } from '@/lib/auth/landing';
 
@@ -14,7 +14,9 @@ const VID_MAX_AGE = 400 * 24 * 60 * 60;
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const next = safeInternalRedirect(url.searchParams.get('next'), '/home');
+  const selection = resolveAuthSelection(url.searchParams, 'next');
+  const next = selection.next ?? '/home';
+  const retryHref = authScreenHref('/login', selection, true);
 
   if (code) {
     const supabase = await createServer();
@@ -42,7 +44,7 @@ export async function GET(request: Request) {
         if (userError && isRetryableAuthError(userError)) {
           return NextResponse.redirect(new URL(next, url.origin));
         }
-        return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+        return NextResponse.redirect(new URL(retryHref, url.origin));
       }
       const { data: dbAdmin, error: adminLookupError } = await supabase.rpc('is_super_admin');
       if (adminLookupError) console.error('[auth-callback] super-admin lookup failed', adminLookupError);
@@ -96,5 +98,5 @@ export async function GET(request: Request) {
       return res;
     }
   }
-  return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+  return NextResponse.redirect(new URL(retryHref, url.origin));
 }

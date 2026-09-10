@@ -12711,5 +12711,7 @@
   "workspace.assistantWorkspace": "Spazio di lavoro dell'assistente",
   "workspace.context": "Contesto",
   "workspace.conversation": "Conversazione",
-  "workspace.planAndResults": "Piano e risultati"
+  "workspace.planAndResults": "Piano e risultati",
+  "signup.reviewSelectedPlanAfterSetup": "Potrai rivedere il piano selezionato dopo la configurazione. Non verrà addebitato alcun pagamento ora.",
+  "signup.freeToStartNoCreditCard": "Inizia gratis. Non serve una carta di credito."
 }

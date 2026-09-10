@@ -12711,5 +12711,7 @@
   "workspace.assistantWorkspace": "Arbeitsbereich des Assistenten",
   "workspace.context": "Kontext",
   "workspace.conversation": "Unterhaltung",
-  "workspace.planAndResults": "Plan und Ergebnisse"
+  "workspace.planAndResults": "Plan und Ergebnisse",
+  "signup.reviewSelectedPlanAfterSetup": "Nach der Einrichtung können Sie Ihren ausgewählten Tarif prüfen. Jetzt wird keine Zahlung fällig.",
+  "signup.freeToStartNoCreditCard": "Der Einstieg ist kostenlos. Keine Kreditkarte erforderlich."
 }

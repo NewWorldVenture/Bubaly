@@ -12711,5 +12711,7 @@
   "workspace.assistantWorkspace": "Werkruimte van de assistent",
   "workspace.context": "Context",
   "workspace.conversation": "Gesprek",
-  "workspace.planAndResults": "Plan en resultaten"
+  "workspace.planAndResults": "Plan en resultaten",
+  "signup.reviewSelectedPlanAfterSetup": "Na het instellen kun je je gekozen abonnement bekijken. Er wordt nu niets in rekening gebracht.",
+  "signup.freeToStartNoCreditCard": "Gratis beginnen. Geen creditcard nodig."
 }

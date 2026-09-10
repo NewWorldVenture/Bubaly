@@ -2,6 +2,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
 } from '@/lib/auth/session';
@@ -95,7 +96,7 @@ export async function middleware(req: NextRequest) {
     if (isPublic || bearerApi) return NextResponse.next({ request: req });
     const url = req.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('redirect', path);
+    url.searchParams.set('redirect', safeInternalRedirect(`${path}${req.nextUrl.search}`, path));
     return NextResponse.redirect(url);
   }
 
@@ -146,7 +147,7 @@ export async function middleware(req: NextRequest) {
     }
     const url = req.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('redirect', path);
+    url.searchParams.set('redirect', safeInternalRedirect(`${path}${req.nextUrl.search}`, path));
     // Carry any cookie the refresh just wrote onto the redirect too — a brand
     // new response would drop them and strand the browser on a stale session.
     return withCookies(NextResponse.redirect(url), res);
