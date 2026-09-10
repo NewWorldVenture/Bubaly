@@ -71,6 +71,9 @@ export async function HandledLedger() {
                 ))}
               </ul>
             )}
+            {(handledLine || meetsHandledFloor(stats.handled30d)) && (
+              <p className="mt-3 max-w-xl text-xs leading-5 text-white/60">{t('pricingValue.realFootnote')}</p>
+            )}
 
             <div className="mt-7 flex flex-col gap-3 xs:flex-row xs:flex-wrap">
               <Link href="/security#ai-trust" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110">

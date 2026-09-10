@@ -160,12 +160,13 @@ describe('public marketing claims', () => {
       expect(catalogue['pricingValue.yourNumbersBody']).toMatch(/your (family|data)/i);
     });
 
-    it('never claims Bubaly finished work that no row backs', () => {
+    it('describes recorded complete-or-partial runs without claiming every run finished', () => {
       // The real card's only sentences are the two aggregate-count keys, both
       // read from public_handled_stats().
       expect(block).toContain("t('handledProof.aggregateNote', { count: real.total })");
       expect(block).toContain("t('handledProof.aggregate30d', { count: real.last30d })");
-      expect(catalogue['pricingValue.realFootnote']).toMatch(/finished state/i);
+      expect(catalogue['pricingValue.realFootnote']).toMatch(/per run marked complete or partly complete/i);
+      expect(catalogue['pricingValue.realFootnote']).toMatch(/without a completion date/i);
     });
 
     it('leaves no inert control on the page', () => {

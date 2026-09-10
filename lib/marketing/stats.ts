@@ -7,11 +7,11 @@ export type PublicStats = {
   families: number;
   members: number;
   tasksCompleted: number;
-  /** Runs that reached `completed` across real families. */
+  /** Legacy RPC field: runs marked completed OR partially_completed. */
   handledCompleted: number;
-  /** The same count, limited to the last 30 days. */
+  /** Matching runs with completed_at at or after the 30-day cutoff; no upper date bound. */
   handled30d: number;
-  /** Distinct real families with at least one completed run. */
+  /** Distinct families with at least one matching complete or partial run. */
   familiesWithRuns: number;
 };
 
@@ -31,13 +31,28 @@ function anonClient() {
   );
 }
 
-type Row = Record<string, unknown> | null | undefined;
-const num = (row: Row, key: string) => Number(row?.[key] ?? 0) || 0;
-const firstRow = (data: unknown): Row => (Array.isArray(data) ? data[0] : data) as Row;
+type Row = Record<string, unknown>;
+
+function firstRow(data: unknown): Row {
+  if (Array.isArray(data) && data.length !== 1) throw new Error('Expected one aggregate row');
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('Invalid aggregate row');
+  return row as Row;
+}
+
+function num(row: Row, key: string): number {
+  const value = row[key];
+  // PostgREST can return bigint counts as decimal strings. Never coerce null,
+  // booleans, blank strings or rounded unsafe integers into public evidence.
+  const parsed = typeof value === 'number' ? value
+    : typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`Invalid aggregate count: ${key}`);
+  return parsed;
+}
 
 /**
- * `public_handled_stats()` ships in a later migration than this reader, so the
- * generated Database type does not carry it yet. The call is typed loosely and
+ * Migration 0278 defines `public_handled_stats()`; the generated Database type
+ * does not carry it yet. The legacy names include partial runs. The call is typed loosely and
  * every failure — including PostgREST's "function does not exist" — degrades
  * to zeros, which the formatters then HIDE (lib/marketing/format.ts
  * HANDLED_PUBLIC_MIN). The marketing site never reads family_automation_runs
@@ -55,11 +70,15 @@ async function readHandledStats(client: SupabaseClient<Database>): Promise<Handl
     const { data, error } = await (client as unknown as HandledStatsRpc).rpc('public_handled_stats');
     if (error) throw error;
     const row = firstRow(data);
-    return {
+    const counts = {
       handledCompleted: num(row, 'runs_completed'),
       handled30d: num(row, 'runs_completed_30d'),
       familiesWithRuns: num(row, 'families_with_runs'),
     };
+    if (counts.handled30d > counts.handledCompleted || counts.familiesWithRuns > counts.handledCompleted) {
+      throw new Error('Inconsistent aggregate counts');
+    }
+    return counts;
   } catch (err) {
     // Zeros are what the formatters HIDE, so a failed read shows nothing
     // rather than a number — but it is still logged, because "the RPC is not
@@ -91,10 +110,16 @@ async function readAccountStats(client: SupabaseClient<Database>): Promise<Accou
  *  hides the registered-family count. */
 export const getPublicStats = unstable_cache(
   async (): Promise<PublicStats> => {
-    const client = anonClient();
+    let client: SupabaseClient<Database>;
+    try {
+      client = anonClient();
+    } catch (err) {
+      console.error('[marketing-stats] public client unavailable (rendering no aggregates)', err);
+      return { ...EMPTY_PUBLIC_STATS };
+    }
     const [accounts, handled] = await Promise.all([readAccountStats(client), readHandledStats(client)]);
     return { ...accounts, ...handled };
   },
-  ['public-stats'],
+  ['public-stats-validated-v2'],
   { revalidate: 3600 },
 );
