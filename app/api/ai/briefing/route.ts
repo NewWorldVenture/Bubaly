@@ -1,10 +1,13 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext } from '@/lib/i18n/server';
+import { translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
+import { formatConciergeDigest } from '@/lib/concierge/digest-display';
 import { buildBrief, type BriefNotice } from '@/lib/briefing/build';
 import { listUnread } from '@/lib/services/notifications';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
@@ -29,7 +32,8 @@ function normalizeBriefTimezone(candidate: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const tr = await getTranslations();
+  const { locale, messages } = await getLocaleContext();
+  const tr = (key: string, params?: Record<string, string | number>) => translate(messages, key, params);
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
@@ -164,11 +168,11 @@ export async function POST(req: NextRequest) {
     const decisions = decisionsRes.data;
 
     const memberMap = new Map((members ?? []).map(m => [m.id, m]));
-    const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
+    const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? '';
 
     // Times a parent reads at 7am are their times. Without `timeZone` these
     // rendered in the server's zone, which on Vercel is UTC.
-    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+    const fmt = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
     const fmtDate = (iso: string) => dayKeyInTz(new Date(iso), tz);
     const calendarTime = (event: { starts_at: string; all_day: boolean }) => event.all_day ? tr('calendar.allDay') : fmt(event.starts_at);
 
@@ -187,6 +191,7 @@ export async function POST(req: NextRequest) {
       pantry: (pantry ?? []).map(p => ({ name: p.name, expiresAt: p.expires_at })),
     };
     const digest = buildConciergeDigest(conciergeSnapshot);
+    const digestView = formatConciergeDigest(digest, locale.code, tr);
 
     const context = `
 TODAY: ${now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${now.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })}
@@ -244,6 +249,9 @@ ${digestToPromptLines(digest)}
     `.trim();
 
     const systemPrompt = `You are the Bubaly AI Chief of Staff. Generate a ${type} family briefing as structured JSON.
+Output locale: ${locale.code}. Use this locale for all generated user-facing prose and date/time labels. The family's timezone is ${tz}.
+Use formal adult address: German Sie, French vous, and formal European Portuguese. Preserve family/user names, original event titles, locations, meal names, and quoted source content verbatim.
+Keep JSON property names and protocol values unchanged: color, urgency and stressLevel enums remain exactly as specified. Meal status is "planned" or "not planned yet"; localize the visible meal label, not status.
     
 IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanation. Start with { and end with }.
 
@@ -298,15 +306,15 @@ ${UNTRUSTED_CONTENT_RULE}
     // The concierge digest is the deterministic backbone: reminders and
     // outstanding items are derived from real data so the briefing answers
     // "what does my family need to do today?" even when AI is unconfigured.
-    const digestReminders = digest.items.map(i => ({
+    const digestReminders = digestView.items.map(i => ({
       text: `${i.title} — ${i.detail}`,
       urgency: (i.urgency === 'soon' ? 'medium' : 'high') as 'high' | 'medium' | 'low',
     }));
-    const subtitle = now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' });
+    const subtitle = now.toLocaleDateString(locale.code, { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' });
 
     // Built from rows already read, so the deterministic path says as much as
     // it honestly can rather than defaulting to "nothing".
-    const fallbackConflicts = todayConflicts(todayEvents ?? [], tz).slice(0, 6);
+    const fallbackConflicts = todayConflicts(todayEvents ?? [], tz, locale.code, tr).slice(0, 6);
     const fallbackKidsNeeds = kidsNeedsFrom(
       (schoolEvents ?? []) as { title: string; starts_at: string; member_id: string | null }[],
       (sportsEvents ?? []) as { title: string; starts_at: string; member_id: string | null }[],
@@ -318,7 +326,8 @@ ${UNTRUSTED_CONTENT_RULE}
       .map((m) => m as unknown as { plan_date: string; meal_type: string; meals: { name: string } | null })
       .filter((m) => m.plan_date === today)
       .slice(0, 6)
-      .map((m) => ({ meal: m.meal_type, name: m.meals?.name ?? null, status: m.meals?.name ? 'planned' : 'not planned yet' }));
+      .map((m) => ({ meal: ['breakfast', 'lunch', 'dinner', 'snack'].includes(m.meal_type) ? tr(`briefingGenerated.meal.${m.meal_type}`) : m.meal_type,
+        name: m.meals?.name ?? null, status: m.meals?.name ? 'planned' : 'not planned yet' }));
 
     let briefing: Record<string, unknown> | null = null;
 
@@ -363,11 +372,11 @@ ${UNTRUSTED_CONTENT_RULE}
     // Deterministic concierge briefing — used when AI is off or returns junk.
     if (!briefing) {
       briefing = {
-        greeting: `Good ${type === 'evening' ? 'evening' : 'morning'}, ${firstName}!`,
+        greeting: tr(`briefingGenerated.${type === 'evening' ? 'evening' : 'morning'}${firstName ? 'Greeting' : 'GreetingNameless'}`, { name: firstName }),
         subtitle,
         familySummary: digest.byDomain.length
-          ? digest.byDomain.map(d => `${d.count} ${d.domain}${d.count > 1 ? 's' : ''} need attention`)
-          : ['Nothing outstanding — enjoy the open day!'],
+          ? digest.byDomain.map(d => tr(`briefingGenerated.domain.${d.domain}.${d.count === 1 ? 'one' : 'other'}`, { count: d.count }))
+          : [tr('briefingGenerated.emptySummary')],
         schedule: (todayEvents ?? []).map(e => ({
           time: calendarTime(e),
           title: e.title,
@@ -388,10 +397,10 @@ ${UNTRUSTED_CONTENT_RULE}
           overall: digest.counts.overdue > 0 ? 60 : digest.counts.today > 3 ? 75 : 90,
           categories: [],
           stressLevel: (digest.counts.overdue > 0 ? 'high' : digest.counts.today > 3 ? 'moderate' : 'low') as 'low' | 'moderate' | 'high',
-          stressReason: digest.counts.total ? digest.headline : null,
-          recommendation: digest.items[0]
-            ? `Start with: ${digest.items[0].title} — ${digest.items[0].detail}.`
-            : 'You are all caught up. Have a great day!',
+          stressReason: digest.counts.total ? digestView.headline : null,
+          recommendation: digestView.items[0]
+            ? tr('briefingGenerated.startWith', { title: digestView.items[0].title, detail: digestView.items[0].detail })
+            : tr('briefingGenerated.emptyRecommendation'),
         },
         outstanding: digestReminders.filter(r => r.urgency === 'high'),
       };
@@ -477,13 +486,16 @@ ${UNTRUSTED_CONTENT_RULE}
       if (markError) console.error('[api/ai/briefing] mark folded notifications read failed', markError);
     }
 
+    const completedRunByKey = new Map((completedRuns ?? []).map(run => [`run:${run.id}`, run]));
     briefing = {
       ...briefing,
       // A partly-finished run says so. Without this a run that did six of eight
       // things reads exactly like one that did all eight (§29).
       completed: brief.handled.map(h => {
-        if (!h.partial) return h.detail ? `${h.title} — ${h.detail}` : h.title;
-        return h.detail ? `${h.title} — ${h.detail}` : `${h.title} — partly done`;
+        const run = h.kind === 'run' ? completedRunByKey.get(h.key) : undefined;
+        const title = run && !run.summary?.trim() ? tr('briefingGenerated.familyRequest') : h.title;
+        if (h.detail) return `${title} — ${h.detail}`;
+        return h.partial ? tr('briefingGenerated.partlyDone', { title }) : title;
       }),
     };
 
@@ -506,7 +518,7 @@ ${UNTRUSTED_CONTENT_RULE}
     // list is read from the notifications table, not written by a model.
     return NextResponse.json({
       briefing,
-      digest,
+      digest: digestView,
       alsoToday: brief.alsoToday,
       alsoTodayUnavailable,
       generatedAt: new Date().toISOString(),
@@ -531,8 +543,10 @@ ${UNTRUSTED_CONTENT_RULE}
 function todayConflicts(
   events: { title: string; starts_at: string; ends_at: string | null; all_day: boolean }[],
   tz: string,
+  locale: LocaleCode,
+  tr: (key: string, params?: Record<string, string | number>) => string,
 ): { description: string; suggestion: string }[] {
-  const at = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  const at = (iso: string) => new Date(iso).toLocaleTimeString(locale, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   const out: { description: string; suggestion: string }[] = [];
   for (let i = 0; i < events.length; i += 1) {
     for (let j = i + 1; j < events.length; j += 1) {
@@ -545,8 +559,8 @@ function todayConflicts(
       const bEnd = b.ends_at ? Date.parse(b.ends_at) : bStart + 3_600_000;
       if (!(aStart < aEnd && bStart < bEnd && aStart < bEnd && bStart < aEnd)) continue;
       out.push({
-        description: `${a.title} and ${b.title} overlap at ${at(new Date(Math.max(aStart, bStart)).toISOString())}`,
-        suggestion: 'Decide who covers which, or move one.',
+        description: tr('briefingGenerated.conflict', { first: a.title, second: b.title, time: at(new Date(Math.max(aStart, bStart)).toISOString()) }),
+        suggestion: tr('briefingGenerated.conflictSuggestion'),
       });
     }
   }

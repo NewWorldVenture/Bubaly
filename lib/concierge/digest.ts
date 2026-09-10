@@ -22,6 +22,14 @@ export type ConciergeDomain =
 
 export type ConciergeUrgency = 'overdue' | 'today' | 'soon';
 
+type DisplayBase = { version: 1; name: string; dayOffset: number };
+export type ConciergeItemDisplay = DisplayBase & (
+  | { kind: 'bill'; amount: number | null }
+  | { kind: 'medication'; member: string | null; timeOfDay: string | null }
+  | { kind: 'maintenance' | 'warranty' | 'pantry' }
+  | { kind: 'trip'; phase: 'ongoing' | 'departure'; destination: string | null }
+);
+
 export interface ConciergeItem {
   domain: ConciergeDomain;
   urgency: ConciergeUrgency;
@@ -32,6 +40,8 @@ export interface ConciergeItem {
   dueLabel: string;
   /** Day offset from `now` (negative = past). Used for stable ordering. */
   dayOffset: number;
+  /** Optional presentation facts; legacy prose and canonical ordering stay unchanged. */
+  display?: ConciergeItemDisplay;
 }
 
 export interface ConciergeSnapshot {
@@ -103,6 +113,25 @@ function money(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+/** Canonical source text, also used to reject stale presentation facts without parsing prose. */
+export function canonicalConciergeText(facts: ConciergeItemDisplay): Pick<ConciergeItem, 'title' | 'detail' | 'member' | 'dueLabel'> {
+  const label = dueLabelFor(facts.dayOffset);
+  switch (facts.kind) {
+    case 'bill': return { title: facts.name, detail: facts.amount !== null ? `${money(facts.amount)} due ${label}` : `Due ${label}`, dueLabel: label };
+    case 'medication': {
+      const parts = [facts.member, facts.timeOfDay].filter(Boolean);
+      return { title: facts.name, detail: parts.length ? parts.join(' · ') : 'Scheduled today', member: facts.member ?? undefined, dueLabel: 'today' };
+    }
+    case 'maintenance': return { title: facts.name, detail: `Due ${label}`, dueLabel: label };
+    case 'pantry': return { title: facts.name, detail: facts.dayOffset < 0 ? `Expired ${label}` : `Expires ${label}`, dueLabel: label };
+    case 'warranty': return { title: `${facts.name} warranty`, detail: facts.dayOffset < 0 ? `Expired ${label}` : `Expires ${label}`, dueLabel: label };
+    case 'trip': {
+      const detail = facts.phase === 'ongoing' ? 'In progress' : `Departs ${label}`;
+      return { title: facts.name, detail: facts.destination ? `${detail} · ${facts.destination}` : detail, dueLabel: facts.phase === 'ongoing' ? 'in progress' : label };
+    }
+  }
+}
+
 /**
  * Build the prioritized cross-domain digest from a raw snapshot. Items are
  * sorted overdue → today → soon, then by soonest deadline, then by a stable
@@ -119,28 +148,25 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.bill);
     if (!urgency) continue;
-    const label = dueLabelFor(off);
+    const display: ConciergeItemDisplay = { version: 1, kind: 'bill', name: b.name, amount: b.amount ?? null, dayOffset: off };
     items.push({
       domain: 'bill',
       urgency,
-      title: b.name,
-      detail: b.amount != null ? `${money(b.amount)} due ${label}` : `Due ${label}`,
-      dueLabel: label,
+      ...canonicalConciergeText(display),
       dayOffset: off,
+      display,
     });
   }
 
   // ── Medications scheduled today ───────────────────────────────────────────
   for (const m of snapshot.medications ?? []) {
-    const parts = [m.member, m.timeOfDay].filter(Boolean) as string[];
+    const display: ConciergeItemDisplay = { version: 1, kind: 'medication', name: m.name, member: m.member ?? null, timeOfDay: m.timeOfDay ?? null, dayOffset: 0 };
     items.push({
       domain: 'medication',
       urgency: 'today',
-      title: m.name,
-      detail: parts.length ? parts.join(' · ') : 'Scheduled today',
-      member: m.member ?? undefined,
-      dueLabel: 'today',
+      ...canonicalConciergeText(display),
       dayOffset: 0,
+      display,
     });
   }
 
@@ -151,14 +177,13 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.maintenance);
     if (!urgency) continue;
-    const label = dueLabelFor(off);
+    const display: ConciergeItemDisplay = { version: 1, kind: 'maintenance', name: t.title, dayOffset: off };
     items.push({
       domain: 'maintenance',
       urgency,
-      title: t.title,
-      detail: `Due ${label}`,
-      dueLabel: label,
+      ...canonicalConciergeText(display),
       dayOffset: off,
+      display,
     });
   }
 
@@ -169,14 +194,13 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.pantry);
     if (!urgency) continue;
-    const label = dueLabelFor(off);
+    const display: ConciergeItemDisplay = { version: 1, kind: 'pantry', name: p.name, dayOffset: off };
     items.push({
       domain: 'pantry',
       urgency,
-      title: p.name,
-      detail: off < 0 ? `Expired ${label}` : `Expires ${label}`,
-      dueLabel: label,
+      ...canonicalConciergeText(display),
       dayOffset: off,
+      display,
     });
   }
 
@@ -188,26 +212,25 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
     const endOff = tr.endDate ? dayOffset(tr.endDate, now) : startOff;
     // In progress: started but not yet ended.
     if (startOff <= 0 && endOff !== null && endOff >= 0) {
+      const display: ConciergeItemDisplay = { version: 1, kind: 'trip', phase: 'ongoing', name: tr.title, destination: tr.destination ?? null, dayOffset: 0 };
       items.push({
         domain: 'trip',
         urgency: 'today',
-        title: tr.title,
-        detail: tr.destination ? `In progress · ${tr.destination}` : 'In progress',
-        dueLabel: 'in progress',
+        ...canonicalConciergeText(display),
         dayOffset: 0,
+        display,
       });
       continue;
     }
     const urgency = classify(startOff, SOON_WINDOW_DAYS.trip);
     if (!urgency) continue;
-    const label = dueLabelFor(startOff);
+    const display: ConciergeItemDisplay = { version: 1, kind: 'trip', phase: 'departure', name: tr.title, destination: tr.destination ?? null, dayOffset: startOff };
     items.push({
       domain: 'trip',
       urgency,
-      title: tr.title,
-      detail: tr.destination ? `Departs ${label} · ${tr.destination}` : `Departs ${label}`,
-      dueLabel: label,
+      ...canonicalConciergeText(display),
       dayOffset: startOff,
+      display,
     });
   }
 
@@ -218,14 +241,13 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
     if (off === null) continue;
     const urgency = classify(off, SOON_WINDOW_DAYS.warranty);
     if (!urgency) continue;
-    const label = dueLabelFor(off);
+    const display: ConciergeItemDisplay = { version: 1, kind: 'warranty', name: w.name, dayOffset: off };
     items.push({
       domain: 'warranty',
       urgency,
-      title: `${w.name} warranty`,
-      detail: off < 0 ? `Expired ${label}` : `Expires ${label}`,
-      dueLabel: label,
+      ...canonicalConciergeText(display),
       dayOffset: off,
+      display,
     });
   }
 

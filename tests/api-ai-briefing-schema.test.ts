@@ -281,6 +281,7 @@ describe('Daily Brief route schema boundary', () => {
     byDomain: [{ domain: 'bill', count: 1 }, { domain: 'pantry', count: 1 }],
     headline: '2 items need attention',
   };
+  const displayDigest = { ...digest, headline: '1 overdue, 1 coming up.' };
 
   // The fixture family carries no timezone, so the route falls back to
   // America/New_York — and every date in the brief is rendered there. Before,
@@ -293,7 +294,7 @@ describe('Daily Brief route schema boundary', () => {
     return {
       greeting: `Good ${type === 'evening' ? 'evening' : 'morning'}, Alex!`,
       subtitle: now.toLocaleDateString('en-US', { timeZone: FAMILY_TZ, weekday: 'long', month: 'long', day: 'numeric' }),
-      familySummary: ['1 bill need attention', '1 pantry need attention'],
+      familySummary: ['1 bill needs attention', '1 pantry item needs attention'],
       schedule: [{ time: new Date(event.starts_at).toLocaleTimeString('en-US', { timeZone: FAMILY_TZ, hour: 'numeric', minute: '2-digit' }), title: event.title, member: 'Sam', emoji: '\ud83d\udcc5', color: 'blue' }],
       conflicts: [],
       kidsNeeds: [],
@@ -306,7 +307,7 @@ describe('Daily Brief route schema boundary', () => {
         overall: 60,
         categories: [],
         stressLevel: 'high',
-        stressReason: digest.headline,
+        stressReason: displayDigest.headline,
         recommendation: 'Start with: Electric bill \u2014 Due yesterday.',
       },
       outstanding: [{ text: 'Electric bill \u2014 Due yesterday', urgency: 'high' }],
@@ -378,7 +379,7 @@ describe('Daily Brief route schema boundary', () => {
     // as "nothing else today".
     expect(Object.keys(body).sort()).toEqual(['alsoToday', 'alsoTodayUnavailable', 'briefing', 'digest', 'generatedAt']);
     expect(body).toMatchObject({
-      digest, generatedAt: utcNow.toISOString(), briefing: { completed: [] },
+      digest: displayDigest, generatedAt: utcNow.toISOString(), briefing: { completed: [] },
       alsoToday: [], alsoTodayUnavailable: false,
     });
     expect(schoolQuery.gte).toHaveBeenCalledWith('starts_at', '2026-09-06T00:00:00.000Z');
@@ -445,7 +446,7 @@ describe('Daily Brief route schema boundary', () => {
     // Every field the model wrote survives EXCEPT `completed`: "Completed
     // Today" is evidence, so the route replaces the model's list with the runs
     // that really finished. Here no run has, so the honest answer is none.
-    expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...validBriefing(), completed: [] }, digest: displayDigest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tools: [], maxTokens: 2000 }));
     expect(mocks.from).not.toHaveBeenCalledWith('home_briefs');
     expect(fetch).not.toHaveBeenCalled();
@@ -480,7 +481,7 @@ describe('Daily Brief route schema boundary', () => {
 
     expect(body.briefing.conflicts).toHaveLength(1);
     expect(body.briefing.conflicts[0]).toMatchObject({ description: expect.stringContaining('Soccer practice and Dentist overlap') });
-    expect(body.briefing.meals).toEqual([{ meal: 'dinner', name: 'Tacos', status: 'planned' }]);
+    expect(body.briefing.meals).toEqual([{ meal: 'Dinner', name: 'Tacos', status: 'planned' }]);
     expect(body.briefing.kidsNeeds).toEqual([{ name: 'Sam', items: ['Bring a costume'] }]);
   });
 
@@ -612,11 +613,11 @@ describe('what Bubaly claims to have done', () => {
     ['excessive list', JSON.stringify(changeField('reminders', Array.from({ length: limits.listItems + 1 }, () => validBriefing().reminders[0])))],
     ['prose-wrapped JSON', `Here it is: ${JSON.stringify(validBriefing())}`],
     ['oversized completion', ' '.repeat(MAX_BRIEFING_RESPONSE_BYTES + 1)],
-  ])('uses the unchanged deterministic fallback for %s', async (_label, text) => {
+  ])('uses the localized deterministic fallback for %s', async (_label, text) => {
     mocks.complete.mockResolvedValue({ text, toolCalls: [] });
     const response = await requestBriefing();
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(), completed: [] }, digest: displayDigest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.complete).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -625,7 +626,7 @@ describe('what Bubaly claims to have done', () => {
     mocks.isAIConfigured.mockResolvedValue(false);
     const response = await requestBriefing(type);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(type), completed: [] }, digest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
+    expect(await response.json()).toEqual({ briefing: { ...expectedFallback(type), completed: [] }, digest: displayDigest, alsoToday: [], alsoTodayUnavailable: false, generatedAt: now.toISOString() });
     expect(mocks.resolveProvider).not.toHaveBeenCalled();
     expect(mocks.complete).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
@@ -639,7 +640,7 @@ describe('what Bubaly claims to have done', () => {
     const response = await requestBriefing();
     const body = await response.json();
     expect(response.status).toBe(200);
-    expect(body.digest).toEqual(emptyDigest);
+    expect(body.digest).toEqual({ ...emptyDigest, headline: "You're all caught up — nothing needs attention right now." });
     expect(body.briefing).toMatchObject({
       familySummary: ['Nothing outstanding \u2014 enjoy the open day!'],
       schedule: [],
@@ -658,7 +659,7 @@ describe('what Bubaly claims to have done', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       briefing: { ...expectedFallback(), completed: [] },
-      digest,
+      digest: displayDigest,
       alsoToday: [],
       alsoTodayUnavailable: false,
       generatedAt: now.toISOString(),

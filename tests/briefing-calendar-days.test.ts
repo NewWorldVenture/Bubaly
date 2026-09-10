@@ -10,7 +10,7 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 const mocks = vi.hoisted(() => ({ context: vi.fn(), server: vi.fn(), complete: vi.fn(), build: vi.fn(), locale: 'en-US' as LocaleCode }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
-vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => translate(getMessages(mocks.locale), key) }));
+vi.mock('@/lib/i18n/server', () => ({ getLocaleContext: async () => ({ locale: { code: mocks.locale }, messages: getMessages(mocks.locale) }) }));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true, resolveProvider: async () => ({ complete: mocks.complete }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: async (_scope: unknown, _input: unknown, fn: (obs: { used: () => void }) => unknown) => fn({ used: () => {} }) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
