@@ -129,11 +129,13 @@ describe('autopilot persistence boundaries', () => {
     expect(source).toContain("throw new Error('Autopilot could not save the suggestion')");
   });
 
-  it('does not treat list lookup or stale suggestion deletion errors as empty state', () => {
+  it('does not treat list lookup or stale suggestion archival errors as empty state', () => {
     const source = readFileSync(resolve(process.cwd(), 'lib/autopilot/scan.ts'), 'utf8');
 
     expect(source).toContain('if (lookupError) throw new Error');
-    expect(source).toContain('if (staleError) throw new Error');
+    const history = readFileSync(resolve(process.cwd(), 'lib/autopilot/history.ts'), 'utf8');
+    expect(source).toContain('await archiveStaleSuggestions(supabase, familyId, stale, now)');
+    expect(history).toContain("throw new Error('Autopilot could not archive stale suggestions')");
     expect(source).toContain('if (readResults.some((result) => result.error))');
   });
 
