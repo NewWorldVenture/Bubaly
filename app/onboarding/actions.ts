@@ -128,7 +128,7 @@ export async function previewCalendarImportAction(input: {
   let source = parsed.data.source;
 
   if (parsed.data.source === 'demo') {
-    events = demoBriefEvents(now);
+    events = demoBriefEvents(now, parsed.data.timezone);
     source = 'demo';
   } else {
     const text = (parsed.data.icsText ?? '').trim();

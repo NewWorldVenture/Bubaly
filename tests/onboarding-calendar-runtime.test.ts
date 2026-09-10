@@ -101,17 +101,27 @@ describe('paste/demo preview uses the selected family timezone', () => {
     expect(db.table('calendar_events').map(row => row.starts_at)).toEqual(preview.data.events.map(event => event.start));
   });
 
-  it('demo preview agrees with finalization without changing the generated sample events', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
-    const request = { source: 'demo' as const, timezone: 'America/New_York' };
+  it.each([
+    ['America/New_York', '2026-09-10T00:00:00Z', '2026-09-09T13:00:00.000Z'],
+    ['Asia/Tokyo', '2026-09-09T22:30:00Z', '2026-09-10T00:00:00.000Z'],
+    ['America/New_York', '2026-03-07T17:00:00Z', '2026-03-07T14:00:00.000Z'],
+    ['America/New_York', '2026-10-31T16:00:00Z', '2026-10-31T13:00:00.000Z'],
+  ])('demo preview and actual finalization keep the local sample schedule in %s at %s', async (timezone, instant, standup) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(instant));
+    const request = { source: 'demo' as const, timezone };
+    const from = vi.spyOn(db, 'from');
     const preview = await previewCalendarImportAction(request);
     expect(preview.ok).toBe(true); if (!preview.ok || !preview.data) throw new Error('Preview unavailable');
-    const legacy = await previewCalendarImportAction({ source: 'demo' });
-    expect(legacy.ok).toBe(true); if (!legacy.ok || !legacy.data) throw new Error('Legacy preview unavailable');
-    expect(preview.data.events).toEqual(legacy.data.events);
+    expect(from.mock.calls.map(([table]) => table)).toEqual(['meal_ideas']);
+    expect(preview.data.events[0].start).toBe(standup);
+    expect(preview.data.brief.todayCount).toBe(4);
+    expect(preview.data.brief.timeline.map(row => row.timeLabel)).toEqual(['9:00 AM', '4:00 PM', '4:30 PM', '6:30 PM']);
+    expect(db.table('calendar_events')).toHaveLength(0);
     const result = await finalizeOnboardingAction(buildFinalizePayload({ ...emptyDraft({ name: 'Ada', familyName: 'Ada family', timezone: request.timezone }), importSource: 'demo', importedEvents: preview.data.events }), { userId, familyId });
     expect(result.ok).toBe(true); if (!result.ok || !result.data?.brief) throw new Error('Finish unavailable');
     expect(preview.data.brief).toEqual(result.data.brief);
+    expect(db.table('calendar_events').map(row => [row.starts_at, row.ends_at])).toEqual(preview.data.events.map(event => [event.start, event.end]));
+    expect(db.table('onboarding_imports')[0]).toMatchObject({ family_id: familyId, source: 'demo', today_count: 4, event_count: 12 });
   });
 
   it.each(['', ' ', 'Invalid/Zone', null, false, 42, {}, [], 'x'.repeat(101)].map(timezone => ({ timezone })))('rejects malformed supplied timezone $timezone before auth or calendar work', async ({ timezone }) => {

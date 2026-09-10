@@ -6,6 +6,7 @@
 // copy for URL fetches; this one is the onboarding-safe, browser-parseable path.)
 
 import type { BriefEvent } from './first-brief';
+import { zonedTimeMs } from '../schedule/zoned';
 
 export interface ParsedIcsEvent {
   uid: string;
@@ -106,14 +107,20 @@ export function toBriefEvents(parsed: ParsedIcsEvent[]): BriefEvent[] {
 
 /**
  * A realistic, generated "sample week" so a user with nothing to paste can still
- * feel the payoff. Anchored to `now` so today always has events — including one
+ * feel the payoff. Anchored to the family's local day so today has events — including one
  * deliberate clash (soccer vs. dentist) and a couple of location-less events so
  * the brief surfaces real conflicts + actions. Pure + deterministic.
  */
-export function demoBriefEvents(now: Date): BriefEvent[] {
+export function demoBriefEvents(now: Date, timezone = 'UTC'): BriefEvent[] {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const localDay = ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)!.value).join('-');
+  const anchor = Date.parse(`${localDay}T12:00:00Z`);
   const day = (offset: number, h: number, m = 0): string => {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset, h, m, 0));
-    return d.toISOString();
+    // Advance calendar dates, then resolve each day's clock with its own DST offset.
+    const date = new Date(anchor + offset * 86_400_000).toISOString().slice(0, 10);
+    return new Date(zonedTimeMs(date, h, m, timezone)).toISOString();
   };
   return [
     // Today — includes a clash (16:00 overlap) and a location-less event.

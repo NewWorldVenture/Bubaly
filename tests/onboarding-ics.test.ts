@@ -83,4 +83,41 @@ describe('demoBriefEvents', () => {
     expect(brief.timeSavedMinutes).toBeGreaterThan(0);
     expect(brief.actions.some((a) => a.kind === 'conflict')).toBe(true);
   });
+
+  it.each([
+    ['America/New_York', '2026-09-10T00:00:00Z', '2026-09-09', '2026-09-09T13:00:00.000Z', '2026-09-10T19:30:00.000Z'],
+    ['America/Los_Angeles', '2026-09-10T02:00:00Z', '2026-09-09', '2026-09-09T16:00:00.000Z', '2026-09-10T22:30:00.000Z'],
+    ['Asia/Tokyo', '2026-09-09T22:30:00Z', '2026-09-10', '2026-09-10T00:00:00.000Z', '2026-09-11T06:30:00.000Z'],
+    ['Asia/Kathmandu', '2026-09-09T22:30:00Z', '2026-09-10', '2026-09-10T03:15:00.000Z', '2026-09-11T09:45:00.000Z'],
+    ['America/New_York', '2026-03-07T17:00:00Z', '2026-03-07', '2026-03-07T14:00:00.000Z', '2026-03-08T19:30:00.000Z'],
+    ['America/New_York', '2026-10-31T16:00:00Z', '2026-10-31', '2026-10-31T13:00:00.000Z', '2026-11-01T20:30:00.000Z'],
+  ])('keeps the sample schedule on the family calendar in %s at %s', (timezone, instant, date, standup, piano) => {
+    const now = new Date(instant);
+    const events = demoBriefEvents(now, timezone);
+    expect(events[0].start).toBe(standup); expect(events[4].start).toBe(piano);
+    const brief = buildFirstBrief(events, now, [], timezone);
+    expect(brief.todayCount).toBe(4);
+    expect(brief.timeline.map(row => row.timeLabel)).toEqual(['9:00 AM', '4:00 PM', '4:30 PM', '6:30 PM']);
+    expect(brief.conflicts[0]).toMatchObject({ aTitle: 'Soccer practice', bTitle: 'Dentist — Mia', dayLabel: 'Today', overlapLabel: '4:30 PM–5:15 PM' });
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const keys = events.map(event => day.format(new Date(event.start)));
+    const expectedOffsets = [0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6];
+    expect(keys).toEqual(expectedOffsets.map(offset => new Date(Date.parse(`${date}T12:00:00Z`) + offset * 86400_000).toISOString().slice(0, 10)));
+    expect(events.map(event => (Date.parse(event.end!) - Date.parse(event.start)) / 60_000)).toEqual([30, 90, 45, 60, 60, 60, 180, 60, 90, 90, 120, 90]);
+    const omitTime = ({ start: _start, end: _end, ...content }: (typeof events)[number]) => content;
+    expect(events.map(omitTime)).toEqual(demoBriefEvents(now).map(omitTime));
+  });
+
+  it('keeps the original UTC schedule and payload exactly when timezone is omitted', () => {
+    const now = new Date('2026-09-10T00:00:00Z');
+    const legacy = demoBriefEvents(now);
+    expect(legacy[0].start).toBe('2026-09-10T09:00:00.000Z');
+    expect(legacy.at(-1)?.start).toBe('2026-09-16T09:00:00.000Z');
+    expect(demoBriefEvents(now, 'UTC')).toEqual(legacy);
+  });
+
+  it('does not silently generate another day for an invalid supplied zone or clock', () => {
+    expect(() => demoBriefEvents(new Date('2026-09-10T00:00:00Z'), 'Invalid/Zone')).toThrow(RangeError);
+    expect(() => demoBriefEvents(new Date('invalid'), 'America/New_York')).toThrow(RangeError);
+  });
 });
