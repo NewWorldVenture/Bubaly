@@ -14,7 +14,7 @@ const mock = vi.hoisted(() => ({
   read: vi.fn<() => Promise<Result>>(), createClient: vi.fn(), eq: vi.fn(),
   channel: vi.fn(), removeChannel: vi.fn(), realtime: undefined as (() => void) | undefined,
   published: false, fetch: vi.fn(), toast: vi.fn(), locale: 'en-US' as LocaleCode,
-  scope: { familyId: 'family-a', userId: 'user-a', role: 'parent', members: [] }, checkout: '',
+  scope: { familyId: 'family-a', family: { name: 'Review family' }, userId: 'user-a', role: 'parent', members: [] }, checkout: '',
 }));
 
 // Execute the real hook and component callbacks. This scheduler lets a test
@@ -65,8 +65,12 @@ vi.mock('@/lib/realtime/published-tables', () => ({ isRealtimePublished: () => m
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mock.scope }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mock.checkout) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
-  const { getMessages } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string) => getMessages(mock.locale)[key] ?? key };
+  const { getMessages, translate } = await import('@/lib/i18n/messages');
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mock.locale), key, params),
+    useLocale: () => localeOrDefault(mock.locale),
+  };
 });
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mock.toast, error: mock.toast }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh: vi.fn() }) }));
@@ -126,7 +130,7 @@ function unavailable(node: ReactNode) {
 beforeEach(() => {
   vi.clearAllMocks();
   mock.slots = []; mock.cursor = 0; mock.effects = []; mock.cleanups.clear();
-  mock.scope = { familyId: 'family-a', userId: 'user-a', role: 'parent', members: [] };
+  mock.scope = { familyId: 'family-a', family: { name: 'Review family' }, userId: 'user-a', role: 'parent', members: [] };
   mock.checkout = ''; mock.locale = 'en-US'; mock.published = false; mock.realtime = undefined;
   mock.read.mockReset().mockResolvedValue({ data: null, error: null });
   mock.eq.mockImplementation(() => ({ maybeSingle: mock.read }));
@@ -380,5 +384,205 @@ describe('Billing subscription rendering and purchase callbacks', () => {
     expect(html(tree)).toContain('Bubaly Free');
     expect(nodes(tree).some((node) => typeof node.props.onChoose === 'function')).toBe(false);
     expect(mock.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('explicit selected-plan review', () => {
+  const plans = ['basic_monthly', 'basic_annual', 'plus_monthly', 'plus_annual'] as const;
+  function review(tree: ReactNode) { return nodes(tree).find((node) => typeof node.props.onConfirm === 'function'); }
+  async function readyReview(query = 'view=manage&reviewPlan=plus_annual') {
+    mock.checkout = query;
+    moduleTree(); await settle();
+    return moduleTree();
+  }
+  it.each(plans)('stages %s without any mutation until explicit confirmation', async (plan) => {
+    const tree = await readyReview(`view=manage&reviewPlan=${plan}&amount=1&priceId=price_untrusted`);
+    const selection = review(tree)!;
+    expect(selection.props.initialPlan).toBe(plan);
+    expect(selection.props.familyName).toBe('Review family');
+    expect(selection.props.currentSlug).toBeNull();
+    expect(selection.props.hasLiveSubscription).toBe(false);
+    expect(mock.fetch).not.toHaveBeenCalled();
+    await (selection.props.onConfirm as (plan: string) => Promise<void>)(plan);
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    expect(mock.fetch).toHaveBeenCalledWith('/api/billing/change-plan', expect.objectContaining({
+      body: JSON.stringify({ plan, expectedUserId: 'user-a', expectedFamilyId: 'family-a' }),
+    }));
+  });
+  it.each([
+    'reviewPlan=&checkout=plus', 'reviewPlan=unknown&checkout=plus', 'reviewPlan=plus_annual&checkout=plus',
+    'reviewPlan=plus_annual&reviewPlan=plus_annual', 'reviewPlan=basic_annual&reviewPlan=plus_annual',
+    'reviewPlan=basic_annual&plan=basic&billing=yearly', 'plan=plus&checkout=plus', 'billing=yearly&checkout=basic',
+  ])('never starts legacy checkout or exposes a confirm control for invalid/mixed query %s', async (query) => {
+    const tree = await readyReview(query);
+    expect(review(tree)).toBeUndefined();
+    expect(nodes(tree).some(node => typeof node.props.onChoose === 'function')).toBe(false);
+    expect(html(tree)).toContain(escaped(getMessages('en-US')['billingReview.invalid']));
+    expect(mock.fetch).not.toHaveBeenCalled();
+  });
+  it('recovers a failed required read without consuming the review or beginning checkout', async () => {
+    mock.checkout = 'reviewPlan=basic_annual';
+    mock.read.mockRejectedValueOnce(new Error('private billing error'));
+    expect(review(moduleTree())).toBeUndefined(); await settle();
+    const failed = moduleTree();
+    expect(review(failed)).toBeUndefined();
+    (unavailable(failed).props.onRetry as () => void)(); await settle();
+    expect(review(moduleTree())?.props.initialPlan).toBe('basic_annual');
+    expect(mock.fetch).not.toHaveBeenCalled();
+  });
+  it.each(['familyId', 'userId', 'role', 'query', 'ABA', 'dispose'] as const)('revokes retained review confirmation after %s changes', async (kind) => {
+    const old = review(await readyReview())!;
+    if (kind === 'dispose') unmount();
+    else {
+      if (kind === 'familyId' || kind === 'ABA') mock.scope.familyId = 'family-b';
+      if (kind === 'userId') mock.scope.userId = 'user-b';
+      if (kind === 'role') mock.scope.role = 'child';
+      if (kind === 'query') mock.checkout = 'reviewPlan=basic_monthly';
+      moduleTree(false);
+      if (kind === 'ABA') {
+        flushEffects(); await settle(); mock.scope.familyId = 'family-a'; moduleTree(false);
+      }
+    }
+    await (old.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).not.toHaveBeenCalled();
+  });
+  it('ignores a late checkout response after the family changes and prevents duplicate confirmation', async () => {
+    const selected = review(await readyReview())!;
+    let resolve!: (response: unknown) => void;
+    mock.fetch.mockReturnValue(new Promise(done => { resolve = done; }));
+    vi.stubGlobal('window', { location: { href: '/original' } });
+    const confirm = selected.props.onConfirm as (plan: string) => Promise<void>;
+    const pending = confirm('plus_annual');
+    await confirm('plus_annual');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    expect(review(moduleTree())?.props.pending).toBe(true);
+    mock.scope.familyId = 'family-b'; moduleTree(false);
+    resolve({ ok: true, json: async () => ({ url: 'https://checkout.example.test/stale' }) });
+    await pending;
+    expect(window.location.href).toBe('/original');
+    expect(mock.toast).not.toHaveBeenCalled();
+  });
+  it('keeps review confirmation unavailable to a child and preserves a current-plan no-op', async () => {
+    mock.scope.role = 'child';
+    expect(review(await readyReview())).toBeUndefined();
+    expect(mock.fetch).not.toHaveBeenCalled();
+    mock.scope.role = 'parent';
+    mock.read.mockResolvedValue({ data: row('family-a', 'plus_annual'), error: null });
+    mock.scope.familyId = 'family-b'; moduleTree(); await settle();
+    mock.scope.familyId = 'family-a'; moduleTree(); await settle();
+    const selected = review(moduleTree())!;
+    await (selected.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).not.toHaveBeenCalled();
+  });
+  it('rejects a retained confirm callback while a realtime reload is unavailable', async () => {
+    mock.published = true;
+    const selected = review(await readyReview())!;
+    mock.read.mockRejectedValueOnce(new Error('unavailable'));
+    mock.realtime!();
+    await (selected.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).not.toHaveBeenCalled();
+    await settle();
+    expect(review(moduleTree())).toBeUndefined();
+  });
+  it('preserves the selection after a failed confirmation so an explicit retry can succeed', async () => {
+    const selected = review(await readyReview())!;
+    mock.fetch.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'billing temporarily unavailable' }) });
+    await (selected.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    const retry = review(moduleTree())!;
+    expect(retry.props.initialPlan).toBe('plus_annual'); expect(retry.props.pending).toBe(false);
+    await (retry.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).toHaveBeenCalledTimes(2);
+  });
+  it('suppresses the unrelated generic service-fee notice for this endpoint and stages a new query without payment', async () => {
+    await readyReview();
+    const tree = render(() => BillingModule({ serviceFeeNotice: 'UNRELATED_CHECKOUT_SERVICE_FEE' }));
+    expect(html(tree)).not.toContain('UNRELATED_CHECKOUT_SERVICE_FEE');
+    mock.checkout = 'view=manage&reviewPlan=basic_monthly';
+    const changed = review(moduleTree())!;
+    expect(changed.props.initialPlan).toBe('basic_monthly');
+    expect(mock.fetch).not.toHaveBeenCalled();
+  });
+  it.each(['canceled', 'incomplete_expired', 'missing-provider', 'cancel-scheduled'] as const)('allows explicit same-plan %s recovery without automatic mutation', async (kind) => {
+    const subscription = row('family-a', 'plus_annual');
+    if (kind === 'missing-provider') subscription.provider_ref = null;
+    else if (kind === 'cancel-scheduled') subscription.cancel_at_period_end = true;
+    else subscription.status = kind;
+    mock.read.mockResolvedValue({ data: subscription, error: null });
+    const selection = review(await readyReview())!;
+    expect(mock.fetch).not.toHaveBeenCalled();
+    expect(selection.props.hasLiveSubscription).toBe(kind === 'cancel-scheduled');
+    await (selection.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each(['partial', 'success', 'already-updated'] as const)('waits for authoritative readback after %s provider confirmation across query changes', async kind => {
+    mock.read.mockResolvedValue({ data: row('family-a', 'basic'), error: null });
+    const selection = review(await readyReview())!;
+    mock.fetch.mockResolvedValueOnce({ ok: kind !== 'partial', json: async () => ({
+      changed: kind === 'success', providerUpdated: kind !== 'success', providerRef: 'subscription-fixture',
+      error: kind === 'partial' ? getMessages('en-US')['changePlan.stripeChangedThePlanBut'] : undefined,
+    }) });
+    await (selection.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    const waiting = review(moduleTree())!;
+    expect(waiting.props.syncPending).toBe(true);
+    await (waiting.props.onConfirm as (plan: string) => Promise<void>)('plus_monthly');
+    mock.checkout = 'reviewPlan=basic_monthly';
+    const changedQuery = review(moduleTree())!;
+    expect(changedQuery.props.syncPending).toBe(true);
+    expect(changedQuery.props.initialPlan).toBe('plus_annual');
+    await (changedQuery.props.onConfirm as (plan: string) => Promise<void>)('plus_monthly');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    mock.read.mockRejectedValueOnce(new Error('status still unavailable'));
+    await (changedQuery.props.onRefresh as () => Promise<void>)();
+    const unavailableTree = moduleTree(); expect(review(unavailableTree)).toBeUndefined();
+    await (unavailable(unavailableTree).props.onRetry as () => Promise<void>)(); await settle();
+    let again = review(moduleTree())!;
+    expect(again.props.syncPending).toBe(true);
+    const cancelPending = row('family-a', 'plus_annual'); cancelPending.cancel_at_period_end = true;
+    mock.read.mockResolvedValueOnce({ data: cancelPending, error: null });
+    await (again.props.onRefresh as () => Promise<void>)();
+    again = review(moduleTree())!; expect(again.props.syncPending).toBe(true);
+    const wrongProvider = row('family-a', 'plus_annual'); wrongProvider.provider_ref = 'another-provider';
+    mock.read.mockResolvedValueOnce({ data: wrongProvider, error: null });
+    await (again.props.onRefresh as () => Promise<void>)();
+    again = review(moduleTree())!; expect(again.props.syncPending).toBe(true);
+    mock.read.mockResolvedValueOnce({ data: row('family-a', 'plus_annual'), error: null });
+    await (again.props.onRefresh as () => Promise<void>)();
+    moduleTree(); await settle();
+    const resolved = review(moduleTree())!;
+    expect(resolved.props.syncPending).toBe(false);
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each(['query', 'role', 'realtime', 'legacy-query'] as const)('serializes the account and records provider completion when %s changes before the paid response', async kind => {
+    mock.published = true;
+    mock.read.mockResolvedValue({ data: row('family-a', 'basic'), error: null });
+    const selected = review(await readyReview())!;
+    let resolve!: (response: unknown) => void;
+    mock.fetch.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const request = (selected.props.onConfirm as (plan: string) => Promise<void>)('plus_annual');
+    if (kind === 'query') mock.checkout = 'reviewPlan=plus_monthly';
+    if (kind === 'legacy-query') mock.checkout = 'checkout=plus';
+    if (kind === 'role') mock.scope.role = 'child';
+    if (kind === 'realtime') {
+      mock.read.mockRejectedValueOnce(new Error('temporarily unavailable'));
+      mock.realtime!(); await settle();
+    }
+    let tree = moduleTree();
+    const newReview = review(tree);
+    if (newReview) await (newReview.props.onConfirm as (plan: string) => Promise<void>)('plus_monthly');
+    const legacy = nodes(tree).find(node => typeof node.props.onChoose === 'function');
+    if (legacy) (legacy.props.onChoose as (plan: string) => void)('plus_monthly');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    resolve({ ok: false, json: async () => ({ providerUpdated: true, providerRef: 'subscription-fixture', error: getMessages('en-US')['changePlan.stripeChangedThePlanBut'] }) });
+    await request;
+    if (kind === 'role') mock.scope.role = 'parent';
+    tree = moduleTree();
+    const waiting = review(tree)!;
+    expect(waiting).toBeDefined();
+    expect(waiting.props.syncPending).toBe(true);
+    expect(waiting.props.initialPlan).toBe('plus_annual');
+    expect(nodes(tree).some(node => typeof node.props.onChoose === 'function')).toBe(false);
+    await (waiting.props.onConfirm as (plan: string) => Promise<void>)('plus_monthly');
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
   });
 });

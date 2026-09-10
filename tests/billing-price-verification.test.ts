@@ -4,23 +4,46 @@ import PRICES from '@/lib/constants/family-prices.json';
 import { POST as checkout } from '@/app/api/billing/checkout/route';
 import { POST as changePlan } from '@/app/api/billing/change-plan/route';
 import { POST as webhook } from '@/app/api/webhooks/stripe/route';
+import { getUserContext, requireUserContext } from '@/lib/supabase/auth';
 
 const mocks = vi.hoisted(() => ({
   retrievePrice: vi.fn(), createCustomer: vi.fn(), createCheckout: vi.fn(), retrieveSubscription: vi.fn(), updateSubscription: vi.fn(),
   constructEvent: vi.fn(), recordEvent: vi.fn(), markProcessed: vi.fn(), markError: vi.fn(),
   role: 'parent', trace: [] as string[], writes: [] as { table: string; operation: string; value: unknown }[],
   rows: {} as Record<string, Record<string, unknown> | null>,
+  contextState: 'ready' as 'ready' | 'needsFamily' | 'signedOut' | 'unavailable',
+  memberships: [{ familyId: 'family-a', role: 'parent' }],
+  errors: {} as Record<string, { message: string }>,
+  syncFailure: 'none' as 'none' | 'returned' | 'thrown',
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'user-a', email: 'fixture@example.test' }, active: { role: mocks.role, familyId: 'family-a', family: { name: 'Fixture family' } } }) }));
+vi.mock('@/lib/supabase/auth', () => {
+  const context = () => ({ user: { id: 'user-a', email: 'fixture@example.test' },
+    active: { role: mocks.role, familyId: 'family-a', family: { name: 'Fixture family' } },
+    memberships: mocks.memberships.map(member => ({ ...member, role: member.familyId === 'family-a' ? mocks.role : member.role, family: { name: 'Fixture family' } })),
+  });
+  return {
+    requireUserContext: vi.fn(async () => context()),
+    getUserContext: vi.fn(async () => {
+      if (mocks.contextState === 'needsFamily') return { needsFamily: true };
+      if (mocks.contextState === 'signedOut') return null;
+      if (mocks.contextState === 'unavailable') throw new Error('private context read failure');
+      return context();
+    }),
+  };
+});
 vi.mock('@/lib/supabase/server', () => {
   const db = { from: (table: string) => {
     const builder = {
       select: () => builder, eq: () => builder,
-      maybeSingle: async () => ({ data: mocks.rows[table] ?? null, error: null }),
+      maybeSingle: async () => ({ data: mocks.rows[table] ?? null, error: mocks.errors[table] ?? null }),
       upsert: async (value: unknown) => { mocks.writes.push({ table, operation: 'upsert', value }); return { error: null }; },
       insert: async (value: unknown) => { mocks.writes.push({ table, operation: 'insert', value }); return { error: null }; },
-      update: (value: unknown) => ({ eq: async () => { mocks.writes.push({ table, operation: 'update', value }); return { error: null }; } }),
+      update: (value: unknown) => ({ eq: async () => {
+        mocks.writes.push({ table, operation: 'update', value });
+        if (mocks.syncFailure === 'thrown') throw new Error('private sync write failure');
+        return { error: mocks.syncFailure === 'returned' ? { message: 'private sync write failure' } : null };
+      } }),
     };
     return builder;
   } };
@@ -60,11 +83,13 @@ function noPaidMutation() {
 }
 beforeEach(() => {
   vi.clearAllMocks(); mocks.role = 'parent'; mocks.trace = []; mocks.writes = [];
-  mocks.rows = { subscriptions: { plan: 'basic', status: 'active', provider_ref: 'sub-existing' }, billing_customers: null };
+  mocks.rows = { subscriptions: { plan: 'basic', status: 'active', provider_ref: 'sub-existing', cancel_at_period_end: false }, billing_customers: null, user_preferences: { active_family_id: 'family-a' } };
+  mocks.contextState = 'ready'; mocks.memberships = [{ familyId: 'family-a', role: 'parent' }]; mocks.errors = {};
+  mocks.syncFailure = 'none';
   mocks.retrievePrice.mockReset().mockImplementation(async (id: string) => { mocks.trace.push('price'); return validPrice(id); });
   mocks.createCustomer.mockReset().mockImplementation(async () => { mocks.trace.push('customer'); return { id: 'cus-fixture' }; });
   mocks.createCheckout.mockReset().mockImplementation(async () => { mocks.trace.push('checkout'); return { id: 'cs-fixture', url: 'https://checkout.example.test' }; });
-  mocks.retrieveSubscription.mockReset().mockResolvedValue({ items: { data: [{ id: 'si-fixture' }] } });
+  mocks.retrieveSubscription.mockReset().mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.basic_monthly.id } }] } });
   mocks.updateSubscription.mockReset().mockImplementation(async () => { mocks.trace.push('subscription-update'); return {}; });
   mocks.recordEvent.mockResolvedValue({ outcome: 'claimed', claimToken: 'claim-fixture' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -130,9 +155,145 @@ it('legacy Family annual Checkout selects Basic annual and is also accepted by c
   expect((await checkout(request('family_annual'))).status).toBe(200);
   expect(mocks.retrievePrice).toHaveBeenCalledWith(PRICES.stripePrices.basic_annual.id);
   mocks.rows.subscriptions = { plan: 'basic_annual', status: 'active', provider_ref: 'sub-existing' };
+  mocks.retrieveSubscription.mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.basic_annual.id } }] } });
   const response = await changePlan(request('family_annual'));
   expect(await response.json()).toMatchObject({ ok: true, changed: false });
   expect(mocks.updateSubscription).not.toHaveBeenCalled();
+});
+
+describe('explicit billing review ownership assertions', () => {
+  function reviewed(body: Record<string, unknown>) {
+    return new NextRequest('https://app.example.test/api/billing/change-plan', { method: 'POST', body: JSON.stringify(body) });
+  }
+  it.each([
+    { expectedUserId: 'user-b', expectedFamilyId: 'family-a' },
+    { expectedUserId: 'user-a', expectedFamilyId: 'family-b' },
+    { expectedUserId: 'user-b', expectedFamilyId: 'family-b' },
+  ])('rejects stale review context before any provider work: %j', async (context) => {
+    const response = await changePlan(reviewed({ plan: 'plus_annual', ...context }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'billingReview.contextChanged' });
+    expect(mocks.retrievePrice).not.toHaveBeenCalled();
+    expect(mocks.retrieveSubscription).not.toHaveBeenCalled();
+    expect(requireUserContext).not.toHaveBeenCalled();
+    noPaidMutation();
+  });
+  it.each([
+    { expectedUserId: 'user-a' }, { expectedFamilyId: 'family-a' },
+    { expectedUserId: null, expectedFamilyId: 'family-a' },
+    { expectedUserId: 'user-a', expectedFamilyId: '' },
+    { expectedUserId: ['user-a'], expectedFamilyId: 'family-a' },
+    { expectedUserId: 'user-a', expectedFamilyId: { id: 'family-a' } },
+  ])('requires a complete string assertion pair when supplied: %j', async (context) => {
+    expect((await changePlan(reviewed({ plan: 'plus_annual', ...context }))).status).toBe(400);
+    expect(mocks.retrievePrice).not.toHaveBeenCalled();
+    noPaidMutation();
+  });
+  it.each(['basic_monthly', 'basic_annual', 'plus_monthly', 'plus_annual'] as const)('confirms only canonical %s at its verified price, with no extra service fee', async (plan) => {
+    mocks.rows.subscriptions = null;
+    const response = await changePlan(reviewed({ plan, expectedUserId: 'user-a', expectedFamilyId: 'family-a', amount: 1, priceId: 'price_untrusted' }));
+    expect(response.status).toBe(200);
+    expect(mocks.retrievePrice).toHaveBeenCalledWith(PRICES.stripePrices[plan].id);
+    expect(mocks.createCheckout).toHaveBeenCalledTimes(1);
+    const created = mocks.createCheckout.mock.calls[0][0];
+    expect(created.line_items).toEqual([{ price: PRICES.stripePrices[plan].id, quantity: 1 }]);
+    expect(created.subscription_data).toEqual({ metadata: { family_id: 'family-a' } });
+    expect(created).not.toHaveProperty('invoice_creation');
+  });
+  it('keeps current-plan no-op, role restrictions, and canonical price validation for reviewed requests', async () => {
+    const body = { plan: 'basic_monthly', expectedUserId: 'user-a', expectedFamilyId: 'family-a' };
+    const response = await changePlan(reviewed(body));
+    expect(await response.json()).toMatchObject({ ok: true, changed: false });
+    noPaidMutation();
+    mocks.role = 'child';
+    expect((await changePlan(reviewed(body))).status).toBe(403);
+    noPaidMutation();
+    mocks.role = 'parent';
+    mocks.retrievePrice.mockResolvedValue({ ...validPrice(), unit_amount: 1 });
+    expect((await changePlan(reviewed({ ...body, plan: 'plus_annual' }))).status).toBe(503);
+    noPaidMutation();
+  });
+  it.each(['needsFamily', 'signedOut', 'unavailable'] as const)('never invokes provisioning when fresh reviewed context is %s', async state => {
+    mocks.contextState = state;
+    const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(response.status).toBe(state === 'unavailable' ? 503 : 409);
+    expect(getUserContext).toHaveBeenCalledTimes(1);
+    expect(requireUserContext).not.toHaveBeenCalled();
+    expect(mocks.retrievePrice).not.toHaveBeenCalled();
+    noPaidMutation();
+  });
+  it('rejects an unavailable active-family preference even when the fallback context matches the old review', async () => {
+    mocks.memberships.push({ familyId: 'family-b', role: 'parent' });
+    mocks.errors.user_preferences = { message: 'private preference failure' };
+    const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'changePlan.subscriptionStatusIsTemporarilyUnavailable' });
+    expect(requireUserContext).not.toHaveBeenCalled(); expect(mocks.retrievePrice).not.toHaveBeenCalled(); noPaidMutation();
+  });
+  it.each([null, { active_family_id: null }, { active_family_id: 'foreign-family' }, { active_family_id: 'family-b' }])('rejects ambiguous or different authoritative active-family choice: %j', async preference => {
+    mocks.memberships.push({ familyId: 'family-b', role: 'parent' }); mocks.rows.user_preferences = preference;
+    const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(response.status).toBe(409);
+    expect(requireUserContext).not.toHaveBeenCalled(); expect(mocks.retrievePrice).not.toHaveBeenCalled(); noPaidMutation();
+  });
+  it('permits the sole unambiguous membership when no preference row exists', async () => {
+    mocks.rows.user_preferences = null;
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(200);
+    expect(requireUserContext).not.toHaveBeenCalled();
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+  });
+  it('checks the role on the authoritative active membership rather than an earlier fallback membership', async () => {
+    mocks.memberships.push({ familyId: 'family-b', role: 'child' }); mocks.rows.user_preferences = { active_family_id: 'family-b' };
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-b' }))).status).toBe(403);
+    expect(requireUserContext).not.toHaveBeenCalled(); expect(mocks.retrievePrice).not.toHaveBeenCalled(); noPaidMutation();
+  });
+  it.each(['canceled', 'incomplete_expired', 'missing-provider'])('starts one new checkout for a same-plan %s subscription', async kind => {
+    mocks.rows.subscriptions = { plan: 'plus_annual', status: kind === 'missing-provider' ? 'active' : kind, provider_ref: kind === 'missing-provider' ? null : 'sub-ended', cancel_at_period_end: false };
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(200);
+    expect(mocks.createCheckout).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSubscription).not.toHaveBeenCalled();
+    expect(mocks.retrievePrice).toHaveBeenCalledWith(PRICES.stripePrices.plus_annual.id);
+  });
+  it('resumes an existing same-plan scheduled cancellation with one verified provider update', async () => {
+    mocks.rows.subscriptions = { plan: 'plus_annual', status: 'active', provider_ref: 'sub-existing', cancel_at_period_end: true };
+    mocks.retrieveSubscription.mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: true, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.plus_annual.id } }] } });
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(200);
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSubscription).toHaveBeenCalledWith('sub-existing', expect.objectContaining({ cancel_at_period_end: false }));
+    expect(mocks.createCheckout).not.toHaveBeenCalled();
+  });
+  it('does not repeat a provider update when its actual price already changed but local webhook sync is stale', async () => {
+    mocks.retrieveSubscription.mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.plus_annual.id } }] } });
+    const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, changed: false, providerUpdated: true, providerRef: 'sub-existing' });
+    expect(mocks.retrieveSubscription).toHaveBeenCalledTimes(1);
+    noPaidMutation();
+  });
+  it('does not claim an actual provider no-op when only the local slug matches the requested plan', async () => {
+    mocks.rows.subscriptions = { plan: 'plus_annual', status: 'active', provider_ref: 'sub-existing', cancel_at_period_end: false };
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(200);
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+  });
+  it('does not repeat an already-applied cancellation resume while the local cancellation flag remains stale', async () => {
+    mocks.rows.subscriptions = { plan: 'basic', status: 'active', provider_ref: 'sub-existing', cancel_at_period_end: true };
+    const response = await changePlan(reviewed({ plan: 'basic_monthly', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(await response.json()).toMatchObject({ changed: false, providerUpdated: true });
+    noPaidMutation();
+  });
+  it.each(['canceled', 'incomplete_expired'])('requires a refreshed local subscription when the provider is already %s', async status => {
+    mocks.retrieveSubscription.mockResolvedValue({ id: 'sub-existing', status, cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.plus_annual.id } }] } });
+    expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(503);
+    noPaidMutation();
+  });
+  it.each(['returned', 'thrown'] as const)('preserves known provider completion after a %s local sync failure', async failure => {
+    mocks.syncFailure = failure;
+    const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'changePlan.stripeChangedThePlanBut', providerUpdated: true, providerRef: 'sub-existing' });
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+    expect(mocks.createCheckout).not.toHaveBeenCalled();
+  });
 });
 
 describe('subscription webhook price history', () => {

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { getUserContext, requireUserContext, type UserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
-import { slugToStripePlan } from '@/lib/billing/plans';
+import { canChangeSubscriptionInPlace, slugToStripePlan } from '@/lib/billing/plans';
 import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -12,9 +12,6 @@ import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 const MAX_BILLING_REQUEST_BYTES = 4_096;
 
 export const runtime = 'nodejs';
-
-// Statuses where an existing Stripe subscription can be modified in place.
-const MODIFIABLE = new Set(['active', 'trialing', 'past_due']);
 
 /**
  * Self-serve plan change: upgrade/downgrade tier or switch monthly↔annual.
@@ -25,12 +22,6 @@ const MODIFIABLE = new Set(['active', 'trialing', 'past_due']);
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
-    const ctx = await requireUserContext();
-    if (!isAdmin(ctx.active.role)) {
-      return NextResponse.json({ error: t('changePlan.onlyAParentCanChange') }, { status: 403 });
-    }
-    const familyId = ctx.active.familyId;
-
     const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
     if (!body.ok) {
       return NextResponse.json(
@@ -38,7 +29,49 @@ export async function POST(req: NextRequest) {
         { status: body.reason === 'too_large' ? 413 : 400 },
       );
     }
-    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: unknown };
+    const payload = body.value && typeof body.value === 'object' ? body.value : {};
+    const { plan, expectedUserId, expectedFamilyId } = payload as { plan?: unknown; expectedUserId?: unknown; expectedFamilyId?: unknown };
+    const assertedContext = Object.prototype.hasOwnProperty.call(payload, 'expectedUserId') || Object.prototype.hasOwnProperty.call(payload, 'expectedFamilyId');
+    let ctx: UserContext;
+    if (assertedContext) {
+      if (typeof expectedUserId !== 'string' || !expectedUserId || typeof expectedFamilyId !== 'string' || !expectedFamilyId) {
+        return NextResponse.json({ error: t('billingReview.contextChanged') }, { status: 400 });
+      }
+      // A review must not provision a family/trial for another account. Resolve
+      // membership without the provisioning fallback in requireUserContext.
+      let fresh: Awaited<ReturnType<typeof getUserContext>>;
+      try { fresh = await getUserContext(); }
+      catch {
+        return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+      }
+      if (!fresh || 'needsFamily' in fresh || expectedUserId !== fresh.user.id) {
+        return NextResponse.json({ error: t('billingReview.contextChanged') }, { status: 409 });
+      }
+      // Ordinary navigation may fall back after a preference-read failure. A
+      // paid review requires an authoritative active-family choice instead.
+      let preferredFamilyId: string | null | undefined;
+      try {
+        const db = await createServer();
+        const { data: preference, error } = await db.from('user_preferences').select('active_family_id').eq('user_id', fresh.user.id).maybeSingle();
+        if (error) throw error;
+        preferredFamilyId = preference?.active_family_id;
+      } catch {
+        return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+      }
+      const active = preferredFamilyId
+        ? fresh.memberships.find(membership => membership.familyId === preferredFamilyId)
+        : fresh.memberships.length === 1 ? fresh.memberships[0] : undefined;
+      if (!active || expectedFamilyId !== active.familyId) {
+        return NextResponse.json({ error: t('billingReview.contextChanged') }, { status: 409 });
+      }
+      ctx = { ...fresh, active };
+    } else {
+      ctx = await requireUserContext();
+    }
+    if (!isAdmin(ctx.active.role)) {
+      return NextResponse.json({ error: t('changePlan.onlyAParentCanChange') }, { status: 403 });
+    }
+    const familyId = ctx.active.familyId;
     if (!isStripePlanKey(plan)) {
       return NextResponse.json({ error: t('changePlan.invalidPlan') }, { status: 400 });
     }
@@ -60,7 +93,7 @@ export async function POST(req: NextRequest) {
 
     const { data: sub, error: subError } = await supabase
       .from('subscriptions')
-      .select('plan, status, provider_ref')
+      .select('plan, status, provider_ref, cancel_at_period_end')
       .eq('family_id', familyId)
       .maybeSingle();
     if (subError) {
@@ -68,16 +101,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
     }
 
-    // No-op guard: already on exactly this plan + interval.
-    if (slugToStripePlan(sub?.plan) === canonicalStripePlan(plan) && !(sub && (sub as { cancel_at_period_end?: boolean }).cancel_at_period_end)) {
-      return NextResponse.json({ ok: true, changed: false, message: 'You are already on this plan.' });
-    }
-
     // In-place modification when a modifiable Stripe subscription exists.
-    if (sub?.provider_ref && MODIFIABLE.has(sub.status)) {
+    if (canChangeSubscriptionInPlace(sub)) {
       const stripeSub = await stripe.subscriptions.retrieve(sub.provider_ref);
-      const itemId = stripeSub.items.data[0]?.id;
+      const item = stripeSub.items.data[0];
+      const itemId = item?.id;
       if (!itemId) return NextResponse.json({ error: t('changePlan.noSubscriptionItemFound') }, { status: 409 });
+      if (!canChangeSubscriptionInPlace({ status: stripeSub.status, provider_ref: stripeSub.id })) {
+        return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+      }
+      // A prior provider update can precede its local webhook. Read Stripe's
+      // actual item before treating a retry as another paid subscription change.
+      if (item.price.id === priceId && !stripeSub.cancel_at_period_end) {
+        const providerUpdated = slugToStripePlan(sub.plan) !== canonicalStripePlan(plan) || sub.cancel_at_period_end;
+        return NextResponse.json({ ok: true, changed: false, providerUpdated, providerRef: stripeSub.id,
+          message: providerUpdated ? t('changePlan.stripeChangedThePlanBut') : 'You are already on this plan.' });
+      }
 
       await stripe.subscriptions.update(sub.provider_ref, {
         items: [{ id: itemId, price: priceId }],
@@ -87,16 +126,18 @@ export async function POST(req: NextRequest) {
       });
 
       // Optimistic local sync; the customer.subscription.updated webhook confirms.
-      const { error: syncError } = await createServiceClient()
-        .from('subscriptions')
-        .update({ cancel_at_period_end: false })
-        .eq('family_id', familyId);
-      if (syncError) {
+      try {
+        const { error: syncError } = await createServiceClient()
+          .from('subscriptions')
+          .update({ cancel_at_period_end: false })
+          .eq('family_id', familyId);
+        if (syncError) throw syncError;
+      } catch (syncError) {
         console.error('[billing-change-plan] Subscription sync write failed', syncError);
-        return NextResponse.json({ error: t('changePlan.stripeChangedThePlanBut'), providerUpdated: true }, { status: 503 });
+        return NextResponse.json({ error: t('changePlan.stripeChangedThePlanBut'), providerUpdated: true, providerRef: stripeSub.id }, { status: 503 });
       }
 
-      return NextResponse.json({ ok: true, changed: true, mode: 'updated' });
+      return NextResponse.json({ ok: true, changed: true, mode: 'updated', providerRef: stripeSub.id });
     }
 
     // No live subscription (Free / canceled) → start Checkout.
