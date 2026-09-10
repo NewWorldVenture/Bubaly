@@ -124,8 +124,9 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
   }
 }
 
-/** OR clauses, including nested AND groups used to filter typed calendar windows. */
-function parseOr(expression: string, conjunction = false): Predicate {
+/** `a.eq.1,b.is.null,c.in.(x,y)`, plus the nested `and(...)`/`or(...)` groups
+ *  used to filter typed calendar windows. */
+function parseOr(expression: string, mode: 'or' | 'and' = 'or'): Predicate {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
@@ -141,10 +142,12 @@ function parseOr(expression: string, conjunction = false): Predicate {
   if (!current.trim() || parts.some(part => !part.trim())) throw new Error('[in-memory-supabase] empty or() clause');
   const predicates = parts.map((part) => {
     const trimmed = part.trim();
+    if (trimmed.startsWith('and(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(4, -1), 'and');
+    if (trimmed.startsWith('or(') && trimmed.endsWith(')')) return parseOr(trimmed.slice(3, -1));
     const negated = trimmed.startsWith('not.');
     const body = negated ? trimmed.slice(4) : trimmed;
     if (body.startsWith('and(') && body.endsWith(')')) {
-      const predicate = parseOr(body.slice(4, -1), true);
+      const predicate = parseOr(body.slice(4, -1), 'and');
       return negated ? (row: Row) => !predicate(row) : predicate;
     }
     if (body.startsWith('or(')) throw new Error('[in-memory-supabase] nested or() is unsupported');
@@ -158,7 +161,7 @@ function parseOr(expression: string, conjunction = false): Predicate {
     const predicate = operatorPredicate(column, op, wanted);
     return negated ? (row: Row) => !predicate(row) : predicate;
   });
-  return (row) => conjunction ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
+  return (row) => mode === 'and' ? predicates.every((p) => p(row)) : predicates.some((p) => p(row));
 }
 
 /** Split a select list on top-level commas; `a, b:c, d(e,f)` → three parts. */
