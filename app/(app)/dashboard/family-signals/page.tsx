@@ -8,7 +8,10 @@ import { ErrorState } from '@/components/ui/states';
 import { SignalPrecisionCard } from '@/components/metrics/signal-precision-card';
 import { loadSignalPrecision } from '@/lib/metric/signal-precision-server';
 
-export const metadata: Metadata = { title: 'Family Intelligence' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('familySignals.familyIntelligence') };
+}
 
 async function ReadFailure() {
   const t = await getTranslations();

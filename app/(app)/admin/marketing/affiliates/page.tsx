@@ -11,7 +11,10 @@ import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Affiliates', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('affiliates.affiliates'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Affiliate = Tables<'affiliates'>;

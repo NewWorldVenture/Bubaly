@@ -11,7 +11,10 @@ import {
 import { ContactTimelineModule, ContactTimelineReadError } from '@/components/modules/contact-timeline-module';
 import type { Tables } from '@/lib/database.types';
 
-export const metadata: Metadata = { title: 'Contact Timeline' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('contacts.contactTimeline') };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

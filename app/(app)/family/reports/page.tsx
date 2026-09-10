@@ -8,7 +8,10 @@ import { StatTile, SectionCard, ScoreRing, LevelBadge } from '@/components/famil
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Reports' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('reports.familyReports') };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

@@ -9,7 +9,10 @@ import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } 
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'A/B Testing', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('experiments.aBTesting'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 const STATUS_STYLE: Record<string, string> = {

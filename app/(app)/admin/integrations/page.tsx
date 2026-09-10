@@ -8,7 +8,10 @@ import { ErrorState } from '@/components/ui/states';
 import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail } from '@/lib/server/health';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Integrations', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('integrations.integrations'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Integration = {

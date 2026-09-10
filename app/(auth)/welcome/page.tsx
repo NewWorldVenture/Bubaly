@@ -3,7 +3,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { Sparkles, ArrowRight } from 'lucide-react';
 
-export const metadata: Metadata = { title: 'Welcome to Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('welcome.welcomeToBubaly') };
+}
 
 // Screen 1 of the onboarding mockups: a dedicated welcome / get-started card that
 // greets people before the sign-up chooser. t('welcome.getStarted') → create an account;

@@ -11,7 +11,10 @@ import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } fro
 import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Video Marketing', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('video.videoMarketing'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Video = Tables<'marketing_videos'>;

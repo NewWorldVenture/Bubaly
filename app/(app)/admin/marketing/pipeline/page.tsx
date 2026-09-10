@@ -14,7 +14,10 @@ import type { Tables } from '@/lib/database.types';
 import { saveDealAction, setDealStageAction, deleteDealAction } from '../crm/actions';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sales Pipeline', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pipeline.salesPipeline'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type Deal = Tables<'crm_deals'>;
