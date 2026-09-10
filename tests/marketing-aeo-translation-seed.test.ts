@@ -39,6 +39,11 @@ const CORRECTION = readFileSync(
   'utf8',
 );
 
+const GERMAN = readFileSync(
+  join(ROOT, 'supabase/migrations/0281_german_clauses_close.sql'),
+  'utf8',
+);
+
 describe('AEO translation seed — 0279', () => {
   it('seeds every published question in every locale the site speaks', () => {
     expect(statements).toHaveLength(360);
@@ -139,5 +144,61 @@ describe('AEO number agreement — 0280', () => {
                             'Was ist Erinnerungen', 'Wat is Herinneringen', 'Les Rappels désigne ']) {
       expect(CORRECTION).not.toContain(singular);
     }
+  });
+});
+
+// German sets a subordinate clause off with a comma on BOTH sides, and two of
+// the German frames continue after the {blurb} slot with a finite verb. Where a
+// clausal vocabulary item landed in one, the clause opened and never closed.
+// Same root cause as 0280 one level up — a frame that requires something of
+// whatever fills its slot — so the templates now mark which items carry a
+// clause and use a slot form that closes it.
+//
+// Proven against real Postgres (16.13): 0277, the 60 published English parents,
+// then 0279, 0280 and 0281 in order.
+//   -> 'der rechtzeitige Erinnerungen, damit nichts Wichtiges untergeht, umfasst.'
+//   -> 'lassen Sie das Planen von Reisen, an denen die ganze Familie Freude
+//       hat, sich von selbst erledigen.'
+//   fixture: one de-DE row source='human' + reviewed_at, one machine but
+//            stamped reviewed_at -> both kept their text verbatim
+//   replayed -> zero rows differing from the snapshot
+describe('German clause punctuation — 0281', () => {
+  const statements = GERMAN.split(/\n(?=update public\.marketing_aeo_question_translations)/)
+    .filter((chunk) => chunk.trimStart().startsWith('update public.'));
+
+  it('touches German and nothing else', () => {
+    expect(statements).toHaveLength(10);
+    const locales = new Set(
+      statements.map((s) => /and t\.locale = '([a-z]{2}-[A-Z]{2})'/.exec(s)?.[1]),
+    );
+    expect([...locales]).toEqual(['de-DE']);
+  });
+
+  it('leaves a row a native speaker has touched exactly as they left it', () => {
+    for (const statement of statements) {
+      expect(statement).toContain("and t.source = 'machine'");
+      expect(statement).toContain('and t.reviewed_at is null;');
+    }
+  });
+
+  it('closes the clause before the frame verb', () => {
+    expect(GERMAN).toContain('damit nichts Wichtiges untergeht, umfasst.');
+    expect(GERMAN).toContain('an denen die ganze Familie Freude hat, sich von selbst erledigen.');
+    expect(GERMAN).toContain('eine Familie zu führen, sich von selbst erledigen.');
+    // No unclosed one survives in the DATA. The header quotes the broken form
+    // on purpose, to show what it is correcting, so this reads the statements.
+    const written = statements.join('\n');
+    expect(written).not.toMatch(/untergeht umfasst/);
+    expect(written).not.toMatch(/hat sich von selbst/);
+    expect(written).not.toMatch(/führen sich von selbst/);
+  });
+
+  // 0280 gave this row its plural copula; its blurb is also one of the clausal
+  // six, so it needs both and the text here must already carry 0280's.
+  it('carries 0280 forward on the row that needs both corrections', () => {
+    const both = statements.find((s) => s.includes("q.question = 'What is Reminders?'"));
+    expect(both).toBeDefined();
+    expect(both).toContain('Was sind Erinnerungen?');
+    expect(both).toContain('untergeht, umfasst.');
   });
 });
