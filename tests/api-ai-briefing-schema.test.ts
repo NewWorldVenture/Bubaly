@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import {
   BRIEFING_RESPONSE_LIMITS as limits,
   BriefingResponseSchema,
@@ -506,30 +507,20 @@ describe('the day the brief covers is the family’s day', () => {
         member: { display_name: 'Alex Example' },
       },
     });
-    // The fake's builder returns itself from every method, so recording has to
-    // happen inside it rather than around it.
-    const windows: Record<string, [string, string, unknown][]> = {};
-    mocks.from.mockImplementation((table: string) => {
-      const data = table === 'family_members' ? [{ id: 'child', display_name: 'Sam', role: 'child' }] : [];
-      const promise = Promise.resolve({ data, error: null });
-      const query: Record<string, unknown> = { then: promise.then.bind(promise) };
-      for (const method of ['select', 'eq', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
-        query[method] = vi.fn(() => query);
-      }
-      for (const method of ['gte', 'lte']) {
-        query[method] = vi.fn((col: string, v: unknown) => { (windows[table] ??= []).push([method, col, v]); return query; });
-      }
-      return query;
-    });
+    const db = createInMemorySupabase();
+    db.seed('calendar_events', [
+      { ...event, family_id: 'family', title: 'Tonight', starts_at: '2026-09-06T06:30:00.000Z', all_day: false },
+      { ...event, family_id: 'family', title: 'Tomorrow', starts_at: '2026-09-06T07:00:00.000Z', all_day: false },
+      { ...event, family_id: 'other', title: 'Other family', starts_at: '2026-09-06T06:30:00.000Z', all_day: false },
+    ]);
+    mocks.from.mockImplementation((table: string) => db.from(table));
+    mocks.isAIConfigured.mockResolvedValue(false);
 
     const res = await requestBriefing();
     expect(res.status).toBe(200);
 
-    const today = (windows.calendar_events ?? []).find((w) => w[0] === 'gte');
-    expect(today, 'no day window was applied to calendar_events').toBeTruthy();
-    // 00:00 Sep 5 in Los Angeles is 07:00 UTC on Sep 5 — the family's day,
-    // which is not the UTC date the clock says.
-    expect(String(today![2])).toBe('2026-09-05T07:00:00.000Z');
+    const body = await res.json();
+    expect(body.briefing.schedule.map((item: { title: string; time: string }) => [item.title, item.time])).toEqual([['Tonight', '11:30 PM']]);
   });
 });
 

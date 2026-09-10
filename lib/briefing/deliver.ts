@@ -38,6 +38,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
+import { briefingCalendarWindow } from './calendar-window';
 
 type DB = SupabaseClient<Database>;
 
@@ -100,8 +101,6 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const { db, familyId, tz } = scope;
   const dayKey = target.dayKey;
   const bounds = zonedDayBoundsMs(dayKey, tz);
-  const dayStartIso = new Date(bounds.start).toISOString();
-  const weekEndIso = new Date(bounds.start + 7 * 86_400_000).toISOString();
   const horizon = dayKeyInTz(new Date(target.at.getTime() + 30 * 86_400_000), tz);
   // "Already handled" is what finished since yesterday's local midnight — a
   // run from last week is not part of this morning's story.
@@ -109,8 +108,8 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const todayDow = weekdayOf(dayKey);
 
   const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await Promise.all([
-    db.from('calendar_events').select('title, starts_at, ends_at, location')
-      .eq('family_id', familyId).gte('starts_at', dayStartIso).lt('starts_at', weekEndIso).order('starts_at').limit(100),
+    db.from('calendar_events').select('title, starts_at, ends_at, all_day, location')
+      .eq('family_id', familyId).or(briefingCalendarWindow(dayKey, tz, 0, 7)).order('starts_at').limit(100),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     db.from('bills').select('name, amount, due_date, status')
       .eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
@@ -161,7 +160,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   return ok(buildBrief({
     kind: 'daily',
     now: target.at,
-    events: (events.data ?? []).map((e) => ({ title: e.title, start: e.starts_at, end: e.ends_at, location: e.location })),
+    events: (events.data ?? []).map((e) => ({ title: e.title, start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location })),
     snapshot,
     completedRuns: (runs.data ?? []) as CompletedRunRow[],
     activity: (activity.data ?? []) as AiActivityRow[],
