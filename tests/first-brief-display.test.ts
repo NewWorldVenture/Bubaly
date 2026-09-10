@@ -186,7 +186,8 @@ describe('first brief semantic display', () => {
 describe('localized dates retain generation timezone semantics', () => {
   it.each([
     ['2026-03-07T23:30:00-05:00', '2026-03-08T22:00:00-04:00', '2026-03-08T22:30:00-04:00', 'Morgen', '22:30–23:00'],
-    ['2026-10-31T23:30:00-04:00', '2026-11-01T01:15:00-04:00', '2026-11-01T01:30:00-04:00', 'Morgen', '1:30–1:15'],
+    ['2026-03-07T23:30:00-05:00', '2026-03-08T01:15:00-05:00', '2026-03-08T01:30:00-05:00', 'Morgen', '01:30 GMT-5–03:15 GMT-4'],
+    ['2026-10-31T23:30:00-04:00', '2026-11-01T01:15:00-04:00', '2026-11-01T01:30:00-04:00', 'Morgen', '01:30 GMT-4–01:15 GMT-5'],
     ['2026-09-09T12:00:00-04:00', '2026-09-11T10:00:00-04:00', '2026-09-11T10:30:00-04:00', 'Freitag', '10:30–11:00'],
   ])('labels calendar-relative days across transitions: %s', (now, first, second, day, range) => {
     const brief = buildFirstBrief([{ title: 'A', start: first }, { title: 'B', start: second }], new Date(now), [], 'America/New_York');
