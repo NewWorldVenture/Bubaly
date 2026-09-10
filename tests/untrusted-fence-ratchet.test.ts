@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // §44's fence is genuinely well built — nonce markers, a rule the model is told
@@ -45,7 +45,8 @@ function toolCallingModules(): string[] {
       const src = readFileSync(path, 'utf8');
       if (!/resolveProvider|provider\.(complete|runTools)/.test(src)) return false;
       return /tools:\s*(?!\[\s*\])[A-Za-z_[]/.test(src);
-    });
+    })
+    .map((path) => path.split(sep).join('/'));
 }
 
 describe('the untrusted-content fence reaches every tool-calling prompt', () => {

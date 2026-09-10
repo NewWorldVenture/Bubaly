@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 // `lib/i18n/server.ts` imports `next/headers`. A CLIENT module that reaches it
 // fails `next build` with "You're importing a component that needs next/headers"
@@ -189,13 +189,13 @@ describe('lib/i18n/server never reaches the browser', () => {
  * entry and STOPS at the first `'use client'`. A module the server can still
  * reach when it stops may not call a hook.
  */
-const ROUTE_ENTRY = /(^|\/)(page|layout|template|default|not-found|loading|route)\.tsx?$/;
+const ROUTE_ENTRY = /^(page|layout|template|default|not-found|loading|route)\.tsx?$/;
 
 function serverRenderedModules(): Set<string> {
   const roots = files.filter(
     (file) =>
       file.startsWith(join(ROOT, 'app'))
-      && ROUTE_ENTRY.test(file)
+      && ROUTE_ENTRY.test(basename(file))
       && !sources.get(file)!.declaresClient,
   );
   const reached = new Set(roots);

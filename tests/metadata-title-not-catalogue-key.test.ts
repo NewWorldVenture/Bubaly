@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 // A Next.js `metadata` export is static: it cannot await `getTranslations()`, so
 // whatever string sits in `title` is rendered VERBATIM into <title>. A catalogue
@@ -12,15 +12,19 @@ import { execSync } from 'node:child_process';
 // nor rendered through `t()`. So it needs its own guard.
 const CATALOGUE_KEY = /^[a-z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/;
 
-function pageFiles(): string[] {
-  return execSync("find app -name 'page.tsx' -o -name 'layout.tsx'", { encoding: 'utf8' })
-    .split('\n').filter(Boolean);
+function pageFiles(directory = 'app'): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? pageFiles(path) : ['page.tsx', 'layout.tsx'].includes(entry.name) ? [path] : [];
+  });
 }
 
 describe('metadata titles are real text, never catalogue keys', () => {
   it('has no page shipping a catalogue key as its browser-tab title', () => {
     const offenders: string[] = [];
-    for (const file of pageFiles()) {
+    const files = pageFiles();
+    expect(files.length).toBeGreaterThan(100);
+    for (const file of files) {
       const source = readFileSync(file, 'utf8');
       for (const m of source.matchAll(/export const metadata: Metadata = \{[^}]*title: '([^']+)'/g)) {
         if (CATALOGUE_KEY.test(m[1])) offenders.push(`${file}: ${m[1]}`);
