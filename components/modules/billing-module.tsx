@@ -32,7 +32,7 @@ import {
   createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
   deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
 } from '@/app/(app)/dashboard/billing/actions';
-import { isRealtimePublished } from '@/lib/realtime/published-tables';
+import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
@@ -59,7 +59,6 @@ type Transaction = Tables<'transactions'>;
 type Budget = Tables<'budgets'>;
 type Bill = Tables<'bills'>;
 type SavingsGoal = Tables<'savings_goals'>;
-type Subscription = Tables<'subscriptions'>;
 
 // ── Stripe helpers ──────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: React.ReactNode }> = {
@@ -520,8 +519,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const checkoutLevel: 1 | 2 | undefined = checkoutTier === 'plus' ? 2 : checkoutTier === 'basic' ? 1 : undefined;
   const needLevel = checkoutLevel ?? (search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined);
   const [tab, setTab] = useState<Tab>('Overview');
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [subLoading, setSubLoading] = useState(true);
+  const { subscription, status: subReadStatus, reload: loadSub, isCurrentReady } = useBillingSubscription(familyId, userId);
   const [pending, startTransition] = useTransition();
 
   // Modal state
@@ -572,30 +570,10 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       supabase.from('savings_goals').select('*').eq('family_id', familyId).order('name'),
   });
 
-  // ── Stripe subscription (live: realtime + after self-serve changes) ──────
-  const loadSub = useCallback(async () => {
-    const sb = createClient();
-    const { data } = await sb.from('subscriptions').select('*').eq('family_id', familyId).maybeSingle();
-    setSubscription(data);
-    setSubLoading(false);
-  }, [familyId]);
-
-  useEffect(() => {
-    void loadSub();
-    // `subscriptions` is not published, so this channel could only ever sit
-    // idle. Checkout returns through a full navigation, which reloads the plan.
-    if (!isRealtimePublished('subscriptions')) return;
-    const sb = createClient();
-    const channel = sb
-      .channel(`subscription:${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `family_id=eq.${familyId}` }, () => { void loadSub(); })
-      .subscribe();
-    return () => { void sb.removeChannel(channel); };
-  }, [familyId, loadSub]);
-
   // Self-serve plan change (upgrade / downgrade / switch interval). Updates the
   // live Stripe subscription in place, or redirects to Checkout when on Free.
   const changePlan = useCallback((plan: StripePlan) => {
+    if (!admin || !isCurrentReady()) return;
     startTransition(async () => {
       try {
         const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
@@ -607,7 +585,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         await loadSub();
       } catch { toastError(tr('billingModule.couldNotChangeThePlan')); }
     });
-  }, [loadSub, success, toastError, tr]);
+  }, [admin, isCurrentReady, loadSub, success, toastError, tr]);
 
   // One-tap checkout from the demo upgrade flow: if `?checkout=basic|plus` is
   // present and the family is still on Free, open Stripe Checkout for that tier
@@ -616,16 +594,17 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const autoCheckoutFired = useRef(false);
   useEffect(() => {
     if (autoCheckoutFired.current) return;
-    if (!checkoutLevel || subLoading) return;
+    if (!checkoutLevel || subReadStatus !== 'ready' || !isCurrentReady()) return;
     if (!admin) return;
     // Only when there's no paid plan yet — never re-charge an already-subscribed family.
     if (slugToStripePlan(subscription?.plan) !== null) return;
     autoCheckoutFired.current = true;
     changePlan(stripePlanFor(checkoutLevel, 'monthly'));
-  }, [checkoutLevel, subLoading, admin, subscription, changePlan]);
+  }, [checkoutLevel, subReadStatus, isCurrentReady, admin, subscription, changePlan]);
 
   // Schedule a downgrade to Free at period end, or undo it.
   const setCancel = useCallback((resume: boolean) => {
+    if (!admin || !isCurrentReady()) return;
     startTransition(async () => {
       try {
         const res = await fetch('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume }) });
@@ -635,7 +614,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         await loadSub();
       } catch { toastError(tr('billingModule.couldNotUpdateTheSubscription')); }
     });
-  }, [loadSub, success, toastError, tr]);
+  }, [admin, isCurrentReady, loadSub, success, toastError, tr]);
 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
@@ -1388,7 +1367,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <CreditCard className="h-5 w-5 text-brand-text" />
             <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
           </div>
-          {subLoading ? <SkeletonList /> : (
+          {subReadStatus === 'loading' ? <SkeletonList /> : subReadStatus === 'unavailable' ? (
+            <ErrorState message={tr('changePlan.subscriptionStatusIsTemporarilyUnavailable')} onRetry={() => void loadSub()} />
+          ) : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -1407,7 +1388,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className="flex items-center gap-1">{subConfig.icon} {subConfig.label}</span>
                   </Badge>
                   {admin && subscription && (
-                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>{tr('billing.paymentAmpInvoices')}</Button>
+                    <Button size="sm" variant="ghost" loading={pending} onClick={() => {
+                      if (admin && isCurrentReady()) startTransition(() => void openPortal());
+                    }}>{tr('billing.paymentAmpInvoices')}</Button>
                   )}
                 </div>
               </div>
