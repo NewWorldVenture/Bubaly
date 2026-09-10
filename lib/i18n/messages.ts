@@ -61,6 +61,23 @@ const FALLBACK_CHAIN: Partial<Record<LocaleCode, LocaleCode[]>> = {
 };
 
 /**
+ * The locales `locale` reads from, nearest first and including itself.
+ *
+ * Exported because the catalogue is not the only thing a regional locale
+ * inherits. The AEO knowledge base is stored per locale in the database, and it
+ * has exactly the same problem an overlay catalogue has: a fr-CA reader whose
+ * chrome resolves through fr-FR must read the fr-FR answers too, or the page is
+ * French around a section that is not there at all. Both callers deriving the
+ * chain from this one table is what keeps them from drifting apart.
+ *
+ * A locale we do not ship gets a chain of just itself, which is the honest
+ * answer: we know nothing about what it should inherit.
+ */
+export function localeFallbackChain(locale: string): string[] {
+  return [locale, ...(FALLBACK_CHAIN[locale as LocaleCode] ?? [])];
+}
+
+/**
  * The catalogue for `locale`, already merged down its fallback chain so every
  * key resolves. Merging here (rather than falling back per lookup) means the
  * object handed to the client provider is complete and the client needs no
