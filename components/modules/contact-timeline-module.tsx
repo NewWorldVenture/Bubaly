@@ -5,22 +5,24 @@
 // the merged timeline (logged interactions · inbox communications · birthdays).
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Phone, MessageSquare, Gift, HandHeart, StickyNote, Users,
   Cake, Mail, HeartPulse, Plus, Loader2, Trash2, X, Sparkles, Copy, Check as CheckIcon, RefreshCw,
 } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
 import type { TimelineEntry, ContactHealth, InteractionKind } from '@/lib/contacts/timeline';
-import { INTERACTION_LABEL } from '@/lib/contacts/timeline';
+import { INTERACTION_LABEL_KEY } from '@/lib/contacts/timeline';
 import {
   logInteractionAction, deleteInteractionAction, draftReconnectMessageAction,
 } from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ErrorState } from '@/components/ui/states';
 
 type Tone = 'warm' | 'brief' | 'playful';
-const TONES: { key: Tone; label: string }[] = [
-  { key: 'warm', label: 'Warm' }, { key: 'brief', label: 'Brief' }, { key: 'playful', label: 'Playful' },
+const TONES: { key: Tone; labelKey: string }[] = [
+  { key: 'warm', labelKey: 'contactTimeline.toneWarm' }, { key: 'brief', labelKey: 'contactTimeline.toneBrief' }, { key: 'playful', labelKey: 'contactTimeline.tonePlayful' },
 ];
 
 const ENTRY_ICON: Record<string, typeof Phone> = {
@@ -28,14 +30,27 @@ const ENTRY_ICON: Record<string, typeof Phone> = {
   favor: HandHeart, note: StickyNote, communication: Mail, birthday: Cake,
 };
 
-const HEALTH_STYLE: Record<ContactHealth['status'], { chip: string; label: string }> = {
-  fresh:      { chip: 'bg-emerald-500/15 text-emerald-300', label: 'In good touch' },
-  due:        { chip: 'bg-amber-500/15 text-amber-300', label: 'Due for a touch' },
-  overdue:    { chip: 'bg-rose-500/15 text-rose-300', label: 'Overdue' },
-  no_history: { chip: 'bg-white/[0.08] text-muted', label: 'No history yet' },
+const HEALTH_STYLE: Record<ContactHealth['status'], { chip: string; labelKey: string }> = {
+  fresh:      { chip: 'bg-emerald-500/15 text-emerald-300', labelKey: 'contactTimeline.statusFresh' },
+  due:        { chip: 'bg-amber-500/15 text-amber-300', labelKey: 'contactTimeline.statusDue' },
+  overdue:    { chip: 'bg-rose-500/15 text-rose-300', labelKey: 'reminders.overdue' },
+  no_history: { chip: 'bg-white/[0.08] text-muted', labelKey: 'contactTimeline.statusNoHistory' },
 };
 
 const KIND_OPTIONS: InteractionKind[] = ['visit', 'call', 'message', 'gift', 'favor', 'note'];
+
+export function ContactTimelineReadError() {
+  const t = useTranslations();
+  const router = useRouter();
+  return <ErrorState message={t('contactTimeline.historyUnavailable')} onRetry={() => router.refresh()} />;
+}
+
+/** Stored calendar dates have no time zone; format them without shifting days. */
+function displayDate(value: string, locale: string): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return value;
+  return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
 
 export function ContactTimelineModule({
   contact, timeline, health, interactionIds,
@@ -45,8 +60,8 @@ export function ContactTimelineModule({
   health: ContactHealth;
   interactionIds: string[];
 }) {
-  const i18nT = useTranslations();
   const tr = useTranslations();
+  const locale = useLocale().code;
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -73,8 +88,8 @@ export function ContactTimelineModule({
         <div className="min-w-0">
           <h1 className="text-2xl font-black sm:text-3xl">{contact.name}</h1>
           <p className="mt-1 text-sm text-muted">
-            {[contact.relationship, contact.organization, contact.specialty].filter(Boolean).join(' · ') || 'Family contact'}
-            {contact.birthday_month && contact.birthday_day ? ` · 🎂 ${contact.birthday_month}/${contact.birthday_day}` : ''}
+            {[contact.relationship, contact.organization, contact.specialty].filter(Boolean).join(' · ') || tr('contactTimeline.familyContact')}
+            {contact.birthday_month && contact.birthday_day ? ` · 🎂 ${new Date(Date.UTC(2000, contact.birthday_month - 1, contact.birthday_day)).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}
           </p>
         </div>
         <button
@@ -82,7 +97,7 @@ export function ContactTimelineModule({
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
         >
           {composerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          {composerOpen ? 'Close' : 'Log a touch'}
+          {composerOpen ? tr('home.close') : tr('contactTimeline.logTouch')}
         </button>
       </header>
 
@@ -92,11 +107,11 @@ export function ContactTimelineModule({
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 ring-1 ring-brand/25">
             <HeartPulse className="h-5 w-5 text-brand-text" />
           </span>
-          <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', hs.chip)}>{hs.label}</span>
+          <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', hs.chip)}>{tr(hs.labelKey)}</span>
           {health.daysSince != null && (
             <span className="text-xs text-muted">
-              {tr('contactTimeline.lastTouch')} {health.daysSince === 0 ? 'today' : `${health.daysSince}d ago`}
-              {health.cadenceDays ? ` · usual rhythm ~${health.cadenceDays}d` : ''}
+              {tr('contactTimeline.lastTouch')} {new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-health.daysSince, 'day')}
+              {health.cadenceDays ? ` · ${tr('contactTimeline.usualRhythm', { days: health.cadenceDays })}` : ''}
             </span>
           )}
         </div>
@@ -116,13 +131,13 @@ export function ContactTimelineModule({
               <label key={k} className="cursor-pointer">
                 <input type="radio" name="kind" value={k} defaultChecked={k === 'visit'} className="peer sr-only" />
                 <span className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-semibold text-muted transition peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-brand-text">
-                  {INTERACTION_LABEL[k]}
+                  {tr(INTERACTION_LABEL_KEY[k])}
                 </span>
               </label>
             ))}
           </div>
           <input
-            name="title" required placeholder={i18nT('contactTimeline.whatHappenedEGSundayDinner')}
+            name="title" required placeholder={tr('contactTimeline.whatHappenedEGSundayDinner')}
             className="mt-3 h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
           />
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -165,8 +180,8 @@ export function ContactTimelineModule({
                   <div className="min-w-0 flex-1 rounded-2xl border border-border bg-surface p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold">{e.title}{e.amount != null ? ` · $${e.amount}` : ''}</p>
-                        <p className="text-[11px] text-muted">{e.date}</p>
+                        <p className="text-sm font-semibold">{e.title}{e.amount != null ? ` · ${new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(e.amount)}` : ''}</p>
+                        <p className="text-[11px] text-muted">{displayDate(e.date, locale)}</p>
                       </div>
                       {deletable && (
                         <button
@@ -244,7 +259,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
                   className={cn('h-7 rounded-full px-2.5 text-[11px] font-semibold transition disabled:opacity-60',
                     tone === t.key ? 'bg-brand/20 text-brand-text' : 'text-muted hover:bg-elevated')}
                 >
-                  {t.label}
+                  {tr(t.labelKey)}
                 </button>
               ))}
               <button onClick={() => setOpen(false)} aria-label={tr('contactTimeline.closeDraft')} className="rounded-lg p-1 text-muted hover:bg-elevated">
@@ -254,16 +269,22 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
           </div>
 
           {error ? (
-            <p className="mt-2 text-xs text-rose-300">{error}</p>
+            <div className="mt-2">
+              <p className="text-xs text-rose-300" role="alert">{error}</p>
+              <button onClick={() => draft(tone)} disabled={pending}
+                className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
+                {tr('states.tryAgain')}
+              </button>
+            </div>
           ) : pending && !message ? (
-            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Writing…</p>
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {tr('contactTimeline.writing')}</p>
           ) : message ? (
             <>
               <p className={cn('mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg', pending && 'opacity-50')}>{message}</p>
               <div className="mt-2.5 flex items-center gap-2">
                 <button onClick={copy}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90">
-                  {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
+                  {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? tr('adminMarketingAssistant.copied') : tr('family.copy')}
                 </button>
                 <button onClick={() => draft(tone)} disabled={pending}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
