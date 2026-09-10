@@ -71,6 +71,11 @@ vi.mock('@/components/i18n/locale-provider', async () => {
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mock.toast, error: mock.toast }) }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
+// Integration adds independent family-value cards alongside the subscription.
+// Their server actions and hook state are outside this read/purchase boundary.
+// Explicit factories also work on the pricing base before those cards exist.
+vi.mock('@/components/billing/family-delivered-value', () => ({ FamilyDeliveredValue: () => null }));
+vi.mock('@/components/billing/family-value-comparison', () => ({ FamilyValueComparison: () => null }));
 vi.mock('@/components/ui/modal', () => ({ Modal: () => null }));
 vi.mock('@/app/(app)/dashboard/billing/actions', () => ({
   createSavingsGoalAction: vi.fn(), createTransactionAction: vi.fn(), deleteBudgetAction: vi.fn(),
