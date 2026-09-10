@@ -187,6 +187,11 @@ export function InboxQueue({ items, unavailable, needsYou }: {
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                    {item.canImportDocument && (
+                      <Link href={`/capture/link?messageId=${encodeURIComponent(item.rowId)}`} className="text-[11px] font-semibold text-brand-text hover:underline">
+                        {t('documentLink.title')}
+                      </Link>
+                    )}
                     {item.canHandle && (
                       <button type="button" onClick={() => void handleIt(item)} disabled={busyId !== null}
                         className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50">

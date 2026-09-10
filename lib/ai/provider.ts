@@ -19,10 +19,17 @@ export type AIImage = {
   data: string;         // base64-encoded image bytes
 };
 
+export type AIFile = {
+  media_type: 'application/pdf';
+  data: string;
+  filename: string;
+};
+
 export type AIMessage = {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   images?: AIImage[];   // optional vision input (user messages only)
+  files?: AIFile[];     // optional PDF input, encoded by the provider transport
   tool_calls?: { name: string; args: Record<string, unknown> }[];
   tool_results?: { name: string; result: unknown }[];
 };
@@ -216,6 +223,21 @@ const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_TIMEOUT_MS = 60_000;
 const OPENAI_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
+function messageContent(message: AIMessage) {
+  if (!message.images?.length && !message.files?.length) return message.content;
+  return [
+    { type: 'text' as const, text: message.content },
+    ...(message.images ?? []).map((image) => ({
+      type: 'image_url' as const,
+      image_url: { url: `data:${image.media_type};base64,${image.data}` },
+    })),
+    ...(message.files ?? []).map((file) => ({
+      type: 'file' as const,
+      file: { filename: file.filename, file_data: `data:${file.media_type};base64,${file.data}` },
+    })),
+  ];
+}
+
 /**
  * Combine a caller's cancellation with the transport deadline. Returning
  * undefined lets `fetchExternal` install its own timeout, so a caller that
@@ -262,22 +284,7 @@ export class OpenAIProvider implements AIProvider {
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => {
-            // Attach vision blocks when a user message carries images.
-            if (m.images?.length) {
-              return {
-                role: m.role,
-                content: [
-                  { type: 'text' as const, text: m.content },
-                  ...m.images.map((img) => ({
-                    type: 'image_url' as const,
-                    image_url: { url: `data:${img.media_type};base64,${img.data}` },
-                  })),
-                ],
-              };
-            }
-            return { role: m.role, content: m.content };
-          }),
+          .map((m) => ({ role: m.role, content: messageContent(m) })),
       ],
     };
     if (tools.length) {
@@ -309,7 +316,7 @@ export class OpenAIProvider implements AIProvider {
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content })),
+          .map((m) => ({ role: m.role, content: messageContent(m) })),
       ],
       response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema: jsonSchema } },
     }, maxTokens);

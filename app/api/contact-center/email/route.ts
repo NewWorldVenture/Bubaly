@@ -21,6 +21,7 @@ import {
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
+import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,15 +49,19 @@ export async function POST(req: NextRequest) {
 
   const ctype = req.headers.get('content-type') ?? '';
   let fields: Record<string, unknown> = {};
+  const attachments: File[] = [];
   try {
     if (ctype.includes('application/json')) {
       const raw = await readBoundedRequestText(req, MAX_BODY);
       if (!raw.ok) return new NextResponse('Payload too large', { status: 413 });
       fields = JSON.parse(raw.text) as Record<string, unknown>;
     } else {
-      const form = await readBoundedRequestFormData(req, MAX_BODY);
+      const form = await readBoundedRequestFormData(req, MAX_MULTIPART_EMAIL_BYTES);
       if (!form.ok) return new NextResponse('Payload too large', { status: 413 });
-      fields = Object.fromEntries([...form.value.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : '']));
+      for (const [key, value] of form.value.entries()) {
+        if (typeof value === 'string') fields[key] = value;
+        else attachments.push(value);
+      }
     }
   } catch {
     return new NextResponse('Invalid payload', { status: 400 });
@@ -148,6 +153,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Every delivery retries attachments independently, including a duplicate
+  // inbox message. Previously saved documents survive later failures and are
+  // re-read by deterministic id, without repeating OCR or overwriting edits.
+  const attachmentResult = await fileEmailAttachments(admin, {
+    familyId, inboxMessageId: filed.messageId, providerRef: filed.providerRef,
+    sender: from, subject, files: attachments,
+  });
+  if (!attachmentResult.ok) {
+    return NextResponse.json({ ok: false, retryable: true, attachments: attachmentResult.results }, {
+      status: 503, headers: { 'Retry-After': '30' },
+    });
+  }
+
   // Auto-reply (best-effort) unless the concierge is off or it's spam.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
@@ -160,5 +178,5 @@ export async function POST(req: NextRequest) {
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }
 
-  return NextResponse.json({ ok: true, intent: result.intent });
+  return NextResponse.json({ ok: true, intent: result.intent, attachments: attachmentResult.results });
 }
