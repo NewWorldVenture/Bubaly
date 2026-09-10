@@ -36,10 +36,11 @@ import {
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { formatFirstBrief } from '@/lib/onboarding/first-brief-display';
 import { pickFirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { ConnectedCalendar, type CalendarProvider } from '@/components/onboarding/connected-calendar';
 import { isReviewPlan, reviewBillingPath, type ReviewPlan } from '@/lib/billing/review-selection';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
@@ -359,6 +360,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
   reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
   const { error: toastError } = useToast();
   const [ics, setIcs] = useState('');
   const [loading, setLoading] = useState<null | 'paste' | 'demo'>(null);
@@ -391,6 +393,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
   }
 
   if (brief) {
+    const view = formatFirstBrief(brief, { locale: locale.code, t: tr });
     return (
       <div className="space-y-4">
         {draft.calendarReceipt && <p className="rounded-xl border border-border p-3 text-sm text-muted">{calendarName
@@ -400,7 +403,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
           <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand-text">
             <Sparkles className="h-5 w-5" />
           </div>
-          <p className="text-base font-semibold">{brief.headline}</p>
+          <p className="text-base font-semibold">{view.headline}</p>
           {brief.timeSavedMinutes > 0 && (
             <p className="mt-1 text-sm text-muted">
               {tr('onboardingWizard.estimatedPlanningTimeOfNMinutes', { minutes: brief.timeSavedMinutes })}
@@ -415,7 +418,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
               {brief.timeline.slice(0, 6).map((t, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="truncate"><span className="font-medium">{t.title}</span>{t.location ? <span className="text-muted"> · {t.location}</span> : null}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{t.timeLabel}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{view.timeline[i].timeLabel}</span>
                 </li>
               ))}
             </ul>
@@ -427,7 +430,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-500" /> {tr(brief.conflicts.length === 1 ? 'onboardingCopy.clashToResolveOne' : 'onboardingCopy.clashToResolveOther', { count: brief.conflicts.length })}</h2>
             <ul className="space-y-1 text-sm text-muted">
               {brief.conflicts.slice(0, 3).map((c, i) => (
-                <li key={i}>{tr('onboardingCopy.overlap', { first: c.aTitle, second: c.bTitle, day: c.dayLabel, time: c.overlapLabel })}</li>
+                <li key={i}>{tr('onboardingCopy.overlap', { first: c.aTitle, second: c.bTitle, day: view.conflicts[i].dayLabel, time: view.conflicts[i].overlapLabel })}</li>
               ))}
             </ul>
           </section>
@@ -437,10 +440,10 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
           <section className="rounded-2xl border border-border p-4">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> {tr('onboardingWizard.firstThingsToHandle')}</h2>
             <ul className="space-y-1.5 text-sm">
-              {brief.actions.slice(0, 4).map((a) => (
+              {brief.actions.slice(0, 4).map((a, i) => (
                 <li key={a.id} className="flex items-start gap-2">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
-                  <span><span className="font-medium">{a.label}</span> — <span className="text-muted">{a.detail}</span></span>
+                  <span><span className="font-medium">{view.actions[i].label}</span> — <span className="text-muted">{view.actions[i].detail}</span></span>
                 </li>
               ))}
             </ul>
@@ -451,8 +454,8 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
           <section className="rounded-2xl border border-border p-4">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand-text" /> {tr('onboardingCopy.workingForYouAlready')}</h2>
             <ul className="space-y-1.5 text-sm">
-              {brief.opportunities.map((o) => (
-                <li key={o.id}><span className="font-medium">{o.label}</span> <span className="text-muted">· {o.detail}</span></li>
+              {brief.opportunities.map((o, i) => (
+                <li key={o.id}><span className="font-medium">{view.opportunities[i].label}</span> <span className="text-muted">· {view.opportunities[i].detail}</span></li>
               ))}
             </ul>
           </section>
@@ -705,6 +708,8 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 // ─── Step 6: Done ─────────────────────────────────────────────────────────────
 function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void; onReview?: () => void }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const briefHeadline = brief ? formatFirstBrief(brief, { locale: locale.code, t: tr }).headline : '';
   const hasBrief = !!brief && (brief.todayCount > 0 || brief.dinnerIdeas.length > 0 || brief.timeSavedMinutes > 0 || brief.conflicts.length > 0);
   const memberCount = draft.members.length;
   const goalCount = draft.goals.length;
@@ -732,7 +737,7 @@ function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: Onboard
       {hasBrief && brief && (
         <div className="mt-6 space-y-3 text-left">
           <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {brief.headline}</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {briefHeadline}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {brief.timeSavedMinutes > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand-text"><Clock className="h-3 w-3" /> {tr('onboardingWizard.nMinPlanningEstimated', { minutes: brief.timeSavedMinutes })}</span>

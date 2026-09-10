@@ -8,6 +8,7 @@
 // onboarding_imports at finalize (the seed of the TTFV metric).
 
 import { pickDinnerIdeas, type DinnerIdea } from './dinner-ideas';
+import type { FirstBriefDisplay, BriefConflictDisplay, BriefActionDisplay, BriefOpportunityDisplay } from './first-brief-display';
 
 export interface BriefEvent {
   title: string;
@@ -32,6 +33,7 @@ export interface BriefConflict {
   bTitle: string;
   dayLabel: string;           // "Today" | "Tomorrow" | "Wed"
   overlapLabel: string;       // "4:30–5:30 PM"
+  display?: BriefConflictDisplay;
 }
 
 export type ActionKind = 'conflict' | 'prep' | 'location';
@@ -40,6 +42,7 @@ export interface BriefAction {
   kind: ActionKind;
   label: string;
   detail: string;
+  display?: BriefActionDisplay;
 }
 
 export interface BriefOpportunity {
@@ -47,6 +50,7 @@ export interface BriefOpportunity {
   label: string;
   detail: string;
   minutes: number;            // estimated time saved
+  display?: BriefOpportunityDisplay;
 }
 
 export interface FirstBrief {
@@ -60,6 +64,8 @@ export interface FirstBrief {
   opportunities: BriefOpportunity[];
   dinnerIdeas: DinnerIdea[];
   timeSavedMinutes: number;
+  /** Optional presentation facts; excluded from the durable briefSummary. */
+  display?: FirstBriefDisplay;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -157,6 +163,11 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
           bTitle: b.title,
           dayLabel: dayLabel(eventDayKey(a), todayKey, tomorrowKey),
           overlapLabel: fmtRange(new Date(Math.max(aStart, bStart)).toISOString(), Math.min(aEnd, bEnd), timeFormatter),
+          display: {
+            dayKey: eventDayKey(a),
+            overlapStart: new Date(Math.max(aStart, bStart)).toISOString(),
+            overlapEnd: new Date(Math.min(aEnd, bEnd)).toISOString(),
+          },
         });
       }
     }
@@ -170,6 +181,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       kind: 'conflict',
       label: `Resolve a clash ${c.dayLabel.toLowerCase()}`,
       detail: `${c.aTitle} overlaps ${c.bTitle} (${c.overlapLabel}). Decide who covers what.`,
+      display: { kind: 'conflict', conflictIndex: conflicts.indexOf(c) },
     });
   }
   const missingLocation = week.filter((e) => !e.location && (eventDayKey(e) === todayKey || eventDayKey(e) === tomorrowKey));
@@ -179,6 +191,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       kind: 'location',
       label: `Add a location`,
       detail: `“${e.title}” ${dayLabel(eventDayKey(e), todayKey, tomorrowKey).toLowerCase()} has no place set.`,
+      display: { kind: 'location', title: e.title, dayKey: eventDayKey(e) },
     });
   }
   if (timeline.length > 0 && actions.length < 6) {
@@ -188,6 +201,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       kind: 'prep',
       label: 'Get ready for today',
       detail: `First up: ${first.title}${first.timeLabel !== 'All day' ? ` at ${first.timeLabel}` : ''}.`,
+      display: { kind: 'prep', timelineIndex: timeline.indexOf(first) },
     });
   }
 
@@ -200,6 +214,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       label: `${recurringCount} recurring event${recurringCount === 1 ? '' : 's'} on autopilot`,
       detail: 'Bubaly keeps these on your calendar and reminds you — no re-entering.',
       minutes: recurringCount * 5,
+      display: { kind: 'recurring', count: recurringCount },
     });
   }
   if (conflicts.length > 0) {
@@ -208,6 +223,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       label: `${conflicts.length} clash${conflicts.length === 1 ? '' : 'es'} caught for you`,
       detail: 'We spotted these before they became a scramble.',
       minutes: conflicts.length * 15,
+      display: { kind: 'conflicts', count: conflicts.length },
     });
   }
   if (week.length > 0) {
@@ -216,6 +232,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       label: 'Your week, already organized',
       detail: `${week.length} event${week.length === 1 ? '' : 's'} sorted into one shared timeline.`,
       minutes: Math.min(week.length, 40) * 2,
+      display: { kind: 'week', count: week.length },
     });
   }
   const top = opportunities.sort((a, b) => b.minutes - a.minutes).slice(0, 3);
@@ -225,12 +242,16 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   const localCalendarDate = new Date(`${todayKey}T12:00:00Z`);
   const dow = WEEKDAYS_LONG[localCalendarDate.getUTCDay()];
   let headline: string;
+  let headlineDisplay: FirstBriefDisplay['headline'];
   if (timeline.length === 0 && week.length === 0) {
     headline = "You're set up — add your first plans and Bubaly takes it from here.";
+    headlineDisplay = 'empty';
   } else if (conflicts.length > 0) {
     headline = `Here's your ${dow} — ${timeline.length} event${timeline.length === 1 ? '' : 's'}, ${conflicts.length} clash${conflicts.length === 1 ? '' : 'es'} to resolve.`;
+    headlineDisplay = 'conflicts';
   } else {
     headline = `Here's your ${dow} — ${timeline.length} event${timeline.length === 1 ? '' : 's'}, and you're in good shape.`;
+    headlineDisplay = 'clear';
   }
 
   // 3 dinner ideas that fit the day (quick when today is busy, more involved on
@@ -248,6 +269,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
     opportunities: top,
     dinnerIdeas,
     timeSavedMinutes,
+    display: { version: 1, timezone, dayKey: todayKey, headline: headlineDisplay },
   };
 }
 
