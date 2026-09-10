@@ -9,8 +9,16 @@ import { resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { CompleteSetupForm } from '@/components/onboarding/complete-setup';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Complete your setup' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getTranslations())('completeSetupCopy.title') };
+}
 export const dynamic = 'force-dynamic';
+
+const MISSING_COPY: Record<string, string> = {
+  name: 'completeSetupCopy.missingName', questionnaire: 'completeSetupCopy.missingQuestionnaire',
+  goals: 'completeSetupCopy.missingGoals', value: 'completeSetupCopy.missingCalendar',
+  members: 'onboardingCopy.membersTitle', pin: 'completeSetupCopy.missingPin',
+};
 
 /**
  * The re-onboarding / "finish setting up" surface. Every signed-in account has a
@@ -48,7 +56,10 @@ export default async function CompleteSetupPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={result.headline}
+        title={t(result.needsReset ? 'completeSetupCopy.headlineReset'
+          : result.isComplete ? 'completeSetupCopy.headlineComplete'
+          : result.needsSetup ? 'completeSetupCopy.headlineNeedsSetup'
+          : 'completeSetupCopy.headlineRemaining')}
         description={t('setup.finishAFewDetailsSo')}
       />
 
@@ -56,13 +67,13 @@ export default async function CompleteSetupPage() {
         <div className="space-y-5">
           <SectionCard title={t('dashboardSetup.setupProgress')}>
             <div className="flex flex-col items-center gap-4">
-              <ScoreRing pct={result.score} label={result.isComplete ? 'Complete' : 'Set up'} />
+              <ScoreRing pct={result.score} label={t(result.isComplete ? 'completeSetupCopy.scoreComplete' : 'completeSetupCopy.scoreSetup')} />
               <p className="text-center text-xs text-muted">
                 {result.isComplete
-                  ? 'Your family profile is complete. Nice work!'
+                  ? t('completeSetupCopy.profileComplete')
                   : progress?.source === 'auto_provision'
-                    ? 'You skipped guided setup when you signed up — finish it here.'
-                    : 'A few quick things and you’re fully set up.'}
+                    ? t('completeSetupCopy.skippedSetup')
+                    : t('completeSetupCopy.fewThingsLeft')}
               </p>
             </div>
           </SectionCard>
@@ -79,7 +90,7 @@ export default async function CompleteSetupPage() {
                     <Link href={m.href}
                       className="flex items-center gap-2.5 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-sm transition hover:border-brand/40">
                       <Circle className="h-4 w-4 shrink-0 text-muted" />
-                      <span className="flex-1 font-medium">{m.label}</span>
+                      <span className="flex-1 font-medium">{MISSING_COPY[m.key] ? t(MISSING_COPY[m.key]) : m.label}</span>
                       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted" />
                     </Link>
                   </li>
@@ -90,7 +101,7 @@ export default async function CompleteSetupPage() {
         </div>
 
         <SectionCard
-          title={t('dashboardSetup.aboutYourFamily')}
+          title={t('onboardingCopy.aboutTitle')}
           description={t('setup.tellUsYourHouseholdMakeup')}
         >
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5 text-xs text-muted">
