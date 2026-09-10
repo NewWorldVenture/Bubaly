@@ -87,6 +87,57 @@ export function hasAuthCookies(names: Iterable<string>): boolean {
 }
 
 /**
+ * The PKCE half-transaction: `sb-<project-ref>-auth-token-code-verifier`, which
+ * `@supabase/ssr` writes when a Supabase sign-in STARTS and consumes when the
+ * browser comes back with `?code=`.
+ *
+ * Its presence is the only honest way to tell "this `code` is ours to exchange"
+ * from "this `code` belongs to somebody else". Without a verifier there is no
+ * exchange that can succeed, so treating such a code as a sign-in can only end
+ * at `/login?error=auth` — which, for a visitor who was already signed in,
+ * reads as being logged out for opening a link.
+ */
+export function isPkceVerifierCookieName(name: string): boolean {
+  return /^sb-.+-auth-token-code-verifier(?:\.\d+)?$/.test(name);
+}
+
+/** Is a Supabase sign-in mid-flight in this browser? */
+export function hasPkceVerifierCookie(names: Iterable<string>): boolean {
+  for (const name of names) if (isPkceVerifierCookieName(name)) return true;
+  return false;
+}
+
+/**
+ * Should the middleware forward this `?code=` to /auth/callback?
+ *
+ * Supabase can be configured to redirect to a path that does not handle the
+ * exchange (its Site URL, usually `/`), and forwarding rescues that. But `code`
+ * is the standard OAuth parameter name, not Supabase's private one, so the
+ * rescue has to be narrow or it captures codes meant for someone else and
+ * answers them with a login page:
+ *
+ *  - Every provider callback in this app lives under `/api/` and performs its
+ *    own exchange — Google Calendar, and the sync providers. Forwarding those
+ *    hands a Google authorization code to `exchangeCodeForSession`, which
+ *    cannot use it, and drops the signed-in user on `/login?error=auth` for the
+ *    crime of connecting their calendar. Their single-use `state` cookie is
+ *    spent by then, so retrying fails too.
+ *  - Anywhere else, `?code=` is just as likely a promo or referral code on a
+ *    marketing link. Only a browser mid-PKCE has a code we could possibly
+ *    exchange.
+ */
+export function shouldForwardAuthCode(input: {
+  path: string;
+  hasCode: boolean;
+  cookieNames: Iterable<string>;
+}): boolean {
+  if (!input.hasCode) return false;
+  if (input.path === '/auth/callback') return false;
+  if (input.path === '/api' || input.path.startsWith('/api/')) return false;
+  return hasPkceVerifierCookie(input.cookieNames);
+}
+
+/**
  * Is this auth failure transient — a network blip, a timeout, a rate limit, a
  * Supabase 5xx — rather than a real "your session is gone"?
  *
