@@ -6,15 +6,55 @@ import {
   tierLabelForLevel,
   FAMILY_MONTHLY_CENTS,
   FAMILY_ANNUAL_CENTS,
+  BASIC_MONTHLY_CENTS,
+  BASIC_ANNUAL_CENTS,
+  PLUS_MONTHLY_CENTS,
+  PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
+import FAMILY_PRICES from '@/lib/constants/family-prices.json';
+import { annualSavingsPct } from '@/lib/billing/plans';
 
 // These guard the single billing source of truth. Slugs MUST match what the
 // Stripe webhook writes ('free' | 'family' | 'family_annual'). A regression here
 // previously caused annual subscriptions to be counted as $0 MRR in admin.
 describe('plan pricing source of truth', () => {
+  it.each([
+    { name: 'Family Basic', slug: 'basic', annualSlug: 'basic_annual', level: 1 as const, monthly: BASIC_MONTHLY_CENTS, annual: BASIC_ANNUAL_CENTS, expectedMonthly: 1204, expectedAnnual: 11988, equivalent: 999 },
+    { name: 'Family+', slug: 'plus', annualSlug: 'plus_annual', level: 2 as const, monthly: PLUS_MONTHLY_CENTS, annual: PLUS_ANNUAL_CENTS, expectedMonthly: 3011, expectedAnnual: 29988, equivalent: 2499 },
+  ])('$name keeps the annual commitment and monthly equivalent exact', ({ slug, annualSlug, monthly, annual, expectedMonthly, expectedAnnual, equivalent }) => {
+    expect(annual).toBe(expectedAnnual);
+    expect(annual / 12).toBe(equivalent);
+    expect(annual % 12).toBe(0);
+    expect(planMonthlyCents(annualSlug)).toBe(equivalent);
+    expect(monthly).toBe(expectedMonthly);
+    expect(planMonthlyCents(slug)).toBe(expectedMonthly);
+    expect(planById(slug)?.priceMonthly).toBe(expectedMonthly);
+  });
+
+  it.each([
+    { name: 'Family Basic', level: 1 as const, monthly: BASIC_MONTHLY_CENTS, annual: BASIC_ANNUAL_CENTS },
+    { name: 'Family+', level: 2 as const, monthly: PLUS_MONTHLY_CENTS, annual: PLUS_ANNUAL_CENTS },
+  ])('$name monthly billing reverses the 17% annual discount with cent rounding', ({ level, monthly, annual }) => {
+    expect(FAMILY_PRICES.annualSavingsPercent).toBe(17);
+    const exactMonthlyCents = (annual / 12) / (1 - 17 / 100);
+    expect(monthly).toBe(Math.round(exactMonthlyCents));
+    expect(Math.abs(monthly - exactMonthlyCents)).toBeLessThanOrEqual(0.5);
+    expect(Math.round((1 - annual / (monthly * 12)) * 100)).toBe(17);
+    expect(annualSavingsPct(level)).toBe(17);
+  });
+
+  it('keeps legacy Family constants and monthly-equivalent slugs aligned with Family Basic', () => {
+    expect(FAMILY_MONTHLY_CENTS).toBe(BASIC_MONTHLY_CENTS);
+    expect(FAMILY_ANNUAL_CENTS).toBe(BASIC_ANNUAL_CENTS);
+    expect(planMonthlyCents('family')).toBe(planMonthlyCents('basic'));
+    expect(planMonthlyCents('family_annual')).toBe(planMonthlyCents('basic_annual'));
+    expect(planMonthlyCents('family_annual')).toBe(999);
+    expect(planById('family')).toBe(planById('basic'));
+  });
+
   it('prices the monthly Family plan from the canonical constant', () => {
     expect(planMonthlyCents('family')).toBe(FAMILY_MONTHLY_CENTS);
-    expect(FAMILY_MONTHLY_CENTS).toBe(999);
+    expect(FAMILY_MONTHLY_CENTS).toBe(1204);
   });
 
   it('prices annual as a non-zero monthly-equivalent (not $0)', () => {

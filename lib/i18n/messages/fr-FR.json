@@ -11857,6 +11857,7 @@
   "upgradeModal.annual": "Annuel",
   "upgradeModal.askAFamilyAdminToUpgrade": "Demandez à un administrateur de la famille de faire évoluer votre forfait pour débloquer cette fonctionnalité.",
   "upgradeModal.availableOnPlan": "Disponible à partir de {plan}.",
+  "upgradeModal.billedAnnually": "Facturé {amount} par an",
   "upgradeModal.chooseAnnual": "Choisir l'annuel →",
   "upgradeModal.chooseMonthly": "Choisir le mensuel →",
   "upgradeModal.compareAllPlans": "Comparer tous les forfaits →",

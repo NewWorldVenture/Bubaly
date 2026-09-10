@@ -73,13 +73,13 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
 };
 const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
   free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
-  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: '$9.99/mo' },
-  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: '$99.99/yr' },
-  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: '$24.99/mo' },
-  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: '$249.99/yr' },
+  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: `$${(PLUS_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: `$${(PLUS_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
   // Legacy slugs map to Basic.
-  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: '$9.99/mo' },
-  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: '$99.99/yr' },
+  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
 };
 
 async function openPortal() {

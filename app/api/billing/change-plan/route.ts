@@ -4,7 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
-import { isStripePlan, slugToStripePlan } from '@/lib/billing/plans';
+import { slugToStripePlan } from '@/lib/billing/plans';
+import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -37,8 +38,8 @@ export async function POST(req: NextRequest) {
         { status: body.reason === 'too_large' ? 413 : 400 },
       );
     }
-    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: string };
-    if (!plan || !isStripePlan(plan)) {
+    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: unknown };
+    if (!isStripePlanKey(plan)) {
       return NextResponse.json({ error: t('changePlan.invalidPlan') }, { status: 400 });
     }
     const priceId = STRIPE_PLANS[plan];
@@ -52,6 +53,11 @@ export async function POST(req: NextRequest) {
     );
     const stripe = getStripe();
 
+    if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
+      console.error('[billing-change-plan] Configured Stripe price is unavailable or does not match the plan');
+      return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+    }
+
     const { data: sub, error: subError } = await supabase
       .from('subscriptions')
       .select('plan, status, provider_ref')
@@ -63,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     // No-op guard: already on exactly this plan + interval.
-    if (slugToStripePlan(sub?.plan) === plan && !(sub && (sub as { cancel_at_period_end?: boolean }).cancel_at_period_end)) {
+    if (slugToStripePlan(sub?.plan) === canonicalStripePlan(plan) && !(sub && (sub as { cancel_at_period_end?: boolean }).cancel_at_period_end)) {
       return NextResponse.json({ ok: true, changed: false, message: 'You are already on this plan.' });
     }
 

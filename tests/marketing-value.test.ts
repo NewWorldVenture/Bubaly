@@ -34,10 +34,10 @@ describe('per-day framing never understates', () => {
   });
 
   it('matches the figures the plan constants imply today', () => {
-    expect(perDayCents(BASIC_ANNUAL_CENTS, 'yearly')).toBe(28);
-    expect(perDayCents(PLUS_ANNUAL_CENTS, 'yearly')).toBe(69);
-    expect(perDayCents(BASIC_MONTHLY_CENTS, 'monthly')).toBe(34);
-    expect(perDayCents(PLUS_MONTHLY_CENTS, 'monthly')).toBe(84);
+    expect(perDayCents(BASIC_ANNUAL_CENTS, 'yearly')).toBe(33);
+    expect(perDayCents(PLUS_ANNUAL_CENTS, 'yearly')).toBe(83);
+    expect(perDayCents(BASIC_MONTHLY_CENTS, 'monthly')).toBe(41);
+    expect(perDayCents(PLUS_MONTHLY_CENTS, 'monthly')).toBe(101);
   });
 
   it('is never below the exact division, and degrades to nothing on bad input', () => {
@@ -53,8 +53,8 @@ describe('per-day framing never understates', () => {
   });
 
   it('formats cents under a dollar and dollars from a dollar up', () => {
-    expect(formatPerDay(perDayCents(BASIC_ANNUAL_CENTS, 'yearly'))).toBe('28¢');
-    expect(formatPerDay(perDayCents(PLUS_MONTHLY_CENTS, 'monthly'))).toBe('84¢');
+    expect(formatPerDay(perDayCents(BASIC_ANNUAL_CENTS, 'yearly'))).toBe('33¢');
+    expect(formatPerDay(perDayCents(PLUS_MONTHLY_CENTS, 'monthly'))).toBe('$1.01');
     expect(formatPerDay(100)).toBe('$1');
     expect(formatPerDay(105)).toBe('$1.05');
   });

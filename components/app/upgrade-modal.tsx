@@ -167,6 +167,7 @@ export function UpgradeModal({
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('upgradeModal.save17')}</span>
               </div>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-0.5 text-xs font-medium text-fg/80">{t('upgradeModal.billedAnnually', { amount: dollars(tier.annualCents) })}</p>
               <p className="mt-0.5 text-xs text-muted">{annualPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.annualPlan ? t('upgradeModal.redirecting') : t('upgradeModal.chooseAnnual')}

@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { currentStripePriceId } from '@/lib/billing/price-catalog';
 
 let stripeClient: Stripe | null = null;
 
@@ -27,14 +28,14 @@ export function stripeFromKey(secretKey?: string | null): Stripe {
 }
 
 export const STRIPE_PLANS = {
-  basic_monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY ?? process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? '',
-  basic_annual: process.env.STRIPE_PRICE_BASIC_ANNUAL ?? process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? '',
-  plus_monthly: process.env.STRIPE_PRICE_PLUS_MONTHLY ?? '',
-  plus_annual: process.env.STRIPE_PRICE_PLUS_ANNUAL ?? '',
+  basic_monthly: currentStripePriceId('basic_monthly', process.env.STRIPE_PRICE_BASIC_MONTHLY ?? process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? ''),
+  basic_annual: currentStripePriceId('basic_annual', process.env.STRIPE_PRICE_BASIC_ANNUAL ?? process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? ''),
+  plus_monthly: currentStripePriceId('plus_monthly', process.env.STRIPE_PRICE_PLUS_MONTHLY ?? ''),
+  plus_annual: currentStripePriceId('plus_annual', process.env.STRIPE_PRICE_PLUS_ANNUAL ?? ''),
   // Legacy keys — kept so any older client/links keep working. They resolve to
   // the Basic price (the former single "Family" plan is now Family Basic).
-  family_monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? process.env.STRIPE_PRICE_BASIC_MONTHLY ?? '',
-  family_annual: process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? process.env.STRIPE_PRICE_BASIC_ANNUAL ?? '',
+  family_monthly: currentStripePriceId('family_monthly', process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? process.env.STRIPE_PRICE_BASIC_MONTHLY ?? ''),
+  family_annual: currentStripePriceId('family_annual', process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? process.env.STRIPE_PRICE_BASIC_ANNUAL ?? ''),
 } as const;
 
 export type StripePlan = keyof typeof STRIPE_PLANS;

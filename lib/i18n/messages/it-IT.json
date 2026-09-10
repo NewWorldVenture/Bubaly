@@ -11857,6 +11857,7 @@
   "upgradeModal.annual": "Annuale",
   "upgradeModal.askAFamilyAdminToUpgrade": "Chiedi a un amministratore della famiglia di fare l'upgrade del piano per sbloccare questa funzione.",
   "upgradeModal.availableOnPlan": "Disponibile a partire da {plan}.",
+  "upgradeModal.billedAnnually": "Addebito annuale di {amount}",
   "upgradeModal.chooseAnnual": "Scegli annuale →",
   "upgradeModal.chooseMonthly": "Scegli mensile →",
   "upgradeModal.compareAllPlans": "Confronta tutti i piani →",

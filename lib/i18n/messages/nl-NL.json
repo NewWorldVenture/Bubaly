@@ -11857,6 +11857,7 @@
   "upgradeModal.annual": "Jaarlijks",
   "upgradeModal.askAFamilyAdminToUpgrade": "Vraag een gezinsbeheerder om het abonnement te upgraden om deze functie te ontgrendelen.",
   "upgradeModal.availableOnPlan": "Beschikbaar vanaf {plan}.",
+  "upgradeModal.billedAnnually": "Jaarlijks gefactureerd: {amount}",
   "upgradeModal.chooseAnnual": "Kies jaarlijks →",
   "upgradeModal.chooseMonthly": "Kies maandelijks →",
   "upgradeModal.compareAllPlans": "Alle abonnementen vergelijken →",

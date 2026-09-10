@@ -11857,6 +11857,7 @@
   "upgradeModal.annual": "Annual",
   "upgradeModal.askAFamilyAdminToUpgrade": "Ask a family admin to upgrade your plan to unlock this feature.",
   "upgradeModal.availableOnPlan": "Available on {plan} and above.",
+  "upgradeModal.billedAnnually": "Billed {amount} annually",
   "upgradeModal.chooseAnnual": "Choose annual →",
   "upgradeModal.chooseMonthly": "Choose monthly →",
   "upgradeModal.compareAllPlans": "Compare all plans →",
