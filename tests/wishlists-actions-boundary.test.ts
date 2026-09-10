@@ -39,6 +39,7 @@ function client(results: Record<string, TableResult>, seen: Seen[]) {
         select: () => chain,
         eq: (key: string, value: unknown) => { entry.filters.push([key, value]); return chain; },
         order: () => chain,
+        range: (from: number, to: number) => Promise.resolve({ ...result, data: result.data?.slice(from, to + 1) ?? null }),
         limit: () => Promise.resolve(result),
         then: (onF: (v: TableResult) => unknown) => Promise.resolve(result).then(onF),
       };
@@ -97,7 +98,7 @@ describe('adviseBeforeBuying', () => {
     const result = await adviseBeforeBuying({ text: 'Cordless drill' });
     expect(result.ok).toBe(true);
 
-    expect(seen.map((s) => s.table).sort()).toEqual([
+    expect([...new Set(seen.map((s) => s.table))].sort()).toEqual([
       'family_facts', 'home_assets', 'home_locations', 'inventory_items', 'wardrobe_items', 'wishlist_items',
     ]);
     for (const entry of seen) {

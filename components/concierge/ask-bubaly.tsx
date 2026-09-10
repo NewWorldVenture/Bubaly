@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Loader2, MessageCircleQuestion, Sparkles } from 'lucide-react';
 import { NAV_CATALOG } from '@/lib/constants/navigation';
 import { routeCommand } from '@/lib/command-bar/route';
@@ -44,7 +45,7 @@ export type AskBubalyProps = {
 
 type Inline =
   | { kind: 'clarification'; runId: string; question: string }
-  | { kind: 'answer' | 'recommendation'; text: string; runId: string | null };
+  | { kind: 'answer' | 'recommendation'; text: string; runId: string | null; href?: string | null };
 
 export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, autoFocus, className, onOutcome }: AskBubalyProps) {
   const t = useTranslations();
@@ -85,7 +86,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
         setInline({ kind: 'clarification', runId: data.runId ?? '', question: data.question ?? data.summary });
         break;
       case 'answer':
-        setInline({ kind: 'answer', text: data.summary, runId: data.runId });
+        setInline({ kind: 'answer', text: data.summary, runId: data.runId, href: data.redirect });
         break;
       case 'recommendation':
         setInline({ kind: 'recommendation', text: data.summary, runId: data.runId });
@@ -218,6 +219,11 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" aria-hidden />
             <span className="whitespace-pre-wrap">{inline.text}</span>
           </p>
+          {inline.kind === 'answer' && inline.href && (
+            <Link href={inline.href} className="focus-ring mt-2 inline-flex min-h-11 items-center text-brand-text underline underline-offset-4">
+              {t('needsAttention.ctaView')}
+            </Link>
+          )}
           {inline.kind === 'recommendation' && (
             <p className="mt-2 text-xs text-muted">{t('askBubaly.bubalyLeftThisAsASuggestion')}</p>
           )}

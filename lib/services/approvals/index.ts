@@ -50,6 +50,8 @@ import { ledgerWriter } from '@/lib/trust/ledger';
 import { executeTool } from '@/lib/ai/tools/execute';
 import { markApprovedSchoolSource } from '@/lib/front-desk/school-approval';
 import { getTool } from '@/lib/ai/tools/registry';
+import { savePrivatePurchaseAnswer, scopeForApprovedPurchase } from '@/lib/services/purchases/private-result';
+import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { isTerminalRunState, legacyStatusFor, type RunState, type StepState } from '@/lib/ai/runs/states';
 import {
@@ -697,7 +699,13 @@ async function performApproved(
       }
 
       const args = edited ?? classified.args;
-      const actingScope = await scopeForApprovedWork(scope, row);
+      const privatePurchase = classified.name === 'finances.advisePurchase';
+      const requester = privatePurchase ? await scopeForApprovedPurchase(scope, row) : null;
+      if (requester && !requester.ok) {
+        await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
+        return requester;
+      }
+      const actingScope = requester?.ok ? requester.data : await scopeForApprovedWork(scope, row);
       const outcome = await executeTool(
         { ...actingScope, requestId: row.request_id ?? scope.requestId ?? null, runId: row.run_id ?? null },
         classified.name,
@@ -716,6 +724,20 @@ async function performApproved(
       );
 
       if (outcome.status === 'ok') {
+        // #436 (school source) and #438 (private purchase advice) both extend
+        // this path; both must run. The private answer is saved FIRST because
+        // it can fail and return — archiving the school source before that
+        // would mark an inbox message handled for work that never finished.
+        if (privatePurchase) {
+          const answer = (outcome.data as { answer?: unknown } | null)?.answer;
+          const saved = typeof answer === 'string'
+            ? await savePrivatePurchaseAnswer(actingScope, row.id, answer)
+            : fail((await getTranslations())('purchaseAdvice.privateUnavailable'), { code: SERVICE_CODES.db, retryable: true });
+          if (!saved.ok) {
+            await stampExecution(scope, row.id, (await getTranslations())('purchaseAdvice.privateUnavailable'));
+            return saved;
+          }
+        }
         const sourceHandled = await markApprovedSchoolSource(scope, row, outcome);
         await stampExecution(scope, row.id, outcome.summary);
         await auditDecision(scope, row, 'approved_execution', outcome.summary, { tool: classified.name, tool_call_id: outcome.toolCallId, verified: outcome.verified ?? null, ...(sourceHandled === null ? {} : { inbox_source_handled: sourceHandled }) });

@@ -220,7 +220,9 @@ export async function submitRequest(
   }, { db });
   if (!intentSaved.ok) console.error('[ai/intake] could not persist the interpreted intent', intentSaved.error);
 
-  const context = await buildContext(requestScope, { intent, requestId, pageContext: input.context ?? null });
+  // Purchase advice loads its evidence inside the guarded read. Preloading
+  // finance or memory here would read it before that tool's trust decision.
+  const context = await buildContext(requestScope, { intent, requestId, pageContext: input.context ?? null, ...(intent === 'purchase_advice' ? { slices: ['people'] } : {}) });
   if (!context.ok) {
     await markRequestFailed(requestScope, db, requestId, context.error);
     return fail(context.error, { code: INTAKE_CODES.context, retryable: context.retryable });
@@ -318,7 +320,7 @@ async function finalizeOutcome(
       if (conversationId) {
         await recordConversationTurn(scope, db, conversationId, requestId, { role: 'assistant', content: outcome.text, card: outcome.card ?? null });
       }
-      return ok({ requestId, runId: null, planId: null, outcome: 'answer', summary: outcome.text, redirect: null });
+      return ok({ requestId, runId: null, planId: null, outcome: 'answer', summary: outcome.text, redirect: outcome.href ?? null });
     }
     case 'clarification': {
       const run = await createRun(scope, { requestId, runType: 'concierge', summary: outcome.question, state: 'awaiting_context' }, { db });
