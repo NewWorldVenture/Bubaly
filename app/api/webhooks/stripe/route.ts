@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
+import { catalogPlanForPrice } from '@/lib/billing/price-catalog';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -23,7 +24,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
   if (!priceId) throw new Error('Subscription price is missing');
 
   // Map price → plan slug
-  const plan =
+  const plan = catalogPlanForPrice(priceId) ?? (
     priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
     priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
     priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
@@ -31,7 +32,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     // Legacy price IDs (backward-compat with existing subscriptions)
     priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
     priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
-    null;
+    null);
   if (!plan) throw new Error('Unknown Stripe subscription price');
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a

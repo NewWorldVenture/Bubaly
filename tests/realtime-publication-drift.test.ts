@@ -197,7 +197,7 @@ describe('the bespoke subscriptions are gated too', () => {
   // shared list directly.
   it.each([
     ['components/modules/concierge-calls-module.tsx', 'concierge_calls'],
-    ['components/modules/billing-module.tsx', 'subscriptions'],
+    ['lib/hooks/use-billing-subscription.ts', 'subscriptions'],
     ['components/app/app-context.tsx', 'family_members'],
     ['components/marketplace/negotiation-panel.tsx', 'marketplace_negotiation_rounds'],
   ])('%s refuses to open a channel on an unpublished table', (file, table) => {

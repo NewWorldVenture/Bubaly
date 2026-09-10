@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateSegment, summarizeCustomers, type MarketingCustomer } from '@/lib/marketing/customers';
+import { BASIC_MONTHLY_CENTS } from '@/lib/constants/plans';
 
 const NOW = new Date('2026-06-20T00:00:00Z').getTime();
 const DAY = 86_400_000;
@@ -71,7 +72,7 @@ describe('summarizeCustomers', () => {
     expect(m.paying).toBe(2); // new + active
     expect(m.newThisMonth).toBe(1);
     expect(m.lapsed).toBe(2); // lapsed + churned
-    expect(m.estMrrCents).toBe(999 * 2); // two paying on $9.99 monthly-equivalent
+    expect(m.estMrrCents).toBe(BASIC_MONTHLY_CENTS * 2); // two paying on the legacy basic monthly plan
     expect(m.byLifecycle.free).toBe(1);
   });
 });

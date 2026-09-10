@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -33,7 +34,9 @@ import {
   createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
   deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
 } from '@/app/(app)/dashboard/billing/actions';
-import { isRealtimePublished } from '@/lib/realtime/published-tables';
+import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
+import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
+import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
@@ -48,7 +51,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import {
-  classifyChange, slugToStripePlan, stripePlanFor, annualSavingsPct,
+  classifyChange, slugToStripePlan, stripePlanFor, annualSavingsPct, canChangeSubscriptionInPlace,
   CHANGE_LABELS, type StripePlan, type BillingInterval, type PlanChange,
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
@@ -61,7 +64,6 @@ type Transaction = Tables<'transactions'>;
 type Budget = Tables<'budgets'>;
 type Bill = Tables<'bills'>;
 type SavingsGoal = Tables<'savings_goals'>;
-type Subscription = Tables<'subscriptions'>;
 
 // ── Stripe helpers ──────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: React.ReactNode }> = {
@@ -75,13 +77,13 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
 };
 const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
   free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
-  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: '$9.99/mo' },
-  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: '$99.99/yr' },
-  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: '$24.99/mo' },
-  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: '$249.99/yr' },
+  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: `$${(PLUS_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: `$${(PLUS_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
   // Legacy slugs map to Basic.
-  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: '$9.99/mo' },
-  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: '$99.99/yr' },
+  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
+  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
 };
 
 async function openPortal() {
@@ -510,10 +512,40 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const tr = useTranslations();
-  const { familyId, userId, role, members } = useApp();
+  const { familyId, family, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const search = useSearchParams();
+  // Even a malformed or competing review hint disables legacy auto-checkout.
+  const hasReviewHint = search.has('reviewPlan') || search.has('plan') || search.has('billing');
+  const reviewPlan = hasReviewHint ? parseReviewSelection(search) : null;
+  const reviewQuery = search.toString();
+  const reviewAccount = useMemo(() => ({ familyId, userId }), [familyId, userId]);
+  const renderedReviewAccount = useRef<typeof reviewAccount | null>(reviewAccount);
+  renderedReviewAccount.current = reviewAccount;
+  const reviewOwner = useMemo(() => ({ familyId, userId, role, reviewQuery }), [familyId, userId, role, reviewQuery]);
+  const renderedReviewOwner = useRef<typeof reviewOwner | null>(reviewOwner);
+  renderedReviewOwner.current = reviewOwner;
+  const reviewInFlight = useRef<typeof reviewAccount | null>(null);
+  const [payingReview, setPayingReview] = useState<typeof reviewAccount | null>(null);
+  type PendingReadback = { account: typeof reviewAccount; plan: ReviewPlan; providerRef: string | null };
+  const waitingReadback = useRef<PendingReadback | null>(null);
+  const [readback, setReadback] = useState<PendingReadback | null>(null);
+  const [confirmedReview, setConfirmedReview] = useState<{ owner: typeof reviewOwner; plan: ReviewPlan } | null>(null);
+  useEffect(() => {
+    renderedReviewAccount.current = reviewAccount;
+    return () => {
+      if (renderedReviewAccount.current === reviewAccount) renderedReviewAccount.current = null;
+    };
+  }, [reviewAccount]);
+  useEffect(() => {
+    // React may replay mount effects; restore the same committed owner after
+    // that cleanup while still invalidating retained callbacks on disposal.
+    renderedReviewOwner.current = reviewOwner;
+    return () => {
+      if (renderedReviewOwner.current === reviewOwner) renderedReviewOwner.current = null;
+    };
+  }, [reviewOwner]);
   const wantsUpgrade = search.get('upgrade') === '1';
   // `?checkout=basic|plus` (from the demo upgrade flow) pre-selects a tier and
   // opens Stripe Checkout automatically once the family + subscription load, so a
@@ -522,9 +554,18 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const checkoutLevel: 1 | 2 | undefined = checkoutTier === 'plus' ? 2 : checkoutTier === 'basic' ? 1 : undefined;
   const needLevel = checkoutLevel ?? (search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined);
   const [tab, setTab] = useState<Tab>('Overview');
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [subLoading, setSubLoading] = useState(true);
+  const { subscription, status: subReadStatus, reload: loadSub, isCurrentReady } = useBillingSubscription(familyId, userId);
   const [pending, startTransition] = useTransition();
+  const reviewNeedsReadback = readback?.account === reviewAccount;
+  const effectiveReviewPlan = reviewNeedsReadback && readback ? readback.plan
+    : confirmedReview?.owner === reviewOwner ? confirmedReview.plan : reviewPlan;
+  const reviewBusy = payingReview === reviewAccount;
+  useEffect(() => {
+    if (!reviewNeedsReadback || !readback || !isCurrentReady() || !canChangeSubscriptionInPlace(subscription)) return;
+    if (subscription.provider_ref !== readback.providerRef || slugToStripePlan(subscription.plan) !== readback.plan || subscription.cancel_at_period_end) return;
+    if (waitingReadback.current === readback) waitingReadback.current = null;
+    setReadback(null);
+  }, [reviewNeedsReadback, readback, isCurrentReady, subscription]);
 
   // Modal state
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -574,30 +615,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       supabase.from('savings_goals').select('*').eq('family_id', familyId).order('name'),
   });
 
-  // ── Stripe subscription (live: realtime + after self-serve changes) ──────
-  const loadSub = useCallback(async () => {
-    const sb = createClient();
-    const { data } = await sb.from('subscriptions').select('*').eq('family_id', familyId).maybeSingle();
-    setSubscription(data);
-    setSubLoading(false);
-  }, [familyId]);
-
-  useEffect(() => {
-    void loadSub();
-    // `subscriptions` is not published, so this channel could only ever sit
-    // idle. Checkout returns through a full navigation, which reloads the plan.
-    if (!isRealtimePublished('subscriptions')) return;
-    const sb = createClient();
-    const channel = sb
-      .channel(`subscription:${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `family_id=eq.${familyId}` }, () => { void loadSub(); })
-      .subscribe();
-    return () => { void sb.removeChannel(channel); };
-  }, [familyId, loadSub]);
-
   // Self-serve plan change (upgrade / downgrade / switch interval). Updates the
   // live Stripe subscription in place, or redirects to Checkout when on Free.
   const changePlan = useCallback((plan: StripePlan) => {
+    if (!admin || !isCurrentReady()) return;
+    if (reviewInFlight.current === reviewAccount || waitingReadback.current?.account === reviewAccount) return;
     startTransition(async () => {
       try {
         const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
@@ -609,7 +631,56 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         await loadSub();
       } catch { toastError(tr('billingModule.couldNotChangeThePlan')); }
     });
-  }, [loadSub, success, toastError, tr]);
+  }, [admin, reviewAccount, isCurrentReady, loadSub, success, toastError, tr]);
+
+  // Assertions are checked again against fresh server context. An old tab or
+  // retained callback must never apply a review to a newly active household.
+  const confirmReview = useCallback(async (plan: ReviewPlan) => {
+    const currentAccount = () => renderedReviewAccount.current === reviewAccount;
+    const current = () => currentAccount() && renderedReviewOwner.current === reviewOwner && isCurrentReady();
+    if (!reviewPlan || !isReviewPlan(plan) || !admin || !current() || reviewInFlight.current === reviewAccount) return;
+    if (waitingReadback.current?.account === reviewAccount) return;
+    if (canChangeSubscriptionInPlace(subscription) && !subscription.cancel_at_period_end && slugToStripePlan(subscription.plan) === plan) return;
+    reviewInFlight.current = reviewAccount;
+    setPayingReview(reviewAccount);
+    try {
+      const res = await fetch('/api/billing/change-plan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan, expectedUserId: userId, expectedFamilyId: familyId }),
+      });
+      const json = await res.json();
+      if (!currentAccount()) return;
+      if (json.providerUpdated === true || (res.ok && json.changed === true)) {
+        // Keep this account blocked across query changes until a real read
+        // confirms the paid result. Status retries must never repeat payment.
+        const awaiting: PendingReadback = { account: reviewAccount, plan, providerRef: json.providerRef ?? subscription?.provider_ref ?? null };
+        waitingReadback.current = awaiting;
+        setReadback(awaiting);
+        setConfirmedReview({ owner: reviewOwner, plan });
+        if (renderedReviewOwner.current === reviewOwner) {
+          if (res.ok) success(tr('billingReview.changeConfirmed'));
+          else toastError(json.error ?? tr('changePlan.stripeChangedThePlanBut'));
+        }
+        await loadSub();
+        return;
+      }
+      if (!current()) return;
+      if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
+      if (json.url) { window.location.href = json.url; return; }
+      success(tr('billingReview.alreadyCurrent'));
+      await loadSub();
+    } catch {
+      if (current()) toastError(tr('billingModule.couldNotChangeThePlan'));
+    } finally {
+      if (reviewInFlight.current === reviewAccount) reviewInFlight.current = null;
+      if (currentAccount()) setPayingReview(null);
+    }
+  }, [reviewPlan, admin, reviewAccount, reviewOwner, isCurrentReady, subscription, userId, familyId, loadSub, success, toastError, tr]);
+
+  const refreshReviewStatus = useCallback(async () => {
+    if (renderedReviewOwner.current !== reviewOwner || waitingReadback.current?.account !== reviewAccount) return;
+    await loadSub();
+  }, [reviewOwner, reviewAccount, loadSub]);
 
   // One-tap checkout from the demo upgrade flow: if `?checkout=basic|plus` is
   // present and the family is still on Free, open Stripe Checkout for that tier
@@ -618,16 +689,19 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const autoCheckoutFired = useRef(false);
   useEffect(() => {
     if (autoCheckoutFired.current) return;
-    if (!checkoutLevel || subLoading) return;
+    if (hasReviewHint) return;
+    if (!checkoutLevel || subReadStatus !== 'ready' || !isCurrentReady()) return;
     if (!admin) return;
     // Only when there's no paid plan yet — never re-charge an already-subscribed family.
     if (slugToStripePlan(subscription?.plan) !== null) return;
     autoCheckoutFired.current = true;
     changePlan(stripePlanFor(checkoutLevel, 'monthly'));
-  }, [checkoutLevel, subLoading, admin, subscription, changePlan]);
+  }, [hasReviewHint, checkoutLevel, subReadStatus, isCurrentReady, admin, subscription, changePlan]);
 
   // Schedule a downgrade to Free at period end, or undo it.
   const setCancel = useCallback((resume: boolean) => {
+    if (!admin || !isCurrentReady()) return;
+    if (reviewInFlight.current === reviewAccount || waitingReadback.current?.account === reviewAccount) return;
     startTransition(async () => {
       try {
         const res = await fetch('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume }) });
@@ -637,7 +711,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         await loadSub();
       } catch { toastError(tr('billingModule.couldNotUpdateTheSubscription')); }
     });
-  }, [loadSub, success, toastError, tr]);
+  }, [admin, reviewAccount, isCurrentReady, loadSub, success, toastError, tr]);
 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
@@ -1395,7 +1469,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               mount their own card here and test for it, so both stay. */}
           <div className="mb-4"><FamilyDeliveredValue /></div>
           <div className="mb-4"><FamilyValueComparison /></div>
-          {subLoading ? <SkeletonList /> : (
+          {/* #475/#481 replaced the boolean with a three-state read so a
+              FAILED subscription lookup stops looking like "no plan". */}
+          {subReadStatus === 'loading' ? <SkeletonList /> : subReadStatus === 'unavailable' ? (
+            <ErrorState message={tr('changePlan.subscriptionStatusIsTemporarilyUnavailable')} onRetry={() => void loadSub()} />
+          ) : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -1414,7 +1492,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className="flex items-center gap-1">{subConfig.icon} {subConfig.label}</span>
                   </Badge>
                   {admin && subscription && (
-                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>{tr('billing.paymentAmpInvoices')}</Button>
+                    <Button size="sm" variant="ghost" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => {
+                      if (admin && isCurrentReady() && reviewInFlight.current !== reviewAccount && waitingReadback.current?.account !== reviewAccount) startTransition(() => void openPortal());
+                    }}>{tr('billing.paymentAmpInvoices')}</Button>
                   )}
                 </div>
               </div>
@@ -1423,23 +1503,35 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               {admin && subCanceling && (
                 <div className="mb-4 flex flex-col gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span>{tr('billing.yourPlanEndsOn')} {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} {tr('billing.andDropsToFree')}</span>
-                  <Button size="sm" loading={pending} onClick={() => setCancel(true)}>{tr('billing.resumePlan')}</Button>
+                  <Button size="sm" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => setCancel(true)}>{tr('billing.resumePlan')}</Button>
                 </div>
               )}
 
               {/* Plan picker — always available to admins so they can upgrade,
                   downgrade, or switch billing interval at any time. */}
-              {admin && (
-                <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending} onChoose={changePlan} />
+              {admin && !hasReviewHint && !reviewNeedsReadback && (
+                <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending || reviewBusy} onChoose={changePlan} />
               )}
-              {admin && serviceFeeNotice && (
+              {admin && effectiveReviewPlan && (
+                <SelectedPlanReview key={JSON.stringify([familyId, userId, role, reviewQuery, reviewNeedsReadback])}
+                  initialPlan={effectiveReviewPlan} familyName={family.name} currentSlug={subscription?.plan ?? null}
+                  hasLiveSubscription={canChangeSubscriptionInPlace(subscription)} canceling={!!subscription?.cancel_at_period_end}
+                  pending={reviewBusy} syncPending={reviewNeedsReadback} onRefresh={refreshReviewStatus} onConfirm={confirmReview} />
+              )}
+              {hasReviewHint && !reviewPlan && (
+                <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm" role="status">
+                  <p>{tr('billingReview.invalid')}</p>
+                  <Link href="/pricing" className="mt-2 inline-block font-semibold underline underline-offset-2">{tr('billingReview.chooseAgain')}</Link>
+                </div>
+              )}
+              {admin && !hasReviewHint && !reviewNeedsReadback && serviceFeeNotice && (
                 <p className="mt-3 text-center text-xs text-muted">{serviceFeeNotice}</p>
               )}
 
               {/* Cancel control for paying families that aren't already canceling. */}
               {admin && hasPaidPlan && !subCanceling && (
                 <div className="mt-3 text-right">
-                  <button onClick={() => setCancel(false)} disabled={pending} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
+                  <button onClick={() => setCancel(false)} disabled={pending || reviewBusy || reviewNeedsReadback} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
                     {tr('billing.cancelAmpDowngradeToFree')}
                   </button>
                 </div>

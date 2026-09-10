@@ -3,18 +3,23 @@
 //
 // Three tiers:
 //   free          → Bubaly Free (no charge)
-//   basic / basic_annual  → Family Basic ($9.99/mo or ~$8.33/mo billed yearly)
-//   plus  / plus_annual   → Family+ ($24.99/mo or ~$20.83/mo billed yearly)
+//   basic / basic_annual  → Family Basic ($12.04/mo or $9.99/mo billed yearly)
+//   plus  / plus_annual   → Family+ ($30.11/mo or $24.99/mo billed yearly)
 //
 // Legacy: 'family' and 'family_annual' map to basic tier (backward-compat).
+
+import familyPrices from './family-prices.json';
 
 export type PlanId = 'free' | 'family' | 'family_annual' | 'basic' | 'basic_annual' | 'plus' | 'plus_annual';
 
 // ── Prices (cents) ─────────────────────────────────────────────────────────
-export const BASIC_MONTHLY_CENTS  = 999;   // $9.99/month
-export const BASIC_ANNUAL_CENTS   = 9999;  // $99.99/year (~$8.33/mo, save ~17%)
-export const PLUS_MONTHLY_CENTS   = 2499;  // $24.99/month
-export const PLUS_ANNUAL_CENTS    = 24999; // $249.99/year (~$20.83/mo, save ~17%)
+// Annual totals keep the requested monthly equivalents exact. Monthly billing
+// reverses the advertised 17% saving and rounds to cents (savings round to 17%).
+// The same catalogue records the verified current and previous Stripe prices.
+export const BASIC_MONTHLY_CENTS  = familyPrices.basic.monthlyCents;
+export const BASIC_ANNUAL_CENTS   = familyPrices.basic.annualCents;
+export const PLUS_MONTHLY_CENTS   = familyPrices.plus.monthlyCents;
+export const PLUS_ANNUAL_CENTS    = familyPrices.plus.annualCents;
 
 // Legacy alias kept for backward compat
 export const FAMILY_MONTHLY_CENTS = BASIC_MONTHLY_CENTS;
