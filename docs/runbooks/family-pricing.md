@@ -128,7 +128,10 @@ commit and timestamp.
    `STRIPE_WEBHOOK_SECRET` to the signing secret for **that endpoint**. The route
    reads this environment value directly; an admin `stripe_settings.webhook_secret`
    does not override it. A signing secret for another application's endpoint
-   cannot configure Bubaly's webhook. Verify signed event delivery and processing
+   cannot configure Bubaly's webhook. Subscribe that endpoint to
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated` and `customer.subscription.deleted`, matching
+   the billing route's handled event types. Verify signed event delivery and processing
    without placing secrets or event payloads containing customer data in the
    rollout record.
 5. Integrate the reviewed pricing [#472](https://github.com/NewWorldVenture/Bubaly/pull/472)
