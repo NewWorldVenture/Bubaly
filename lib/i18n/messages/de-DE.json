@@ -12750,5 +12750,6 @@
   "onboardingCopy.letsBegin": "Los geht’s",
   "onboardingCopy.dashboardReady": "Ihre Übersicht ist auf Sie abgestimmt und bereit zum Erkunden.",
   "onboardingCopy.kidLogin": "Richten Sie einen Zugang für {names} ein — mit Benutzername und PIN, ohne E-Mail-Adresse",
-  "onboardingCopy.primaryCalendarPreview": "Vorschau aus Ihrem Hauptkalender: die nächsten 30 Tage. Abschließen importiert diese Termine. Spätere Abrufe ergänzen anstehende Termine und übernehmen gemeldete Änderungen; nicht mehr gelieferte Termine bleiben erhalten. Kalender und Aufgaben beim Anbieter bleiben unverändert."
+  "onboardingCopy.primaryCalendarPreview": "Vorschau aus Ihrem Hauptkalender: die nächsten 30 Tage. Abschließen importiert diese Termine. Spätere Abrufe ergänzen anstehende Termine und übernehmen gemeldete Änderungen; nicht mehr gelieferte Termine bleiben erhalten. Kalender und Aufgaben beim Anbieter bleiben unverändert.",
+  "onboardingWizard.invalidPreviewTimezone": "Wählen Sie eine gültige Zeitzone."
 }

@@ -12750,5 +12750,6 @@
   "onboardingCopy.letsBegin": "Let’s begin",
   "onboardingCopy.dashboardReady": "Your dashboard is personalized and ready to explore.",
   "onboardingCopy.kidLogin": "Give {names} a login — username and PIN, no email needed",
-  "onboardingCopy.primaryCalendarPreview": "Preview from your primary calendar: the next 30 days. Finish imports these events. Future reads add upcoming appointments and apply reported changes; events missing from a read are kept. Your provider calendar and tasks stay unchanged."
+  "onboardingCopy.primaryCalendarPreview": "Preview from your primary calendar: the next 30 days. Finish imports these events. Future reads add upcoming appointments and apply reported changes; events missing from a read are kept. Your provider calendar and tasks stay unchanged.",
+  "onboardingWizard.invalidPreviewTimezone": "Choose a valid time zone."
 }

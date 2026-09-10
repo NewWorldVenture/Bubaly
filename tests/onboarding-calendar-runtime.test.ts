@@ -5,16 +5,18 @@ import { calendarContinuationCookie, readCalendarContinuation, sealCalendarConti
 import { syncOAuthStateCookie } from '@/lib/sync/oauth-state';
 import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
 import type { ReviewPlan } from '@/lib/billing/review-selection';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { getMessages, translate } from '@/lib/i18n/messages';
 
 const mock = vi.hoisted(() => ({ db: null as unknown, cookies: new Map<string, string>(), saveProfile: vi.fn(), exchange: vi.fn(), identity: vi.fn(), legacyContext: vi.fn(),
-  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn() }));
+  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn(), locale: 'en-US' as LocaleCode }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: (name: string, value: string) => mock.cookies.set(name, value), get: (name: string) => mock.cookies.has(name) ? { value: mock.cookies.get(name) } : undefined }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => mock.db, createServiceClient: () => mock.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mock.legacyContext, getUserContext: mock.context }));
 vi.mock('next/navigation', () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`); }, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  const { getMessages, translate } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string) => translate(getMessages(mock.locale), key) };
 });
 vi.mock('@/lib/sync/registry', () => ({ getAdapter: () => mock.adapter, configuredAdapters: () => mock.adapter ? [mock.adapter] : [] }));
 vi.mock('@/lib/sync/providers/google', async (original) => ({ ...await original<typeof import('@/lib/sync/providers/google')>(), exchangeCode: mock.exchange }));
@@ -42,6 +44,7 @@ const familyId = '20000000-0000-4000-8000-000000000001';
 const otherUser = '10000000-0000-4000-8000-000000000002';
 let db: InMemorySupabase;
 beforeEach(() => {
+  mock.locale = 'en-US';
   vi.stubEnv('SYNC_TOKEN_KEY', '12'.repeat(32));
   vi.stubEnv('GOOGLE_SYNC_CLIENT_ID', 'configured-client');
   vi.stubEnv('MICROSOFT_SYNC_CLIENT_ID', 'configured-client');
@@ -114,7 +117,29 @@ describe('paste/demo preview uses the selected family timezone', () => {
   it.each(['', ' ', 'Invalid/Zone', null, false, 42, {}, [], 'x'.repeat(101)].map(timezone => ({ timezone })))('rejects malformed supplied timezone $timezone before auth or calendar work', async ({ timezone }) => {
     const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
     const result = await previewCalendarImportAction({ source: 'demo', timezone } as never);
-    expect(result.ok).toBe(false); expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, error: translate(getMessages(mock.locale), 'onboardingWizard.invalidPreviewTimezone') });
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['en-US', 'Choose a valid time zone.'], ['de-DE', 'Wählen Sie eine gültige Zeitzone.'],
+    ['es-ES', 'Elige una zona horaria válida.'], ['fr-FR', 'Choisissez un fuseau horaire valide.'],
+    ['it-IT', 'Scegli un fuso orario valido.'], ['nl-NL', 'Kies een geldige tijdzone.'],
+    ['pt-PT', 'Escolha um fuso horário válido.'],
+  ] as const)('%s returns a localized timezone validation response before auth or reads', async (locale, error) => {
+    mock.locale = locale;
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    expect(await previewCalendarImportAction({ source: 'demo', timezone: 'Invalid/Zone' })).toEqual({ ok: false, error });
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each([{ source: 'unsupported' }, { source: 'paste', icsText: 'x'.repeat(200_001) }])('preserves earlier source/text validation precedence', async input => {
+    mock.locale = 'de-DE';
+    const auth = vi.spyOn(db.auth, 'getUser'); const from = vi.spyOn(db, 'from');
+    const original = await previewCalendarImportAction(input as never);
+    expect(original.ok).toBe(false);
+    expect(await previewCalendarImportAction({ ...input, timezone: 'Invalid/Zone' } as never)).toEqual(original);
+    expect(auth).not.toHaveBeenCalled(); expect(from).not.toHaveBeenCalled();
   });
 
   it('omitted timezone retains the legacy UTC presentation default', async () => {

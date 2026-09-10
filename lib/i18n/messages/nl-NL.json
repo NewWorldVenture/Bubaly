@@ -12750,5 +12750,6 @@
   "onboardingCopy.letsBegin": "Laten we beginnen",
   "onboardingCopy.dashboardReady": "Je dashboard is gepersonaliseerd en klaar om te verkennen.",
   "onboardingCopy.kidLogin": "Geef {names} toegang — gebruikersnaam en pincode, geen e-mail nodig",
-  "onboardingCopy.primaryCalendarPreview": "Voorbeeld uit je primaire agenda: de komende 30 dagen. Afronden importeert deze afspraken. Latere uitlezingen voegen komende afspraken en gemelde wijzigingen toe; afspraken die ontbreken blijven bewaard. Je agenda en taken bij de aanbieder blijven ongewijzigd."
+  "onboardingCopy.primaryCalendarPreview": "Voorbeeld uit je primaire agenda: de komende 30 dagen. Afronden importeert deze afspraken. Latere uitlezingen voegen komende afspraken en gemelde wijzigingen toe; afspraken die ontbreken blijven bewaard. Je agenda en taken bij de aanbieder blijven ongewijzigd.",
+  "onboardingWizard.invalidPreviewTimezone": "Kies een geldige tijdzone."
 }

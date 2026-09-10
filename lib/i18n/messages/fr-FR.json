@@ -12750,5 +12750,6 @@
   "onboardingCopy.letsBegin": "C’est parti",
   "onboardingCopy.dashboardReady": "Votre tableau de bord est personnalisé et prêt à être exploré.",
   "onboardingCopy.kidLogin": "Créez un accès pour {names} — un identifiant et un code PIN suffisent, sans e-mail",
-  "onboardingCopy.primaryCalendarPreview": "Aperçu de votre calendrier principal : les 30 prochains jours. Terminer importe ces événements. Les lectures suivantes ajoutent les rendez-vous à venir et appliquent les modifications signalées ; les événements absents d’une lecture sont conservés. Votre calendrier et vos tâches chez le fournisseur restent inchangés."
+  "onboardingCopy.primaryCalendarPreview": "Aperçu de votre calendrier principal : les 30 prochains jours. Terminer importe ces événements. Les lectures suivantes ajoutent les rendez-vous à venir et appliquent les modifications signalées ; les événements absents d’une lecture sont conservés. Votre calendrier et vos tâches chez le fournisseur restent inchangés.",
+  "onboardingWizard.invalidPreviewTimezone": "Choisissez un fuseau horaire valide."
 }

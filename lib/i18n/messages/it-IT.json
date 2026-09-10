@@ -12750,5 +12750,6 @@
   "onboardingCopy.letsBegin": "Cominciamo",
   "onboardingCopy.dashboardReady": "La tua dashboard è personalizzata e pronta da esplorare.",
   "onboardingCopy.kidLogin": "Crea un accesso per {names}: nome utente e PIN, senza e-mail",
-  "onboardingCopy.primaryCalendarPreview": "Anteprima dal tuo calendario principale: i prossimi 30 giorni. Completa la configurazione per importare questi eventi. Le letture successive aggiungono gli appuntamenti futuri e applicano le modifiche segnalate; gli eventi assenti da una lettura vengono conservati. Il calendario e le attività del fornitore restano invariati."
+  "onboardingCopy.primaryCalendarPreview": "Anteprima dal tuo calendario principale: i prossimi 30 giorni. Completa la configurazione per importare questi eventi. Le letture successive aggiungono gli appuntamenti futuri e applicano le modifiche segnalate; gli eventi assenti da una lettura vengono conservati. Il calendario e le attività del fornitore restano invariati.",
+  "onboardingWizard.invalidPreviewTimezone": "Scegli un fuso orario valido."
 }
