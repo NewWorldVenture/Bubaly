@@ -48,7 +48,7 @@ function render(extra: Partial<Parameters<typeof OnboardingWizard>[0]> = {}) {
  mocks.cursor = 0; const tree = OnboardingWizard({ expectedOwner: owner, reviewPlan: 'plus_annual', ...extra });
  mocks.effects.splice(0).forEach(effect => effect()); return tree;
 }
-function finishControl(tree: ReactNode) { const result = nodes(tree).find(node=>typeof node.props.onClick === 'function' && textOf(node).includes('Finish setup')); if(!result) throw new Error('Missing Finish setup control'); return result.props.onClick as () => void; }
+function finishControl(tree: ReactNode) { return control(tree, 'onboardingCopy.finishSetup'); }
 function donePanel(tree: ReactNode) { const node=nodes(tree).find(n=>typeof n.type === 'function' && n.type.name === 'DonePanel'); return node ? (node.type as (props: unknown)=>ReactNode)(node.props) : null; }
 function control(tree: ReactNode, key: string) { const label=translate(getMessages(mocks.locale),key);const node=nodes(tree).find(n=>typeof n.props.onClick==='function' && textOf(n).trim()===label);if(!node)throw new Error(`Missing ${key}`);return node.props.onClick as ()=>void; }
 beforeEach(()=>{
@@ -99,6 +99,26 @@ describe('explicit selected-plan review after successful onboarding',()=>{
   mocks.locale=locale;render();finishControl(render())();await vi.waitFor(()=>expect(donePanel(render())).not.toBeNull());
   const panel=donePanel(render());expect(textOf(panel)).toContain(translate(getMessages(locale),'onboardingWizard.reviewSelectedPlan'));
   control(panel,'onboardingWizard.startExploring')();expect(mocks.push).toHaveBeenCalledExactlyOnceWith('/dashboard');
+ });
+ it('changing the display language during Finish keeps the pending owner and payload',async()=>{
+  let resolve:(value:unknown)=>void=()=>{};mocks.finish.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+  render();finishControl(render())();const [payload,expectedOwner]=mocks.finish.mock.calls[0];
+  mocks.locale='fr-FR';const french=render();expect(textOf(french)).not.toContain('Finish setup');
+  expect(textOf(french)).toContain(translate(getMessages('fr-FR'),'onboardingCopy.finishSetup'));
+  finishControl(french)();expect(mocks.finish).toHaveBeenCalledTimes(1);
+  expect(expectedOwner).toEqual(owner);expect(payload).toEqual(buildFinalizePayload({ ...draft, timezone:Intl.DateTimeFormat().resolvedOptions().timeZone }));
+  resolve({ok:true,data:{familyId}});await vi.waitFor(()=>expect(donePanel(render())).not.toBeNull());
+  const panel=donePanel(render());expect(textOf(panel)).toContain(translate(getMessages('fr-FR'),'onboardingCopy.dashboardReady'));
+  expect(storage.has(DRAFT_STORAGE_KEY)).toBe(false);expect(mocks.push).not.toHaveBeenCalled();
+  control(panel,'onboardingWizard.reviewSelectedPlan')();expect(mocks.push).toHaveBeenCalledExactlyOnceWith('/dashboard/billing?view=manage&reviewPlan=plus_annual');
+ });
+ it.each(['en-US','de-DE','es-ES','fr-FR','it-IT','nl-NL','pt-PT'] as const)('%s renders an unnamed connected-calendar preview without informal fallback copy',locale=>{
+  mocks.locale=locale;storage.set(DRAFT_STORAGE_KEY,serializeDraftState('value',draft,true));render();
+  const panelNode=nodes(render()).find(node=>typeof node.type==='function'&&node.type.name==='ValuePanel')!;
+  const panel=(panelNode.type as (props:unknown)=>ReactNode)({...panelNode.props,draft:{...draft,calendarReceipt:'fixture-receipt'}});
+  expect(textOf(panel)).toContain(translate(getMessages(locale),'onboardingCopy.primaryCalendarPreview'));
+  expect(textOf(panel)).not.toMatch(/deinem Hauptkalender|o teu calendário principal|da il tuo/);
+  expect(mocks.finish).not.toHaveBeenCalled();expect(mocks.push).not.toHaveBeenCalled();
  });
  it('plain onboarding has no review action and keeps its dashboard control',async()=>{
   render({reviewPlan:null});finishControl(render({reviewPlan:null}))();await vi.waitFor(()=>expect(donePanel(render({reviewPlan:null}))).not.toBeNull());
