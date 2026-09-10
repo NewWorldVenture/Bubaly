@@ -54,7 +54,7 @@ try {
     getRows('marketing_pages?select=id,path,title,summary,seo,aeo,status&deleted_at=is.null', 'marketing_pages'),
     getRows('marketing_seo_pages?select=id,path,title,meta_description,status&status=eq.active', 'marketing_seo_pages'),
     getRows('marketing_aeo_questions?select=id,question,answer,source_path,status,metadata&status=eq.published', 'marketing_aeo_questions'),
-    getRows('marketing_aeo_question_translations?select=question_id,locale', 'marketing_aeo_question_translations'),
+    getRows('marketing_aeo_question_translations?select=question_id,locale,question,answer', 'marketing_aeo_question_translations'),
   ]);
   const published = pages.filter((page) => page.status === 'published');
   for (const page of published) {
@@ -81,14 +81,20 @@ try {
   // same finding, and the number that matters is how far behind each language
   // is. Counted against the questions actually being published, so unpublishing
   // a question clears its gap instead of pinning the release open.
+  // A row is not coverage: `question` and `answer` are NOT NULL but the column
+  // accepts '', so counting row existence would report a blank translation as
+  // done and let the release pass over a question that renders as nothing.
   const translated = new Map(TRANSLATED_LOCALES.map((locale) => [locale, new Set()]));
-  for (const row of translationRows) translated.get(row.locale)?.add(row.question_id);
+  for (const row of translationRows) {
+    if (!text(row.question) || !text(row.answer)) continue;
+    translated.get(row.locale)?.add(row.question_id);
+  }
   for (const locale of TRANSLATED_LOCALES) {
     const missing = aeoRows.filter((row) => !translated.get(locale).has(row.id));
     if (!missing.length) continue;
     const sample = missing.slice(0, 3).map((row) => JSON.stringify(row.question)).join(', ');
     failures.push(
-      `locale ${locale} has no Knowledge Center translation for ${missing.length} of ${aeoRows.length} published AEO questions (${sample}${missing.length > 3 ? ', ...' : ''})`,
+      `locale ${locale} has no usable Knowledge Center translation for ${missing.length} of ${aeoRows.length} published AEO questions (${sample}${missing.length > 3 ? ', ...' : ''})`,
     );
   }
 

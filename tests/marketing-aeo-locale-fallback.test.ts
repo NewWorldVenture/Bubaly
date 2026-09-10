@@ -96,6 +96,27 @@ describe('the Knowledge Center follows the same locale chain as the chrome aroun
     expect(localized.map((q) => q.question)).toEqual(QUESTIONS.map((q) => q.question));
   });
 
+  // `question` and `answer` are NOT NULL but the column accepts '', so a row is
+  // not the same thing as an answer.
+  it('does not let a blank overlay row displace a usable parent one', async () => {
+    rows = [
+      { question_id: 'q1', locale: 'fr-FR', question: "Qu'est-ce que Bubaly ?", answer: 'Un OS familial.' },
+      { question_id: 'q1', locale: 'fr-CA', question: '   ', answer: '' },
+    ];
+    // Nearer, and empty. Ranking before discarding would hand the reader
+    // nothing where a good fr-FR answer was sitting one step away.
+    expect((await localize('fr-CA'))[0].answer).toBe('Un OS familial.');
+    rows.reverse();
+    expect((await localize('fr-CA'))[0].answer).toBe('Un OS familial.');
+  });
+
+  it('treats a blank row as no translation at all', async () => {
+    rows = [{ question_id: 'q1', locale: 'fr-FR', question: '', answer: '' }];
+    // Nothing usable in the set, so the section falls back rather than
+    // rendering one blank accordion row.
+    expect(await localize('fr-FR')).toEqual(QUESTIONS);
+  });
+
   it('leaves English locales alone without querying at all', async () => {
     const localized = await localize('en-GB');
     expect(localized).toEqual(QUESTIONS);

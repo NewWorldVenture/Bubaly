@@ -335,6 +335,12 @@ export async function localizeAeoQuestions(
     const distance = new Map(chain.map((code, index) => [code, index]));
     const byId = new Map<string, { locale: string; question: string; answer: string }>();
     for (const row of data ?? []) {
+      // `question` and `answer` are NOT NULL but not non-empty: the column
+      // accepts ''. Such a row is discarded BEFORE the nearest-relative choice,
+      // not after — a blank fr-CA row is nearer than a good fr-FR one, so
+      // ranking first would let an empty overlay silently replace a usable
+      // parent answer with nothing.
+      if (!row.question?.trim() || !row.answer?.trim()) continue;
       const nearer = byId.get(row.question_id);
       if (nearer && (distance.get(nearer.locale) ?? Infinity) <= (distance.get(row.locale) ?? Infinity)) continue;
       byId.set(row.question_id, row);

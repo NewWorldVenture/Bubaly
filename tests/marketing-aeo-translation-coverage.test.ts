@@ -48,7 +48,7 @@ describe('every locale the site ships can reach a Knowledge Center answer', () =
   it('reports a translation gap per locale rather than per row', () => {
     // 60 questions x 6 locales is 360 lines of the same finding; the verifier
     // has a 100-line cap, so per-row reporting would bury every other failure.
-    expect(SCRIPT).toMatch(/has no Knowledge Center translation for \$\{missing\.length\} of \$\{aeoRows\.length\}/);
-    expect(SCRIPT).toMatch(/marketing_aeo_question_translations\?select=question_id,locale/);
+    expect(SCRIPT).toMatch(/has no usable Knowledge Center translation for \$\{missing\.length\} of \$\{aeoRows\.length\}/);
+    expect(SCRIPT).toMatch(/marketing_aeo_question_translations\?select=question_id,locale,question,answer/);
   });
 });
