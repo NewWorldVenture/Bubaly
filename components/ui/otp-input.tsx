@@ -102,7 +102,7 @@ export function OtpInput({
           autoFocus={autoFocus && i === 0}
           aria-label={`Digit ${i + 1}`}
           className={cn(
-            'h-14 w-12 rounded-xl border bg-bg text-center text-2xl font-semibold transition focus-ring',
+            'h-14 w-12 min-w-0 rounded-xl border bg-bg text-center text-2xl font-semibold transition focus-ring',
             'disabled:opacity-50',
             digits[i] ? 'border-brand' : 'border-border',
           )}
