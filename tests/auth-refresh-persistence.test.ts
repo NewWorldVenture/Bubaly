@@ -158,7 +158,31 @@ describe('actual middleware refresh', () => {
     expect(response.status).toBe(200);
     expect(req.cookies.get(key)?.value).not.toBe(old);
     expect(response.cookies.get(key)?.value).toBe(req.cookies.get(key)?.value);
+    expect(response.headers.get('cache-control')).toContain('private');
     expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('expires')).toBe('0');
+    expect(response.headers.get('pragma')).toBe('no-cache');
+  });
+  it.each([400, 401])('carries session expiration and private cache headers onto the login redirect after HTTP %i', async (status) => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', origin); vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-anon');
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(
+      { code: 'refresh_token_not_found', message: 'Invalid Refresh Token' },
+      { status, headers: { 'x-supabase-api-version': '2024-01-01' } },
+    )));
+    const old = encode(session('rejected-refresh', true));
+    const req = new NextRequest('https://bubaly.example/home', { headers: { cookie: `${key}=${old}` } });
+
+    const response = await middleware(req);
+
+    expect(response.status).toBe(307);
+    const destination = new URL(response.headers.get('location') ?? '');
+    expect(destination.pathname).toBe('/login');
+    expect(destination.searchParams.get('redirect')).toBe('/home');
+    expect(req.cookies.get(key)?.value).toBe('');
+    expect(response.cookies.get(key)).toMatchObject({ value: '', maxAge: 0, path: '/' });
+    expect(response.headers.get('cache-control')).toContain('private');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('expires')).toBe('0');
     expect(response.headers.get('pragma')).toBe('no-cache');
   });
 });
