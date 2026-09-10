@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { AppState } from 'react-native';
 import { supabase } from './supabase';
 import { resolveActiveFamily, type ActiveFamily } from './family';
 import { friendlyAuthError } from './auth-core';
@@ -48,7 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       session: setSession, restoring: setRestoring, ready: setReady,
     });
-    return connection.dispose;
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void connection.retry();
+    });
+    return () => { foreground.remove(); connection.dispose(); };
   }, []);
 
   const userId = session?.user.id ?? null;
