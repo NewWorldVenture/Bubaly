@@ -12665,5 +12665,22 @@
   "workspace.assistantWorkspace": "Assistant workspace",
   "workspace.context": "Context",
   "workspace.conversation": "Conversation",
-  "workspace.planAndResults": "Plan and results"
+  "workspace.planAndResults": "Plan and results",
+  "avatarPicker.colors.violet": "Violet",
+  "avatarPicker.colors.indigo": "Indigo",
+  "avatarPicker.colors.blue": "Blue",
+  "avatarPicker.colors.cyan": "Cyan",
+  "avatarPicker.colors.teal": "Teal",
+  "avatarPicker.colors.green": "Green",
+  "avatarPicker.colors.amber": "Amber",
+  "avatarPicker.colors.orange": "Orange",
+  "avatarPicker.colors.red": "Red",
+  "avatarPicker.colors.pink": "Pink",
+  "avatarPicker.colors.rose": "Rose",
+  "avatarPicker.colors.slate": "Slate",
+  "avatarPicker.presetAvatar": "{color} avatar",
+  "avatarPicker.uploading": "Uploading…",
+  "avatarPicker.uploadOwnPhoto": "Upload your own photo",
+  "avatarPicker.notSignedIn": "Not signed in",
+  "avatarPicker.currentAvatar": "Your avatar"
 }

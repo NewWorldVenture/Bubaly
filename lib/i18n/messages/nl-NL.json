@@ -12665,5 +12665,22 @@
   "workspace.assistantWorkspace": "Werkruimte van de assistent",
   "workspace.context": "Context",
   "workspace.conversation": "Gesprek",
-  "workspace.planAndResults": "Plan en resultaten"
+  "workspace.planAndResults": "Plan en resultaten",
+  "avatarPicker.colors.violet": "Violet",
+  "avatarPicker.colors.indigo": "Indigo",
+  "avatarPicker.colors.blue": "Blauw",
+  "avatarPicker.colors.cyan": "Cyaan",
+  "avatarPicker.colors.teal": "Blauwgroen",
+  "avatarPicker.colors.green": "Groen",
+  "avatarPicker.colors.amber": "Amber",
+  "avatarPicker.colors.orange": "Oranje",
+  "avatarPicker.colors.red": "Rood",
+  "avatarPicker.colors.pink": "Roze",
+  "avatarPicker.colors.rose": "Rozerood",
+  "avatarPicker.colors.slate": "Leigrijs",
+  "avatarPicker.presetAvatar": "Avatar: {color}",
+  "avatarPicker.uploading": "Bezig met uploaden…",
+  "avatarPicker.uploadOwnPhoto": "Upload je eigen foto",
+  "avatarPicker.notSignedIn": "Je bent niet ingelogd",
+  "avatarPicker.currentAvatar": "Jouw avatar"
 }
