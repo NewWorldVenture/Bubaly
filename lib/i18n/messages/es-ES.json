@@ -12776,5 +12776,8 @@
   "homeOutcome.groceryEmpty": "Apunta lo que falta y compártelo con todos.",
   "homeOutcome.choresLabel": "Organiza las tareas del hogar",
   "homeOutcome.choresDone": "Las tareas están asignadas.",
-  "homeOutcome.choresEmpty": "Reparte el trabajo con una rutina sencilla."
+  "homeOutcome.choresEmpty": "Reparte el trabajo con una rutina sencilla.",
+  "homeCalendar.todayUnavailable": "El calendario de hoy no está disponible temporalmente.",
+  "homeCalendar.upcomingUnavailable": "Los próximos eventos del calendario no están disponibles temporalmente.",
+  "homeCalendar.conflictsUnavailable": "La comprobación de conflictos del calendario no está disponible temporalmente."
 }

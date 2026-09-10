@@ -38,6 +38,7 @@ import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type Awaitin
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
+import { briefingCalendarWindow } from '@/lib/briefing/calendar-window';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -73,6 +74,20 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
   const todayEnd = new Date(dayBounds.end);
+  const calendarTime = new Intl.DateTimeFormat(locale.code, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  const calendarDateTime = new Intl.DateTimeFormat(locale.code, { timeZone: tz, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const calendarDate = new Intl.DateTimeFormat(locale.code, { timeZone: 'UTC', month: 'short', day: 'numeric' });
+  const calendarLabel = (at: string | null, upcoming = false, allDay = false) => {
+    if (!at) return '';
+    const date = new Date(allDay ? `${at.slice(0, 10)}T12:00:00Z` : at);
+    if (!Number.isFinite(date.getTime())) return '';
+    return (allDay ? calendarDate : upcoming ? calendarDateTime : calendarTime).format(date);
+  };
+  const calendarNotice = (key: string) => (
+    <p role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-muted">
+      {t(key)}{' '}<Link href="/dashboard" className="font-semibold text-brand-text underline focus-ring">{t('root.tryAgain')}</Link>
+    </p>
+  );
 
   // Not a { data, error } read, so it sits beside the batch rather than inside
   // it. A failure costs the plan tier — defaulting to the free tier — instead
@@ -84,13 +99,13 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
   const [
     { count: pendingChores },
-    { data: todayEvents },
+    todayCalendarRes,
     { count: groceryCount },
     { count: overdueMedsCount },
     { count: pendingApprovals },
     { count: openTodos },
     { data: members },
-    { data: upcomingEvents },
+    upcomingCalendarRes,
     { data: autopilotOpen },
     { count: autopilotHandledCount },
     { count: unreadCommsCount },
@@ -102,7 +117,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: weekReminderRows },
     { data: approvalRows },
     { data: renewalRows },
-    { data: conflictEventRows },
+    assignedCalendarRes,
     { data: documentRows },
     { data: homeworkRows },
     { count: plannedDinnerCount },
@@ -113,7 +128,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .select('id, title, starts_at, all_day, location')
       .eq('family_id', familyId)
       .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', todayStart.toISOString()).lt('starts_at', todayEnd.toISOString())
+      .or(briefingCalendarWindow(todayKey, tz, 0, 1))
       .order('starts_at').limit(5),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
@@ -131,8 +146,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .select('id, title, starts_at, all_day')
       .eq('family_id', familyId)
       .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', todayEnd.toISOString())
-      .lte('starts_at', new Date(Date.now() + 7 * 86400000).toISOString())
+      .or(briefingCalendarWindow(todayKey, tz, 1, 7))
       .order('starts_at').limit(5),
     supabase.from('autopilot_suggestions')
       .select('id, title, detail, kind, urgency, confidence')
@@ -170,11 +184,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at')
       .eq('family_id', familyId).in('status', ['active', 'expired'])
       .lte('expires_at', new Date(Date.now() + 45 * 86400000).toISOString()).limit(50),
-    // Upcoming assigned events (next 14d) → detect personal double-bookings.
+    // Assigned events through the complete local date +14 → personal double-bookings.
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
       .eq('family_id', familyId).not('assignee_id', 'is', null)
-      .gte('starts_at', todayStart.toISOString())
-      .lte('starts_at', new Date(Date.now() + 14 * 86400000).toISOString())
+      .or(briefingCalendarWindow(todayKey, tz, 0, 15))
       .order('starts_at').limit(200),
     // Stored documents expiring within ~30 days (passports, licenses, insurance…).
     supabase.from('documents').select('id, title, expires_at')
@@ -191,6 +204,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .gte('plan_date', todayStart.toISOString().slice(0, 10))
       .lte('plan_date', new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)),
   ]);
+  for (const [label, result] of [['today calendar', todayCalendarRes], ['upcoming calendar', upcomingCalendarRes], ['assigned calendar', assignedCalendarRes]] as const) {
+    if (result.error) console.error(`[dashboard-home] ${label} read failed`, result.error);
+  }
+  const todayUnavailable = !!todayCalendarRes.error;
+  const upcomingUnavailable = !!upcomingCalendarRes.error;
+  const conflictsUnavailable = !!assignedCalendarRes.error;
+  const todayEvents = todayUnavailable ? [] : (todayCalendarRes.data ?? []);
+  const upcomingEvents = upcomingUnavailable ? [] : (upcomingCalendarRes.data ?? []);
+  const conflictEventRows = conflictsUnavailable ? [] : (assignedCalendarRes.data ?? []);
 
   // §16 Command Center reads: what Bubaly is doing, what it finished, what it
   // is asking. Family-scoped; every error is captured and logged, and a failed
@@ -311,7 +333,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     recommendations,
   });
   const needs = topNeeds(homeNeeds, 5);
-  const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
+  const needsHeader = conflictsUnavailable ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
 
   const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
   const today = buildToday({
@@ -337,7 +359,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // next best getting-started steps, and dinner ideas — instead of a bland
   // "all caught up" void. Reuses the onboarding first-brief engine so home + the
   // first-run screen tell the same story.
-  const showOutcome = needs.shown.length === 0 && !hasEvents;
+  const showOutcome = !todayUnavailable && !upcomingUnavailable && !conflictsUnavailable && needs.shown.length === 0 && !hasEvents;
   let homeBrief: ReturnType<typeof buildHomeBrief> | null = null;
   if (showOutcome) {
     const { data: dinnerRows } = await supabase
@@ -408,6 +430,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         .select('id, kind, title, detail, href, impact')
         .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
       const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
+        .filter((r) => !conflictsUnavailable || r.kind !== 'conflict')
         .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
       const top = ranked[0];
       if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
@@ -559,7 +582,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       </div>
 
       {/* §16 Needs Your Attention — one ranked queue, decisions made in place */}
-      <NeedsAttention
+      {conflictsUnavailable && calendarNotice('homeCalendar.conflictsUnavailable')}
+      {(!conflictsUnavailable || needs.shown.length > 0) && <NeedsAttention
         items={needs.shown}
         more={needs.more}
         headline={needsHeader}
@@ -567,7 +591,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         moneyApprovalKinds={Object.fromEntries(((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [a.id, a.kind]))}
         recommendationBodies={Object.fromEntries(recommendations.map((r) => [r.id, r.body]))}
         canDecide={manager}
-      />
+      />}
 
       {/* §16 Bubaly Is Working On — live from Realtime after the first paint */}
       <WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" />
@@ -581,7 +605,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           </div>
           <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.viewAll')}</Link>
         </div>
-        {!hasEvents && (
+        {todayUnavailable && calendarNotice('homeCalendar.todayUnavailable')}
+        {!todayUnavailable && !hasEvents && (
           <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">{t('aiHomeDashboard.aClearDayNothingScheduledAnd')}</p>
         )}
         {today.schedule.length > 0 && (
@@ -594,7 +619,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{item.title}</p>
-                    <p className="text-xs text-muted">{item.allDay ? 'All day' : fmtTime(item.at)}</p>
+                    <p className="text-xs text-muted">{item.kind === 'event' ? (item.allDay ? t('calendar.allDay') : calendarLabel(item.at)) : fmtTime(item.at)}</p>
                   </div>
                 </Link>
               </li>
@@ -620,7 +645,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       </div>
 
       {/* Upcoming this week */}
-      {hasUpcoming && (
+      {(hasUpcoming || upcomingUnavailable) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -629,6 +654,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             </div>
             <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">{t('aiHomeDashboard.calendar')}</Link>
           </div>
+          {upcomingUnavailable && calendarNotice('homeCalendar.upcomingUnavailable')}
           <div className="space-y-1.5">
             {upcomingItems.map((item) => (
               <Link key={item.key} href={item.kind === 'reminder' ? '/dashboard/reminders' : '/dashboard/calendar'}
@@ -638,8 +664,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                   : <Calendar className="h-4 w-4 shrink-0 text-muted" />}
                 <span className="flex-1 truncate text-sm">{item.title}</span>
                 <span className="text-xs text-muted">
-                  {item.allDay
-                    ? new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  {item.kind === 'event'
+                    ? calendarLabel(item.at, true, item.allDay)
                     : new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </span>
               </Link>

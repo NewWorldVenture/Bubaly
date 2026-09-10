@@ -12776,5 +12776,8 @@
   "homeOutcome.groceryEmpty": "Schrijf op wat er op is en deel het met iedereen.",
   "homeOutcome.choresLabel": "Stel huishoudelijke taken in",
   "homeOutcome.choresDone": "De taken zijn verdeeld.",
-  "homeOutcome.choresEmpty": "Verdeel het werk met een eenvoudige routine."
+  "homeOutcome.choresEmpty": "Verdeel het werk met een eenvoudige routine.",
+  "homeCalendar.todayUnavailable": "De agenda van vandaag is tijdelijk niet beschikbaar.",
+  "homeCalendar.upcomingUnavailable": "Komende agenda-afspraken zijn tijdelijk niet beschikbaar.",
+  "homeCalendar.conflictsUnavailable": "De controle op agenda-overlappingen is tijdelijk niet beschikbaar."
 }

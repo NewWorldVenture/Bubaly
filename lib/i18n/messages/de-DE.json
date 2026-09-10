@@ -12776,5 +12776,8 @@
   "homeOutcome.groceryEmpty": "Notieren Sie, was fehlt — und teilen Sie die Liste mit allen.",
   "homeOutcome.choresLabel": "Richten Sie Aufgaben ein",
   "homeOutcome.choresDone": "Die Aufgaben sind verteilt.",
-  "homeOutcome.choresEmpty": "Verteilen Sie die Arbeit mit einer einfachen Routine."
+  "homeOutcome.choresEmpty": "Verteilen Sie die Arbeit mit einer einfachen Routine.",
+  "homeCalendar.todayUnavailable": "Der heutige Kalender ist vorübergehend nicht verfügbar.",
+  "homeCalendar.upcomingUnavailable": "Bevorstehende Kalendertermine sind vorübergehend nicht verfügbar.",
+  "homeCalendar.conflictsUnavailable": "Die Prüfung auf Terminkonflikte ist vorübergehend nicht verfügbar."
 }

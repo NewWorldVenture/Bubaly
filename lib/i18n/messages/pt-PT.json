@@ -12776,5 +12776,8 @@
   "homeOutcome.groceryEmpty": "Anote o que falta e partilhe a lista com todos.",
   "homeOutcome.choresLabel": "Organize as tarefas domésticas",
   "homeOutcome.choresDone": "As tarefas estão atribuídas.",
-  "homeOutcome.choresEmpty": "Partilhe o trabalho com uma rotina simples."
+  "homeOutcome.choresEmpty": "Partilhe o trabalho com uma rotina simples.",
+  "homeCalendar.todayUnavailable": "O calendário de hoje está temporariamente indisponível.",
+  "homeCalendar.upcomingUnavailable": "Os próximos eventos do calendário estão temporariamente indisponíveis.",
+  "homeCalendar.conflictsUnavailable": "A verificação de conflitos do calendário está temporariamente indisponível."
 }

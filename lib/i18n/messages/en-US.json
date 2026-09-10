@@ -12776,5 +12776,8 @@
   "homeOutcome.groceryEmpty": "Jot what you’re out of — share it with everyone.",
   "homeOutcome.choresLabel": "Set up chores",
   "homeOutcome.choresDone": "Chores are assigned.",
-  "homeOutcome.choresEmpty": "Share the load with a simple routine."
+  "homeOutcome.choresEmpty": "Share the load with a simple routine.",
+  "homeCalendar.todayUnavailable": "Today’s calendar is temporarily unavailable.",
+  "homeCalendar.upcomingUnavailable": "Upcoming calendar events are temporarily unavailable.",
+  "homeCalendar.conflictsUnavailable": "Calendar conflict checks are temporarily unavailable."
 }
