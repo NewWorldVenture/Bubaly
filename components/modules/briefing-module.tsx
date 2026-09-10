@@ -23,7 +23,7 @@ import {
   briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
   type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -772,6 +772,7 @@ type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.Reac
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
   const tr = useTranslations();
+  const locale = useLocale();
   const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [now, setNow] = useState(new Date());
@@ -781,7 +782,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
     return () => clearInterval(id);
   }, []);
 
-  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10));
+  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10), locale.code);
 
   useEffect(() => {
     try {

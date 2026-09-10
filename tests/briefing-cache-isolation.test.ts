@@ -3,6 +3,7 @@ import {
   briefingContextKey, createBriefingSession, parseBriefingResponse, purgeLegacyBriefingCache,
   type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
+import { DEFAULT_LOCALE, LOCALES } from '@/lib/i18n/locales';
 
 const day = '2026-09-05';
 const context = {
@@ -49,6 +50,11 @@ const reply = (value: unknown) => new Response(JSON.stringify(value), {
 });
 
 describe('BRIEF-CACHE-ISOLATION context boundary', () => {
+  it('separates every trusted viewer locale while preserving default-call compatibility', () => {
+    const keys = LOCALES.map(locale => briefingContextKey(context, day, locale.code));
+    expect(new Set(keys).size).toBe(LOCALES.length);
+    expect(briefingContextKey(context, day)).toBe(briefingContextKey(context, day, DEFAULT_LOCALE));
+  });
   it('separates household, signed-in user, member, and day identities', () => {
     const original = briefingContextKey(context, day);
     expect(original).not.toBeNull();
