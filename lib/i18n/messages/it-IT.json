@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "La tua dashboard è personalizzata e pronta da esplorare.",
   "onboardingCopy.kidLogin": "Crea un accesso per {names}: nome utente e PIN, senza e-mail",
   "onboardingCopy.primaryCalendarPreview": "Anteprima dal tuo calendario principale: i prossimi 30 giorni. Completa la configurazione per importare questi eventi. Le letture successive aggiungono gli appuntamenti futuri e applicano le modifiche segnalate; gli eventi assenti da una lettura vengono conservati. Il calendario e le attività del fornitore restano invariati.",
-  "onboardingWizard.invalidPreviewTimezone": "Scegli un fuso orario valido."
+  "onboardingWizard.invalidPreviewTimezone": "Scegli un fuso orario valido.",
+  "calendarImport.invalidCalendar": "Non è stato possibile leggere questa esportazione del calendario. Controlla il file e riprova.",
+  "calendarImport.invalidDate": "Questo calendario contiene una data o un orario non valido o non supportato. Non è stato importato nulla.",
+  "calendarImport.invalidRange": "Un evento del calendario ha una fine che non corrisponde al suo inizio. Non è stato importato nulla.",
+  "calendarImport.invalidDuration": "Questo calendario contiene una durata di evento non valida o non supportata. Non è stato importato nulla.",
+  "calendarImport.unsupportedTimezone": "Questo calendario utilizza una definizione di fuso orario non supportata o contraddittoria. Esportalo in UTC oppure collega il tuo calendario.",
+  "calendarImport.floatingTimezoneRequired": "Scegli il fuso orario della tua famiglia prima di importare orari del calendario senza fuso orario.",
+  "calendarImport.unsupportedRecurrence": "Questa esportazione contiene eccezioni di ricorrenza che non possono essere importate. Collega il tuo calendario.",
+  "calendarImport.tooManyEvents": "Usa un’esportazione del calendario con al massimo 1.000 eventi e 200.000 caratteri.",
+  "calendarImport.floatingDisclosure": "Gli orari senza fuso orario sono stati interpretati in {timezone} per questa importazione.",
+  "calendarImport.recurringDisclosure": "Vengono importate solo le occorrenze elencate. Le serie ricorrenti non vengono ampliate né salvate come eventi ripetuti."
 }

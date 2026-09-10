@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "Tu panel está personalizado y listo para explorar.",
   "onboardingCopy.kidLogin": "Crea un acceso para {names}: nombre de usuario y PIN, sin necesidad de correo",
   "onboardingCopy.primaryCalendarPreview": "Vista previa de tu calendario principal: los próximos 30 días. Al finalizar se importan estos eventos. Las lecturas posteriores añaden próximas citas y aplican los cambios notificados; se conservan los eventos que no aparecen en una lectura. Tu calendario y tus tareas en el proveedor no cambian.",
-  "onboardingWizard.invalidPreviewTimezone": "Elige una zona horaria válida."
+  "onboardingWizard.invalidPreviewTimezone": "Elige una zona horaria válida.",
+  "calendarImport.invalidCalendar": "No se ha podido leer esta exportación del calendario. Comprueba el archivo e inténtalo de nuevo.",
+  "calendarImport.invalidDate": "Este calendario contiene una fecha u hora no válida o no compatible. No se ha importado nada.",
+  "calendarImport.invalidRange": "Un evento del calendario tiene un final que no coincide con su inicio. No se ha importado nada.",
+  "calendarImport.invalidDuration": "Este calendario contiene una duración de evento no válida o no compatible. No se ha importado nada.",
+  "calendarImport.unsupportedTimezone": "Este calendario utiliza una definición de zona horaria no compatible o contradictoria. Expórtalo en UTC o conecta tu calendario.",
+  "calendarImport.floatingTimezoneRequired": "Elige la zona horaria de tu familia antes de importar horas de calendario sin zona horaria.",
+  "calendarImport.unsupportedRecurrence": "Esta exportación contiene excepciones de recurrencia que no se pueden importar. Conecta tu calendario.",
+  "calendarImport.tooManyEvents": "Utiliza una exportación de calendario con un máximo de 1.000 eventos y 200.000 caracteres.",
+  "calendarImport.floatingDisclosure": "Las horas sin zona horaria se han interpretado en {timezone} para esta importación.",
+  "calendarImport.recurringDisclosure": "Solo se importan las fechas indicadas. Las series recurrentes no se amplían ni se guardan como eventos repetitivos."
 }

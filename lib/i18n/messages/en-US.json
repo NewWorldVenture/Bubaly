@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "Your dashboard is personalized and ready to explore.",
   "onboardingCopy.kidLogin": "Give {names} a login — username and PIN, no email needed",
   "onboardingCopy.primaryCalendarPreview": "Preview from your primary calendar: the next 30 days. Finish imports these events. Future reads add upcoming appointments and apply reported changes; events missing from a read are kept. Your provider calendar and tasks stay unchanged.",
-  "onboardingWizard.invalidPreviewTimezone": "Choose a valid time zone."
+  "onboardingWizard.invalidPreviewTimezone": "Choose a valid time zone.",
+  "calendarImport.invalidCalendar": "This calendar export could not be read. Check the file and try again.",
+  "calendarImport.invalidDate": "This calendar contains an invalid or unsupported date or time. Nothing was imported.",
+  "calendarImport.invalidRange": "A calendar event has an end that does not match its start. Nothing was imported.",
+  "calendarImport.invalidDuration": "This calendar contains an invalid or unsupported event duration. Nothing was imported.",
+  "calendarImport.unsupportedTimezone": "This calendar uses an unsupported or conflicting time zone definition. Export it in UTC or connect your calendar instead.",
+  "calendarImport.floatingTimezoneRequired": "Choose your family's time zone before importing calendar times without a time zone.",
+  "calendarImport.unsupportedRecurrence": "This export contains recurrence exceptions that cannot be imported. Connect your calendar instead.",
+  "calendarImport.tooManyEvents": "Use a calendar export with at most 1,000 events and 200,000 characters.",
+  "calendarImport.floatingDisclosure": "Times without a time zone were interpreted in {timezone} for this import.",
+  "calendarImport.recurringDisclosure": "Only the listed occurrences are imported. Recurring series are not expanded or saved as repeating events."
 }

@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "Ihre Übersicht ist auf Sie abgestimmt und bereit zum Erkunden.",
   "onboardingCopy.kidLogin": "Richten Sie einen Zugang für {names} ein — mit Benutzername und PIN, ohne E-Mail-Adresse",
   "onboardingCopy.primaryCalendarPreview": "Vorschau aus Ihrem Hauptkalender: die nächsten 30 Tage. Abschließen importiert diese Termine. Spätere Abrufe ergänzen anstehende Termine und übernehmen gemeldete Änderungen; nicht mehr gelieferte Termine bleiben erhalten. Kalender und Aufgaben beim Anbieter bleiben unverändert.",
-  "onboardingWizard.invalidPreviewTimezone": "Wählen Sie eine gültige Zeitzone."
+  "onboardingWizard.invalidPreviewTimezone": "Wählen Sie eine gültige Zeitzone.",
+  "calendarImport.invalidCalendar": "Dieser Kalenderexport konnte nicht gelesen werden. Prüfen Sie die Datei und versuchen Sie es erneut.",
+  "calendarImport.invalidDate": "Dieser Kalender enthält ein ungültiges oder nicht unterstütztes Datum oder eine solche Uhrzeit. Es wurde nichts importiert.",
+  "calendarImport.invalidRange": "Bei einem Kalendertermin passt das Ende nicht zum Beginn. Es wurde nichts importiert.",
+  "calendarImport.invalidDuration": "Dieser Kalender enthält eine ungültige oder nicht unterstützte Termindauer. Es wurde nichts importiert.",
+  "calendarImport.unsupportedTimezone": "Dieser Kalender verwendet eine nicht unterstützte oder widersprüchliche Zeitzonendefinition. Exportieren Sie ihn in UTC oder verbinden Sie stattdessen Ihren Kalender.",
+  "calendarImport.floatingTimezoneRequired": "Wählen Sie die Zeitzone Ihrer Familie, bevor Sie Kalenderzeiten ohne Zeitzone importieren.",
+  "calendarImport.unsupportedRecurrence": "Dieser Export enthält Ausnahmen von Terminserien, die nicht importiert werden können. Verbinden Sie stattdessen Ihren Kalender.",
+  "calendarImport.tooManyEvents": "Verwenden Sie einen Kalenderexport mit höchstens 1.000 Terminen und 200.000 Zeichen.",
+  "calendarImport.floatingDisclosure": "Zeiten ohne Zeitzone wurden für diesen Import in {timezone} interpretiert.",
+  "calendarImport.recurringDisclosure": "Es werden nur die aufgeführten Termine importiert. Terminserien werden weder erweitert noch als wiederkehrende Termine gespeichert."
 }

@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "Votre tableau de bord est personnalisé et prêt à être exploré.",
   "onboardingCopy.kidLogin": "Créez un accès pour {names} — un identifiant et un code PIN suffisent, sans e-mail",
   "onboardingCopy.primaryCalendarPreview": "Aperçu de votre calendrier principal : les 30 prochains jours. Terminer importe ces événements. Les lectures suivantes ajoutent les rendez-vous à venir et appliquent les modifications signalées ; les événements absents d’une lecture sont conservés. Votre calendrier et vos tâches chez le fournisseur restent inchangés.",
-  "onboardingWizard.invalidPreviewTimezone": "Choisissez un fuseau horaire valide."
+  "onboardingWizard.invalidPreviewTimezone": "Choisissez un fuseau horaire valide.",
+  "calendarImport.invalidCalendar": "Cette exportation du calendrier n’a pas pu être lue. Vérifiez le fichier et réessayez.",
+  "calendarImport.invalidDate": "Ce calendrier contient une date ou une heure invalide ou non prise en charge. Rien n’a été importé.",
+  "calendarImport.invalidRange": "Un événement du calendrier a une fin qui ne correspond pas à son début. Rien n’a été importé.",
+  "calendarImport.invalidDuration": "Ce calendrier contient une durée d’événement invalide ou non prise en charge. Rien n’a été importé.",
+  "calendarImport.unsupportedTimezone": "Ce calendrier utilise une définition de fuseau horaire non prise en charge ou contradictoire. Exportez-le en UTC ou connectez votre calendrier.",
+  "calendarImport.floatingTimezoneRequired": "Choisissez le fuseau horaire de votre famille avant d’importer des horaires sans fuseau horaire.",
+  "calendarImport.unsupportedRecurrence": "Cette exportation contient des exceptions de récurrence qui ne peuvent pas être importées. Connectez votre calendrier.",
+  "calendarImport.tooManyEvents": "Utilisez une exportation de calendrier contenant au maximum 1 000 événements et 200 000 caractères.",
+  "calendarImport.floatingDisclosure": "Les horaires sans fuseau horaire ont été interprétés dans le fuseau {timezone} pour cette importation.",
+  "calendarImport.recurringDisclosure": "Seules les occurrences indiquées sont importées. Les séries récurrentes ne sont ni développées ni enregistrées comme événements répétitifs."
 }

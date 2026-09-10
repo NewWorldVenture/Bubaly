@@ -43,6 +43,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { ConnectedCalendar, type CalendarProvider } from '@/components/onboarding/connected-calendar';
 import { isReviewPlan, reviewBillingPath, type ReviewPlan } from '@/lib/billing/review-selection';
 import type { OnboardingOwner } from '@/lib/onboarding/owner';
+import type { IcsImportDisclosure } from '@/lib/onboarding/ics';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
@@ -83,19 +84,41 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   const screenOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId, reviewPlan }), [expectedOwner?.userId, expectedOwner?.familyId, reviewPlan]);
   const currentScreen = useRef(screenOwner);
   currentScreen.current = screenOwner;
+  // Imports belong to a user/family lifetime, independent of the billing query.
+  const calendarOwner = useMemo(() => ({ userId: expectedOwner?.userId, familyId: expectedOwner?.familyId }), [expectedOwner?.userId, expectedOwner?.familyId]);
+  const currentCalendarOwner = useRef(calendarOwner);
+  currentCalendarOwner.current = calendarOwner;
   const mounted = useRef(true);
   const finishing = useRef<typeof screenOwner | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const [step, setStep] = useState<OnboardingStep>('profile');
-  const [draft, setDraft] = useState<OnboardingDraft>(() =>
+  const [storedDraft, setDraft] = useState<OnboardingDraft>(() =>
     emptyDraft({ name: initialName, lastName: initialLastName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
+  const [calendarDraftOwner, setCalendarDraftOwner] = useState(calendarOwner);
+  // A new owner cannot render or submit the previous owner's imported contents,
+  // including the render before the clearing effect has committed.
+  const draft = useMemo(() => calendarDraftOwner === calendarOwner ? storedDraft : { ...storedDraft, importedEvents: [], importSource: '', calendarReceipt: undefined }, [calendarDraftOwner, calendarOwner, storedDraft]);
   const [familyNameTouched, setFamilyNameTouched] = useState(false);
   const [savingOwner, setSavingOwner] = useState<typeof screenOwner | null>(null);
   const saving = savingOwner === screenOwner;
   // The server-computed first brief (timeline · clashes · dinner ideas · time
   // saved), returned by finalize and shown on the celebration screen.
-  const [doneBrief, setDoneBrief] = useState<FirstBrief | null>(null);
+  const [doneResult, setDoneResult] = useState<{ owner: typeof calendarOwner; brief: FirstBrief | null } | null>(null);
+  const doneBrief = doneResult?.owner === calendarOwner ? doneResult.brief : null;
+  // Bound to the exact owner and event array; never enters draft storage or Finish.
+  const [calendarNotice, setCalendarNotice] = useState<{
+    owner: typeof calendarOwner; events: OnboardingDraft['importedEvents']; disclosure: IcsImportDisclosure;
+  } | null>(null);
+  const noteCalendar = useCallback((events: OnboardingDraft['importedEvents'], disclosure?: IcsImportDisclosure) => {
+    if (mounted.current && currentCalendarOwner.current === calendarOwner) setCalendarNotice(disclosure ? { owner: calendarOwner, events, disclosure } : null);
+  }, [calendarOwner]);
+  useEffect(() => {
+    if (calendarDraftOwner === calendarOwner) return;
+    setDraft(previous => ({ ...previous, importedEvents: [], importSource: '', calendarReceipt: undefined }));
+    setCalendarNotice(null);
+    setCalendarDraftOwner(calendarOwner);
+  }, [calendarDraftOwner, calendarOwner]);
 
   const update = useCallback((patch: Partial<OnboardingDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
   const firstName = draft.name.trim().split(' ')[0];
@@ -168,7 +191,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft), expectedOwner);
     if (!mounted.current || currentScreen.current !== screenOwner) return;
     if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
-    setDoneBrief(res.data?.brief ?? null);
+    setDoneResult({ owner: calendarOwner, brief: res.data?.brief ?? null });
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
@@ -228,7 +251,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
           <FamilyPanel draft={draft} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
-        {step === 'value' && <ValuePanel draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} reviewPlan={reviewPlan} expectedOwner={expectedOwner} />}
+        {step === 'value' && <ValuePanel key={`${calendarOwner.userId}:${calendarOwner.familyId}`} draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} reviewPlan={reviewPlan} expectedOwner={expectedOwner}
+          scope={calendarOwner} consentScope={screenOwner} disclosure={calendarNotice?.owner === calendarOwner && calendarNotice.events === draft.importedEvents ? calendarNotice.disclosure : undefined}
+          onDisclosure={noteCalendar} />}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
@@ -354,9 +379,11 @@ function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string;
 }
 
 // ─── Step 3: Value — import a calendar, see the instant payoff ─────────────────
-function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus, reviewPlan, expectedOwner }: {
+function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus, reviewPlan, expectedOwner, scope, consentScope, disclosure, onDisclosure }: {
   draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; calendarProviders: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
   reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
+  scope: object; consentScope: object; disclosure?: IcsImportDisclosure;
+  onDisclosure: (events: OnboardingDraft['importedEvents'], disclosure?: IcsImportDisclosure) => void;
 }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
@@ -367,24 +394,52 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
     draft.importedEvents.length || draft.calendarReceipt ? buildFirstBrief(draft.importedEvents, new Date(), [], draft.timezone) : null);
   const [ignoreConnected, setIgnoreConnected] = useState(false);
   const [calendarName, setCalendarName] = useState('');
+  const currentScope = useRef(scope); currentScope.current = scope;
+  const currentConsentScope = useRef(consentScope); currentConsentScope.current = consentScope;
+  const previewRequest = useRef(0);
+  const previewMounted = useRef(true);
+  const pendingRequest = useRef<number | null>(null);
+  useEffect(() => { previewMounted.current = true; return () => { previewMounted.current = false; }; }, []);
   const onConnectedPreview = useCallback((preview: { events: import('@/lib/onboarding/first-brief').BriefEvent[]; receipt: string; calendarName: string; brief: FirstBrief }) => {
+    if (!previewMounted.current || currentScope.current !== scope || currentConsentScope.current !== consentScope) return;
+    previewRequest.current++;
+    pendingRequest.current = null;
+    setLoading(null);
+    onDisclosure(preview.events);
     setBrief(preview.brief); setCalendarName(preview.calendarName);
     update({ importedEvents: preview.events, importSource: 'url', calendarReceipt: preview.receipt });
     trackOnboarding('value', 'step');
-  }, [update]);
+  }, [update, onDisclosure, scope, consentScope]);
 
   async function run(source: 'paste' | 'demo') {
+    if (!previewMounted.current || currentScope.current !== scope || pendingRequest.current !== null) return;
+    const request = ++previewRequest.current;
+    pendingRequest.current = request;
+    const current = () => previewMounted.current && currentScope.current === scope && request === previewRequest.current;
     setLoading(source);
+    try {
     const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined, timezone: draft.timezone });
-    setLoading(null);
+    if (!current()) return;
     if (!res.ok) { toastError(res.error); return; }
     if (!res.data) { toastError(tr('onboardingWizard.couldNotReadThatCalendar')); return; }
     setBrief(res.data.brief);
     update({ importedEvents: res.data.events, importSource: res.data.source, calendarReceipt: undefined });
+    onDisclosure(res.data.events, res.data.disclosure);
     trackOnboarding('value', 'step');
+    } catch {
+      if (current()) toastError(tr('onboardingWizard.couldNotReadThatCalendar'));
+    } finally {
+      if (pendingRequest.current === request) pendingRequest.current = null;
+      if (current()) setLoading(null);
+    }
   }
 
   function reset() {
+    if (!previewMounted.current || currentScope.current !== scope) return;
+    previewRequest.current++;
+    pendingRequest.current = null;
+    setLoading(null);
+    onDisclosure([]);
     setBrief(null); setIcs('');
     setIgnoreConnected(true);
     update({ importedEvents: [], importSource: '', calendarReceipt: undefined });
@@ -393,6 +448,10 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
   if (brief) {
     return (
       <div className="space-y-4">
+        {(disclosure?.floatingTimezone || disclosure?.recurring) && <div className="space-y-1 rounded-xl border border-border p-3 text-sm text-muted">
+          {disclosure.floatingTimezone && <p>{tr('calendarImport.floatingDisclosure', { timezone: disclosure.floatingTimezone })}</p>}
+          {disclosure.recurring && <p>{tr('calendarImport.recurringDisclosure')}</p>}
+        </div>}
         {draft.calendarReceipt && <p className="rounded-xl border border-border p-3 text-sm text-muted">{calendarName
           ? tr('connectedCalendar.previewReady', { calendar: calendarName })
           : tr('onboardingCopy.primaryCalendarPreview')}</p>}

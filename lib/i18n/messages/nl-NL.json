@@ -12751,5 +12751,15 @@
   "onboardingCopy.dashboardReady": "Je dashboard is gepersonaliseerd en klaar om te verkennen.",
   "onboardingCopy.kidLogin": "Geef {names} toegang — gebruikersnaam en pincode, geen e-mail nodig",
   "onboardingCopy.primaryCalendarPreview": "Voorbeeld uit je primaire agenda: de komende 30 dagen. Afronden importeert deze afspraken. Latere uitlezingen voegen komende afspraken en gemelde wijzigingen toe; afspraken die ontbreken blijven bewaard. Je agenda en taken bij de aanbieder blijven ongewijzigd.",
-  "onboardingWizard.invalidPreviewTimezone": "Kies een geldige tijdzone."
+  "onboardingWizard.invalidPreviewTimezone": "Kies een geldige tijdzone.",
+  "calendarImport.invalidCalendar": "Deze kalenderexport kon niet worden gelezen. Controleer het bestand en probeer het opnieuw.",
+  "calendarImport.invalidDate": "Deze kalender bevat een ongeldige of niet-ondersteunde datum of tijd. Er is niets geïmporteerd.",
+  "calendarImport.invalidRange": "Een kalenderafspraak heeft een eindtijd die niet bij de begintijd past. Er is niets geïmporteerd.",
+  "calendarImport.invalidDuration": "Deze kalender bevat een ongeldige of niet-ondersteunde duur van een afspraak. Er is niets geïmporteerd.",
+  "calendarImport.unsupportedTimezone": "Deze kalender gebruikt een niet-ondersteunde of tegenstrijdige tijdzonedefinitie. Exporteer de kalender in UTC of koppel je kalender.",
+  "calendarImport.floatingTimezoneRequired": "Kies de tijdzone van je gezin voordat je kalendertijden zonder tijdzone importeert.",
+  "calendarImport.unsupportedRecurrence": "Deze export bevat uitzonderingen op herhalingen die niet kunnen worden geïmporteerd. Koppel je kalender.",
+  "calendarImport.tooManyEvents": "Gebruik een kalenderexport met maximaal 1.000 afspraken en 200.000 tekens.",
+  "calendarImport.floatingDisclosure": "Tijden zonder tijdzone zijn voor deze import geïnterpreteerd in {timezone}.",
+  "calendarImport.recurringDisclosure": "Alleen de vermelde afspraken worden geïmporteerd. Terugkerende reeksen worden niet uitgebreid of opgeslagen als herhalende afspraken."
 }
