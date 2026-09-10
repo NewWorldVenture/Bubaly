@@ -62,7 +62,6 @@ const BASELINE = new Set<string>([
   'components/concierge/plan-write-backs.tsx',
   // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message
   // reads keep prior state on error instead of false-emptying; removed.
-  'components/modules/billing-module.tsx',
   // concierge-calls-module fixed under M26 honesty (wave 3b) — the realtime
   // refresh keeps the list on screen when its read fails; removed.
   // grocery-module fixed under A-10 (PLA-0625), then deleted as an unreachable
