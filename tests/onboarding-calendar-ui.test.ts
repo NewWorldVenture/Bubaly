@@ -109,3 +109,26 @@ describe('reachable primary-calendar onboarding controls', () => {
     expect(mocks.receive).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('pricing hint on explicit calendar connection', () => {
+  const expectedOwner = { userId: '11111111-1111-4111-8111-111111111111', familyId: null };
+  it('passes only the typed choice and owner assertion outside the business input', async () => {
+    const tree = render({ reviewPlan: 'plus_annual', expectedOwner });
+    expect(mocks.start).not.toHaveBeenCalled();
+    (button(tree, 'connectedCalendar.google').props.onClick as () => void)();
+    await vi.waitFor(() => expect(mocks.start).toHaveBeenCalledWith({ provider: 'google', family: defaults.family, displayName: 'Ada' }, { expectedOwner, reviewPlan: 'plus_annual' }));
+  });
+  it('an old owner callback cannot start connection after a new owner is rendered', () => {
+    const previous = button(render({ expectedOwner, reviewPlan: 'basic_annual' }), 'connectedCalendar.google').props.onClick as () => void;
+    render({ expectedOwner: { ...expectedOwner, userId: '22222222-2222-4222-8222-222222222222' }, reviewPlan: 'basic_annual' });
+    previous(); expect(mocks.start).not.toHaveBeenCalled(); expect(mocks.assign).not.toHaveBeenCalled();
+  });
+  it('a slow successful old-owner start cannot navigate the new account to its consent URL', async () => {
+    let resolve: (value: unknown) => void = () => {};
+    mocks.start.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    (button(render({ expectedOwner, reviewPlan: 'plus_annual' }), 'connectedCalendar.google').props.onClick as () => void)();
+    render({ expectedOwner: { ...expectedOwner, userId: '22222222-2222-4222-8222-222222222222' }, reviewPlan: 'plus_annual' });
+    resolve({ ok: true, url: '/api/sync/google/auth?onboarding=1' });
+    await Promise.resolve(); await Promise.resolve(); expect(mocks.assign).not.toHaveBeenCalled();
+  });
+});

@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
-import { calendarContinuationCookie, sealCalendarContinuation } from '@/lib/onboarding/calendar-state';
+import { calendarContinuationCookie, readCalendarContinuation, sealCalendarContinuation } from '@/lib/onboarding/calendar-state';
 import { syncOAuthStateCookie } from '@/lib/sync/oauth-state';
 import { buildFinalizePayload, emptyDraft } from '@/lib/onboarding/flow';
+import type { ReviewPlan } from '@/lib/billing/review-selection';
 
 const mock = vi.hoisted(() => ({ db: null as unknown, cookies: new Map<string, string>(), saveProfile: vi.fn(), exchange: vi.fn(), identity: vi.fn(), legacyContext: vi.fn(),
   adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn() }));
@@ -15,7 +16,7 @@ vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
 });
-vi.mock('@/lib/sync/registry', () => ({ getAdapter: () => mock.adapter }));
+vi.mock('@/lib/sync/registry', () => ({ getAdapter: () => mock.adapter, configuredAdapters: () => mock.adapter ? [mock.adapter] : [] }));
 vi.mock('@/lib/sync/providers/google', async (original) => ({ ...await original<typeof import('@/lib/sync/providers/google')>(), exchangeCode: mock.exchange }));
 vi.mock('@/lib/sync/providers/microsoft', async (original) => ({ ...await original<typeof import('@/lib/sync/providers/microsoft')>(), exchangeMicrosoftCalendarReadCode: mock.exchange }));
 vi.mock('@/lib/sync/access-token', () => ({ getProviderAccessToken: async () => 'private-server-token' }));
@@ -31,7 +32,7 @@ vi.mock('@/lib/onboarding/remember', () => ({ rememberOnboardingFacts: async () 
 
 const { startCalendarConnectionAction, previewConnectedCalendarAction } = await import('@/app/onboarding/calendar-actions');
 const { finalizeOnboardingAction } = await import('@/app/onboarding/actions');
-const { default: OnboardingLayout } = await import('@/app/onboarding/layout');
+const { default: OnboardingPage } = await import('@/app/onboarding/page');
 const { GET: googleStart } = await import('@/app/api/sync/google/auth/route');
 const { GET: googleFinish } = await import('@/app/api/sync/google/callback/route');
 const { GET: providerStart } = await import('@/app/api/sync/[provider]/auth/route');
@@ -84,16 +85,16 @@ async function connected() {
   return { accountId, preview: preview.data };
 }
 
-async function pendingOAuth(provider: 'google' | 'microsoft') {
+async function pendingOAuth(provider: 'google' | 'microsoft', reviewPlan?: ReviewPlan) {
   (mock.adapter as { provider: string }).provider = provider;
-  const started = await startCalendarConnectionAction({ provider, family: { name: 'Ada family', timezone: 'UTC' }, displayName: 'Ada' });
+  const started = await startCalendarConnectionAction({ provider, family: { name: 'Ada family', timezone: 'UTC' }, displayName: 'Ada' }, { reviewPlan, expectedOwner: { userId, familyId } });
   if (!started.ok) throw new Error(started.error);
   const response = provider === 'google' ? await googleStart(request(started.url))
     : await providerStart(request(started.url), { params: Promise.resolve({ provider }) });
   const state = new URL(response.headers.get('location')!).searchParams.get('state')!;
   mock.cookies.set(syncOAuthStateCookie(provider), response.cookies.get(syncOAuthStateCookie(provider))!.value);
-  const callback = () => {
-    const req = request(`/api/sync/${provider}/callback?code=approved&state=${state}`);
+  const callback = (result = 'code=approved') => {
+    const req = request(`/api/sync/${provider}/callback?${result}&state=${state}`);
     return provider === 'google' ? googleFinish(req) : providerFinish(req, { params: Promise.resolve({ provider }) });
   };
   return callback;
@@ -233,7 +234,7 @@ describe('onboarding OAuth routes and Finish integration', () => {
     expect(db.table('sync_accounts')[0].sync_direction).toBe('manual');
     // A page reload loses the private receipt, so both the layout and a fresh
     // owned preview must remain reachable even after completion was recorded.
-    await expect(OnboardingLayout({ children: null })).resolves.toBeDefined();
+    await expect(OnboardingPage({})).resolves.toBeDefined();
     const reloaded = await previewConnectedCalendarAction(accountId);
     expect(reloaded.ok).toBe(true);
     if (!reloaded.ok) throw new Error(reloaded.error);
@@ -242,7 +243,7 @@ describe('onboarding OAuth routes and Finish integration', () => {
     expect(db.table('families')).toHaveLength(1);
     expect(db.table('calendar_events')).toHaveLength(1);
     expect(db.table('onboarding_imports')).toHaveLength(1);
-    await expect(OnboardingLayout({ children: null })).rejects.toThrow('redirect:/dashboard');
+    await expect(OnboardingPage({})).rejects.toThrow('redirect:/dashboard');
   });
 
   it('keeps managed members and invitations stable after a partial Finish and a changed provider preview', async () => {
@@ -280,7 +281,7 @@ describe('onboarding OAuth routes and Finish integration', () => {
       return { data: [{ family_id: familyId, created: true }], error: null } as never;
     });
     await connected();
-    await expect(OnboardingLayout({ children: null })).resolves.toBeDefined();
+    await expect(OnboardingPage({})).resolves.toBeDefined();
     expect(db.table('families')).toHaveLength(1);
     expect(db.table('family_members')).toHaveLength(1);
     expect(db.table('user_preferences')[0].active_family_id).toBe(familyId);
@@ -326,5 +327,90 @@ describe('onboarding OAuth routes and Finish integration', () => {
     expect(await startCalendarConnectionAction({ provider: 'google', family: { name: 'Changed', timezone: 'UTC' }, displayName: 'Ada' })).toMatchObject({ ok: false });
     expect(db.table('families')[0].name).toBe('Ada family');
     expect(mock.cookies.size).toBe(0);
+  });
+});
+
+describe('selected pricing continuation at the real onboarding boundaries', () => {
+  const plans = ['basic_monthly', 'basic_annual', 'plus_monthly', 'plus_annual'] as const;
+  it.each(plans)('a completed family reaches the exact %s review before profile or provider reads', async (reviewPlan) => {
+    db.table('onboarding_progress')[0].status = 'completed';
+    const from = vi.spyOn(db, 'from');
+    await expect(OnboardingPage({ searchParams: Promise.resolve({ reviewPlan }) })).rejects.toThrow(`redirect:/dashboard/billing?view=manage&reviewPlan=${reviewPlan}`);
+    expect(from.mock.calls.some(([table]) => table === 'profiles')).toBe(false);
+  });
+  it.each([{}, { reviewPlan: 'plus' }, { reviewPlan: ['plus_annual', 'plus_annual'] }, { reviewPlan: 'plus_annual', checkout: 'basic' }])('completed accounts with no unambiguous choice keep the dashboard destination: %j', async (query) => {
+    db.table('onboarding_progress')[0].status = 'completed';
+    await expect(OnboardingPage({ searchParams: Promise.resolve(query) })).rejects.toThrow('redirect:/dashboard');
+  });
+  it('keeps an unfinished owned family in the wizard with a separate typed hint', async () => {
+    const rendered = await OnboardingPage({ searchParams: Promise.resolve({ reviewPlan: 'plus_annual' }) });
+    expect(rendered.props).toMatchObject({ reviewPlan: 'plus_annual', expectedOwner: { userId, familyId } });
+  });
+  it('a missing-family account stays in onboarding with its authenticated owner', async () => {
+    mock.context.mockResolvedValue({ needsFamily: true });
+    db.replace('family_members', []); db.replace('user_preferences', []);
+    const rendered = await OnboardingPage({ searchParams: Promise.resolve({ reviewPlan: 'basic_annual' }) });
+    expect(rendered.props).toMatchObject({ reviewPlan: 'basic_annual', expectedOwner: { userId, familyId: null } });
+  });
+  it('preserves a valid selection through the signed-out entry without reading a profile', async () => {
+    mock.context.mockResolvedValue(null);
+    const from = vi.spyOn(db, 'from');
+    await expect(OnboardingPage({ searchParams: Promise.resolve({ reviewPlan: 'plus_annual' }) })).rejects.toThrow('redirect:/login?reviewPlan=plus_annual');
+    expect(from).not.toHaveBeenCalled();
+  });
+  it('an unavailable ownership read never becomes completed routing', async () => {
+    const from = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation((table) => { if (table === 'onboarding_progress') throw new Error('read unavailable'); return from(table); });
+    await expect(OnboardingPage({ searchParams: Promise.resolve({ reviewPlan: 'plus_annual' }) })).rejects.toThrow('read unavailable');
+  });
+  for (const provider of ['google', 'microsoft'] as const) {
+    it.each(['connected', 'cancelled', 'unavailable'] as const)(`${provider} returns the annual choice after %s with verified owner/state`, async (status) => {
+      const callback = await pendingOAuth(provider, 'plus_annual');
+      if (status === 'unavailable') mock.exchange.mockRejectedValueOnce(new Error('provider temporarily unavailable'));
+      const response = await callback(status === 'cancelled' ? 'error=access_denied' : 'code=approved');
+      const url = new URL(response.headers.get('location')!);
+      expect(url.searchParams.get('reviewPlan')).toBe('plus_annual');
+      expect(url.searchParams.get('calendarStatus')).toBe(status);
+      if (status !== 'connected') expect(db.table('sync_accounts')).toHaveLength(0);
+    });
+    it.each(['actor', 'family', 'role', 'expired', 'tampered', 'state', 'provider'] as const)(`${provider} never recovers a choice from %s-invalid continuation`, async (change) => {
+      const callback = await pendingOAuth(provider, 'basic_annual');
+      const name = calendarContinuationCookie(provider);
+      const original = readCalendarContinuation(mock.cookies.get(name))!;
+      if (change === 'actor') mock.cookies.set(name, sealCalendarContinuation({ ...original, userId: otherUser }));
+      if (change === 'family') db.table('user_preferences')[0].active_family_id = 'another-family';
+      if (change === 'role') db.table('family_members')[0].role = 'teen';
+      if (change === 'expired') mock.cookies.set(name, sealCalendarContinuation(original, Date.now() - 600_001));
+      if (change === 'tampered') mock.cookies.set(name, `${mock.cookies.get(name)}tampered`);
+      if (change === 'state') mock.cookies.set(syncOAuthStateCookie(provider), 'different-state');
+      if (change === 'provider') mock.cookies.set(name, sealCalendarContinuation({ ...original, provider: provider === 'google' ? 'microsoft' : 'google' }));
+      const url = new URL((await callback('error=access_denied')).headers.get('location')!);
+      expect(url.searchParams.get('reviewPlan')).toBeNull();
+      expect(mock.exchange).not.toHaveBeenCalled();
+      expect(db.table('sync_accounts')).toHaveLength(0);
+    });
+    it(`${provider} disabled feature keeps the verified navigation hint without provider work`, async () => {
+      const callback = await pendingOAuth(provider, 'basic_annual');
+      db.seed('app_settings', [{ key: 'feature_tiers', value: { 'calendar-sync': 'off' } }]);
+      const url = new URL((await callback()).headers.get('location')!);
+      expect(url.searchParams.get('reviewPlan')).toBe('basic_annual');
+      expect(url.searchParams.get('calendarStatus')).toBe('unavailable');
+      expect(mock.exchange).not.toHaveBeenCalled(); expect(db.table('sync_accounts')).toHaveLength(0);
+    });
+  }
+  it.each(['actor', 'family', 'unavailable'] as const)('stale %s Finish and Connect stop before profile, family claim, or cookie writes', async (change) => {
+    const expectedOwner = { userId: change === 'actor' ? otherUser : userId, familyId };
+    if (change === 'family') db.table('user_preferences')[0].active_family_id = otherUser;
+    if (change === 'unavailable') {
+      const from = db.from.bind(db);
+      vi.spyOn(db, 'from').mockImplementation((table) => { if (table === 'user_preferences') throw new Error('read unavailable'); return from(table); });
+    }
+    const claim = vi.spyOn(db, 'rpc');
+    const payload = buildFinalizePayload(emptyDraft({ name: 'Ada', familyName: 'Ada family' }));
+    if (change === 'unavailable') await expect(finalizeOnboardingAction(payload, expectedOwner)).rejects.toThrow('read unavailable');
+    else expect(await finalizeOnboardingAction(payload, expectedOwner)).toMatchObject({ ok: false });
+    expect(await startCalendarConnectionAction({ provider: 'google', family: { name: 'Changed', timezone: 'UTC' }, displayName: 'Changed' }, { expectedOwner, reviewPlan: 'plus_annual' })).toMatchObject({ ok: false });
+    expect(mock.saveProfile).not.toHaveBeenCalled(); expect(claim).not.toHaveBeenCalled(); expect(mock.cookies.size).toBe(0);
+    expect(db.table('families')[0].name).toBe('Ada family');
   });
 });

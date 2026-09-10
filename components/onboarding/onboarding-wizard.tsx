@@ -41,17 +41,26 @@ import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { ConnectedCalendar, type CalendarProvider } from '@/components/onboarding/connected-calendar';
+import { isReviewPlan, reviewBillingPath, type ReviewPlan } from '@/lib/billing/review-selection';
+import type { OnboardingOwner } from '@/lib/onboarding/owner';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
 const isLikelyEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
 
-export function OnboardingWizard({ initialName = '', initialLastName = '', calendarProviders = [], calendarAccountId, calendarStatus }: {
+export function OnboardingWizard({ initialName = '', initialLastName = '', calendarProviders = [], calendarAccountId, calendarStatus, reviewPlan, expectedOwner }: {
   initialName?: string; initialLastName?: string; calendarProviders?: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+  reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
 }) {
   const tr = useTranslations();
   const router = useRouter();
   const { error: toastError } = useToast();
+  const screenKey = `${expectedOwner?.userId ?? ''}:${expectedOwner?.familyId ?? ''}:${reviewPlan ?? ''}`;
+  const currentScreen = useRef(screenKey);
+  currentScreen.current = screenKey;
+  const mounted = useRef(true);
+  const finishing = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const [step, setStep] = useState<OnboardingStep>('profile');
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
@@ -125,16 +134,19 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
   }, [step, current, total]);
 
   async function finish() {
+    if (!mounted.current || currentScreen.current !== screenKey || finishing.current) return;
+    finishing.current = true;
     setSaving(true);
     try {
-    const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
+    const res = await finalizeOnboardingAction(buildFinalizePayload(draft), expectedOwner);
+    if (!mounted.current || currentScreen.current !== screenKey) return;
     if (!res.ok) { toastError(res.error ?? tr('actions.couldNotFinishSettingUp2')); return; }
     setDoneBrief(res.data?.brief ?? null);
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
-    } catch { toastError(tr('actions.couldNotFinishSettingUp2')); }
-    finally { setSaving(false); }
+    } catch { if (mounted.current && currentScreen.current === screenKey) toastError(tr('actions.couldNotFinishSettingUp2')); }
+    finally { finishing.current = false; if (mounted.current && currentScreen.current === screenKey) setSaving(false); }
   }
 
   function advance() {
@@ -147,6 +159,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
 
   return (
     <div className="rounded-3xl border border-border bg-surface/40 p-6 shadow-sm sm:p-8">
+      {calendarStatus === 'unavailable' && !isReviewPlan(reviewPlan) && (
+        <Link href="/pricing" className="mb-4 block text-sm font-medium text-brand-text underline">{tr('onboardingWizard.reviewFamilyPlans')}</Link>
+      )}
       {/* Screen-reader-only live region: announces navigation between steps. */}
       <p className="sr-only" role="status" aria-live="polite">{liveMsg}</p>
       {step !== 'done' && (
@@ -183,11 +198,13 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
           <FamilyPanel draft={draft} firstName={firstName} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
-        {step === 'value' && <ValuePanel draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} />}
+        {step === 'value' && <ValuePanel draft={draft} update={update} calendarProviders={calendarProviders} calendarAccountId={calendarAccountId} calendarStatus={calendarStatus} reviewPlan={reviewPlan} expectedOwner={expectedOwner} />}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
-        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief} onGo={() => { router.push('/dashboard'); router.refresh(); }} />}
+        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief}
+          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenKey) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
+          onGo={() => { if (mounted.current && currentScreen.current === screenKey) { router.push('/dashboard'); router.refresh(); } }} />}
       </div>
 
       {step !== 'done' && (
@@ -306,8 +323,9 @@ function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string;
 }
 
 // ─── Step 3: Value — import a calendar, see the instant payoff ─────────────────
-function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus }: {
+function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calendarStatus, reviewPlan, expectedOwner }: {
   draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; calendarProviders: CalendarProvider[]; calendarAccountId?: string; calendarStatus?: string;
+  reviewPlan?: ReviewPlan | null; expectedOwner?: OnboardingOwner;
 }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
@@ -431,6 +449,7 @@ function ValuePanel({ draft, update, calendarProviders, calendarAccountId, calen
   return (
     <div className="space-y-4">
       <ConnectedCalendar providers={calendarProviders} accountId={ignoreConnected ? undefined : calendarAccountId}
+        reviewPlan={reviewPlan} expectedOwner={expectedOwner}
         status={ignoreConnected ? undefined : calendarStatus} family={{ name: draft.familyName, timezone: draft.timezone }} displayName={draft.name} onPreview={onConnectedPreview} />
       <div className="rounded-2xl border border-border p-4">
         <label htmlFor="ics-paste" className="mb-2 flex items-center gap-2 text-sm font-semibold">
@@ -648,7 +667,7 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 }
 
 // ─── Step 6: Done ─────────────────────────────────────────────────────────────
-function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void }) {
+function DonePanel({ draft, firstName, brief, onGo, onReview }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void; onReview?: () => void }) {
   const tr = useTranslations();
   const hasBrief = !!brief && (brief.todayCount > 0 || brief.dinnerIdeas.length > 0 || brief.timeSavedMinutes > 0 || brief.conflicts.length > 0);
   const memberCount = draft.members.length;
@@ -726,7 +745,8 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
         <DoOneThingCard thing={pickFirstThing({ eventsToday: brief?.todayCount ?? 0, overdueTasks: 0, openGrocery: 0, birthdaysSoon: 0 })} />
       </div>
 
-      <Button className="mt-3 w-full" onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
+      {onReview && <Button className="mt-3 w-full" onClick={onReview}>{tr('onboardingWizard.reviewSelectedPlan')} <ArrowRight className="ml-1 h-4 w-4" /></Button>}
+      <Button className="mt-3 w-full" variant={onReview ? 'secondary' : 'primary'} onClick={onGo}>{tr('onboardingWizard.startExploring')} <ArrowRight className="ml-1 h-4 w-4" /></Button>
 
       {kids.length > 0 && (
         <Link

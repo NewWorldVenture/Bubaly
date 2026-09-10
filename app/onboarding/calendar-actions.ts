@@ -13,26 +13,33 @@ import { previewConnectedCalendar } from '@/lib/services/onboarding-calendar';
 import { assertOnboardingCalendarAccess } from '@/lib/services/onboarding-calendar/access';
 import { buildFirstBrief } from '@/lib/onboarding/first-brief';
 import type { ServiceScope } from '@/lib/services/types';
+import { isReviewPlan, type ReviewPlan } from '@/lib/billing/review-selection';
+import { onboardingOwnerSchema, type OnboardingOwner } from '@/lib/onboarding/owner';
+import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
 
 const startSchema = z.object({ provider: onboardingCalendarProvider, family: createFamilySchema,
   displayName: z.string().trim().min(1).max(60) });
-export async function startCalendarConnectionAction(input: z.infer<typeof startSchema>) {
+const continuationInput = z.object({ expectedOwner: onboardingOwnerSchema.optional(), reviewPlan: z.custom<ReviewPlan>(isReviewPlan).optional() }).strict();
+export async function startCalendarConnectionAction(input: z.infer<typeof startSchema>, navigation?: { expectedOwner?: OnboardingOwner; reviewPlan?: ReviewPlan }) {
   const t = await getTranslations();
   try {
     const parsed = startSchema.safeParse(input);
-    if (!parsed.success) return { ok: false as const, error: t('connectedCalendar.unavailable') };
+    const hint = continuationInput.safeParse(navigation ?? {});
+    if (!parsed.success || !hint.success) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     const { provider, family, displayName } = parsed.data;
     if (!getAdapter(provider)?.isConfigured() || !hasEncryptionKey()) return { ok: false as const, error: t('connectedCalendar.unavailable') };
     const db = await createServer();
     const auth = await db.auth.getUser();
     if (auth.error || !auth.data.user) return { ok: false as const, error: t('connectedCalendar.unavailable') };
+    if (!await verifyOnboardingOwner(db, auth.data.user.id, hint.data.expectedOwner)) return { ok: false as const, error: t('onboardingWizard.contextChanged') };
     const scope: ServiceScope = { db: createServiceClient(), familyId: '', userId: auth.data.user.id, role: 'parent', actorKind: 'member', memberId: null, tz: family.timezone };
     await assertOnboardingCalendarAccess(scope);
     const prepared = await prepareCalendarFamily(scope, { ...family, displayName });
     if (!prepared.ok) return prepared;
     await assertOnboardingCalendarAccess({ ...scope, familyId: prepared.data.familyId });
     const state = `onboarding.${createSyncOAuthState()}`;
-    (await cookies()).set(calendarContinuationCookie(provider), sealCalendarContinuation({ userId: scope.userId!, familyId: prepared.data.familyId, provider, state }), {
+    (await cookies()).set(calendarContinuationCookie(provider), sealCalendarContinuation({ userId: scope.userId!, familyId: prepared.data.familyId, provider, state,
+      ...(hint.data.reviewPlan ? { reviewPlan: hint.data.reviewPlan } : {}) }), {
       httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: syncOAuthStatePath(provider), maxAge: 600,
     });
     return { ok: true as const, url: `/api/sync/${provider}/auth?onboarding=1` };

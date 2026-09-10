@@ -33,6 +33,8 @@ import { rememberOnboardingFacts } from '@/lib/onboarding/remember';
 import { readCalendarPreview } from '@/lib/onboarding/calendar-state';
 import { finishConnectedCalendar, enableConnectedCalendar, validateConnectedCalendarReceipt } from '@/lib/services/onboarding-calendar';
 import type { ServiceScope } from '@/lib/services/types';
+import type { OnboardingOwner } from '@/lib/onboarding/owner';
+import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -574,14 +576,17 @@ export async function finalizeOnboardingAction(input: {
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[]; receipt?: string };
-}): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
+}, expectedOwner?: OnboardingOwner): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
   const t = await getTranslations();
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
 
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
   if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
+
+  if (!await verifyOnboardingOwner(supabase, auth.user.id, expectedOwner)) return { ok: false, error: t('onboardingWizard.contextChanged') };
 
   const { profile, family, details, members, appearance, calendarImport } = parsed.data;
   const connectedReceipt = calendarImport.receipt ? readCalendarPreview(calendarImport.receipt, auth.user.id, calendarImport.events) : null;

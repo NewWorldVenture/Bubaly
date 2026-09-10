@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { encryptSecret, decryptSecret } from '@/lib/sync/crypto';
 import { onboardingRunKey } from '@/lib/onboarding/idempotency';
 import type { BriefEvent } from '@/lib/onboarding/first-brief';
+import { isReviewPlan, type ReviewPlan } from '@/lib/billing/review-selection';
 
 export type OnboardingCalendarProvider = 'google' | 'microsoft';
 export const onboardingCalendarProvider = z.enum(['google', 'microsoft']);
@@ -14,6 +15,7 @@ const canonicalCiphertext = (value: string) => {
 const continuationSchema = z.object({
   version: z.literal(1), kind: z.literal('onboarding_calendar'), userId: z.string().uuid(), familyId: z.string().uuid(),
   provider: onboardingCalendarProvider, state: z.string().min(20).max(100), expiresAt: z.number().finite(),
+  reviewPlan: z.custom<ReviewPlan>(isReviewPlan).optional(),
 });
 export type CalendarContinuation = z.infer<typeof continuationSchema>;
 export function sealCalendarContinuation(input: Omit<CalendarContinuation, 'version' | 'kind' | 'expiresAt'>, now = Date.now()): string {
