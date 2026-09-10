@@ -142,15 +142,15 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
             return (
               <li key={i}>
                 <a href={meta.href}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 hover:bg-surface/70 transition-colors group">
+                  className="grid grid-cols-[6px_20px_minmax(0,1fr)_16px] items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-surface/40 px-3 py-2.5 hover:bg-surface/70 transition-colors group sm:grid-cols-[6px_20px_minmax(0,1fr)_auto_16px]">
                   <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', u.dot)} />
                   <span className="text-base flex-shrink-0">{meta.emoji}</span>
                   <span className="flex-1 min-w-0">
                     <span className="text-sm font-medium text-fg block truncate">{item.title}</span>
                     <span className="text-xs text-muted block truncate">{item.detail}</span>
                   </span>
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0', u.cls)}>{tr(u.labelKey)}</span>
-                  <ChevronRight className="h-4 w-4 text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity flex-shrink-0" />
+                  <span className={cn('col-start-3 row-start-2 justify-self-start text-xs px-2 py-0.5 rounded-full border sm:col-start-4 sm:row-start-1', u.cls)}>{tr(u.labelKey)}</span>
+                  <ChevronRight className="col-start-4 row-start-1 h-4 w-4 text-muted opacity-100 sm:col-start-5 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity" />
                 </a>
               </li>
             );
