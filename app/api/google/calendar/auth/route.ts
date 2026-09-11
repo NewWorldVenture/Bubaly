@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getGoogleOAuthUrl } from '@/lib/google';
@@ -10,11 +10,11 @@ import { getGoogleOAuthUrl } from '@/lib/google';
 // callback, so a forged callback can't link an attacker's Google account to a
 // victim (or vice-versa). The connected user is resolved from the session on the
 // callback, never from `state`.
-export async function GET() {
+export async function GET(req: NextRequest) {
   await requireUserContext(); // must be signed in; identity comes from the session
 
   const state = randomBytes(32).toString('base64url');
-  const res = NextResponse.redirect(getGoogleOAuthUrl(state));
+  const res = NextResponse.redirect(getGoogleOAuthUrl(state, req.nextUrl.origin));
   res.cookies.set('gcal_oauth_state', state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

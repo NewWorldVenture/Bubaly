@@ -7,10 +7,50 @@ export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_CALENDAR_URL = 'https://www.googleapis.com/calendar/v3';
 
-export function getGoogleOAuthUrl(state: string): string {
+/**
+ * The `redirect_uri` for the Calendar OAuth flow.
+ *
+ * Both the authorization request and the token exchange must send the SAME
+ * value — Google rejects the exchange otherwise — so both go through here
+ * rather than building the string twice.
+ *
+ * This used to be `${process.env.NEXT_PUBLIC_APP_URL}/api/...` with no
+ * fallback: the only two sites in the codebase interpolating that variable
+ * bare. Unset, it produced the literal string
+ * `undefined/api/google/calendar/callback`, and Google answers a malformed
+ * redirect_uri with the consent screen replaced by:
+ *
+ *   Access blocked: Authorization Error
+ *   Error 400: invalid_request
+ *
+ * Order: an explicit override first (it must match what is registered in the
+ * Google Cloud console, which the request's own origin need not); then the
+ * configured app URL, and only if that is missing or unusable, the origin the
+ * request actually arrived on. The last step cannot produce `undefined`, which
+ * is the whole point — a preview or a fresh environment degrades to a working
+ * flow instead of a blocked one.
+ */
+export function googleCalendarRedirectUri(origin: string): string {
+  const override = process.env.GOOGLE_CALENDAR_REDIRECT_URI?.trim();
+  if (override) return override;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const base = appUrl && /^https?:\/\/\S+$/.test(appUrl) ? appUrl : origin;
+  return `${base.replace(/\/+$/, '')}/api/google/calendar/callback`;
+}
+
+export function getGoogleOAuthUrl(state: string, origin: string): string {
+  // `process.env.GOOGLE_CLIENT_ID!` used to reach Google as the string
+  // "undefined" and come back as the same opaque Error 400 as a bad
+  // redirect_uri. Failing here names the missing variable instead.
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!clientId) {
+    throw new Error(
+      'GOOGLE_CLIENT_ID is not set, so the consent request would be rejected as Error 400: invalid_request.',
+    );
+  }
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/google/calendar/callback`,
+    client_id: clientId,
+    redirect_uri: googleCalendarRedirectUri(origin),
     response_type: 'code',
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
     access_type: 'offline',
@@ -20,7 +60,13 @@ export function getGoogleOAuthUrl(state: string): string {
   return `${GOOGLE_AUTH_URL}?${params}`;
 }
 
-export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
+/**
+ * `redirectUri` is REQUIRED and must be the same value the consent request
+ * sent — Google compares them and rejects a mismatch. Passing it in rather than
+ * rebuilding it here is what makes that guarantee structural: one call to
+ * googleCalendarRedirectUri per flow, not two that can disagree.
+ */
+export async function exchangeGoogleCode(code: string, redirectUri: string): Promise<GoogleToken> {
   const res = await fetchExternal(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -28,7 +74,7 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
       code,
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/google/calendar/callback`,
+      redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
   }, 15_000);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { createServer } from '@/lib/supabase/server';
-import { exchangeGoogleCode, type GoogleToken } from '@/lib/google';
+import { exchangeGoogleCode, googleCalendarRedirectUri, type GoogleToken } from '@/lib/google';
 
 // Google redirects here after the user grants calendar access. Exchanges the code
 // for tokens and stores them on the SESSION user's user_preferences.
@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
     const userId = auth.user?.id;
     if (!userId) return redirect('error');
 
-    const token: GoogleToken = await exchangeGoogleCode(code);
+    // Same origin the consent request was built from, so the two redirect_uri
+    // values Google compares are produced by one function, not two.
+    const token: GoogleToken = await exchangeGoogleCode(code, googleCalendarRedirectUri(origin));
 
     const { data: prefs } = await supabase
       .from('user_preferences')
