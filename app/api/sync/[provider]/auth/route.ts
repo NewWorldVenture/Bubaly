@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
 
   // Env override (e.g. MICROSOFT_SYNC_REDIRECT_URI) wins — needed when the app
   // sits behind a proxy/custom domain; otherwise derive from the request origin.
-  const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]
+  const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]?.trim()
     || `${origin}/api/sync/${provider}/callback`;
   // State is opaque and browser-bound; identity is always derived from the
   // callback session rather than from a caller-controlled query parameter.

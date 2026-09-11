@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import {
   fetchGoogleCalendarEvents,
   getValidAccessToken,
+  isGoogleReconnectRequired,
   type GoogleToken,
 } from '@/lib/google';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -40,7 +41,32 @@ export async function POST() {
     const timeMin = new Date().toISOString();
     const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { token: refreshedToken, accessToken } = await getValidAccessToken(stored);
+    let refreshedToken: GoogleToken;
+    let accessToken: string;
+    try {
+      ({ token: refreshedToken, accessToken } = await getValidAccessToken(stored));
+    } catch (err) {
+      if (!isGoogleReconnectRequired(err)) throw err;
+      // The grant is dead, so what is stored is not a connection any more.
+      // Clearing it is what puts the "Connect Google" button back in front of
+      // the user: GET below reports `connected` from this same value, so
+      // leaving a corpse there would keep showing "Sync" for a calendar that
+      // can never sync. Only a DEFINITIVE revocation reaches here — a timeout
+      // or a 5xx rethrows above and leaves the connection alone.
+      // Null rather than `delete`: GET reads `googleCalendarToken?.accessToken`,
+      // so null already answers `connected: false`, and it keeps the same shape
+      // the refresh path writes a line below instead of two ways to say "gone".
+      const cleared = { ...np, googleCalendarToken: null };
+      await supabase
+        .from('user_preferences')
+        .upsert({ user_id: ctx.user.id, notification_prefs: cleared }, { onConflict: 'user_id' });
+      // 409, not 500: nothing is broken on our side and retrying will not help.
+      // `reconnect` is the machine-readable half the client keys off.
+      return NextResponse.json(
+        { error: t('sync.googleAccessExpiredReconnect'), reconnect: true },
+        { status: 409 },
+      );
+    }
 
     // Persist refreshed token if it changed
     if (refreshedToken.accessToken !== stored.accessToken) {

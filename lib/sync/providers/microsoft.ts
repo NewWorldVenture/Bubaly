@@ -36,7 +36,14 @@ export function isMicrosoftSyncConfigured(): boolean {
   return !!(microsoftClientId() && microsoftClientSecret());
 }
 export function microsoftRedirectUri(origin: string): string {
-  return process.env.MICROSOFT_SYNC_REDIRECT_URI ?? `${origin}/api/sync/microsoft/callback`;
+// `||`, not `??`: a present-but-BLANK value must not defeat the fallback.
+// `.env.example` ships `MICROSOFT_SYNC_REDIRECT_URI=` empty, and `??` treats ""
+// as a real value — so the onboarding leg sent a literal `redirect_uri=` to the
+// provider (Entra answers AADSTS900144) while the dashboard leg, which already
+// used `||` in app/api/sync/[provider]/{auth,callback}, worked fine. The two
+// legs of one flow disagreeing is the bug; the provider compares the two URIs.
+// Trimmed because the value is sent byte-exact and stray whitespace is rejected.
+  return process.env.MICROSOFT_SYNC_REDIRECT_URI?.trim() || `${origin}/api/sync/microsoft/callback`;
 }
 /** offline_access → persistent refresh token; openid/email → identity. */
 export function microsoftScopes(): string {

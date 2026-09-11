@@ -327,7 +327,17 @@ export function CalendarModule() {
     setSyncing(true);
     try {
       const res = await fetch('/api/google/calendar/sync', { method: 'POST' });
-      const json = await res.json() as { synced?: number; error?: string };
+      const json = await res.json() as { synced?: number; error?: string; reconnect?: boolean };
+      // A revoked or expired Google grant is not a failed sync — it is a
+      // disconnected calendar. The server has already cleared the dead token,
+      // so flipping this flag swaps the Sync button back to Connect Google, and
+      // the toast names the one thing the user can actually do about it. Left
+      // as a generic "Sync failed" this recurred weekly with no way forward.
+      if (json.reconnect) {
+        setGcalConnected(false);
+        toastError(json.error ?? tr('sync.googleAccessExpiredReconnect'));
+        return;
+      }
       if (json.error) throw new Error(json.error);
       success(`Synced ${json.synced} events`); void refresh();
     } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }

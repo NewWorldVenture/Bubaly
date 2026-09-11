@@ -13442,5 +13442,6 @@
   "briefingView.nextEvent": "Hierna: {title} om {time}",
   "briefingView.available": "Beschikbaar",
   "briefingView.oneEvent": "{count} afspraak",
-  "briefingView.manyEvents": "{count} afspraken"
+  "briefingView.manyEvents": "{count} afspraken",
+  "sync.googleAccessExpiredReconnect": "De Google-toegang is verlopen. Koppel je agenda opnieuw om te blijven synchroniseren."
 }

@@ -13442,5 +13442,6 @@
   "briefingView.nextEvent": "Después: {title} a las {time}",
   "briefingView.available": "Disponible",
   "briefingView.oneEvent": "{count} evento",
-  "briefingView.manyEvents": "{count} eventos"
+  "briefingView.manyEvents": "{count} eventos",
+  "sync.googleAccessExpiredReconnect": "El acceso a Google ha caducado. Vuelve a conectar tu calendario para seguir sincronizando."
 }

@@ -87,6 +87,32 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
   };
 }
 
+/**
+ * The grant is gone: the refresh token was expired, revoked, or issued to a
+ * different client. No retry brings it back — only the user re-consenting.
+ *
+ * This is NOT an exotic case. While the OAuth app's publishing status is
+ * "Testing", Google expires refresh tokens after SEVEN DAYS, so every connected
+ * calendar lands here weekly until the app is verified and published. A user
+ * also reaches it by revoking access from their Google account page.
+ *
+ * Kept distinct from an ordinary failure for the same reason a session is:
+ * a rate limit, a 5xx or a dropped connection must not read as "disconnected".
+ */
+export class GoogleReconnectRequired extends Error {
+  constructor(message = 'Google access needs to be reconnected') {
+    super(message);
+    this.name = 'GoogleReconnectRequired';
+  }
+}
+
+/** True only for a definitive revoked/expired grant. */
+export function isGoogleReconnectRequired(error: unknown): boolean {
+  if (error instanceof GoogleReconnectRequired) return true;
+  return typeof error === 'object' && error !== null
+    && (error as { name?: unknown }).name === 'GoogleReconnectRequired';
+}
+
 export async function refreshGoogleToken(refreshToken: string): Promise<GoogleToken> {
   const res = await fetchExternal(GOOGLE_TOKEN_URL, {
     method: 'POST',
@@ -98,7 +124,14 @@ export async function refreshGoogleToken(refreshToken: string): Promise<GoogleTo
       grant_type: 'refresh_token',
     }),
   }, 15_000);
-  if (!res.ok) throw new Error(`Google token refresh failed: ${res.status}`);
+  if (!res.ok) {
+    // Google answers a dead grant with 400 + `error: "invalid_grant"`. That is
+    // the only shape that means reconnect; everything else is a failure to be
+    // retried, not a disconnection.
+    const body = await res.text().catch(() => '');
+    if (res.status === 400 && /invalid_grant/.test(body)) throw new GoogleReconnectRequired();
+    throw new Error(`Google token refresh failed: ${res.status}`);
+  }
   const data = await readBoundedResponseJson<{ access_token: string; expires_in: number }>(res, 64 * 1024);
   return {
     accessToken: data.access_token,
@@ -111,7 +144,7 @@ export async function getValidAccessToken(token: GoogleToken): Promise<{ token: 
   if (token.expiresAt - 60_000 > Date.now()) {
     return { token, accessToken: token.accessToken };
   }
-  if (!token.refreshToken) throw new Error('No refresh token — user must reconnect Google');
+  if (!token.refreshToken) throw new GoogleReconnectRequired('No refresh token stored');
   const refreshed = await refreshGoogleToken(token.refreshToken);
   return { token: refreshed, accessToken: refreshed.accessToken };
 }
