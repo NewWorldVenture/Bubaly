@@ -35,7 +35,14 @@ export function isGoogleSyncConfigured(): boolean {
 }
 /** Redirect URI must be identical in the auth request and the token exchange. */
 export function googleSyncRedirectUri(origin: string): string {
-  return process.env.GOOGLE_SYNC_REDIRECT_URI ?? `${origin}/api/sync/google/callback`;
+// `||`, not `??`: a present-but-BLANK value must not defeat the fallback.
+// `.env.example` ships `GOOGLE_SYNC_REDIRECT_URI=` empty, and `??` treats ""
+// as a real value — so the onboarding leg sent a literal `redirect_uri=` to the
+// provider (Google rejects it) while the dashboard leg, which already
+// used `||` in app/api/sync/[provider]/{auth,callback}, worked fine. The two
+// legs of one flow disagreeing is the bug; the provider compares the two URIs.
+// Trimmed because the value is sent byte-exact and stray whitespace is rejected.
+  return process.env.GOOGLE_SYNC_REDIRECT_URI?.trim() || `${origin}/api/sync/google/callback`;
 }
 /** Scopes assembled from env (calendar + readonly + tasks), plus identity. */
 export function googleSyncScopes(): string {

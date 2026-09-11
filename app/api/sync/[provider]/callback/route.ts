@@ -41,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     const ctx = await requireUserContext();
 
     // Must match the auth leg exactly: same env override, same origin fallback.
-    const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]
+    const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]?.trim()
       || `${origin}/api/sync/${provider}/callback`;
     const tokens = await adapter.exchangeCode(code, redirectUri);
     const identity = await adapter.getAccountIdentity(tokens.accessToken).catch(() => null);
