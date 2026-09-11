@@ -91,6 +91,53 @@ separates `RLS DISABLED`, deny-by-default, manager-gated, guarded-stray and
 open, and names the offending policy. Validated against PostgreSQL 16.13 across
 all of those states.
 
+### 0.2 The boundary read (2026-09-11): closed, on all ten
+
+That query was run against production. Every one of the ten money tables:
+
+```
+table_exists true · rls_enabled true · restrictive_guards 3 · permissive_writes 3
+ungated_permissive_writes 0 · offending_policies NULL
+verdict: CLOSED - every write is manager-gated
+```
+
+Three guards on **both** the wallet and the finance group is `0275`'s signature
+(`0254` reaches the wallet group only), so `0254` and `0275` are both present in
+the schema. **There is no live money finding, and the §4 repair is unblocked.**
+
+`moneyWriteVerdict` now reports this same way rather than by omission: it reads
+`tables[].rls`, lists `rlsDisabled` / `noWritePolicy` / `absent` explicitly, and
+counts RLS-off as exploitable on its own. A snapshot too old to carry the table
+list reports `rlsKnown: false` instead of guessing.
+
+#### What did NOT reconcile
+
+The §0.1 pre-flight said `0254` **NOT present** — no restrictive policy at all
+on `wallet_transactions`. This read says three. Same project, same `main`
+branch, hours apart. Both cannot describe one database at one moment, and the
+probe in question was a plain `exists(... and not polpermissive)`, so it is not
+a subtle predicate.
+
+Two readings agree that every table is guarded — the 2026-09-07 audit and this
+one — and the single `0254` row disagrees with both. That does not make it
+noise. It was never explained, and only two explanations fit:
+
+- **Someone applied `0254`/`0275` by hand between the two reads.** Then all is
+  consistent, and that is simply a fourth hand-applied migration the replay will
+  no-op through.
+- **Nothing was applied.** Then restrictive policies on a money table appeared
+  between two reads with no migration behind them — drift, in the same table
+  group §5 already documents drifting once before. Benign today because the
+  guards are present and correct; not benign as a mechanism, because whatever
+  adds guards unasked can drop them unasked.
+
+**If you are here and do not know which it was, treat it as the second.** Run
+the boundary query again and compare against the block above before the replay:
+a second unexplained change is drift, confirmed. The cheap standing check is to
+run it on a schedule and diff — nothing in this repository currently records
+*when* a money policy changed, which is why this could not be settled after the
+fact.
+
 ---
 
 ## 1. Why the finding is real

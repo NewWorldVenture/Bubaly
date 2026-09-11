@@ -139,17 +139,79 @@ export async function readProductionMigrationState({ projectRef, token, fetchImp
  * An open write on a guarded table is reportable but not exploitable — that is
  * the wallet finding, and LB-016 explains why halting on it adds nothing.
  */
+/** The ten tables the money boundary covers, in the order the SQL lists them. */
+export const MONEY_TABLES = [
+  'family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
+  'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals',
+];
+
+/**
+ * Can a non-manager write to a money table?
+ *
+ * This used to reason from `moneyWritePolicies` alone, which left two states
+ * invisible — both of which report as clean:
+ *
+ *  1. RLS DISABLED. Every policy is inert, so the table has no ungated
+ *     permissive write and is writable by anyone holding the table grant. The
+ *     snapshot has carried `tables[].rls` all along; this never read it.
+ *     Verified on PostgreSQL 16.13: a table with RLS off, three restrictive
+ *     guards still present and zero ungated writes is CLEAN by a policy-only
+ *     rule and open in fact.
+ *
+ *  2. NO WRITE POLICY AT ALL. `moneyWritePolicies` only contains tables that
+ *     have at least one write policy, so a table with none never appeared in
+ *     `unguarded` and `exploitable` stayed false. That state is genuinely
+ *     closed when RLS is on — RLS denies what no policy allows — but it was
+ *     being reported by omission rather than by decision, and it is why
+ *     `unguarded: []` was glossed in the runbook as "every table has a guard"
+ *     when it only ever meant "no table that has a write policy lacks a guard".
+ *
+ * The verdict vocabulary matches docs/audit/money-boundary-state.sql so the
+ * automated check and the hand-run query say the same words.
+ */
 export function moneyWriteVerdict(snapshot) {
   const rows = snapshot.moneyWritePolicies ?? [];
+  const tableList = Array.isArray(snapshot.tables) ? snapshot.tables : [];
+  const rlsByTable = new Map(tableList.map((t) => [t.name, t.rls === true]));
+  // An older snapshot predating the table list cannot answer the RLS question.
+  // Say so rather than defaulting either way: claiming "RLS is on" would invent
+  // a guarantee, and claiming "RLS is off" would invent a finding.
+  const rlsKnown = tableList.length > 0;
+
   const openWrites = rows
     .filter((r) => r.permissive && !r.managerGated)
     .map((r) => `${r.table}.${r.name} (${r.command})`);
   const guarded = new Set(rows.filter((r) => !r.permissive).map((r) => r.table));
-  const unguarded = [...new Set(rows.map((r) => r.table))].filter((t) => !guarded.has(t)).sort();
+  const withWritePolicy = new Set(rows.map((r) => r.table));
+
+  const present = rlsKnown
+    ? MONEY_TABLES.filter((t) => rlsByTable.has(t))
+    : [...withWritePolicy].filter((t) => MONEY_TABLES.includes(t));
+
+  const rlsDisabled = rlsKnown ? present.filter((t) => !rlsByTable.get(t)).sort() : [];
+  const unguarded = present.filter((t) => withWritePolicy.has(t) && !guarded.has(t)).sort();
+  const noWritePolicy = present.filter((t) => !withWritePolicy.has(t)).sort();
+  const absent = rlsKnown ? MONEY_TABLES.filter((t) => !rlsByTable.has(t)).sort() : [];
+
+  const verdicts = Object.fromEntries(MONEY_TABLES.map((t) => {
+    if (rlsKnown && !rlsByTable.has(t)) return [t, 'table absent'];
+    if (rlsDisabled.includes(t)) return [t, 'OPEN - RLS DISABLED'];
+    if (noWritePolicy.includes(t)) return [t, 'CLOSED - RLS on, no write policy grants access'];
+    if (!openWrites.some((w) => w.startsWith(`${t}.`))) return [t, 'CLOSED - every write is manager-gated'];
+    if (guarded.has(t)) return [t, 'closed by restrictive guard'];
+    return [t, 'OPEN - non-manager can write'];
+  }).filter(([, v]) => v !== undefined));
+
   return {
     openWrites,
     unguarded,
-    exploitable: openWrites.some((w) => unguarded.includes(w.split('.')[0])),
+    rlsDisabled,
+    noWritePolicy,
+    absent,
+    rlsKnown,
+    verdicts,
+    // RLS off is exploitable on its own: the policies below it do not apply.
+    exploitable: rlsDisabled.length > 0 || openWrites.some((w) => unguarded.includes(w.split('.')[0])),
     runbook: 'docs/runbooks/LB-016-wallet-permissive-policy-finding.md',
   };
 }

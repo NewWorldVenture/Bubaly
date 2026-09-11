@@ -137,3 +137,81 @@ describe('money write verdict', () => {
     expect(CATALOG_QUERY).not.toMatch(/'usingExpr'|'checkExpr'|'qual',\s*qual/);
   });
 });
+
+// Two states reported as CLEAN by a policy-only rule. Both were reachable by
+// this verdict for as long as it existed, and §0 of the runbook glossed the
+// result as a stronger guarantee than the data supported.
+describe('money write verdict — the states a policy-only rule cannot see', () => {
+  const tables = (over: Record<string, boolean> = {}) =>
+    ['family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
+     'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals']
+      .map((name) => ({ name, rls: over[name] ?? true }));
+
+  const gated = (table: string) => ([
+    { table, name: `${table}_mng_insert`, command: 'INSERT', permissive: true, managerGated: true },
+    { table, name: `${table}_manager_insert_guard`, command: 'INSERT', permissive: false, managerGated: true },
+  ]);
+
+  // 1. RLS off. Every policy below it is inert.
+  it('calls a table with RLS disabled open, even with guards and no ungated write', () => {
+    const verdict = moneyWriteVerdict({
+      tables: tables({ family_wallets: false }),
+      moneyWritePolicies: gated('family_wallets'),
+    });
+    // Exactly the shape that reads clean on policies alone:
+    expect(verdict.openWrites).toEqual([]);
+    expect(verdict.unguarded).toEqual([]);
+    // ...and is open in fact.
+    expect(verdict.rlsDisabled).toEqual(['family_wallets']);
+    expect(verdict.exploitable).toBe(true);
+    expect(verdict.verdicts.family_wallets).toBe('OPEN - RLS DISABLED');
+  });
+
+  // 2. No write policy at all. Closed — but by decision, not by omission.
+  it('reports a table with no write policy rather than leaving it out', () => {
+    const verdict = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: gated('bills') });
+    expect(verdict.noWritePolicy).toContain('wallet_transactions');
+    expect(verdict.verdicts.wallet_transactions).toBe('CLOSED - RLS on, no write policy grants access');
+    expect(verdict.exploitable).toBe(false);
+  });
+
+  // The gloss that started this: `unguarded: []` never meant "every table has a
+  // guard", only "no table that HAS a write policy lacks one".
+  it('does not let an empty unguarded list imply every table is guarded', () => {
+    const verdict = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: gated('bills') });
+    expect(verdict.unguarded).toEqual([]);
+    expect(verdict.noWritePolicy.length).toBeGreaterThan(0); // the rest are not "guarded"
+  });
+
+  // What production actually returned on 2026-09-11, through the hand-run query:
+  // all ten present, RLS on, three guards each, zero ungated writes.
+  it('agrees with the production reading that closed the boundary', () => {
+    const rows = ['family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
+                  'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals'].flatMap(gated);
+    const verdict = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: rows });
+    expect(verdict.exploitable).toBe(false);
+    expect(verdict.rlsDisabled).toEqual([]);
+    expect(verdict.absent).toEqual([]);
+    expect(Object.values(verdict.verdicts).every((v) => String(v).startsWith('CLOSED'))).toBe(true);
+  });
+
+  // A snapshot taken before the table list existed cannot answer the RLS
+  // question. Saying "on" would invent a guarantee; saying "off" would invent a
+  // finding. It says neither.
+  it('does not guess about RLS when the snapshot cannot tell it', () => {
+    const verdict = moneyWriteVerdict({ moneyWritePolicies: gated('bills') });
+    expect(verdict.rlsKnown).toBe(false);
+    expect(verdict.rlsDisabled).toEqual([]);
+    expect(verdict.exploitable).toBe(false);
+  });
+
+  it('distinguishes a table that is absent from one that is unguarded', () => {
+    const verdict = moneyWriteVerdict({
+      tables: tables().filter((t) => t.name !== 'wallet_rules'),
+      moneyWritePolicies: gated('bills'),
+    });
+    expect(verdict.absent).toEqual(['wallet_rules']);
+    expect(verdict.unguarded).not.toContain('wallet_rules');
+    expect(verdict.verdicts.wallet_rules).toBe('table absent');
+  });
+});

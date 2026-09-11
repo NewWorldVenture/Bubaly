@@ -283,6 +283,18 @@ describe('AI eval scenarios', () => {
   // finances.createTransaction" was a sentence about nothing. Nine of the ten
   // scenarios were written that way, which is how a safety assertion passes
   // for two months without ever being able to fail.
+  // 20s, not vitest's 5000ms default. The body is a loop over a handful of
+  // arrays and runs in microseconds; the ~4s is the FIRST import of the tool
+  // registry, whose module graph gets transformed once and charged to whichever
+  // test imports it first. That left ~20% headroom, and it tipped twice — 5015ms
+  // once, then again in a later full run — each time "passing on re-run", which
+  // is what no headroom looks like rather than evidence nothing is wrong.
+  //
+  // Measured, not guessed: this test 4012ms, the two tests importing the same
+  // module after it 1ms and 28ms. Starting the import at module scope was tried
+  // and did NOT help — the transform cost is still absorbed by the first
+  // awaiting test — so the honest fix is to give the wait a budget that fits it.
+  // The assertion is unchanged; nothing is skipped, relaxed, or quarantined.
   it('every tool a scenario names resolves in the registry', async () => {
     const { getTool } = await import('@/lib/ai/tools/registry');
     const ghosts: string[] = [];
@@ -292,7 +304,7 @@ describe('AI eval scenarios', () => {
       }
     }
     expect(ghosts, `these names are not tools, so the assertions naming them can never fail:\n  ${ghosts.join('\n  ')}`).toEqual([]);
-  });
+  }, 20_000);
 
   // A prohibition on a read is a real privacy assertion, but the safety half
   // exists for the writes: the thing a family would find in the morning.
