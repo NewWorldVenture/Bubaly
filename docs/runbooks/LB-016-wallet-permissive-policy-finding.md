@@ -54,6 +54,43 @@ still open: §4. It is why that workflow run is red. A red
 `Supabase production migrations` check does **not** mean the money finding is
 back — check `moneyWrites` in the run's log before assuming it does.
 
+### 0.1 Correction (2026-09-11): the all-clear above is narrower than it reads
+
+An operator ran the §4.3 pre-flight against production and it did **not** return
+what §4.3 said to expect. `0254` came back **NOT present** — no restrictive
+policy at all on `wallet_transactions` — while `0275` came back *present*.
+
+Both of those numbers are unreliable in opposite directions, and neither the
+verdict above nor the old pre-flight could have told you:
+
+- **The `0275` row was meaningless.** That probe was an *absence* check ("no
+  ungated permissive write on `bills`"), which a table with no policies
+  satisfies. It reported `present` whether or not `0275` had run. Replaced in
+  this repo with a positive existence check; `tests/migration-ledger-preflight`
+  now fails if an absence-only probe returns.
+- **`unguarded: []` does not mean "every table has a guard".** Read
+  `moneyWriteVerdict`: `unguarded` is derived from `moneyWritePolicies`, which
+  only contains tables having **at least one write policy**. A money table with
+  *no* write policies never appears, so it is neither `guarded` nor
+  `unguarded`, and `exploitable` stays `false`. The §0 gloss — "every one of the
+  ten carries a restrictive write guard" — is stronger than the data supports.
+- **Neither check looks at whether RLS is on.** The snapshot records
+  `relrowsecurity` per table, but `moneyWriteVerdict` never consults it. With
+  RLS disabled every policy is inert, so such a table has no ungated permissive
+  write and reads as clean. Verified against PostgreSQL 16.13: a table with RLS
+  off, three restrictive guards still present and zero ungated writes is
+  reported **clean** by a policy-only rule and **open** in reality.
+
+So the two readings may both be correct and describe a third state: RLS on with
+no write policies at all, which denies writes. That is *closed*, not open — but
+it is not what §0 claims, and it is not what §2 claims either.
+
+**Before relying on §2, read the state rather than the provenance:** run
+`docs/audit/money-boundary-state.sql` (read-only). Its `verdict` column
+separates `RLS DISABLED`, deny-by-default, manager-gated, guarded-stray and
+open, and names the offending policy. Validated against PostgreSQL 16.13 across
+all of those states.
+
 ---
 
 ## 1. Why the finding is real
@@ -171,7 +208,19 @@ and `tests/migration-version-safety.test.ts` fails if a duplicate returns.
 1. **Pre-flight.** Run `docs/audit/migration-ledger-state.sql` — read-only. It
    reports what the ledger holds, how far ahead the schema is, and whether the
    three hand-applied migrations (`0249`, `0254`, `0275`) show as
-   *present / unrecorded*. Expect exactly that for all three.
+   *present / unrecorded*.
+
+   Do **not** treat *present / unrecorded* as the expected answer and move on.
+   On 2026-09-11 it came back otherwise (§0.1), and the older probes could not
+   have told you. If any row reads **NOT present**, that migration's effect is
+   not in the schema, whatever the ledger or this runbook says about it having
+   been hand-applied.
+
+   Then run `docs/audit/money-boundary-state.sql` — also read-only — and read
+   its `verdict` column before continuing. **Any row reading `*** OPEN ***` is
+   a live money-boundary finding and outranks this repair:** the replay itself
+   transits an open-boundary window (§4.4), so it is the wrong instrument for
+   closing a hole that is already open. Close it directly first (§5).
 2. **Take a restore point.** A PITR checkpoint or a backup, not a mental note.
    This is the step that makes everything after it reversible.
 3. **Pick a maintenance window** — see the warning in 4.4.
@@ -204,10 +253,19 @@ replay has to no-op through.
 
 ## 5. Running this by hand in the Supabase SQL editor
 
-`0254` has been applied to production by hand. That is what puts the restrictive
-guards in place, so **the money is locked** (§2). It does **not** necessarily
-clear the finding: `0254` drops policies by name, so a stray called anything
-other than `wallet_transactions_insert` / `_update` / `_delete` or
+`0254` is *recorded here* as having been applied to production by hand, and that
+is what would put the restrictive guards in place, locking the money (§2).
+
+**Treat that as provenance, not as state.** It is a note about what someone
+did, written at the time; it is not a reading of the database. On 2026-09-11 a
+production pre-flight found no restrictive policy at all on
+`wallet_transactions` (§0.1), which `0254` creates unconditionally. Whatever the
+explanation, the sentence above cannot carry the weight of "the money is
+locked" on its own — confirm with `docs/audit/money-boundary-state.sql` first.
+
+Even where `0254` *has* run it does **not** necessarily clear the finding: it
+drops policies by name, so a stray called anything other than
+`wallet_transactions_insert` / `_update` / `_delete` or
 `"Members manage wallet_transactions"` survives it.
 
 ### Step 1 — find out (read-only, changes nothing)
