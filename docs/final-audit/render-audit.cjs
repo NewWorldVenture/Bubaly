@@ -69,6 +69,25 @@ if (fs.existsSync(incrementalPath)) {
     for (const name of version.addedNamesInChangedFiles) add('ENV', name, name, 'discovery/incremental-inventory.json');
   }
 }
+// Follow-up source discovery retains the same file/function/route identity rules.
+const socialDeltaPath = path.join(__dirname, 'discovery/social-rewards-inventory.json');
+if (fs.existsSync(socialDeltaPath)) {
+  const delta = read('discovery/social-rewards-inventory.json');
+  for (const file of delta.files) {
+    const evidence = { notes: 'Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate.' };
+    if (file.isNew) add(file.path.startsWith('lib/') ? 'LIBRARY' : 'SUPPORT', file.path, file.path, file.path, evidence);
+    for (const fn of file.addedExportedFunctions ?? []) {
+      if (file.apiRoute && file.httpMethods.includes(fn.name)) add('API', `${file.apiRoute}:${fn.name}`, `${fn.name} ${file.apiRoute}`, file.path, { ...evidence, line: fn.line });
+      else if (file.kind === 'production-source') add('SERVICE', `${file.path}:${fn.name}`, fn.name, file.path, { ...evidence, line: fn.line });
+    }
+  }
+  for (const item of delta.environment) add('ENV', item.name, item.name, 'discovery/social-rewards-inventory.json');
+  for (const [key, source, line, name] of [
+    ['social-studio-existing-post-review', 'components/social/studio-form.tsx', 241, 'Open the persisted post after a publish attempt'],
+    ['social-studio-lost-response-review', 'components/social/studio-form.tsx', 249, 'Review posts when the create response is unconfirmed'],
+    ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
+  ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
+}
 // Every tracked file is also classified, including documentation, tests, assets,
 // scripts, dependency manifests and generated schema. Discovery is not verification.
 const mappedSources = new Set(Object.values(records).map(r => r.source));

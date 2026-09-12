@@ -31,7 +31,7 @@ The route-type SHA-256 before and after the production build is `3682dc788460e3c
 
 ## CI provenance
 
-The preceding application checkpoint passed all four jobs in [CI run 34697312616](https://github.com/NewWorldVenture/Bubaly/actions/runs/34697312616) on `9d238e0c86bc8a1116c6ecf7786c09e70b07d111`. Its disposable Supabase browser job reports 540 passing tests in 3.3 minutes, including authenticated and durable-session workflows with no skips. That result is prior-source evidence; this new application source requires its own CI run after publication.
+This application checkpoint, published as `19a6907fdf906de3d44da583f2aa87a88298e697`, passed all four jobs in [CI run 34698217047](https://github.com/NewWorldVenture/Bubaly/actions/runs/34698217047). Its disposable Supabase browser job reports 576 passing tests in 4.5 minutes, including authenticated and durable-session workflows with no skips. Vercel deployment metadata also reports success; anonymous application probes encounter Vercel Authentication, as documented in vercel-preview-19a6907f.md. The earlier 9d238e0c checkpoint separately passed all four jobs in run34697312616 with 540 browser tests. Neither earlier result is substituted for later social/rewards source verification.
 
 ## Remaining limits
 
