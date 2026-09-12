@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const seam = vi.hoisted(() => ({ exchange: vi.fn(), user: vi.fn(), factory: vi.fn(), rpc: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: seam.factory, createServiceClient: vi.fn() }));
+vi.mock('@/lib/auth/recovery-cookies', () => ({ createRecoveryCookieExchange: async () => ({ client: await seam.factory(), applyTo: vi.fn(), dispose: vi.fn() }) }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: vi.fn() }));
 import { GET } from '@/app/auth/callback/route';
 

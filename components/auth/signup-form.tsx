@@ -19,6 +19,7 @@ import { isPlausibleReferralCode, normalizeCode } from '@/lib/referrals/core';
 import { rememberReferralCodeAction } from '@/app/(auth)/signup/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { isRetryableAuthError } from '@/lib/auth/session';
+import { signUpWithOwnedVerifier } from '@/lib/auth/signup-client';
 
 const userIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -85,14 +86,14 @@ export function SignupForm() {
       const origin = window.location.origin;
       const next = nextDest;
       dispatched = true;
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await signUpWithOwnedVerifier(supabase, {
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
           data: { full_name: parsed.data.fullName, ...(referralCode ? { referral_code: referralCode } : {}) },
           emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
-      });
+      }, () => isMountedAttempt() && currentIntent.current === intent);
       if (!isMountedAttempt()) return;
       if (currentIntent.current !== intent) { review(); return; }
       if (error) {

@@ -62,6 +62,9 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
   signUp: mock.signUp, signInWithPassword: mock.password, signInWithOAuth: mock.oauth,
   signInWithOtp: mock.otp, verifyOtp: mock.verify,
 } }) }));
+vi.mock('@/lib/auth/signup-client', () => ({
+  signUpWithOwnedVerifier: (_client: unknown, credentials: unknown) => mock.signUp(credentials),
+}));
 vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: mock.landing, stitchIdentityAction: mock.stitch }));
 vi.mock('@/app/(auth)/signup/actions', () => ({ rememberReferralCodeAction: mock.referral }));
 

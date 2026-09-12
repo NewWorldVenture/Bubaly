@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ getSession: vi.fn(), getCookie: vi.fn(), prepare: vi.fn(), verify: vi.fn(), update: vi.fn() }));
+const state = vi.hoisted(() => ({ readToken: vi.fn(), serverFactory: vi.fn(), getCookie: vi.fn(), prepare: vi.fn(), verify: vi.fn(), update: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: state.getCookie }) }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: async () => ({ auth: { getSession: state.getSession } }) }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: state.serverFactory }));
+vi.mock('@/lib/auth/recovery-cookies', () => ({ readRecoveryCookieToken: state.readToken }));
 vi.mock('@/lib/auth/recovery-server', () => ({
   RECOVERY_HANDOFF_COOKIE: 'bubaly-recovery-handoff',
   RecoveryError: class extends Error { constructor(public key: string) { super(key); } },
@@ -17,24 +18,24 @@ const grant = 'synthetic-signed-grant';
 const handoff = createHash('sha256').update(grant).digest('hex');
 beforeEach(() => {
   vi.resetAllMocks();
-  state.getSession.mockResolvedValue({ data: { session: { access_token: 'exact-cookie-token-a' } }, error: null });
+  state.readToken.mockResolvedValue('exact-cookie-token-a');
   state.getCookie.mockReturnValue({ value: grant });
   state.verify.mockResolvedValue(identity);
   state.prepare.mockResolvedValue({ identity, grant, session: { access_token: 'rotated-a', refresh_token: 'rotated-refresh-a' } });
   state.update.mockResolvedValue({ outcome: 'updated' });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { expect(state.serverFactory).not.toHaveBeenCalled(); vi.useRealTimers(); });
 
 describe('recovery action request and session binding', () => {
   it('returns a prepared pair without reading or installing the ambient session', async () => {
     await expect(prepareRecoveryAction('fragment-a', 'refresh-a')).resolves.toMatchObject({ ok: true, identity, grant });
     expect(state.prepare).toHaveBeenCalledWith('fragment-a', 'refresh-a');
-    expect(state.getSession).not.toHaveBeenCalled();
+    expect(state.readToken).not.toHaveBeenCalled();
   });
   it('does not fall back to a valid ambient session after rejected explicit credentials', async () => {
     state.prepare.mockRejectedValue(new RecoveryError('authRecovery.invalidLink'));
     await expect(prepareRecoveryAction('bad', 'bad')).resolves.toEqual({ ok: false, errorKey: 'authRecovery.invalidLink' });
-    expect(state.getSession).not.toHaveBeenCalled();
+    expect(state.readToken).not.toHaveBeenCalled();
   });
   it('requires both the callback hash and matching current session before returning the grant', async () => {
     await expect(consumeRecoveryAction(handoff)).resolves.toEqual({ ok: true, identity, grant });
@@ -43,7 +44,7 @@ describe('recovery action request and session binding', () => {
   });
   it.each(['', 'x'.repeat(64), '0'.repeat(64), handoff.toUpperCase()])('rejects malformed or unrelated handoff %s without session access', async value => {
     await expect(consumeRecoveryAction(value)).resolves.toMatchObject({ ok: false, errorKey: 'authRecovery.invalidLink' });
-    expect(state.getSession).not.toHaveBeenCalled();
+    expect(state.readToken).not.toHaveBeenCalled();
     expect(state.verify).not.toHaveBeenCalled();
   });
   it('rejects a missing bridge cookie', async () => {
@@ -52,7 +53,7 @@ describe('recovery action request and session binding', () => {
     expect(state.verify).not.toHaveBeenCalled();
   });
   it('never authorizes the preserved account B using account A’s recovery grant', async () => {
-    state.getSession.mockResolvedValue({ data: { session: { access_token: 'token-b' } }, error: null });
+    state.readToken.mockResolvedValue('token-b');
     state.verify.mockRejectedValue(new RecoveryError('authRecovery.sessionChanged'));
     await expect(consumeRecoveryAction(handoff)).resolves.toEqual({ ok: false, errorKey: 'authRecovery.sessionChanged' });
     expect(state.verify).toHaveBeenCalledWith(grant, 'token-b');
@@ -61,8 +62,8 @@ describe('recovery action request and session binding', () => {
     await expect(inspectRecoveryAction(grant)).resolves.toEqual({ ok: true, identity });
     expect(state.verify).toHaveBeenCalledWith(grant, 'exact-cookie-token-a');
   });
-  it.each([null, undefined])('rejects an absent session before password mutation', async session => {
-    state.getSession.mockResolvedValue({ data: { session }, error: null });
+  it.each(['missing', 'unreadable'])('rejects a %s cookie candidate before password mutation', async () => {
+    state.readToken.mockRejectedValue(new RecoveryError('authRecovery.sessionChanged'));
     await expect(saveRecoveryAction(grant, 'new-password')).resolves.toEqual({ outcome: 'failed', errorKey: 'authRecovery.sessionChanged' });
     expect(state.update).not.toHaveBeenCalled();
   });
@@ -70,26 +71,20 @@ describe('recovery action request and session binding', () => {
     state.update.mockResolvedValue({ outcome: 'uncertain', errorKey: 'authRecovery.saveUncertain' });
     await expect(saveRecoveryAction(grant, 'new-password')).resolves.toEqual({ outcome: 'uncertain', errorKey: 'authRecovery.saveUncertain' });
     expect(state.update).toHaveBeenCalledWith(grant, 'exact-cookie-token-a', 'new-password');
-    expect(state.getSession).toHaveBeenCalledTimes(1);
+    expect(state.readToken).toHaveBeenCalledTimes(1);
   });
-  it('reports refresh outages as temporary without implying an account switch', async () => {
-    state.getSession.mockResolvedValue({ data: { session: null }, error: { name: 'AuthRetryableFetchError', status: 503 } });
+  it('reports cookie infrastructure failures as temporary without implying an account switch', async () => {
+    state.readToken.mockRejectedValue(new Error('cookie infrastructure unavailable'));
     await expect(saveRecoveryAction(grant, 'new-password')).resolves.toEqual({ outcome: 'failed', errorKey: 'authRecovery.temporarilyUnavailable' });
     expect(state.update).not.toHaveBeenCalled();
   });
-  it('bounds a held session read without issuing a password write later', async () => {
-    vi.useFakeTimers();
-    let release!: (value: unknown) => void;
-    state.getSession.mockReturnValue(new Promise(resolve => { release = resolve; }));
-    const pending = saveRecoveryAction(grant, 'new-password');
-    await vi.advanceTimersByTimeAsync(15_000);
-    await expect(pending).resolves.toEqual({ outcome: 'failed', errorKey: 'authRecovery.temporarilyUnavailable' });
-    release({ data: { session: { access_token: 'late-token' } }, error: null });
-    await Promise.resolve();
-    expect(state.update).not.toHaveBeenCalled();
+  it('preserves the verifier helper expiry rejection without a server-session refresh', async () => {
+    state.update.mockResolvedValue({ outcome: 'failed', errorKey: 'authRecovery.expiredLink' });
+    await expect(saveRecoveryAction(grant, 'new-password')).resolves.toEqual({ outcome: 'failed', errorKey: 'authRecovery.expiredLink' });
+    expect(state.update).toHaveBeenCalledWith(grant, 'exact-cookie-token-a', 'new-password');
   });
   it('sanitizes infrastructure failures rather than returning credentials or stack text', async () => {
-    state.getSession.mockRejectedValue(new Error('synthetic secret-bearing diagnostic'));
+    state.readToken.mockRejectedValue(new Error('synthetic secret-bearing diagnostic'));
     await expect(inspectRecoveryAction(grant)).resolves.toEqual({ ok: false, errorKey: 'authRecovery.temporarilyUnavailable' });
   });
 });

@@ -2,28 +2,18 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { createServer } from '@/lib/supabase/server';
 import { RECOVERY_HANDOFF_COOKIE, RecoveryError, prepareImplicitRecovery, verifyRecoveryGrant, updateRecoveryPassword } from '@/lib/auth/recovery-server';
-import { isRetryableAuthError } from '@/lib/auth/session';
+import { readRecoveryCookieToken } from '@/lib/auth/recovery-cookies';
 
 function failure(error: unknown) {
   return { ok: false as const, errorKey: error instanceof RecoveryError ? error.key : 'authRecovery.temporarilyUnavailable' };
 }
 
 async function currentToken(): Promise<string> {
-  const client = await createServer();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      client.auth.getSession(),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new RecoveryError('authRecovery.temporarilyUnavailable')), 15_000); }),
-    ]);
-    if (result.error) throw new RecoveryError(isRetryableAuthError(result.error) ? 'authRecovery.temporarilyUnavailable' : 'authRecovery.sessionChanged');
-    if (!result.data.session?.access_token) throw new RecoveryError('authRecovery.sessionChanged');
-    // Cookie contents identify a candidate only. Every caller verifies this
-    // exact token against the provider and signed grant before using it.
-    return result.data.session.access_token;
-  } finally { if (timer) clearTimeout(timer); }
+  // The browser refreshes before submission. An SDK getSession here can queue
+  // old-owner Set-Cookie headers that overwrite a newer browser sign-in when
+  // this action eventually replies. Read only; the helper verifies this token.
+  return readRecoveryCookieToken();
 }
 
 export async function prepareRecoveryAction(accessToken: string, refreshToken: string) {

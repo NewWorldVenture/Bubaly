@@ -81,6 +81,8 @@ export async function middleware(req: NextRequest) {
   // This exact public path exposes only the artifact's revision. Do not refresh
   // sessions or interpret OAuth query parameters for this read-only response.
   if (path === '/api/build-info') return NextResponse.next({ request: req });
+  const recoveryPage = path === '/auth/recovery'
+    || (path === '/login' && req.nextUrl.searchParams.get('reset') === '1');
 
   // A Supabase OAuth code that landed on the wrong path gets forwarded to
   // /auth/callback — but ONLY when it is ours to exchange. `code` is the
@@ -96,7 +98,15 @@ export async function middleware(req: NextRequest) {
   })) {
     const url = req.nextUrl.clone();
     url.pathname = '/auth/callback';
+    if (recoveryPage) url.searchParams.set('next', '/auth/recovery');
     return NextResponse.redirect(url);
+  }
+
+  // Recovery verifies the exact candidate token in its own action/callback.
+  // Ambient refresh here would attach session A cookies to a delayed response
+  // and could overwrite a newer browser session B before UI guards can act.
+  if (recoveryPage || (path === '/auth/callback' && req.nextUrl.searchParams.get('next') === '/auth/recovery')) {
+    return NextResponse.next({ request: req });
   }
 
   const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
