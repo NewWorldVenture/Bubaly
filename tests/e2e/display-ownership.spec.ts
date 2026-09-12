@@ -13,6 +13,7 @@ const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/pack
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.production.min.js'), 'utf8');
 const sources = Object.fromEntries([
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
+  'lib/i18n/locales.ts',
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
 ].map((file) => [file, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -25,6 +26,7 @@ type Props = {
 };
 type Write = { family_id: string; updated_by: string; tiles: Tile[]; settings: DisplaySettings };
 type DisplayProbe = {
+  localeCode: string;
   props: Props; writes: Write[]; stored: Record<string, Write>; notices: Array<{ kind: string; message: string }>;
   render: (patch?: Partial<Props>) => void;
   finish: (index: number, message?: string, thrown?: boolean) => void;
@@ -32,7 +34,7 @@ type DisplayProbe = {
 };
 declare global { interface Window { __displayProbe: DisplayProbe } }
 
-const layout = (widget: Tile['widget'], id = widget): Tile[] => [{ id, widget, size: 'sm' }];
+const layout = (widget: Tile['widget'], id: string = widget): Tile[] => [{ id, widget, size: 'sm' }];
 async function refresh(page: Page, patch: Partial<Props>) {
   await page.evaluate((next) => window.__displayProbe.render(next), patch);
 }
@@ -57,7 +59,7 @@ test.beforeEach(async ({ page }) => {
     const h = React.createElement, modules = {};
     const sources = ${JSON.stringify(sources)};
     const pending = [];
-    const p = { writes: [], stored: {}, notices: [] };
+    const p = { writes: [], stored: {}, notices: [], localeCode: 'en-US' };
     const empty = () => null;
     const icons = new Proxy({}, { get: () => empty });
     const translation = key => key;
@@ -79,7 +81,7 @@ test.beforeEach(async ({ page }) => {
         error: message => p.notices.push({ kind: 'error', message }),
       }) },
       '@/components/ui/avatar': { Avatar: empty },
-      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => 'en-US' },
+      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => load('lib/i18n/locales.ts').localeOrDefault(p.localeCode) },
       '@/lib/utils/format': { fmtTime: value => String(value) },
       '@/lib/utils/cn': { cn: (...parts) => parts.flat().filter(Boolean).join(' ') },
       '@/lib/constants/navigation': { ALL_SERVICES_CATALOG: [], ALL_SERVICES_BY_HREF: new Map() },
@@ -369,6 +371,9 @@ test('family timezone formats event times and timed dates while preserving all-d
   await refresh(page, { initialSettings: await settings(page, { clock24: true }) });
   await expect(page.getByText('19:00', { exact: true })).toBeVisible();
   for (const item of await page.locator('[data-clock24]').all()) await expect(item).toHaveAttribute('data-clock24', 'true');
+  await page.evaluate(() => { window.__displayProbe.localeCode = 'fr-FR'; window.__displayProbe.render(); });
+  await expect(page.getByText('Timed next date', { exact: true }).locator('..')).toContainText('11 sept.');
+  await expect(page.getByText('All-day next date', { exact: true }).locator('..')).toContainText('12 sept.');
 });
 
 test('timezone fallback is visible and invalid input renders safely in UTC', async ({ page }) => {

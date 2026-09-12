@@ -61,3 +61,7 @@ node node_modules/vitest/vitest.mjs run tests/display-render.test.ts tests/displ
 ## Limits
 
 These tests prove component state transitions, rendered error/empty states, exact write ownership payloads and time/prop wiring. Root's separate clock/photo suite exercises their actual components; the API lane exercises server reads and canonical reminder service writes. They do not prove deployed PostgreSQL/RLS, authenticated two-family persistence, cross-device write conflicts, live provider sync, physical kiosk sleep/wake or a complete installed display workflow. Existing route polling remains the refresh mechanism; a successful read is not an instant-freshness promise. No SQL, migration, shared navigation, dependency installation or external write was performed by this lane.
+
+## Integrated locale-contract correction
+
+The full strict TypeScript gate caught that useLocale returns a Locale object, while the first fixtures supplied a string. Passing that object to Intl formatting could silently use the browser default. Both display call sites now pass locale.code. Clock tests execute the actual LocaleProvider/context and locale catalogue resolver with supplied message data; the grid fixture returns actual localeOrDefault objects and checks French date labels. The six clock and25 display browser checks pass after correction, plus scoped lint. A test helper tile ID parameter was explicitly typed as string. No type errors were suppressed; root is repeating the strict integrated gate.

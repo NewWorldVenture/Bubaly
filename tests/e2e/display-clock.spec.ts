@@ -10,6 +10,7 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const sources = Object.fromEntries([
   'components/display/ambient-clock.tsx', 'components/display/photo-frame.tsx',
   'lib/display/ambient.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -31,10 +32,13 @@ async function start(page: Page, instant: string, props: ClockConfig) {
     const sources = ${JSON.stringify(sources)};
     const p = window.__displayClock = { locale: 'en-US', errors: [] };
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
-    const mocks = { react: window.React, '@/components/i18n/locale-provider': { useLocale: () => p.locale, useTranslations: () => key => key } };
+    const mocks = { react: window.React };
     const modules = {};
     function load(id) {
       if (id in mocks) return mocks[id];
+      // This provider receives its exact messages below; catalogue loading is
+      // separate from the real locale object/context/translation contract.
+      if (id.startsWith('@/lib/i18n/messages/') && id.endsWith('.json')) return { default: {} };
       if (id in modules) return modules[id];
       if (!(id in sources)) throw new Error('Unexpected import: ' + id);
       const module = { exports: {} }; modules[id] = module.exports;
@@ -44,13 +48,18 @@ async function start(page: Page, instant: string, props: ClockConfig) {
     }
     const Clock = load('@/components/display/ambient-clock').AmbientClock;
     const Frame = load('@/components/display/photo-frame').PhotoFrame;
+    const Provider = load('@/components/i18n/locale-provider').LocaleProvider;
+    const localeOrDefault = load('@/lib/i18n/locales').localeOrDefault;
     let root = ReactDOM.createRoot(document.getElementById('root'));
     p.mount = props => {
       p.locale = props.locale || 'en-US';
       const component = props.photo ? Frame : Clock;
-      ReactDOM.flushSync(() => root.render(React.createElement(component, {
+      const child = React.createElement(component, {
         clock24: false, seconds: false, photos: [], idleMinutes: 0.01, nextLine: null, ...props,
-      })));
+      });
+      ReactDOM.flushSync(() => root.render(React.createElement(Provider, {
+        locale: localeOrDefault(p.locale), source: 'default', messages: { 'photoFrame.wakeDisplay': 'Wake display' },
+      }, child)));
     };
     p.unmount = () => ReactDOM.flushSync(() => root.unmount());
   })();` });
@@ -92,7 +101,7 @@ test('idle photo frame passes the same family zone to its clock and wakes on int
   await start(page, '2026-01-01T02:00:00Z', { timezone: 'America/Los_Angeles', photo: true });
   await expect(page.locator('#root')).toBeEmpty();
   await page.clock.runFor(650);
-  await expect(page.getByRole('button', { name: 'photoFrame.wakeDisplay' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Wake display' })).toBeVisible();
   await expect(page.locator('#root')).toContainText('6:00');
   await expect(page.locator('#root p')).toHaveText('Wednesday, December 31');
   await page.keyboard.press('Escape');

@@ -199,7 +199,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
   widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date; settings: DisplaySettings;
 }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const locale = useLocale().code;
   const timezone = displayTimezone(data.timezone).timezone;
   switch (widget) {
     case 'clock': return <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />;
@@ -400,7 +400,7 @@ function NowNextStrip({ events, memberById, now, timezone, clock24 }: {
   events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date; timezone: string; clock24: boolean;
 }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const locale = useLocale().code;
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {

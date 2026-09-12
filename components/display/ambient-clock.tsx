@@ -10,7 +10,7 @@ import { displayTimezone } from '@/lib/display/calendar';
 import { useLocale } from '@/components/i18n/locale-provider';
 
 export function AmbientClock({ clock24, seconds, timezone }: { clock24: boolean; seconds: boolean; timezone?: string }) {
-  const locale = useLocale();
+  const locale = useLocale().code;
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
