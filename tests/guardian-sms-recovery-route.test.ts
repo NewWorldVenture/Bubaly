@@ -51,4 +51,3 @@ describe('Guardian SMS recovery scheduled HTTP boundary', () => {
     expect(await result.json()).toEqual({ ok: false, unavailable: 1 });
   });
 });
-

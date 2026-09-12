@@ -124,7 +124,13 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       expect(doneNotifications.data).toHaveLength(1);
       expect(doneNotifications.data![0]).toMatchObject({ user_id: null, body: params.Body, related_type: 'guardian_communications', related_id: commId });
 
-      expect([200, 503], 'A later scheduled tick must return a processing result').toContain(await recover(appOrigin));
+      // Require a clean completed sweep once concurrent fixture cleanup settles.
+      // This also exercises PostgreSQL's lower-and-upper cursor expression;
+      // repeatedly accepting 503 could hide a malformed continuation query.
+      await expect.poll(() => recover(appOrigin), {
+        timeout: 30_000, intervals: [500, 1000, 2000],
+        message: 'A later scheduled tick must complete a clean sweep',
+      }).toBe(200);
       expect((await comm()).data).toEqual(doneComm.data);
       expect((await receipts()).data).toEqual(doneReceipts.data);
       expect((await notifications()).data).toEqual(doneNotifications.data);
