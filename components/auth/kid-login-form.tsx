@@ -20,12 +20,15 @@ export function KidLoginForm() {
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Early edits to SSR inputs can remain visible without reaching React state.
+  const [ready, setReady] = useState(false);
   const mounted = useRef(false);
   const attempt = useRef(0);
   const phase = useRef<'idle' | 'pending' | 'complete'>('idle');
   useLayoutEffect(() => {
     const lifetime = attempt;
     mounted.current = true;
+    setReady(true);
     return () => { mounted.current = false; lifetime.current++; };
   }, []);
 
@@ -88,7 +91,7 @@ export function KidLoginForm() {
             id="kid-login-username" name="username" autoComplete="username"
             value={username}
             onChange={(e) => { if (phase.current === 'idle') setUsername(e.target.value); }}
-            disabled={loading}
+            disabled={!ready || loading}
             autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
             placeholder={t('kidLogin.eGEmma')}
             className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-base focus-visible:focus-ring"
@@ -102,17 +105,17 @@ export function KidLoginForm() {
               name="pin" autoComplete="current-password"
               value={pin}
               onChange={(e) => { if (phase.current === 'idle') setPin(normalizePin(e.target.value)); }}
-              disabled={loading}
+              disabled={!ready || loading}
               inputMode="numeric" type={showPin ? 'text' : 'password'} placeholder="••••"
               className="h-12 w-full rounded-xl border border-border bg-bg px-12 text-center text-lg tracking-[0.5em] focus-visible:focus-ring"
             />
-            <button type="button" disabled={loading} onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+            <button type="button" disabled={!ready || loading} onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
               className="focus-visible:focus-ring absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
               {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
-        <Button type="submit" disabled={loading || username.trim().length < 3 || pin.length !== 4} className="w-full">
+        <Button type="submit" disabled={!ready || loading || username.trim().length < 3 || pin.length !== 4} className="w-full">
           {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} {t('kidLogin.signIn')}
         </Button>
       </form>
