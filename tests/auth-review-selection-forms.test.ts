@@ -15,8 +15,17 @@ const mock = vi.hoisted(() => ({
   push: vi.fn(), refresh: vi.fn(), toast: vi.fn(), stitch: vi.fn(), landing: vi.fn(), referral: vi.fn(),
   signUp: vi.fn(), password: vi.fn(), oauth: vi.fn(), otp: vi.fn(), verify: vi.fn(), fetch: vi.fn(),
 }));
-vi.mock('react', async (original) => ({
-  ...await original<typeof import('react')>(),
+vi.mock('react', async (original) => {
+  const actual = await original<typeof import('react')>();
+  function effectSlot(effect: () => void | (() => void), deps: readonly unknown[] = []) {
+    const index = mock.cursor++;
+    const previous = mock.slots[index] as readonly unknown[] | undefined;
+    if (previous && previous.length === deps.length && deps.every((item, i) => Object.is(item, previous[i]))) return;
+    mock.slots[index] = deps;
+    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+  }
+  return {
+  ...actual,
   useState: (initial: unknown) => {
     const index = mock.cursor++;
     if (!(index in mock.slots)) mock.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -29,14 +38,16 @@ vi.mock('react', async (original) => ({
     if (!(index in mock.slots)) mock.slots[index] = { current: initial };
     return mock.slots[index];
   },
-  useEffect: (effect: () => void | (() => void), deps: readonly unknown[] = []) => {
+  useMemo: (factory: () => unknown, deps: readonly unknown[]) => {
     const index = mock.cursor++;
-    const previous = mock.slots[index] as readonly unknown[] | undefined;
-    if (previous && deps.every((item, i) => Object.is(item, previous[i]))) return;
-    mock.slots[index] = deps;
-    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+    const previous = mock.slots[index] as { deps: readonly unknown[]; value: unknown } | undefined;
+    if (previous && previous.deps.length === deps.length && deps.every((item, i) => Object.is(item, previous.deps[i]))) return previous.value;
+    const value = factory(); mock.slots[index] = { deps, value }; return value;
   },
-}));
+  useEffect: effectSlot,
+  useLayoutEffect: effectSlot,
+  };
+});
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push, refresh: mock.refresh }), useSearchParams: () => mock.query }));
 vi.mock('next/link', () => ({ default: ({ children, ...props }: { children: ReactNode }) => ({ type: 'a', props: { ...props, children }, $$typeof: Symbol.for('react.element') }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
@@ -46,6 +57,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
     .reduce((text, [name, value]) => text.replace(`{${name}}`, value), getMessages(mock.locale)[key] ?? key) };
 });
 vi.mock('@/components/auth/legal-consent', () => ({ LegalConsent: () => null }));
+vi.mock('@/components/auth/recovery-form', () => ({ RecoveryForm: () => null }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
   signUp: mock.signUp, signInWithPassword: mock.password, signInWithOAuth: mock.oauth,
   signInWithOtp: mock.otp, verifyOtp: mock.verify,
@@ -88,17 +100,22 @@ const choices: [string, ReviewPlan][] = [
   ['plan=basic&billing=monthly', 'basic_monthly'], ['plan=basic&billing=yearly', 'basic_annual'],
   ['plan=plus&billing=monthly', 'plus_monthly'], ['plan=plus&billing=yearly', 'plus_annual'],
 ];
+const signupUser = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: 'taylor@example.test', aud: 'authenticated',
+  app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
 
 beforeEach(() => {
   resetHooks(); vi.clearAllMocks();
   mock.query = new URLSearchParams(); mock.locale = 'en-US';
-  mock.signUp.mockReset().mockResolvedValue({ data: { session: { user: { id: 'fixture-user' } } }, error: null });
+  mock.signUp.mockReset().mockResolvedValue({ data: { user: signupUser, session: { user: signupUser,
+    access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 } }, error: null });
+  mock.stitch.mockReset().mockResolvedValue(undefined);
+  mock.referral.mockReset().mockResolvedValue(undefined);
   mock.password.mockReset().mockResolvedValue({ error: null });
   mock.oauth.mockReset().mockResolvedValue({ error: null });
   mock.otp.mockReset().mockResolvedValue({ error: null });
   mock.verify.mockReset().mockResolvedValue({ error: null });
   mock.landing.mockReset().mockResolvedValue('/home');
-  vi.stubGlobal('window', { location: { origin: 'https://bubaly.test' } });
+  vi.stubGlobal('window', { location: { origin: 'https://bubaly.test', hash: '', href: 'https://bubaly.test/login' } });
   vi.stubGlobal('FormData', class { constructor(private fields: Record<string, string>) {} get(name: string) { return this.fields[name]; } });
   vi.stubGlobal('fetch', mock.fetch);
 });
@@ -124,7 +141,7 @@ describe.each(choices)('auth handoff for %s', (query, plan) => {
 
   it('preserves confirmation and check-email login links without navigating before a session exists', async () => {
     mock.query = new URLSearchParams(query);
-    mock.signUp.mockResolvedValueOnce({ data: { session: null }, error: null });
+    mock.signUp.mockResolvedValueOnce({ data: { user: signupUser, session: null }, error: null });
     click(render(SignupForm), getMessages('en-US')['signup.continueWithEmail']);
     await submit(render(SignupForm));
     expect(links(render(SignupForm))).toEqual([`/login?reviewPlan=${plan}`]);
@@ -190,7 +207,7 @@ describe('explicit destinations, failures and defaults', () => {
 
   it('retains the annual choice after failed email, password, and Google attempts', async () => {
     mock.query = new URLSearchParams({ reviewPlan: 'plus_annual' });
-    mock.signUp.mockResolvedValueOnce({ error: new Error('try again') });
+    mock.signUp.mockResolvedValueOnce({ data: { user: null, session: null }, error: { name: 'AuthApiError', status: 400, message: 'try again' } });
     click(render(SignupForm), getMessages('en-US')['signup.continueWithEmail']);
     await submit(render(SignupForm));
     expect(mock.push).not.toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
@@ -6,6 +7,7 @@ import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { hasAuthCookies, isRetryableAuthError } from '@/lib/auth/session';
 import { landingPathForRole } from '@/lib/auth/landing';
+import { createRecoveryGrant, RECOVERY_HANDOFF_COOKIE } from '@/lib/auth/recovery-server';
 
 const VID_COOKIE = 'bubaly_vid';
 const VID_MAX_AGE = 400 * 24 * 60 * 60;
@@ -18,6 +20,34 @@ export async function GET(request: Request) {
   const selection = resolveAuthSelection(url.searchParams, 'next');
   const next = selection.next ?? '/home';
   const retryHref = authScreenHref('/login', selection, true);
+
+  // Recovery needs evidence from this explicit exchange, never a preexisting
+  // signed-in account. Ordinary sign-in callbacks retain their session fallback.
+  if (url.searchParams.get('next') === '/auth/recovery') {
+    const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/auth' };
+    const recoveryRedirect = (query: string) => {
+      const response = NextResponse.redirect(new URL(`/auth/recovery?${query}`, url.origin));
+      response.headers.set('Cache-Control', 'no-store');
+      response.headers.set('Referrer-Policy', 'no-referrer');
+      return response;
+    };
+    try {
+      if (!code || code.length > 4096 || url.searchParams.getAll('code').length !== 1 || url.searchParams.has('error')) throw new Error('Invalid recovery code');
+      const supabase = await createServer();
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error || typeof data?.session?.access_token !== 'string' || !data.session.access_token) throw new Error('Recovery exchange unavailable');
+      const { grant, identity } = await createRecoveryGrant(data.session.access_token);
+      const maxAge = Math.min(300, Math.floor((identity.expiresAt - Date.now()) / 1000));
+      if (maxAge <= 0) throw new Error('Recovery grant expired');
+      const response = recoveryRedirect(`handoff=${createHash('sha256').update(grant).digest('hex')}`);
+      response.cookies.set(RECOVERY_HANDOFF_COOKIE, grant, { ...cookieOptions, maxAge });
+      return response;
+    } catch {
+      const response = recoveryRedirect('error=invalid');
+      response.cookies.set(RECOVERY_HANDOFF_COOKIE, '', { ...cookieOptions, maxAge: 0 });
+      return response;
+    }
+  }
 
   if (code) {
     const supabase = await createServer();

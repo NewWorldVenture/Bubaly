@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { resolveLandingPathAction, stitchIdentityAction } from '@/app/(auth)/act
 import { describeDbError } from '@/lib/supabase/errors';
 import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { RecoveryForm } from '@/components/auth/recovery-form';
 
 export function LoginForm() {
   const t = useTranslations();
@@ -25,6 +26,11 @@ export function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  const [recoveryLink, setRecoveryLink] = useState(false);
+  useLayoutEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    if (fragment.get('type') === 'recovery' || fragment.has('access_token') || fragment.has('refresh_token')) setRecoveryLink(true);
+  }, []);
   // A same-origin ?redirect= (e.g. an invite's /join?token=…) that OAuth + phone
   // sign-in must also honor — not just the password path below.
   const selection = resolveAuthSelection(params);
@@ -60,6 +66,8 @@ export function LoginForm() {
       setLoading(false);
     }
   }
+
+  if (recoveryLink || params.get('reset') === '1') return <RecoveryForm request={!recoveryLink} />;
 
   return (
     <div className="glass-card p-7 animate-fade-in sm:p-8">
@@ -106,6 +114,7 @@ export function LoginForm() {
         </Field>
         <Button type="submit" loading={loading} className="w-full">{t('login.signIn')}</Button>
       </form>
+      <Link href="/login?reset=1" className="mt-3 block text-sm font-medium text-brand-text hover:underline">{t('authRecovery.forgotPassword')}</Link>
       </>
       )}
 

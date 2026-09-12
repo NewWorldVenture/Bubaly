@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MailCheck, Sparkles, Smartphone, Mail, Gift } from 'lucide-react';
@@ -18,6 +18,9 @@ import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selec
 import { isPlausibleReferralCode, normalizeCode } from '@/lib/referrals/core';
 import { rememberReferralCodeAction } from '@/app/(auth)/signup/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isRetryableAuthError } from '@/lib/auth/session';
+
+const userIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function SignupForm() {
   const t = useTranslations();
@@ -29,6 +32,10 @@ export function SignupForm() {
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const mounted = useRef(false);
+  const phase = useRef<'idle' | 'pending' | 'complete' | 'unconfirmed'>('idle');
+  const attempt = useRef(0);
   // Explicit safe destinations (including invitations) take precedence. A
   // selected price only continues to review after setup; auth never buys it.
   const selection = resolveAuthSelection(params);
@@ -40,12 +47,20 @@ export function SignupForm() {
   // avenue, and the onboarding wizard can attribute the new family.
   const rawRef = params.get('ref');
   const referralCode = rawRef && isPlausibleReferralCode(rawRef) ? normalizeCode(rawRef) : null;
+  const intent = useMemo(() => ({ nextDest, referralCode }), [nextDest, referralCode]);
+  const currentIntent = useRef(intent);
+  useLayoutEffect(() => { currentIntent.current = intent; }, [intent]);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   useEffect(() => {
-    if (referralCode) void rememberReferralCodeAction(referralCode);
+    if (referralCode) void rememberReferralCodeAction(referralCode).catch(() => {});
   }, [referralCode]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!mounted.current || currentIntent.current !== intent || phase.current !== 'idle') return;
     setErrors({});
     const form = new FormData(e.currentTarget);
     const input = {
@@ -58,11 +73,18 @@ export function SignupForm() {
       setErrors(fieldErrors(parsed.error));
       return;
     }
+    phase.current = 'pending';
+    const thisAttempt = ++attempt.current;
+    const isMountedAttempt = () => mounted.current && attempt.current === thisAttempt;
+    const review = () => { phase.current = 'unconfirmed'; setUnconfirmed(true); };
+    let dispatched = false;
+    let rejected = false;
     setLoading(true);
     try {
       const supabase = createClient();
       const origin = window.location.origin;
       const next = nextDest;
+      dispatched = true;
       const { data, error } = await supabase.auth.signUp({
         email: parsed.data.email,
         password: parsed.data.password,
@@ -71,7 +93,21 @@ export function SignupForm() {
           emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
-      if (error) throw error;
+      if (!isMountedAttempt()) return;
+      if (currentIntent.current !== intent) { review(); return; }
+      if (error) {
+        const definitiveRejection = error.status !== undefined && error.status >= 400 && error.status < 500
+          && !isRetryableAuthError(error);
+        if (!definitiveRejection) { review(); return; }
+        rejected = true;
+        throw error;
+      }
+      if (!data.user || !userIdPattern.test(data.user.id)
+        || (data.session && data.session.user?.id !== data.user.id)) {
+        review();
+        return;
+      }
+      phase.current = 'complete';
       if (!data.session) {
         // Email confirmation required — the stitch runs in the auth callback
         // once the session is established.
@@ -79,14 +115,29 @@ export function SignupForm() {
         return;
       }
       // Auto-confirmed: attribute the anonymous visitor spine now (best-effort).
-      void stitchIdentityAction();
+      void stitchIdentityAction().catch(() => {});
       router.push(next);
       router.refresh();
     } catch (err) {
+      if (!isMountedAttempt()) return;
+      if (currentIntent.current !== intent || (dispatched && !rejected)) { review(); return; }
+      phase.current = 'idle';
       toastError(describeDbError(err, t('signupForm.couldNotCreateAccount')));
     } finally {
-      setLoading(false);
+      if (isMountedAttempt()) setLoading(false);
     }
+  }
+
+  if (unconfirmed) {
+    return (
+      <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
+        <h1 className="text-xl font-semibold">{t('signupForm.unconfirmedTitle')}</h1>
+        <p className="mt-2 text-sm text-muted" role="status">{t('signupForm.unconfirmedBody')}</p>
+        <Link href={loginHref} className="mt-6 text-sm font-medium text-brand-text hover:underline">
+          {t('signup.signIn')}
+        </Link>
+      </div>
+    );
   }
 
   if (checkEmail) {
@@ -124,9 +175,10 @@ export function SignupForm() {
         )}
       </div>
 
+      <fieldset disabled={loading} className="min-w-0">
       {showPhone ? (
         <div className="mt-7">
-          <PhoneAuth next={nextDest} onBack={() => setShowPhone(false)} />
+          <PhoneAuth next={nextDest} onBack={() => { if (mounted.current && phase.current === 'idle') setShowPhone(false); }} />
         </div>
       ) : (
       <>
@@ -145,21 +197,21 @@ export function SignupForm() {
         <div className="space-y-3">
           <button
             type="button"
-            onClick={() => setShowPhone(true)}
+            onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className={authButtonClass}
           >
             <Smartphone className="h-[18px] w-[18px]" /> {t('signup.continueWithPhone')}
           </button>
           <button
             type="button"
-            onClick={() => setShowEmail(true)}
+            onClick={() => { if (mounted.current && phase.current === 'idle') setShowEmail(true); }}
             className={authButtonClass}
           >
             <Mail className="h-[18px] w-[18px]" /> {t('signup.continueWithEmail')}
           </button>
           <button
             type="button"
-            onClick={() => setShowPhone(true)}
+            onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
           >
             {t('signup.continueWithoutEmail')}
@@ -181,6 +233,7 @@ export function SignupForm() {
       )}
       </>
       )}
+      </fieldset>
 
       <LegalConsent />
 
