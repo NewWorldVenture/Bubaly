@@ -28,7 +28,7 @@ The archived application source is `Temp/bubaly-signout-source-20260912.tar`, SH
 
 The source delta contains 48 non-audit files: 19 production files, 22 test files and seven locale catalogues; 16 files and 16 exported functions are new. The new page is `/auth/signout/complete`. Three new review/completion controls have permanent audit records. `discovery/auth-signout-locales.json` verifies all 13,556 previous entries, values and their order in each base catalogue, with exactly five appended keys per locale.
 
-Prior published `e0abcbeb` completed hosted quality, database, mobile, finance and Vercel checks. E2E job `103593845774` passed 861 checks in 4.9 minutes, including disposable Auth journeys; one external Wikimedia image HTTP 429 remains in its log. Those results establish the earlier recovery/signup checkpoint. Current logout source has not yet been published for hosted verification.
+Prior published `e0abcbeb` completed hosted quality, database, mobile, finance and Vercel checks. E2E job `103593845774` passed 861 checks in 4.9 minutes, including disposable Auth journeys; one external Wikimedia image HTTP 429 remains in its log. Those results establish the earlier recovery/signup checkpoint. The logout source was subsequently published as980561ff: all hosted jobs PASS, including932 E2E checks in6.7 minutes in run34710377277. The later password cycle is recorded in password-adoption-checkpoint.md.
 
 ## Remaining acceptance
 

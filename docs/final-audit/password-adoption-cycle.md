@@ -16,7 +16,7 @@ The child PIN path also adopts a password session. Its server action now uses an
 
 - Root middleware/persistence gate: 31 cases pass, including exact action exemption, unchanged request cookies and ordinary-request controls.
 - Normal-login lane: 56 unit checks and 56 controlled Chromium checks pass, including 23 new actual React/SDK login scenarios and 33 existing recovery scenarios; lint and preliminary nonincremental types pass.
-- Independent ownership lane: 29 actual SDK/Chromium cases pass, including delayed responses, empty-slot logout, final cookie-write races, unavailable storage, malformed/expired receipts, server-token verification, deadline disposal and fallback tab reconciliation.
-- Child server/UI lane and the additional disposable-backend acceptance journey are being finalized. Full frozen-source gates are pending.
+- Independent ownership lane: 32 actual SDK/Chromium cases pass, including delayed responses, empty-slot logout, final cookie-write races, unavailable storage, malformed/expired receipts, server-token verification, deadline disposal and fallback tab reconciliation.
+- Child lane passes30 focused units and17 actual React/SDK browser checks. Normal password UI was extended to31 cases for modified links and inactive controls. All frozen full gates pass at16f0f41c; see password-adoption-checkpoint.md. The new fifth disposable-provider journey is discovered but awaits hosted execution.
 
 These tests preserve the boundary between controlled provider behavior and actual hosted Auth execution. A partial browser cookie write cannot be rolled back atomically; the helper reports failure without restoring old bytes over a replacement session. Unrelated server responses, ordinary OAuth/phone adoption, production session settings and physical mobile acceptance remain separate audit obligations. No SQL, shared navigation or dependencies are changed in this cycle.
