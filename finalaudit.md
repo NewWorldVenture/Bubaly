@@ -2,14 +2,14 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T19:12:02.747Z
-- Total Audit Items: 13671
-- Not Started: 13619
-- In Progress: 49
+- Last Updated: 2026-09-12T19:29:10.718Z
+- Total Audit Items: 13674
+- Not Started: 13616
+- In Progress: 54
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
-- Failed: 2
+- Failed: 3
 - Overall Completion: 0.01%
 
 ## Status Legend
@@ -25,13 +25,14 @@ PRODUCTION READY: NO
 
 ## Critical Blockers
 - API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
-- API-BBD0A5DB630F: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
+- API-BBD0A5DB630F: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
 - LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
-- LIBRARY-5BA7FEA22007: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
-- FLOW-DDE6E8974B46: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
+- LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
+- FLOW-DDE6E8974B46: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
+- DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
 - CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
-- CALLBACK-07F1FB3AED21: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
-- DEPLOY-001: Hosted meal retry/removal acceptance, deployed session/provider configuration, live database/provider workflows, local startup approval limitation, physical devices and the second whole-application regression remain open.
+- CALLBACK-07F1FB3AED21: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
+- DEPLOY-001: Hosted messaging acceptance, deployed session/provider configuration, real database/provider workflows, physical devices, startup approval limitation and second full regression remain open.
 - AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
 - AUTH-002: Production session time-box/inactivity/single-session settings, physical mobile reopening and production child configuration remain unverified. Browser cookie writes are not atomic; ordinary OAuth/phone adoption and unrelated server responses remain separate audit obligations.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
@@ -67,6 +68,7 @@ PRODUCTION READY: NO
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.
+- AUTHZ-004: Bind trusted intake and decision receipts before trusting decided replay or adding autonomous recovery. Do not backfill authority by copying an unverified stored classification.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -8794,9 +8796,9 @@ PRODUCTION READY: NO
 | API-DE92C0D3E1A2 | API | POST /api/guardian/escalate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-4624F4C80639 | API | GET /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-82DE1172411D | API | POST /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-BBD0A5DB630F | API | POST /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress. | Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker. | 64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent. | See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open. |
-| API-262DB8655008 | API | POST /api/guardian/inbound/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-90346B8397DA | API | POST /api/guardian/inbound/whatsapp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-BBD0A5DB630F | API | POST /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability. | Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. | See guardian-policy-read-checkpoint.md. Read failures and lost intake are repaired in237933c1; replay authorship, autonomous recovery, provider delivery and non-atomic writes remain separate obligations. |
+| API-262DB8655008 | API | POST /api/guardian/inbound/voice | 🔄 IN PROGRESS | High | Ten signed actual-pipeline caller cases PASS across voice/WhatsApp, including required policy failures, healthy blocked decisions and invalid signatures. Callback claims are controlled as granted. | Required-policy failures return503 before downstream routing or notification. | Included in full14151-unit and production-build PASS at isolatedeee4ec06, integrated237933c1. | Existing destination-read behavior, unclaimed retry acknowledgement and ten-minute callback reclaim remain unverified; no durable voice/WhatsApp intake claim. |
+| API-90346B8397DA | API | POST /api/guardian/inbound/whatsapp | 🔄 IN PROGRESS | High | Ten signed actual-pipeline caller cases PASS across voice/WhatsApp, including required policy failures, healthy blocked decisions and invalid signatures. Callback claims are controlled as granted. | Required-policy failures return503 before downstream routing or notification. | Included in full14151-unit and production-build PASS at isolatedeee4ec06, integrated237933c1. | Existing destination-read behavior, unclaimed retry acknowledgement and ten-minute callback reclaim remain unverified; no durable voice/WhatsApp intake claim. |
 | API-5A16104BF051 | API | POST /api/guardian/screen | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-A3BF950AE646 | API | POST /api/guardian/status/voicemail | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-2F38298B7BB9 | API | GET /api/health | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9852,7 +9854,7 @@ PRODUCTION READY: NO
 | LIBRARY-E052EDE998EA | LIBRARY | lib/guardian/learning-run.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E15968D68A4A | LIBRARY | lib/guardian/learning.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-0439473CFC12 | LIBRARY | lib/guardian/phone.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-5BA7FEA22007 | LIBRARY | lib/guardian/pipeline.ts | 🔄 IN PROGRESS | High | Pending | None | Pending |  |
+| LIBRARY-5BA7FEA22007 | LIBRARY | lib/guardian/pipeline.ts | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability. | Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. | See guardian-policy-read-checkpoint.md. Read failures and lost intake are repaired in237933c1; replay authorship, autonomous recovery, provider delivery and non-atomic writes remain separate obligations. |
 | LIBRARY-40D6D6CFD762 | LIBRARY | lib/guardian/rules.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1DA8D5CDE6D8 | LIBRARY | lib/guardian/scam-ai.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-4E104708CAF9 | LIBRARY | lib/guardian/scam.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10348,9 +10350,9 @@ PRODUCTION READY: NO
 | FLOW-B5B471C61BB0 | FLOW | goals | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-BBDEFA2950F4 | FLOW | google | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-EEF93E1D1448 | FLOW | graph | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| FLOW-121DB83BE141 | FLOW | groceries | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
-| FLOW-7AA5EB472A55 | FLOW | grocery | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
-| FLOW-DDE6E8974B46 | FLOW | guardian | 🔄 IN PROGRESS | High | Pending | None | Pending |  |
+| FLOW-121DB83BE141 | FLOW | groceries | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
+| FLOW-7AA5EB472A55 | FLOW | grocery | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
+| FLOW-DDE6E8974B46 | FLOW | guardian | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability. | Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. | See guardian-policy-read-checkpoint.md. Read failures and lost intake are repaired in237933c1; replay authorship, autonomous recovery, provider delivery and non-atomic writes remain separate obligations. |
 | FLOW-62484E22A6A5 | FLOW | health | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-4EA140588150 | FLOW | home | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-5B59F3E44358 | FLOW | i18n | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10364,7 +10366,7 @@ PRODUCTION READY: NO
 | FLOW-0A7AACAE9B43 | FLOW | lp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-E2A530E251D3 | FLOW | marketing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-DFD76B3ECBEF | FLOW | marketplace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| FLOW-F146172C0036 | FLOW | meals | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
+| FLOW-F146172C0036 | FLOW | meals | 🔄 IN PROGRESS | High | Pending | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
 | FLOW-C064FBCA9D9D | FLOW | memory | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-F5CCCFB73751 | FLOW | messages | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-3BC801A33EA8 | FLOW | migrate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10577,7 +10579,7 @@ PRODUCTION READY: NO
 | DB-TBL-158 | DB-TBL | grocery_lists | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DB-TBL-159 | DB-TBL | guardian_audit_log | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DB-TBL-160 | DB-TBL | guardian_callback_events | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| DB-TBL-161 | DB-TBL | guardian_communications | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| DB-TBL-161 | DB-TBL | guardian_communications | 🔄 IN PROGRESS | High | Read-only schema shows authenticated family-memberSELECT/INSERT and uniqueSMSsid, with no authenticatedUPDATE/DELETE policy in checked-in declaration. Applied production policy not verified. | None | Pending | NoSQL authored/applied. Trusted recovery needs a protected service-owned receipt, not arbitrary communication rows. |
 | DB-TBL-162 | DB-TBL | guardian_contacts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DB-TBL-163 | DB-TBL | guardian_escalations | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DB-TBL-164 | DB-TBL | guardian_member_profiles | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11304,9 +11306,9 @@ PRODUCTION READY: NO
 | CALLBACK-FD4E5305F4FF | CALLBACK | /api/google/calendar/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-71A417C2F077 | CALLBACK | /api/guardian/escalate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-A484CD51076C | CALLBACK | /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-07F1FB3AED21 | CALLBACK | /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress. | Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker. | 64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent. | See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open. |
-| CALLBACK-F03F4B342194 | CALLBACK | /api/guardian/inbound/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-8B2E6E7A70BF | CALLBACK | /api/guardian/inbound/whatsapp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| CALLBACK-07F1FB3AED21 | CALLBACK | /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability. | Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. | See guardian-policy-read-checkpoint.md. Read failures and lost intake are repaired in237933c1; replay authorship, autonomous recovery, provider delivery and non-atomic writes remain separate obligations. |
+| CALLBACK-F03F4B342194 | CALLBACK | /api/guardian/inbound/voice | 🔄 IN PROGRESS | High | Ten signed actual-pipeline caller cases PASS across voice/WhatsApp, including required policy failures, healthy blocked decisions and invalid signatures. Callback claims are controlled as granted. | Required-policy failures return503 before downstream routing or notification. | Included in full14151-unit and production-build PASS at isolatedeee4ec06, integrated237933c1. | Existing destination-read behavior, unclaimed retry acknowledgement and ten-minute callback reclaim remain unverified; no durable voice/WhatsApp intake claim. |
+| CALLBACK-8B2E6E7A70BF | CALLBACK | /api/guardian/inbound/whatsapp | 🔄 IN PROGRESS | High | Ten signed actual-pipeline caller cases PASS across voice/WhatsApp, including required policy failures, healthy blocked decisions and invalid signatures. Callback claims are controlled as granted. | Required-policy failures return503 before downstream routing or notification. | Included in full14151-unit and production-build PASS at isolatedeee4ec06, integrated237933c1. | Existing destination-read behavior, unclaimed retry acknowledgement and ten-minute callback reclaim remain unverified; no durable voice/WhatsApp intake claim. |
 | CALLBACK-C5ECD6199A9B | CALLBACK | /api/guardian/screen | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-667D2842FE28 | CALLBACK | /api/guardian/status/voicemail | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-991E98BADBD4 | CALLBACK | /api/sync/google/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13312,10 +13314,10 @@ PRODUCTION READY: NO
 | SUPPORT-A3265310F552 | SUPPORT | vercel.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
-| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Application source 21bbfae1 in the existing private Node24.21.0 installation passes 14,021 unit cases, 496 controlled browser cases, a 249-page production build, strict post-build types, lint (four baseline warnings), localization and query audits. Earlier clean-install and startup evidence remains in prior checkpoints; no new installation or local preview startup was performed. | Integrated main9719a486 cron route additions unchanged, repaired incoming cross-platform/pure-test fixtures, removed the obsolete meals browser-write exception and scoped the real meal receipt assertion to its exact list item. | Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun. | Application source remains 21bbfae1. Follow-up14935e33 changes only one E2E locator; its lint/discovery/strict-type gates pass. See weekly-meal-checkpoint.md for source and exact evidence. |
-| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Frozen source 21bbfae1b3fdba8c6ca8520826edfff674df3dca: full private unit suite passes, 1,178 files / 14,021 tests in 52.47 seconds with eight workers under Node 24.21.0. | All meal writes now use the shared service. Removed the obsolete meals browser-write exception and added meals to the zero-browser-write assertion. Preserved upstream cron routes and repaired incoming cross-platform test fixtures. | Full unit suite PASS: 1,178 files / 14,021 tests. Combined 21-suite Chromium gate PASS: 496 cases. Production build PASS: 249 pages. Strict post-build types, lint, localization and query audits PASS. Four baseline lint warnings remain. All private evidence uses frozen source 21bbfae1; see weekly-meal-checkpoint.md. | Current unit evidence is pinned to source 21bbfae1; product workflow acceptance remains separate. |
+| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Integrated main9719a486 cron route additions unchanged, repaired incoming cross-platform/pure-test fixtures, removed the obsolete meals browser-write exception and scoped the real meal receipt assertion to its exact list item. | Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. Preceding meal/auth checkpoint1956a9e0 passed all hosted gates, including1,056 E2E cases; current237933c1 Guardian follow-up awaits hosted acceptance. | Integrated237933c1 runtime source matches isolatedeee4ec06. Only non-audit difference is the previously verified meal E2E locator14935e33. Production build-info contains eee4ec06. No installs or local preview startup. |
+| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Full suite includes repaired Guardian policy-read/intake regressions and prior meal/auth changes. The single meal E2E receipt locator fix is separate from unit execution. | Full unit gate PASS; all unit files match integrated237933c1. No unhandled unit failures. Captured full output: Temp/bubaly-guardian-policy-final-private-units-20260912.log. | Unit completion does not pass enclosing provider, database authorization or UI workflows. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Committed a02e82fb: synchronous form ownership and single-submit guards, honest accepted/uncertain signup receipts, retired callback fencing and handled auxiliary write failures. Recovery continuation is tracked under AUTH-003. Current repair: per-attempt signup client owns verifier cleanup, stages session adoption against current browser cookies and active form intent, and validates cookie write-back before publishing authentication. | 21 actual React/browser/installed-SDK signup cases pass; 30 original selection cases pass. Root combined five-suite Chromium auth gate passes 82 cases on bc22dbc9. One signup case deliberately retains the unresolved SDK verifier-loss characterization. Whole signup/email-confirmation workflow remains unverified. Exact source bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf in the private clean installation: 1162 files / 13537 unit tests PASS (122.55s), production build PASS (247 pages), post-build strict types PASS, lint PASS with four baseline warnings, i18n/query gates PASS, 82 focused Chromium checks PASS (13.3s). See docs/final-audit/persistent-login-renewal-cycle.md. New signup-verifier cycle: 46 actual React/Chromium/installed-SDK checks PASS; selection/persistence fixture integration 56 unit checks PASS. See signup-verifier-cycle.md. Combined source gate now passes; latest result below. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md. | Isolated signup verifier repair implemented; ordinary singleton remains unchanged. Main d8cd6be1 integrated in effe6a2e. New upstream signup fixture now models current hooks, typed receipts and uncertain outcomes; duplicate-email anti-enumeration assertions retained. Seven related suites / 196 tests PASS. |
-| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Password/child source 16f0f41c passed 13,810 units and 454 controlled browser cases. Hosted integration 674f7a24 passed all 1,013 browser checks, including five real disposable GoTrue journeys, run34711793751/job103601761830. See password-adoption-checkpoint.md. | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. | Hosted quality, database, mobile, finance and Vercel PASS at 674f7a24. E2E: 1,013 PASS in 5.6 minutes at 2026-09-12 18:49:45 UTC. Real child PIN adoption, cookie-only reopening, refresh, explicit logout, retained second device and retained parent session pass. | Repository login persistence changes are implemented and hosted disposable-backend acceptance passes. Production session settings and physical-device acceptance remain unverified. |
+| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Password/child source16f0f41c passed its full private gates. Hosted integration674f7a24 passed1,013 browser checks. Later1956a9e0 passed all1,056, including five real disposable GoTrue journeys. See password-adoption-checkpoint.md and weekly-meal-checkpoint.md. | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. All five durable Auth journeys also pass; session policy and physical-device verification remain outstanding. | Repository login persistence changes are implemented and hosted disposable-backend acceptance passes. Production session settings and physical-device acceptance remain unverified. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | INT-001 | INT | Contact Center authenticated provider callbacks and durable intake replay | 🔄 IN PROGRESS | High | docs/final-audit/contact-center-cycle.md | Exact four callback paths reach existing signature checks; persisted unhandled intake retries; bodyless 204; first urgency occurs before planner failure return. | 10 suites / 121 tests PASS; strict project types and scoped lint passed before final urgency tests. Production/deployed provider/database flow remains unverified; outbound durability tracked INT-002. |  |
 | PUSH-001 | PUSH | Notification push delivery, failure retention and acknowledgement | 🔄 IN PROGRESS | High | docs/final-audit/push-cycle.md; docs/final-audit/push-cursor-cycle.md; actual cron/provider-boundary and stateful cursor execution tests | Delivery/device/prune failures stay pending; required family/parental/user-preference reads fail before delivery; push_enabled respected; acknowledgement failures count as failures. Saved service-only global/family keyset cursors traverse and wrap pending due rows without starvation; cursor writes are verified before sending. Both cron handlers report unconfigured skipped delivery as unsuccessful. | 12 related suites / 121 tests, strict TypeScript, scoped lint and diff check PASS. Healthy row 201 is delivered on scan 2; microsecond ordering, tied timestamps, separate scope, wrap, deleted cursor and failed cursor writes exercised. Live provider/physical-device workflow pending. | Existing single pushed_at cannot guarantee per-device exactly-once delivery or prevent concurrent worker double-send. Schema-level investigation remains. |
@@ -13688,7 +13690,7 @@ PRODUCTION READY: NO
 | SUPPORT-C30241E58095 | SUPPORT | tests/e2e/password-login-boundaries.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-AF285E96F2C7 | SUPPORT | tests/e2e/password-session-ownership.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-63EAA3373812 | SUPPORT | tests/password-middleware.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
-| MEAL-001 | MEAL | Choose seven dinners and build a grocery list from persisted ingredients | 🔄 IN PROGRESS | High | 42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue cases PASS. Frozen application source 21bbfae1 passes 14,021 units and 496 controlled browser cases. Hosted 68f1a8f5 run34712568165/job103603871709 passed 1,055 browser cases and failed only the new meal receipt locator on both attempts. Real login, recipe/custom persistence, replacement, reload and initial four grocery row amounts passed before that assertion. Test-only follow-up 14935e33 passes lint, discovery and strict types; hosted retry/removal acceptance remains pending. | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun. | See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery. |
+| MEAL-001 | MEAL | Choose seven dinners and build a grocery list from persisted ingredients | 🔄 IN PROGRESS | High | 42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue cases PASS. Full private source21bbfae1: 14,021 units and496 browser cases PASS. Hosted1956a9e0: all1,056 browser cases PASS, including the complete real Next/PostgREST meal journey. See weekly-meal-checkpoint.md. | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | Requested manual weekly dinner and grocery workflow is implemented and accepted against the disposable hosted backend. Production RLS, external AI, physical devices, other recipe/voting/nutrition workflows and database atomicity remain separate audit obligations. |
 | DB-TBL-DD6A3A7E1AC0 | DB-TBL | marketing_recurring_ads | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
 | DB-TBL-B85388536AE7 | DB-TBL | marketing_recurring_ad_runs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
 | CONTROL-E44C4826F5CE | CONTROL | Choose or replace a dinner for the selected household day | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
@@ -13742,6 +13744,9 @@ PRODUCTION READY: NO
 | SUPPORT-BBB58B510F38 | SUPPORT | tests/recurring-ads-schedule.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E715E678C1D9 | SUPPORT | tests/server-actions-contract.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-896D6DD7A407 | SUPPORT | tests/weekly-meal-dates.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
+| AUTHZ-004 | AUTHZ | Guardian replay must verify stored decision authorship | ❌ FAIL | High | Source-backed signed-route/lease/schema trace independently confirmed at237933c1. No live exploitation, forgedsignature or cross-familyaccess was demonstrated. See guardian-policy-read-checkpoint.md. | Pending service-owned payload/communication/decision receipt binding; existing ai_tool_calls receipt pattern is available without newSQL. | Pending targeted reproduction and repair. Current policy-read/retention tests do not prove stored decision authorship. | Pre-existing replay gap; separate from repaired policy-read and retained-intake defects. |
+| SUPPORT-91A56D6A297E | SUPPORT | tests/guardian-policy-callers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 
 ## Inventory and evidence rules
 
@@ -13805,16 +13810,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS.
+Earlier checkpoints recorded a catalogue timeout, a flaky authenticated toast assertion and public-render stream errors; their source-specific investigations remain in the prior checkpoints. The latest meal/auth hosted run1956a9e0 passes all1,056 browser tests without failed/flaky/skipped summary entries. Current Guardian source237933c1 passes full private gates and still requires its hosted run; full production workflow verification remains unfinished.
 
 #### Fixes Applied
 Integrated main9719a486 cron route additions unchanged, repaired incoming cross-platform/pure-test fixtures, removed the obsolete meals browser-write exception and scoped the real meal receipt assertion to its exact list item.
 
 #### Retest Results
-Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending. Preceding meal/auth checkpoint1956a9e0 passed all hosted gates, including1,056 E2E cases; current237933c1 Guardian follow-up awaits hosted acceptance.
 
 #### Evidence
-Application source 21bbfae1 in the existing private Node24.21.0 installation passes 14,021 unit cases, 496 controlled browser cases, a 249-page production build, strict post-build types, lint (four baseline warnings), localization and query audits. Earlier clean-install and startup evidence remains in prior checkpoints; no new installation or local preview startup was performed.
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -13840,13 +13845,13 @@ Execute the complete checked-in unit suite for the pinned source without failed 
 No complete workflow finding yet; investigation pending.
 
 #### Fixes Applied
-All meal writes now use the shared service. Removed the obsolete meals browser-write exception and added meals to the zero-browser-write assertion. Preserved upstream cron routes and repaired incoming cross-platform test fixtures.
+Full suite includes repaired Guardian policy-read/intake regressions and prior meal/auth changes. The single meal E2E receipt locator fix is separate from unit execution.
 
 #### Retest Results
-Full unit suite PASS: 1,178 files / 14,021 tests. Combined 21-suite Chromium gate PASS: 496 cases. Production build PASS: 249 pages. Strict post-build types, lint, localization and query audits PASS. Four baseline lint warnings remain. All private evidence uses frozen source 21bbfae1; see weekly-meal-checkpoint.md.
+Full unit gate PASS; all unit files match integrated237933c1. No unhandled unit failures. Captured full output: Temp/bubaly-guardian-policy-final-private-units-20260912.log.
 
 #### Evidence
-Frozen source 21bbfae1b3fdba8c6ca8520826edfff674df3dca: full private unit suite passes, 1,178 files / 14,021 tests in 52.47 seconds with eight workers under Node 24.21.0.
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 ✅ PASS
@@ -13907,10 +13912,10 @@ Definitive sign-out/account replacement leaves prior-user offline rows, and late
 Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior.
 
 #### Retest Results
-Hosted quality, database, mobile, finance and Vercel PASS at 674f7a24. E2E: 1,013 PASS in 5.6 minutes at 2026-09-12 18:49:45 UTC. Real child PIN adoption, cookie-only reopening, refresh, explicit logout, retained second device and retained parent session pass.
+Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. All five durable Auth journeys also pass; session policy and physical-device verification remain outstanding.
 
 #### Evidence
-Password/child source 16f0f41c passed 13,810 units and 454 controlled browser cases. Hosted integration 674f7a24 passed all 1,013 browser checks, including five real disposable GoTrue journeys, run34711793751/job103601761830. See password-adoption-checkpoint.md.
+Password/child source16f0f41c passed its full private gates. Hosted integration674f7a24 passed1,013 browser checks. Later1956a9e0 passed all1,056, including five real disposable GoTrue journeys. See password-adoption-checkpoint.md and weekly-meal-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14541,16 +14546,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending. Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.
+Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.
 
 #### Fixes Applied
-Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.
+Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability.
 
 #### Retest Results
-64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending.
 
 #### Evidence
-Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress.
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14605,16 +14610,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.
+Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.
 
 #### Fixes Applied
-None
+Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability.
 
 #### Retest Results
-Pending
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending.
 
 #### Evidence
-Pending
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14637,7 +14642,39 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.
+Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.
+
+#### Fixes Applied
+Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability.
+
+#### Retest Results
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending.
+
+#### Evidence
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### DB-TBL-161 — guardian_communications
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:209
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
 
 #### Fixes Applied
 None
@@ -14646,7 +14683,7 @@ None
 Pending
 
 #### Evidence
-Pending
+Read-only schema shows authenticated family-memberSELECT/INSERT and uniqueSMSsid, with no authenticatedUPDATE/DELETE policy in checked-in declaration. Applied production policy not verified.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14701,16 +14738,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending. Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.
+Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.
 
 #### Fixes Applied
-Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.
+Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability.
 
 #### Retest Results
-64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending.
 
 #### Evidence
-Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress.
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -15578,6 +15615,38 @@ Actual callback characterization at f51bcd40 produces two TwiML replies and two 
 
 #### Final Status
 🔄 IN PROGRESS
+
+### AUTHZ-004 — Guardian replay must verify stored decision authorship
+
+Status: ❌ FAIL
+Severity: High
+Route(s), components, actions, tables and providers: app/api/guardian/inbound/sms/route.ts; supabase/migrations/01370_ai_call_guardian.sql:252; lib/guardian/sms-intake.ts
+
+#### Expected Behavior
+A stored decided communication may bypass screening only when a service-owned receipt binds its identity, payload and decision to verified ingress.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Authenticated family members can insert communications. A preinserted valid decided row matching a real signed callback can skip policy/scam screening when the event is claimable. The actor needs advance knowledge of the realSID and exactpayload/family/member and an unoccupiedSID. Existing uniqueSID and lack of authUPDATE/DELETE prevent replacing an already committed legitimate row. Initial insertion-race ID checks reject that attempt but do not bind authorship on laterretry.
+
+#### Fixes Applied
+Pending service-owned payload/communication/decision receipt binding; existing ai_tool_calls receipt pattern is available without newSQL.
+
+#### Retest Results
+Pending targeted reproduction and repair. Current policy-read/retention tests do not prove stored decision authorship.
+
+#### Evidence
+Source-backed signed-route/lease/schema trace independently confirmed at237933c1. No live exploitation, forgedsignature or cross-familyaccess was demonstrated. See guardian-policy-read-checkpoint.md.
+
+#### Final Status
+❌ FAIL
 
 ### FLOW-FB8E20FC2E4C — ab
 
@@ -17221,7 +17290,7 @@ Pending full workflow execution.
 Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.
 
 #### Retest Results
-Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.
+Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS.
 
 #### Evidence
 Pending
@@ -17254,7 +17323,7 @@ Pending full workflow execution.
 Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.
 
 #### Retest Results
-Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.
+Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS.
 
 #### Evidence
 Pending
@@ -17281,16 +17350,16 @@ Each supported user action completes validation, authorization, business logic, 
 - [ ] Responsive, keyboard, console/network and related regressions
 
 #### Issues Found
-Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.
+Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.
 
 #### Fixes Applied
-None
+Required policy reads now validate exact scoped/count/type receipts under one5s deadline. SMS retains neutral pending intake before policy/AI, conditionally saves and verifies decisions, avoids body URLs and checks current callback lease before decision write/notification. Voice/WhatsApp return503 on policy unavailability.
 
 #### Retest Results
-Pending
+Required-read and lost-intake baselines reproduced; required policy failures retain pending SMS and produce no routing/notification. Healthy retries, exact decision reads, replaced leases, lost responses and long Unicode body checks pass. Build249pages, strict types, lint (four baseline warnings), locale and query audits PASS. Hosted messaging acceptance pending.
 
 #### Evidence
-Pending
+Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -17749,7 +17818,7 @@ Pending full workflow execution.
 Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.
 
 #### Retest Results
-Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.
+Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS.
 
 #### Evidence
 Pending
@@ -19522,13 +19591,14 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 
 ## Remaining Issues
 - API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
-- API-BBD0A5DB630F: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
+- API-BBD0A5DB630F: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
 - LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
-- LIBRARY-5BA7FEA22007: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
-- FLOW-DDE6E8974B46: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
+- LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
+- FLOW-DDE6E8974B46: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
+- DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
 - CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
-- CALLBACK-07F1FB3AED21: Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain.
-- DEPLOY-001: Hosted meal retry/removal acceptance, deployed session/provider configuration, live database/provider workflows, local startup approval limitation, physical devices and the second whole-application regression remain open.
+- CALLBACK-07F1FB3AED21: AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open.
+- DEPLOY-001: Hosted messaging acceptance, deployed session/provider configuration, real database/provider workflows, physical devices, startup approval limitation and second full regression remain open.
 - AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
 - AUTH-002: Production session time-box/inactivity/single-session settings, physical mobile reopening and production child configuration remain unverified. Browser cookie writes are not atomic; ordinary OAuth/phone adoption and unrelated server responses remain separate audit obligations.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
@@ -19564,6 +19634,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.
+- AUTHZ-004: Bind trusted intake and decision receipts before trusting decided replay or adding autonomous recovery. Do not backfill authority by copying an unverified stored classification.
 
 ## Production Readiness
 NO
