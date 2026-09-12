@@ -120903,7 +120903,8 @@
       "fix": "Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.",
       "retest": "64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.",
       "notes": "See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open.",
-      "issue": "SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending."
+      "issue": "SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending. Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.",
+      "remaining": "Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain."
     },
     "API-262DB8655008": {
       "id": "API-262DB8655008",
@@ -135397,12 +135398,14 @@
       "area": "LIBRARY",
       "name": "lib/guardian/pipeline.ts",
       "source": "lib/guardian/pipeline.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
+      "status": "IN PROGRESS",
+      "severity": "High",
       "tests": "Pending",
       "fix": "None",
       "retest": "Pending",
-      "notes": ""
+      "notes": "",
+      "issue": "Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.",
+      "remaining": "Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain."
     },
     "LIBRARY-40D6D6CFD762": {
       "id": "LIBRARY-40D6D6CFD762",
@@ -141898,7 +141901,7 @@
       "severity": "High",
       "tests": "Pending",
       "fix": "Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.",
-      "retest": "Manual and AI duplicate-slot false confirmations were reproduced and now pass exact-one-slot regressions. Desktop/390px screenshots reviewed;280/320px overflow, touch and keyboard tests pass. Final build and hosted meal journey pending.",
+      "retest": "Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.",
       "notes": "See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery.",
       "discoveryGroupId": "APIG-050"
     },
@@ -141912,7 +141915,7 @@
       "severity": "High",
       "tests": "Pending",
       "fix": "Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.",
-      "retest": "Manual and AI duplicate-slot false confirmations were reproduced and now pass exact-one-slot regressions. Desktop/390px screenshots reviewed;280/320px overflow, touch and keyboard tests pass. Final build and hosted meal journey pending.",
+      "retest": "Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.",
       "notes": "See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery.",
       "discoveryGroupId": "APIG-051"
     },
@@ -141922,13 +141925,15 @@
       "area": "FLOW",
       "name": "guardian",
       "source": "app/(app)/guardian/actions.ts, app/api/guardian/escalate/route.ts, app/api/guardian/escalate/twiml/route.ts, app/api/guardian/inbound/sms/route.ts, app/api/guardian/inbound/voice/route.ts, app/api/guardian/inbound/whatsapp/route.ts, app/api/guardian/screen/route.ts, app/api/guardian/status/voicemail/route.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
+      "status": "IN PROGRESS",
+      "severity": "High",
       "tests": "Pending",
       "fix": "None",
       "retest": "Pending",
       "notes": "",
-      "discoveryGroupId": "APIG-052"
+      "discoveryGroupId": "APIG-052",
+      "issue": "Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.",
+      "remaining": "Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain."
     },
     "FLOW-62484E22A6A5": {
       "id": "FLOW-62484E22A6A5",
@@ -142122,7 +142127,7 @@
       "severity": "High",
       "tests": "Pending",
       "fix": "Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.",
-      "retest": "Manual and AI duplicate-slot false confirmations were reproduced and now pass exact-one-slot regressions. Desktop/390px screenshots reviewed;280/320px overflow, touch and keyboard tests pass. Final build and hosted meal journey pending.",
+      "retest": "Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.",
       "notes": "See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery.",
       "discoveryGroupId": "APIG-066"
     },
@@ -154398,7 +154403,8 @@
       "fix": "Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.",
       "retest": "64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.",
       "notes": "See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open.",
-      "issue": "SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending."
+      "issue": "SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending. Source-backed discovery at 68f1a8f5: failed contact/profile/rules reads become absence and can bypass configured Guardian routing policy. SMS classifies before saving intake; simply failing closed would lose the retained-message guarantee. See guardian-policy-read-cycle.md.",
+      "remaining": "Implement and exercise explicit unavailable policy reads, retained pending SMS intake and verified decision replay. See guardian-policy-read-cycle.md. Existing provider delivery and transaction limitations remain."
     },
     "CALLBACK-F03F4B342194": {
       "id": "CALLBACK-F03F4B342194",
@@ -180499,12 +180505,12 @@
       "source": "",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.",
-      "fix": "None",
-      "retest": "Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. Priorcarecheckpoint d36602e all4hostedjobs/697browser testsPASS; newsource hostedCI pending publication. Published 4915cc63: database/mobile/finance and Vercel checks PASS; hosted quality fails new upstream signup hook fixture (8 cases); E2E still running at inspection. Integrating origin/main d8cd6be1 without dependency changes, then rerunning full gates. Completed prior-head 4915cc63 E2E job 103590978050 passes 836 browser tests (6.2m), including disposable Auth journeys. Quality failure remains the separately repaired new upstream signup fixture. Its successful browser output includes one Wikimedia image 429, not a claim of error-free live assets. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md. Published e0abcbeb hosted quality/database/mobile/finance and Vercel PASS; E2E job103593845774 PASS861 browser checks in4.9m, including disposable Auth journeys. One external Wikimedia image429 remains in the log. New logout application source44811fb6 and test-only follow-upc4d4ea1e pass complete private gates as documented in auth-signout-checkpoint.md; current hosted verification is pending publication. Published980561ff all hosted jobs PASS;932 E2E checks6.7m. Password source16f0f41c passes248-page build, strict types, full lint (four baseline warnings), locale/query gates and454 browser checks; hosted verification pending publication.",
-      "notes": "Current application source16f0f41c passes full private gates. User requested parallel workers; full units/build/browser ran concurrently. No packages installed. Current source ready for own draft-PR publication.",
+      "tests": "Application source 21bbfae1 in the existing private Node24.21.0 installation passes 14,021 unit cases, 496 controlled browser cases, a 249-page production build, strict post-build types, lint (four baseline warnings), localization and query audits. Earlier clean-install and startup evidence remains in prior checkpoints; no new installation or local preview startup was performed.",
+      "fix": "Integrated main9719a486 cron route additions unchanged, repaired incoming cross-platform/pure-test fixtures, removed the obsolete meals browser-write exception and scoped the real meal receipt assertion to its exact list item.",
+      "retest": "Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.",
+      "notes": "Application source remains 21bbfae1. Follow-up14935e33 changes only one E2E locator; its lint/discovery/strict-type gates pass. See weekly-meal-checkpoint.md for source and exact evidence.",
       "issue": "CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS.",
-      "remaining": "Current effe6a2e local gates pass. Current-source hosted CI, deployed session/provider configuration, live database/provider workflows, startup approval limitation and final whole-application regression remain open."
+      "remaining": "Hosted meal retry/removal acceptance, deployed session/provider configuration, live database/provider workflows, local startup approval limitation, physical devices and the second whole-application regression remain open."
     },
     "TEST-001": {
       "id": "TEST-001",
@@ -180516,7 +180522,7 @@
       "severity": "High",
       "tests": "Frozen source 21bbfae1b3fdba8c6ca8520826edfff674df3dca: full private unit suite passes, 1,178 files / 14,021 tests in 52.47 seconds with eight workers under Node 24.21.0.",
       "fix": "All meal writes now use the shared service. Removed the obsolete meals browser-write exception and added meals to the zero-browser-write assertion. Preserved upstream cron routes and repaired incoming cross-platform test fixtures.",
-      "retest": "Full unit suite PASS. Combined 21-suite Chromium gate PASS, 496 cases in 1.1 minutes. Final build/type/lint/audit gate running. See weekly-meal-checkpoint.md.",
+      "retest": "Full unit suite PASS: 1,178 files / 14,021 tests. Combined 21-suite Chromium gate PASS: 496 cases. Production build PASS: 249 pages. Strict post-build types, lint, localization and query audits PASS. Four baseline lint warnings remain. All private evidence uses frozen source 21bbfae1; see weekly-meal-checkpoint.md.",
       "notes": "Current unit evidence is pinned to source 21bbfae1; product workflow acceptance remains separate.",
       "expected": "Execute the complete checked-in unit suite for the pinned source without failed tests or unhandled errors; this does not pass enclosing product workflows."
     },
@@ -180545,9 +180551,9 @@
       "severity": "High",
       "tests": "Password/child source 16f0f41c passed 13,810 units and 454 controlled browser cases. Hosted integration 674f7a24 passed all 1,013 browser checks, including five real disposable GoTrue journeys, run34711793751/job103601761830. See password-adoption-checkpoint.md.",
       "fix": "Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior.",
-      "retest": "Hosted quality, database, mobile, finance and Vercel PASS at674f7a24. E2E1013 PASS in5.6min at2026-09-12 18:49:45UTC. Real child PIN adoption, cookie-only reopening, refresh, explicit logout, retained second device and retained parent session pass.",
+      "retest": "Hosted quality, database, mobile, finance and Vercel PASS at 674f7a24. E2E: 1,013 PASS in 5.6 minutes at 2026-09-12 18:49:45 UTC. Real child PIN adoption, cookie-only reopening, refresh, explicit logout, retained second device and retained parent session pass.",
       "notes": "Repository login persistence changes are implemented and hosted disposable-backend acceptance passes. Production session settings and physical-device acceptance remain unverified.",
-      "issue": "Definitive sign-out/account replacement leaves prior-user offline rows, and late shared-hook responses can repopulate caches after purge. Native listener removal rejection causes unhandled promises. AUTH-L05: installed browser/server/native SDK removes saved expired sessions when refresh returns HTTP 200 with an empty object or missing refresh token; reproduced in six failing execution cases on a02e82fb. AUTH-L06: actual route/Chromium reproduction confirms delayed A signout response clears a newer B cookie; cache eventually retires B but cannot recover lost credentials. Ordinary SDK signout also waits before unconditional removal, so replacing transport alone is insufficient. AUTH-L07: a definitive refresh failure delayed after fetch but before SDK cookie cleanup could erase B; actual negative-write barrier reproduced it. AUTH-L08: throwing from that old SDK cleanup could leave a coalesced renewal caller unresolved; actual two-call probe reproduced it. Public adapter deletion fence and browser-only processLock now pass focused regressions. AUTH-L09: actual installed SDK/browser probe demonstrates password request A, delayed until after another tab saves B, then overwrites B. Temp/bubaly-delayed-password-adoption-probe-20260912.log records true B-before, false B-after and true old-A replacement. The current LoginForm has no owned-adoption boundary. Child PIN login is a second password-adopting path with server cookie writes; its guarded handoff is being investigated.",
+      "issue": "Definitive sign-out/account replacement leaves prior-user offline rows, and late shared-hook responses can repopulate caches after purge. Native listener removal rejection causes unhandled promises. AUTH-L05: installed browser/server/native SDK removes saved expired sessions when refresh returns HTTP 200 with an empty object or missing refresh token; reproduced in six failing execution cases on a02e82fb. AUTH-L06: actual route/Chromium reproduction confirms delayed A signout response clears a newer B cookie; cache eventually retires B but cannot recover lost credentials. Ordinary SDK signout also waits before unconditional removal, so replacing transport alone is insufficient. AUTH-L07: a definitive refresh failure delayed after fetch but before SDK cookie cleanup could erase B; actual negative-write barrier reproduced it. AUTH-L08: throwing from that old SDK cleanup could leave a coalesced renewal caller unresolved; actual two-call probe reproduced it. Public adapter deletion fence and browser-only processLock now pass focused regressions. AUTH-L09: actual installed SDK/browser probe demonstrates password request A, delayed until after another tab saves B, then overwrites B. Temp/bubaly-delayed-password-adoption-probe-20260912.log records true B-before, false B-after and true old-A replacement. These pre-fix password and child-login defects are repaired by source 16f0f41c and verified in hosted integration 674f7a24; see password-adoption-checkpoint.md.",
       "remaining": "Production session time-box/inactivity/single-session settings, physical mobile reopening and production child configuration remain unverified. Browser cookie writes are not atomic; ordinary OAuth/phone adoption and unrelated server responses remain separate audit obligations."
     },
     "AUTHZ-001": {
@@ -185694,9 +185700,9 @@
       "source": "components/modules/meals-module.tsx; app/(app)/dashboard/meals/actions.ts; lib/services/meals/index.ts; lib/services/groceries/index.ts",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue integrity cases PASS. Full14,021-unit and496-browser gates PASS at21bbfae1. Real Next/PostgREST phone journey discovered and awaiting hosted execution.",
+      "tests": "42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue cases PASS. Frozen application source 21bbfae1 passes 14,021 units and 496 controlled browser cases. Hosted 68f1a8f5 run34712568165/job103603871709 passed 1,055 browser cases and failed only the new meal receipt locator on both attempts. Real login, recipe/custom persistence, replacement, reload and initial four grocery row amounts passed before that assertion. Test-only follow-up 14935e33 passes lint, discovery and strict types; hosted retry/removal acceptance remains pending.",
       "fix": "Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence.",
-      "retest": "Manual and AI duplicate-slot false confirmations were reproduced and now pass exact-one-slot regressions. Desktop/390px screenshots reviewed;280/320px overflow, touch and keyboard tests pass. Final build and hosted meal journey pending.",
+      "retest": "Duplicate-slot false confirmations now pass exact-one-slot regressions. Desktop/390px screenshots inspected; 280/320px overflow, touch and keyboard checks pass. Private build (249 pages), strict types, lint, locale/query audits PASS. Hosted quality, database, mobile, finance and Vercel PASS at 68f1a8f5. E2E final at 2026-09-12 19:08:10 UTC: 1,055 PASS / 1 FAIL in 7.4 minutes. Scoped list-item receipt selector repaired in 14935e33; retry equality/removal assertions still require a successful hosted rerun.",
       "notes": "See docs/final-audit/weekly-meal-checkpoint.md and weekly-meal-planning-cycle.md. Fixtures do not establish production RLS, atomic concurrent writes, physical devices or real AI delivery."
     },
     "DB-TBL-DD6A3A7E1AC0": {
@@ -186417,5 +186423,5 @@
       "notes": "Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate."
     }
   },
-  "lastUpdated": "2026-09-12T18:53:53.127Z"
+  "lastUpdated": "2026-09-12T19:12:02.747Z"
 }

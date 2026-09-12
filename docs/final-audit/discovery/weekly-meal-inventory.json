@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-12T18:52:34.769Z",
+  "generatedAt": "2026-09-12T19:12:02.601Z",
   "baselineCommit": "644a9cbe8b5565ae22ebe6f2f5430792afb95e24",
-  "sourceCommit": "21bbfae1b3fdba8c6ca8520826edfff674df3dca",
+  "sourceCommit": "14935e3309ed3af5dac9c974037a0c932c2bf383",
   "methodology": [
     "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
     "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
@@ -114,7 +114,13 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-10A6E498D226",
+        "SERVICE-B2F2841920BF",
+        "SERVICE-C420BD46F150",
+        "SERVICE-C10F677B0EFE",
+        "SERVICE-1BBA1A5A0567"
+      ]
     },
     {
       "path": "app/(app)/admin/marketing/social/recurring/controls.tsx",
@@ -158,7 +164,11 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-342D89D1E6C6",
+        "SERVICE-A8EE1EAAB2CC",
+        "SERVICE-29623616A6E1"
+      ]
     },
     {
       "path": "app/(app)/admin/marketing/social/recurring/page.tsx",
@@ -197,7 +207,11 @@
       "pageRoute": "/admin/marketing/social/recurring",
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-A5D17761955A",
+        "ROUTE-A5D17761955A",
+        "SERVICE-3F2D2F45866E"
+      ]
     },
     {
       "path": "app/(app)/dashboard/grocery/actions.ts",
@@ -408,7 +422,8 @@
         "ACTION-1A67F7331B29",
         "ACTION-91AEADE5CC7B",
         "FLOW-F146172C0036",
-        "MEAL-001"
+        "MEAL-001",
+        "SERVICE-73DB0E2176B9"
       ]
     },
     {
@@ -499,7 +514,11 @@
       "httpMethods": [
         "GET"
       ],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-3650D4324732",
+        "API-9ED269DBDB75",
+        "JOB-F5185B999046"
+      ]
     },
     {
       "path": "components/modules/meals-module.tsx",
@@ -596,7 +615,14 @@
         "INCOMPLETE-1BD32C269DBA",
         "INCOMPLETE-AC07EC17D258",
         "UI-WF-008",
-        "MEAL-001"
+        "MEAL-001",
+        "CONTROL-E44C4826F5CE",
+        "CONTROL-A866059DF05A",
+        "CONTROL-4D14CCE7A571",
+        "CONTROL-B316FC5DE180",
+        "CONTROL-A26E7721407C",
+        "CONTROL-87108C97437D",
+        "CONTROL-EC743542B775"
       ]
     },
     {
@@ -2155,7 +2181,15 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "LIBRARY-D8E1C781AB00",
+        "SERVICE-4936014BD04B",
+        "SERVICE-EF004FE9241A",
+        "SERVICE-44DF148FA73B",
+        "SERVICE-FD01DF3B35B4",
+        "SERVICE-B39F9D03F43E",
+        "SERVICE-7D0A72C7ADAE"
+      ]
     },
     {
       "path": "lib/marketing/recurring-ads.ts",
@@ -2304,7 +2338,19 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "LIBRARY-4D80299CD0EC",
+        "SERVICE-64B60713F87D",
+        "SERVICE-1A3424F90AE3",
+        "SERVICE-986953053DB1",
+        "SERVICE-D25336ECA311",
+        "SERVICE-0A2141A9BE5C",
+        "SERVICE-BE67EEFF16E7",
+        "SERVICE-F0319A141859",
+        "SERVICE-44D9B760C61F",
+        "SERVICE-6A823A013264",
+        "SERVICE-0550051EA439"
+      ]
     },
     {
       "path": "lib/meals/planner.ts",
@@ -2645,7 +2691,12 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "LIBRARY-5D5611F24464",
+        "SERVICE-D7DAEBC6B079",
+        "SERVICE-DB9313004CC5",
+        "SERVICE-D8142F4F9261"
+      ]
     },
     {
       "path": "lib/services/groceries/index.ts",
@@ -3336,7 +3387,11 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "DB-TBL-DD6A3A7E1AC0",
+        "DB-TBL-B85388536AE7",
+        "SUPPORT-828B29F5735B"
+      ]
     },
     {
       "path": "tests/ai-meal-plan-persistence.test.ts",
@@ -3381,8 +3436,8 @@
       "kind": "test-source",
       "isNew": true,
       "baselineSha256": null,
-      "sourceSha256": "0f50bd5498261fa3f251fdce27d2057f7eaab8e6d9da823a64b4f97e68bd5743",
-      "bytes": 12763,
+      "sourceSha256": "a12fdb807efbe6ff556abc781e873b19ebdb4d93e0b36de8d322623cf9b06723",
+      "bytes": 12775,
       "baselineExportedSymbols": [],
       "exportedSymbols": [],
       "addedExportedFunctions": [],
@@ -3399,7 +3454,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-4BA5A809C3E3"
+      ]
     },
     {
       "path": "tests/e2e/weekly-meal-planner.spec.ts",
@@ -3416,7 +3473,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-E8F3F434DAC5"
+      ]
     },
     {
       "path": "tests/meal-plan-write-path.test.ts",
@@ -3490,7 +3549,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-72F970F8CE86"
+      ]
     },
     {
       "path": "tests/recurring-ads-schedule.test.ts",
@@ -3507,7 +3568,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-BBB58B510F38"
+      ]
     },
     {
       "path": "tests/server-actions-contract.test.ts",
@@ -3524,7 +3587,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-E715E678C1D9"
+      ]
     },
     {
       "path": "tests/service-groceries.test.ts",
@@ -3636,7 +3701,9 @@
       "pageRoute": null,
       "apiRoute": null,
       "httpMethods": [],
-      "existingMasterIds": []
+      "existingMasterIds": [
+        "SUPPORT-896D6DD7A407"
+      ]
     },
     {
       "path": "vercel.json",

@@ -29,4 +29,6 @@ GitHub could not start pull-request CI for auth publication `644a9cbe` because m
 
 ## Results
 
-Implementation and verification pending. The previous auth application source `16f0f41c` passed 13,810 unit and 454 controlled browser cases, production build, strict types, lint and audits. Vercel passed for `644a9cbe`; its new real child-login journey awaits hosted CI after conflict resolution. The prior logout checkpoint `980561ff` passed all hosted gates including 932 browser tests.
+Implementation is published in source `21bbfae1` through checkpoint `68f1a8f5`. Full private gates pass: 14,021 unit tests, 496 controlled browser tests, a 249-page production build, strict types, lint, localization and query audits. The meal suite includes 42 actual-component cases and inspected desktop/mobile layouts. Hosted run34712568165 passed 1,055 browser cases and failed one broad receipt locator in the new real Next/PostgREST meal journey. Real login, recipe/custom writes, replacement, reload and initial grocery amounts passed before that assertion. Test-only follow-up14935e33 narrows the receipt selector and passes lint/discovery/strict types; retry equality and removal acceptance await a successful hosted rerun. See `weekly-meal-checkpoint.md` for exact source, test scope, defects, fixes and remaining limits.
+
+The persistent-login integration `674f7a24` passed every hosted check, including 1,013 browser cases and the real child PIN session journey. Production session settings and physical-device acceptance remain separate.
