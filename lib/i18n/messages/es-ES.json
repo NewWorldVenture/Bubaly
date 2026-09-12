@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "No se ha iniciado ningún envío. Puedes volver a intentarlo.",
   "marketingPush.outcomes": "Aceptadas por el proveedor: {accepted} · Operaciones fallidas: {failed} · Dispositivos omitidos: {skipped} · Usuarios excluidos: {withheld} · Dispositivos eliminados: {pruned}",
   "marketingPush.legacyCounts": "Aceptadas por el proveedor: {accepted} · Operaciones fallidas: {failed} · Omitidos o excluidos: {skipped}",
-  "contactUrgent.replySaved": "Tu mensaje se ha guardado. La familia puede consultarlo en su bandeja de entrada."
+  "contactUrgent.replySaved": "Tu mensaje se ha guardado. La familia puede consultarlo en su bandeja de entrada.",
+  "habitsModule.dataUnavailable": "No se pudieron verificar los datos del hábito. Actualiza la página e inténtalo de nuevo.",
+  "habitsModule.habitChanged": "Este hábito ha cambiado. Actualiza la página e inténtalo de nuevo.",
+  "rewardsModule.dataUnavailable": "No se pudieron verificar los datos de las recompensas. Actualiza la página e inténtalo de nuevo."
 }

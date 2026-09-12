@@ -51,3 +51,13 @@ Final focused run: **21 browser cases PASS in 3.0 seconds**, four workers, 10-se
 This repair protects this component's normal workflow. It is not atomic server/database enforcement. The repository's only migration referencing `reward_redemptions`, `0028_reward_redemptions.sql`, defines a family-membership write policy without an affordability check. Raw endpoint bypass, hostile client payloads, cross-client concurrent approvals, and an atomic points/approval invariant require separate server/database work and live permission evidence. No SQL was changed or applied.
 
 The existing ledger semantics remain: requested redemptions do not reserve points; only approved/fulfilled redemptions count as spent. The UI exposes rejection and fulfillment, not a cancellation endpoint for an already-requested redemption. Adjacent chores/rewards consumers, remote permission revocation, complete data pagination, real device behavior, and the full production audit remain unverified by this bounded cycle.
+
+## Follow-up committed readback and form lifetime review
+
+Independent medication review identified an overlapping-refresh case that the original21 reward checks did not cover. The actual reward browser regression also failed: a redemption write completed, a newer online read superseded its held readback, and releasing the discarded older response enabled Redeem while the newer read remained pending. This was recorded under DATA-004 before the follow-up repair.
+
+The module now opts into the shared hook's `refreshAndConfirm` result while existing ordinary refresh consumers retain their previous contract. Only the latest response committed by React can release a reward write. A failed confirmation leaves an explicit recovery gate. When a create was already acknowledged, its completion is deferred until a successful Retry, then closes the existing form and announces success once; it cannot become a second new draft after recovery. Failed writes retain their drafts.
+
+An independent review found a second lifetime gap: a captured submit callback from that closed form could run later and create another reward. A per-opening epoch now retires captured handlers on close or confirmed completion, including after another form opens. The household owner boundary remains in place.
+
+The root browser suite now has23 passing actual React/query/cache/SDK cases, including the overlapping read and acknowledged-create recovery sequences. Independent review covers failed retries, owner retirement, failed-write drafts, superseding errors and retired form submissions; its final count is recorded with the combined verification checkpoint. These are additional bounded UI guarantees and do not change the remaining database/affordability limitations above.

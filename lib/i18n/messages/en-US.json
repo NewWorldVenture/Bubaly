@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "No delivery was started. You can retry.",
   "marketingPush.outcomes": "Provider accepted: {accepted} · Failed operations: {failed} · Devices skipped: {skipped} · Users excluded: {withheld} · Devices removed: {pruned}",
   "marketingPush.legacyCounts": "Provider accepted: {accepted} · Failed operations: {failed} · Skipped or excluded: {skipped}",
-  "contactUrgent.replySaved": "Your message is saved. The family can review it in their inbox."
+  "contactUrgent.replySaved": "Your message is saved. The family can review it in their inbox.",
+  "habitsModule.dataUnavailable": "Could not verify habit data. Refresh and try again.",
+  "habitsModule.habitChanged": "This habit changed. Refresh and try again.",
+  "rewardsModule.dataUnavailable": "Could not verify reward data. Refresh and try again."
 }

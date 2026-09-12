@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "Não foi iniciado nenhum envio. Pode tentar novamente.",
   "marketingPush.outcomes": "Aceites pelo fornecedor: {accepted} · Operações falhadas: {failed} · Dispositivos ignorados: {skipped} · Utilizadores excluídos: {withheld} · Dispositivos removidos: {pruned}",
   "marketingPush.legacyCounts": "Aceites pelo fornecedor: {accepted} · Operações falhadas: {failed} · Ignorados ou excluídos: {skipped}",
-  "contactUrgent.replySaved": "A sua mensagem foi guardada. A família pode consultá-la na sua caixa de entrada."
+  "contactUrgent.replySaved": "A sua mensagem foi guardada. A família pode consultá-la na sua caixa de entrada.",
+  "habitsModule.dataUnavailable": "Não foi possível verificar os dados dos hábitos. Atualize a página e tente novamente.",
+  "habitsModule.habitChanged": "Este hábito foi alterado. Atualize a página e tente novamente.",
+  "rewardsModule.dataUnavailable": "Não foi possível verificar os dados das recompensas. Atualize a página e tente novamente."
 }

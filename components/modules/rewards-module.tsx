@@ -49,6 +49,10 @@ export function RewardsModule() {
   const [form, setForm] = useState(blankReward);
   const [busy, setBusy] = useState<string | null>(null);
   const pendingWrite = useRef(false);
+  const [readbackBlocked, setReadbackBlocked] = useState(false);
+  const deferredCompletion = useRef<(() => void) | null>(null);
+  const formEpoch = useRef(0);
+  const renderedFormEpoch = formEpoch.current;
   const mounted = useRef(true);
   const saving = busy === 'catalog';
   useEffect(() => {
@@ -56,15 +60,15 @@ export function RewardsModule() {
     return () => { mounted.current = false; };
   }, []);
 
-  const { data: rewards, loading, error, stale, refresh: refreshRewards } = useRealtimeQuery<Reward>({
+  const { data: rewards, loading, error, stale, refreshAndConfirm: confirmRewards } = useRealtimeQuery<Reward>({
     table: 'rewards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('rewards').select('*').eq('family_id', familyId).order('cost_points'),
   });
-  const { data: assignments, loading: assignmentsLoading, error: assignmentsError, stale: assignmentsStale, refresh: refreshAssignments } = useRealtimeQuery<Assignment>({
+  const { data: assignments, loading: assignmentsLoading, error: assignmentsError, stale: assignmentsStale, refreshAndConfirm: confirmAssignments } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved'),
   });
-  const { data: redemptions, loading: redemptionsLoading, error: redemptionsError, stale: redemptionsStale, refresh: refreshRedemptions } = useRealtimeQuery<Redemption>({
+  const { data: redemptions, loading: redemptionsLoading, error: redemptionsError, stale: redemptionsStale, refreshAndConfirm: confirmRedemptions } = useRealtimeQuery<Redemption>({
     table: 'reward_redemptions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reward_redemptions').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -84,17 +88,35 @@ export function RewardsModule() {
 
   const sortedBalances = useMemo(() => [...balances].sort((a, b) => b.available - a.available), [balances]);
   const readError = error || assignmentsError || redemptionsError;
-  const verified = !readError && !loading && !assignmentsLoading && !redemptionsLoading
+  const verified = !readbackBlocked && !readError && !loading && !assignmentsLoading && !redemptionsLoading
     && !stale && !assignmentsStale && !redemptionsStale;
   // A queued callback must use the current read status and ledger, including
   // after a failed refresh has removed its original button from the screen.
   const current = useRef({ verified, rewards, redemptions, balanceByMember });
   current.current = { verified, rewards, redemptions, balanceByMember };
   const canWrite = () => mounted.current && current.current.verified && !pendingWrite.current;
-  const refreshLedger = async () => { await Promise.all([refreshAssignments(), refreshRedemptions()]); };
-  const retry = () => { void Promise.all([refreshRewards(), refreshAssignments(), refreshRedemptions()]); };
+  const refreshRewards = async () => (await confirmRewards()).ok;
+  const refreshLedger = async () => (await Promise.all([confirmAssignments(), confirmRedemptions()])).every(result => result.ok);
+  const retry = async () => {
+    if (!mounted.current || pendingWrite.current) return;
+    pendingWrite.current = true;
+    setBusy('readback');
+    try {
+      const confirmed = (await Promise.all([confirmRewards(), confirmAssignments(), confirmRedemptions()])).every(result => result.ok);
+      if (!mounted.current) return;
+      setReadbackBlocked(!confirmed);
+      if (confirmed) {
+        const complete = deferredCompletion.current;
+        deferredCompletion.current = null;
+        complete?.();
+      }
+    } finally {
+      pendingWrite.current = false;
+      if (mounted.current) setBusy(null);
+    }
+  };
 
-  async function mutate(id: string, write: () => PromiseLike<{ error: unknown }>, refresh: () => Promise<void>, message: string, complete?: () => void) {
+  async function mutate(id: string, write: () => PromiseLike<{ error: unknown }>, refresh: () => Promise<boolean>, message: string, complete?: () => void) {
     if (!canWrite()) return;
     pendingWrite.current = true;
     setBusy(id);
@@ -104,10 +126,12 @@ export function RewardsModule() {
       if (!mounted.current) return;
       // Rewards and redemptions are not published through Realtime. Keep
       // conflicting actions disabled until their required reads have settled.
-      await refresh();
+      const confirmed = await refresh();
       if (!mounted.current) return;
-      success(message);
-      complete?.();
+      setReadbackBlocked(!confirmed);
+      const finish = () => { success(message); complete?.(); };
+      if (confirmed) finish();
+      else deferredCompletion.current = finish;
     } catch (err) {
       if (mounted.current) toastError(describeDbError(err));
     } finally {
@@ -117,20 +141,21 @@ export function RewardsModule() {
   }
 
   // ── Reward CRUD ───────────────────────────────────────────
-  function openNew() { if (!canManage || !canWrite()) return; setForm(blankReward); setModalOpen(true); }
-  function openEdit(r: Reward) { if (!canManage || !canWrite()) return; setForm({ id: r.id, title: r.title, description: r.description ?? '', cost_points: r.cost_points }); setModalOpen(true); }
-  function closeModal() { if (!pendingWrite.current) setModalOpen(false); }
+  function openNew() { if (!canManage || !canWrite()) return; formEpoch.current += 1; setForm(blankReward); setModalOpen(true); }
+  function openEdit(r: Reward) { if (!canManage || !canWrite()) return; formEpoch.current += 1; setForm({ id: r.id, title: r.title, description: r.description ?? '', cost_points: r.cost_points }); setModalOpen(true); }
+  function retireForm() { formEpoch.current += 1; setModalOpen(false); }
+  function closeModal() { if (!pendingWrite.current) retireForm(); }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!canManage || !canWrite()) return;
+    if (!canManage || !canWrite() || !modalOpen || formEpoch.current !== renderedFormEpoch) return;
     if (!form.title.trim()) { toastError(t('rewardsModule.titleIsRequired')); return; }
     if (form.cost_points < 0) { toastError(t('rewardsModule.costMustBe0Or')); return; }
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
     await mutate('catalog', () => form.id
       ? createClient().from('rewards').update(fields).eq('id', form.id)
       : createClient().from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }),
-    refreshRewards, form.id ? 'Reward updated' : 'Reward added', () => setModalOpen(false));
+    refreshRewards, form.id ? 'Reward updated' : 'Reward added', retireForm);
   }
 
   async function remove(r: Reward) {
@@ -167,7 +192,7 @@ export function RewardsModule() {
     }).eq('id', redemption.id), refreshLedger, status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 
-  if (readError) return <ErrorState message={readError} onRetry={retry} />;
+  if (readError || readbackBlocked) return <ErrorState message={readError || t('rewardsModule.dataUnavailable')} onRetry={retry} />;
   if (!verified) return <SkeletonList count={5} />;
 
   return (

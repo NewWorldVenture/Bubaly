@@ -28,7 +28,7 @@ const outputSchema = z.object({
 }).strict();
 type Inputs = z.infer<typeof inputSchema>;
 type Outputs = z.infer<typeof outputSchema>;
-type Receipt = Tables<'ai_tool_calls'> & { inputs: Inputs; outputs: Outputs };
+type Receipt = Omit<Tables<'ai_tool_calls'>, 'inputs' | 'outputs'> & { inputs: Inputs; outputs: Outputs };
 export type UrgentOutcome = 'accepted' | 'in_app_only' | 'pending' | 'unknown' | 'rejected' | 'legacy_unknown' | 'failed';
 
 function digest(value: string): string { return createHash('sha256').update(value).digest('hex'); }

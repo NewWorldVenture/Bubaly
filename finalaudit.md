@@ -2,15 +2,15 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T14:50:11.987Z
-- Total Audit Items: 13445
-- Not Started: 13416
-- In Progress: 26
-- Passed: 1
+- Last Updated: 2026-09-12T15:05:07.527Z
+- Total Audit Items: 13471
+- Not Started: 13438
+- In Progress: 31
+- Passed: 0
 - Fixed + Passed: 0
 - Blocked: 0
 - Failed: 2
-- Overall Completion: 0.01%
+- Overall Completion: 0.00%
 
 ## Status Legend
 - ⬜ NOT STARTED
@@ -50,6 +50,10 @@ PRODUCTION READY: NO
 - AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
 - DATA-005: Repair current read/lifetime/day/action guards and mutation refresh, then verify supported medication workflows. Server/database role enforcement and atomic concurrent state remain separate.
 - PUSH-006: Repair and execute outcome/retry/UI boundaries. Durable per-device receipts and selective retry/reconciliation remain separate existing-schema work.
+- DATA-006: Repair and related browser checks; full live authorization/concurrency/row-limit proof separate.
+- PERF-002: Validate minimal runtime configuration and complete productionbuild/start/browser checks. Separately investigate first-value fixture ownership.
+- TEST-002: Prove unique fixture cleanup while retaining onboarding/task persistence assertions.
+- TEST-003: Confirm overbudget bytebound/cancellation/status and no unhandledruntimeerror.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13295,8 +13299,8 @@ PRODUCTION READY: NO
 | SUPPORT-A3265310F552 | SUPPORT | vercel.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
-| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending. |  |
-| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. | Initial combined run found an obsolete timeout-source-map expectation after the native transport moved. The map was corrected, targeted tests passed, and the final entire suite passed. Logs: bubaly-final-audit-locale-units-20260912.log; verification-checkpoint.md. |
+| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending. Hosted05e1b69b CI34700241919 all4jobsPASS including quality cataloguetimeoutfix; currentunpublishedsource remains separate. |  |
+| TEST-001 | TEST | Current baseline full automated unit suite | 🔄 IN PROGRESS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | None | Private572b29c9 under isolatedNode24:1149files,12995testsPASS/2staticassertionsFAIL/1unhandledUndici error,129.00s. Root fixed obsolete claim-helper assertions and moved/expanded explicit rawnotification writer exemption;28targetedtestsPASS. Agent isolated unhandled error to synthetic outboundFormData encoder in whole-multipart-overbudget fixture, not production combined-attachment processing; repair pending. | Initial combined run found an obsolete timeout-source-map expectation after the native transport moved. The map was corrected, targeted tests passed, and the final entire suite passed. Logs: bubaly-final-audit-locale-units-20260912.log; verification-checkpoint.md. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. | 68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. Next bounded repair preserves stable session identity across refresh/restart while separating saved family data after sign-out, new login or observed access change. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13465,11 +13469,11 @@ PRODUCTION READY: NO
 | SUPPORT-0BB0813F7C43 | SUPPORT | tests/e2e/auth-cache-partition.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F6DEEF1D5B71 | SUPPORT | tests/e2e/finance-read-states.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
-| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. | 21 actual Chromium workflow checks and 5 points unit tests PASS; scoped lint/diff PASS. Actual component, production hook/cache and installed Supabase client, controlled transport. See docs/final-audit/rewards-ledger-cycle.md. Combined6094eb04 full suite,177browser regression,build,types and lint PASS; see social-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
+| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | 21 actual Chromium workflow checks and 5 points unit tests PASS; scoped lint/diff PASS. Actual component, production hook/cache and installed Supabase client, controlled transport. See docs/final-audit/rewards-ledger-cycle.md. Combined6094eb04 full suite,177browser regression,build,types and lint PASS; see social-verification-checkpoint.md. New superseded-readback regression currently FAIL; root owns bounded followup repair using shared hook confirmation API. Root23actualbrowser cases PASS;independent7PASS, shared fullgate pending. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
 | AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
-| DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required verified read gates, synchronous owner/lifetime mutation locks, explicit readback, exact unique slot matching, local midnight advancement and DST-gap review. | 33actual Chromium module/cache/query/SDK checks pass;19related unit checks and scoped lint pass. Combined fourth-cycle gates pending. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
+| DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | LIBRARY-90A14267D9AB | LIBRARY | lib/social/account-tokens.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -13499,6 +13503,32 @@ PRODUCTION READY: NO
 | CONTROL-CE67470D62E2 | CONTROL | Review posts when the create response is unconfirmed | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | CONTROL-0B16B431843F | CONTROL | Return to Social Accounts after failed X authorization | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | PUSH-006 | PUSH | Marketing push outcomes, retry authority and display units must remain honest | 🔄 IN PROGRESS | High | Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md. | Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records. | Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending. | No SQL, shared navigation, live sends or dependency changes. Prior audience pagination repair remains independently verified. |
+| DATA-006 | DATA | Hydration habit counts and current-owner readback | 🔄 IN PROGRESS | High | 14actual React/query/cache/SDK Chromium characterization checks:4healthy controls and10confirmed defect scenarios. Unique(habit_id,log_date) modeled; no fake duplicate durable rows. See tests/e2e/hydration-audit-repro.spec.ts. | Verified current catalog+log read gates, synchronous owner/lifetime locks, count CAS on family/habit/day/member/currentcount, explicit committedreadback, UTCday advance, modal lifetime retirement and confirmedcreate formclosure. | 30actual Chromium cases PASS;29related unit checks passed before final modal guard; final37combinedhydration+rewardreview cases PASS and lintclean. Combined fullgate pending. | Source discovered under UI-ROUTE-0166, COMPONENT-B87AB8900CCC, DB-TBL-168/169. No production edits before this record. |
+| PERF-002 | PERF | Production response-stream cancellation and supported runtime | 🔄 IN PROGRESS | High | CI34699583414 E2E logs contain GET/ transformAlgorithm TypeErrors. Independent installed Next15.5.25/localNode22.23.1 cancellation/write reproduction25of25; nativeTransformStream25of25 matches hostedNode22.23.2 stack. Official upstream fix review identifies guarded behavior inNode24.15.0; exact hostedGET/ trigger remains unproven. | MinimumNode24.15<25 packageengine with matching rootlockmetadata; webCI Node24. No dependencyversions/globalruntime changed. | Official portableNode24.21.0 checksum verified in isolatedTemp. Same native and installedNext15.5.25 cancel/write harness:Node22.23.1 internal errors25/25+25/25;Node24.21.0 errors0/25+0/25. Full application validation pending. | Finding recorded before configuration changes. Existing dependency tree remains untouched. |
+| TEST-002 | TEST | Authenticated browser fixture ownership across projects | 🔄 IN PROGRESS | High | Actual unmodified beforeEach hooks executed in two isolated VM project modules with shared synthetic Auth store:chromium createsuser/family;iphone shared-emailcleanup deletesboth and replacesuser. Same resultNode22and24. Exact hostedtoast failure attribution remains unproven. | Fresh project/worker/nonce-owned fixture email, identity-checked cleanup and unchanged fullonboarding/taskpersistence assertions. | 4actualhook interleaving/ownership regressions PASS; fullhostedrun pending. | Recorded before fixture edits. No live user accounts modified. |
+| SUPPORT-5D639D9E4966 | SUPPORT | app/api/cron/contact-center-urgent/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| API-62F6F32B2748 | API | GET /api/cron/contact-center-urgent | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| JOB-47B3E5312926 | JOB | /api/cron/contact-center-urgent | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-7F6A900AF295 | SERVICE | inboundProviderRef | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-A7E34BED0527 | SERVICE | findInboundMessage | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-C3284E1B6E1F | LIBRARY | lib/contact-center/urgent-delivery.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-3AB79739DF90 | SERVICE | captureInboundWithUrgency | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-C69D425BFDD3 | SERVICE | attemptUrgentDelivery | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-CF4C9D4494E5 | SERVICE | drainUrgentDeliveries | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-3CDEA1D2F91C | SERVICE | sendSmsWithReceipt | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-475679926AAD | SERVICE | pushDeliveryPhase | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-4F7869ACD3A0 | SERVICE | canDeletePush | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-B059A4CFEDDA | SERVICE | needsPushReview | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-99208E1E851C | SERVICE | pushDeliveryCounts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-8B1A1CEC2A71 | SERVICE | doseSlotInstant | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-3A66ECCFDE7C | SUPPORT | tests/contact-center-intake-query-contract.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-A2BC9AB7B5A4 | SUPPORT | tests/contact-center-urgent-durability-repro.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-B520451DF6B4 | SUPPORT | tests/contact-center-urgent-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-5EE147EA7E77 | SUPPORT | tests/contact-center-urgent-review.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-678300F81E6F | SUPPORT | tests/e2e/medications-ledger.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-26C664F22A02 | SUPPORT | tests/marketing-push-consumer-review.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-56CD7E1068E1 | SUPPORT | tests/marketing-push-outcome-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| TEST-003 | TEST | Inbound multipart request fixture and cancellation accuracy | 🔄 IN PROGRESS | High | Node24 isolated whole-multipart-overbudget case:assertionPASS plus1unhandled ERR_INVALID_STATE/exit1; combined-attachment-byte-limit case separatelypasses. Bundled outboundFormData encoder enqueues after legitimate body cancellation because it only checks errored, notclosed, stream state. | Pre-serialized multipart bytes in controlled inboundstream fixture; explicit cancellation/readbound assertions; actualchunkedloopbackHTTP→Next adapter→emailhandler returns413. | 3files/30testsPASS withzero unhandled errors onNode24; no productionlimits or cancellation changed. Fullsuitepending. | Recorded before fixture change; no providerwrites or productionsecretuse. |
 
 ## Inventory and evidence rules
 
@@ -13568,7 +13598,7 @@ CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b pr
 None
 
 #### Retest Results
-Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending.
+Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending. Hosted05e1b69b CI34700241919 all4jobsPASS including quality cataloguetimeoutfix; currentunpublishedsource remains separate.
 
 #### Evidence
 Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.
@@ -13578,7 +13608,7 @@ Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; p
 
 ### TEST-001 — Current baseline full automated unit suite
 
-Status: ✅ PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: Trace using linked discovery inventory; record exact exercised chain before passing.
 
@@ -13600,13 +13630,13 @@ No complete workflow finding yet; investigation pending.
 None
 
 #### Retest Results
-Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI.
+Private572b29c9 under isolatedNode24:1149files,12995testsPASS/2staticassertionsFAIL/1unhandledUndici error,129.00s. Root fixed obsolete claim-helper assertions and moved/expanded explicit rawnotification writer exemption;28targetedtestsPASS. Agent isolated unhandled error to synthetic outboundFormData encoder in whole-multipart-overbudget fixture, not production combined-attachment processing; repair pending.
 
 #### Evidence
 Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log
 
 #### Final Status
-✅ PASS
+🔄 IN PROGRESS
 
 ### AUTH-001 — Registration, verification, OAuth and recovery
 
@@ -14586,13 +14616,13 @@ Balances, affordability and reward decisions require verified required ledger re
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Two required ledger reads discard error/loading state; a failed history read becomes zero spent and permits an unaffordable outgoing redemption request.
+Two required ledger reads discard error/loading state; a failed history read becomes zero spent and permits an unaffordable outgoing redemption request. Followup actual Chromium reproduction: redemption POST commits, online GET2 supersedes held readback GET1, then releasing GET1 re-enables Redeem while GET2 remains pending. Assertion failed on enabled control. Requires opt-in committed read confirmation, preserving existing ledger permission limitations. Independent5-case review:4controls passed, retained submit after confirmed insert/readback-recovery/form closure created a second reward. Per-opening form lifetime must retire old callbacks even after a new form opens.
 
 #### Fixes Applied
-Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented.
+Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes.
 
 #### Retest Results
-21 actual Chromium workflow checks and 5 points unit tests PASS; scoped lint/diff PASS. Actual component, production hook/cache and installed Supabase client, controlled transport. See docs/final-audit/rewards-ledger-cycle.md. Combined6094eb04 full suite,177browser regression,build,types and lint PASS; see social-verification-checkpoint.md.
+21 actual Chromium workflow checks and 5 points unit tests PASS; scoped lint/diff PASS. Actual component, production hook/cache and installed Supabase client, controlled transport. See docs/final-audit/rewards-ledger-cycle.md. Combined6094eb04 full suite,177browser regression,build,types and lint PASS; see social-verification-checkpoint.md. New superseded-readback regression currently FAIL; root owns bounded followup repair using shared hook confirmation API. Root23actualbrowser cases PASS;independent7PASS, shared fullgate pending.
 
 #### Evidence
 Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance.
@@ -14714,13 +14744,13 @@ Dose actions reflect verified current records, active medication, the current ho
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Unpublished dose-table writes leave stale controls: taken→skip persists skipped while UI says taken, and a subsequent taken action deletes the skipped row. Cached pending dose reads, duplicate and retained prior-family callbacks remain actionable; rejected transport leaves controls busy. Inactive medications remain actionable and the memoized day does not advance at midnight.
+Unpublished dose-table writes leave stale controls: taken→skip persists skipped while UI says taken, and a subsequent taken action deletes the skipped row. Cached pending dose reads, duplicate and retained prior-family callbacks remain actionable; rejected transport leaves controls busy. Inactive medications remain actionable and the memoized day does not advance at midnight. Independent browser review after572b29c9 reproduced a superseded post-mutation readback: online starts GET2, releasing discarded GET1 resolves refresh and re-enables the dose action against old verified rows while GET2 remains pending. Unique-slot/status predicates limit durable corruption, but duplicate/conflicting requests and false readiness remain. Followup actual medication and schedule cases also reproduced old onSubmit after confirmed save/recovery/closure creating a second row. Ops repairing per-opening identity and close/reopen/cancel boundaries; shared hook remains frozen.
 
 #### Fixes Applied
-Required verified read gates, synchronous owner/lifetime mutation locks, explicit readback, exact unique slot matching, local midnight advancement and DST-gap review.
+Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion.
 
 #### Retest Results
-33actual Chromium module/cache/query/SDK checks pass;19related unit checks and scoped lint pass. Combined fourth-cycle gates pending.
+Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending.
 
 #### Evidence
 See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts.
@@ -14756,6 +14786,134 @@ Five focused files/76tests pass, including actual action/core/page and9independe
 
 #### Evidence
 Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### DATA-006 — Hydration habit counts and current-owner readback
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: components/modules/habits-module.tsx; lib/habits/streaks.ts; /dashboard/habits
+
+#### Expected Behavior
+A count change uses verified current household/date data, preserves concurrent values, and shows committed results without duplicate or stale callbacks.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Cached3 versus persisted8 with held refresh permits+1 to overwrite8 with4; failed readback keeps3 writable after4saved; duplicatecallbacks emit2updates; retired owner callbacks write afterswitch/unmount; open-midnight page writespriorUTCdate; requiredlogerrors/pending render0; thrown mutation escapes without toast. Independent self-review reproduced retained submit from an already-saved/unmounted HabitModal creating a second identical habit. Parent household lifetime does not retire an individual form instance.
+
+#### Fixes Applied
+Verified current catalog+log read gates, synchronous owner/lifetime locks, count CAS on family/habit/day/member/currentcount, explicit committedreadback, UTCday advance, modal lifetime retirement and confirmedcreate formclosure.
+
+#### Retest Results
+30actual Chromium cases PASS;29related unit checks passed before final modal guard; final37combinedhydration+rewardreview cases PASS and lintclean. Combined fullgate pending.
+
+#### Evidence
+14actual React/query/cache/SDK Chromium characterization checks:4healthy controls and10confirmed defect scenarios. Unique(habit_id,log_date) modeled; no fake duplicate durable rows. See tests/e2e/hydration-audit-repro.spec.ts.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### PERF-002 — Production response-stream cancellation and supported runtime
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: .github/workflows/ci.yml; package.json; Node TransformStream; app public server rendering
+
+#### Expected Behavior
+Client cancellation does not generate server render failures from the deployed stream runtime; build and deployment runtime versions are validated together.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+A canceled reader racing a subsequent stream write can call the cleared Node transform algorithm. Hosted first-task toast flake precedes first loggedstreamerror by33seconds, so causation is not established.
+
+#### Fixes Applied
+MinimumNode24.15<25 packageengine with matching rootlockmetadata; webCI Node24. No dependencyversions/globalruntime changed.
+
+#### Retest Results
+Official portableNode24.21.0 checksum verified in isolatedTemp. Same native and installedNext15.5.25 cancel/write harness:Node22.23.1 internal errors25/25+25/25;Node24.21.0 errors0/25+0/25. Full application validation pending.
+
+#### Evidence
+CI34699583414 E2E logs contain GET/ transformAlgorithm TypeErrors. Independent installed Next15.5.25/localNode22.23.1 cancellation/write reproduction25of25; nativeTransformStream25of25 matches hostedNode22.23.2 stack. Official upstream fix review identifies guarded behavior inNode24.15.0; exact hostedGET/ trigger remains unproven.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### TEST-002 — Authenticated browser fixture ownership across projects
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: tests/e2e/authenticated.spec.ts; .github/workflows/ci.yml
+
+#### Expected Behavior
+Parallel desktop/phone authenticated workflows own distinct disposable identities and cannot delete another active project fixture.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Shared E2E_AUTH_EMAIL permits cross-project cleanup of an active test account and household.
+
+#### Fixes Applied
+Fresh project/worker/nonce-owned fixture email, identity-checked cleanup and unchanged fullonboarding/taskpersistence assertions.
+
+#### Retest Results
+4actualhook interleaving/ownership regressions PASS; fullhostedrun pending.
+
+#### Evidence
+Actual unmodified beforeEach hooks executed in two isolated VM project modules with shared synthetic Auth store:chromium createsuser/family;iphone shared-emailcleanup deletesboth and replacesuser. Same resultNode22and24. Exact hostedtoast failure attribution remains unproven.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### TEST-003 — Inbound multipart request fixture and cancellation accuracy
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: tests/email-attachments.test.ts; lib/server/bounded-request-body.ts; Node24 Undici FormData encoder
+
+#### Expected Behavior
+Oversized inbound multipart requests stop reading at the limit, return413, and finish without unhandled errors through the actual HTTP request adapter.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+SyntheticRequest(FormData) models an outgoing encoder instead of the incoming HTTP byte stream and leaks canceled encoder rejection; fullsuite attribution pointed to the followingtest.
+
+#### Fixes Applied
+Pre-serialized multipart bytes in controlled inboundstream fixture; explicit cancellation/readbound assertions; actualchunkedloopbackHTTP→Next adapter→emailhandler returns413.
+
+#### Retest Results
+3files/30testsPASS withzero unhandled errors onNode24; no productionlimits or cancellation changed. Fullsuitepending.
+
+#### Evidence
+Node24 isolated whole-multipart-overbudget case:assertionPASS plus1unhandled ERR_INVALID_STATE/exit1; combined-attachment-byte-limit case separatelypasses. Bundled outboundFormData encoder enqueues after legitimate body cancellation because it only checks errored, notclosed, stream state.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -18728,6 +18886,10 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
 - DATA-005: Repair current read/lifetime/day/action guards and mutation refresh, then verify supported medication workflows. Server/database role enforcement and atomic concurrent state remain separate.
 - PUSH-006: Repair and execute outcome/retry/UI boundaries. Durable per-device receipts and selective retry/reconciliation remain separate existing-schema work.
+- DATA-006: Repair and related browser checks; full live authorization/concurrency/row-limit proof separate.
+- PERF-002: Validate minimal runtime configuration and complete productionbuild/start/browser checks. Separately investigate first-value fixture ownership.
+- TEST-002: Prove unique fixture cleanup while retaining onboarding/task persistence assertions.
+- TEST-003: Confirm overbudget bytebound/cancellation/status and no unhandledruntimeerror.
 
 ## Production Readiness
 NO

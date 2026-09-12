@@ -88,6 +88,20 @@ if (fs.existsSync(socialDeltaPath)) {
     ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
   ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
 }
+const careDeltaPath = path.join(__dirname, 'discovery/care-delivery-inventory.json');
+if (fs.existsSync(careDeltaPath)) {
+  const delta = read('discovery/care-delivery-inventory.json');
+  for (const file of delta.files) {
+    const evidence = { notes: 'Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate.' };
+    if (file.isNew) add(file.path.startsWith('lib/') ? 'LIBRARY' : 'SUPPORT', file.path, file.path, file.path, evidence);
+    for (const fn of file.addedExportedFunctions) {
+      if (file.apiRoute && file.httpMethods.includes(fn.name)) add('API', `${file.apiRoute}:${fn.name}`, `${fn.name} ${file.apiRoute}`, file.path, { ...evidence, line: fn.line });
+      else if (file.kind === 'production-source') add('SERVICE', `${file.path}:${fn.name}`, fn.name, file.path, { ...evidence, line: fn.line });
+    }
+    if (file.apiRoute?.startsWith('/api/cron/')) add('JOB', file.apiRoute, file.apiRoute, file.path, evidence);
+    for (const name of file.environmentNames) add('ENV', name, name, file.path, evidence);
+  }
+}
 // Every tracked file is also classified, including documentation, tests, assets,
 // scripts, dependency manifests and generated schema. Discovery is not verification.
 const mappedSources = new Set(Object.values(records).map(r => r.source));

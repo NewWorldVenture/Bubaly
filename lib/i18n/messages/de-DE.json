@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "Es wurde keine Zustellung begonnen. Sie können es erneut versuchen.",
   "marketingPush.outcomes": "Vom Anbieter angenommen: {accepted} · Fehlgeschlagene Vorgänge: {failed} · Übersprungene Geräte: {skipped} · Ausgeschlossene Nutzer: {withheld} · Entfernte Geräte: {pruned}",
   "marketingPush.legacyCounts": "Vom Anbieter angenommen: {accepted} · Fehlgeschlagene Vorgänge: {failed} · Übersprungen oder ausgeschlossen: {skipped}",
-  "contactUrgent.replySaved": "Ihre Nachricht wurde gespeichert. Die Familie kann sie in ihrem Posteingang lesen."
+  "contactUrgent.replySaved": "Ihre Nachricht wurde gespeichert. Die Familie kann sie in ihrem Posteingang lesen.",
+  "habitsModule.dataUnavailable": "Die Gewohnheitsdaten konnten nicht überprüft werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
+  "habitsModule.habitChanged": "Diese Gewohnheit wurde geändert. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
+  "rewardsModule.dataUnavailable": "Die Belohnungsdaten konnten nicht überprüft werden. Aktualisieren Sie die Seite und versuchen Sie es erneut."
 }

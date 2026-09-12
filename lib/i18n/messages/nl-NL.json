@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "Er is geen verzending gestart. Je kunt het opnieuw proberen.",
   "marketingPush.outcomes": "Door provider geaccepteerd: {accepted} · Mislukte bewerkingen: {failed} · Overgeslagen apparaten: {skipped} · Uitgesloten gebruikers: {withheld} · Verwijderde apparaten: {pruned}",
   "marketingPush.legacyCounts": "Door provider geaccepteerd: {accepted} · Mislukte bewerkingen: {failed} · Overgeslagen of uitgesloten: {skipped}",
-  "contactUrgent.replySaved": "Je bericht is opgeslagen. Het gezin kan het in de inbox bekijken."
+  "contactUrgent.replySaved": "Je bericht is opgeslagen. Het gezin kan het in de inbox bekijken.",
+  "habitsModule.dataUnavailable": "De gewoontegegevens konden niet worden gecontroleerd. Vernieuw de pagina en probeer het opnieuw.",
+  "habitsModule.habitChanged": "Deze gewoonte is gewijzigd. Vernieuw de pagina en probeer het opnieuw.",
+  "rewardsModule.dataUnavailable": "De beloningsgegevens konden niet worden gecontroleerd. Vernieuw de pagina en probeer het opnieuw."
 }

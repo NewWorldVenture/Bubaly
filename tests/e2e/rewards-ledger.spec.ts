@@ -37,6 +37,7 @@ type Fixture = {
   holdMutations: boolean;
   failMutation: boolean;
   release: (table: Table) => Promise<void>;
+  releaseOne: (table: Table) => Promise<void>;
   finishWrites: () => Promise<void>;
 };
 type Probe = {
@@ -65,6 +66,7 @@ async function fixture(page: Page): Promise<Fixture> {
     rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }] },
     mode: {}, reads: [], writes: [], holdMutations: false, failMutation: false,
     release: async table => { delete state.mode[table]; await Promise.all((held.get(table) ?? []).splice(0).map(release => release())); },
+    releaseOne: async table => { const release = held.get(table)?.shift(); if (!release) throw new Error('No held read'); await release(); },
     finishWrites: async () => { state.holdMutations = false; await Promise.all(pendingWrites.splice(0).map(release => release())); },
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
@@ -329,4 +331,37 @@ test('unmount retires callbacks and a late issued-write completion does not refr
   expect(state.reads).toHaveLength(reads);
   expect(await page.evaluate(() => window.__rewardsLedger.toasts)).toEqual([]);
   await expect(page.locator('main')).toBeEmpty();
+});
+
+test('a superseded redemption readback keeps actions locked until the newer read commits', async ({ page }) => {
+  const state = await fixture(page); state.rows.reward_redemptions = [];
+  await mount(page); await ready(page);
+  state.mode.reward_redemptions = 'hold';
+  await page.getByRole('button', { name: 'Redeem', exact: true }).click();
+  await expect.poll(() => state.reads.filter(table => table === 'reward_redemptions').length).toBe(2);
+  await page.evaluate(() => window.__rewardsLedger.online());
+  await expect.poll(() => state.reads.filter(table => table === 'reward_redemptions').length).toBe(3);
+  await state.releaseOne('reward_redemptions'); await finish(page);
+  await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toBeDisabled({ timeout: 1000 });
+  expect(state.writes).toHaveLength(1);
+  await state.release('reward_redemptions');
+  await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toBeEnabled();
+  expect(state.rows.reward_redemptions).toHaveLength(1);
+});
+
+test('a confirmed catalog insert with failed readback retires its form once retry commits', async ({ page }) => {
+  const state = await fixture(page); await mount(page, 'parent'); await ready(page);
+  await page.getByRole('button', { name: 'Add reward', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Persisted before readback');
+  state.mode.rewards = 'fail';
+  await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
+  expect(state.rows.rewards.filter(row => row.title === 'Persisted before readback')).toHaveLength(1);
+  expect(await page.evaluate(() => window.__rewardsLedger.toasts.filter(toast => toast.kind === 'success'))).toHaveLength(0);
+  delete state.mode.rewards;
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('Persisted before readback', { exact: true })).toBeVisible();
+  expect(state.writes.filter(write => write.method === 'POST')).toHaveLength(1);
+  expect(await page.evaluate(() => window.__rewardsLedger.toasts.filter(toast => toast.kind === 'success'))).toHaveLength(1);
 });

@@ -31,7 +31,7 @@ function rawInsertSites(): string[] {
   for (const file of ['app', 'lib', 'components'].flatMap(walk)) {
     if (file.startsWith('lib/services/notifications')) continue; // the service itself
     const src = readFileSync(file, 'utf8');
-    if (/from\('notifications'\)\s*\n?\s*\.insert\(/.test(src) || /from\('notifications'\)\.insert\(/.test(src)) {
+    if (/from\('notifications'\)\s*\.(?:insert|upsert)\(/.test(src)) {
       found.add(file);
     }
   }
@@ -47,8 +47,7 @@ const ALLOWED: Record<string, string> = {
   // nothing else; worth doing, not worth risking a missed emergency to rush.
   'app/api/guardian/escalate/route.ts': 'a guardian escalation is the alert a family must get at 3am',
   'app/api/guardian/screen/route.ts': 'the emergency branch of call screening',
-  'app/api/contact-center/sms/route.ts': 'only fires when shouldNotifyFamily(intent) — an urgent inbound message',
-  'app/api/contact-center/voice/transcription/route.ts': 'titled "Urgent voicemail at your family line"; same gate',
+  'lib/contact-center/urgent-delivery.ts': 'strict urgent-only durable receipts; deterministic notification primary key prevents duplicate alerts and preserves delivery/read markers on recovery',
 
   // NO DEBT LEFT. This last one still writes its own batch, and that is now a
   // justified exemption rather than something owed: 150 rows through notify()

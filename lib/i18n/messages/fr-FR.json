@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "Aucun envoi n’a commencé. Vous pouvez réessayer.",
   "marketingPush.outcomes": "Acceptées par le fournisseur : {accepted} · Opérations échouées : {failed} · Appareils ignorés : {skipped} · Utilisateurs exclus : {withheld} · Appareils supprimés : {pruned}",
   "marketingPush.legacyCounts": "Acceptées par le fournisseur : {accepted} · Opérations échouées : {failed} · Ignorés ou exclus : {skipped}",
-  "contactUrgent.replySaved": "Votre message est enregistré. La famille peut le consulter dans sa boîte de réception."
+  "contactUrgent.replySaved": "Votre message est enregistré. La famille peut le consulter dans sa boîte de réception.",
+  "habitsModule.dataUnavailable": "Impossible de vérifier les données des habitudes. Actualisez la page et réessayez.",
+  "habitsModule.habitChanged": "Cette habitude a été modifiée. Actualisez la page et réessayez.",
+  "rewardsModule.dataUnavailable": "Impossible de vérifier les données des récompenses. Actualisez la page et réessayez."
 }

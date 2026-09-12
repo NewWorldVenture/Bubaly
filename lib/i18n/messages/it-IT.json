@@ -13491,5 +13491,8 @@
   "marketingPush.notStarted": "Nessun invio è stato avviato. Puoi riprovare.",
   "marketingPush.outcomes": "Accettate dal fornitore: {accepted} · Operazioni non riuscite: {failed} · Dispositivi saltati: {skipped} · Utenti esclusi: {withheld} · Dispositivi rimossi: {pruned}",
   "marketingPush.legacyCounts": "Accettate dal fornitore: {accepted} · Operazioni non riuscite: {failed} · Saltati o esclusi: {skipped}",
-  "contactUrgent.replySaved": "Il tuo messaggio è stato salvato. La famiglia può leggerlo nella propria casella di posta."
+  "contactUrgent.replySaved": "Il tuo messaggio è stato salvato. La famiglia può leggerlo nella propria casella di posta.",
+  "habitsModule.dataUnavailable": "Impossibile verificare i dati delle abitudini. Aggiorna la pagina e riprova.",
+  "habitsModule.habitChanged": "Questa abitudine è cambiata. Aggiorna la pagina e riprova.",
+  "rewardsModule.dataUnavailable": "Impossibile verificare i dati dei premi. Aggiorna la pagina e riprova."
 }

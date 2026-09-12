@@ -1,0 +1,1813 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T14:53:27.319Z",
+  "baselineCommit": "05e1b69bf78bebe76a71f8b0eaf83a8921d171f3",
+  "sourceCommit": "572b29c9b1b99fbb9639b1d66fbcbef927964636",
+  "methodology": [
+    "Only committed git blobs between fixed source commits; later uncommitted work excluded.",
+    "Source SHA256 covers exact committed bytes, not working-tree newline conversion.",
+    "Top-level exported function and value boundaries parsed with installed TypeScript; source discovery is not workflow verification.",
+    "Environment names only; no secret values. Existing master identities copied unchanged."
+  ],
+  "counts": {
+    "files": 37,
+    "newFiles": 9,
+    "production": 13,
+    "tests": 15,
+    "locales": 7
+  },
+  "files": [
+    {
+      "path": "app/(app)/admin/marketing/push/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "0513084017fb11fc99efe87474de2f6ed11820fd1c50fef52b0bf8874ab2d21a",
+      "sourceSha256": "d33af3b6a2023d1f405b14a05c7ff969bad1a0acc53bc02eeea6c0a9bf761d57",
+      "bytes": 7349,
+      "exportedSymbols": [
+        {
+          "name": "createPushCampaignAction",
+          "line": 16,
+          "kind": "function"
+        },
+        {
+          "name": "sendPushCampaignAction",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "deletePushCampaignAction",
+          "line": 115,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "ACTION-BDE7FD6EF5B1",
+          "key": "app/(app)/admin/marketing/push/actions.ts:createPushCampaignAction",
+          "source": "app/(app)/admin/marketing/push/actions.ts"
+        },
+        {
+          "id": "ACTION-E7AFDF8C4FA3",
+          "key": "app/(app)/admin/marketing/push/actions.ts:sendPushCampaignAction",
+          "source": "app/(app)/admin/marketing/push/actions.ts"
+        },
+        {
+          "id": "ACTION-A679BF182948",
+          "key": "app/(app)/admin/marketing/push/actions.ts:deletePushCampaignAction",
+          "source": "app/(app)/admin/marketing/push/actions.ts"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/admin/marketing/push/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ffafd4e77899df9c65dc10cd5475527877cb68532fd4f5df0cb5cdfa30292762",
+      "sourceSha256": "6090931834170dd44ca3d201cf7b086ad3e59f02e8019e787ad73d0577af98de",
+      "bytes": 6981,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 16,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "PushPage",
+          "line": 28,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0043",
+          "key": "app/(app)/admin/marketing/push/page.tsx",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "ROUTE-3F5B81FCE5ED",
+          "key": "app/(app)/admin/marketing/push/page.tsx",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-5EE0C49C66A2",
+          "key": "app/(app)/admin/marketing/push/page.tsx:75:form:0",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-1509AFB380BD",
+          "key": "app/(app)/admin/marketing/push/page.tsx:76:input:1",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-3694658395D8",
+          "key": "app/(app)/admin/marketing/push/page.tsx:77:input:2",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-505D518AEA55",
+          "key": "app/(app)/admin/marketing/push/page.tsx:78:input:3",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-D394DE85F0A7",
+          "key": "app/(app)/admin/marketing/push/page.tsx:79:button:4",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-8792163D3F9D",
+          "key": "app/(app)/admin/marketing/push/page.tsx:100:form:5",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-496312B5C566",
+          "key": "app/(app)/admin/marketing/push/page.tsx:101:button:6",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-BCC708F2734E",
+          "key": "app/(app)/admin/marketing/push/page.tsx:105:form:7",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-F615CD358A21",
+          "key": "app/(app)/admin/marketing/push/page.tsx:106:button:8",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "CONTROL-87901745326B",
+          "key": "app/(app)/admin/marketing/push/page.tsx:126:Link:9",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "INCOMPLETE-1A57BA35E63B",
+          "key": "app/(app)/admin/marketing/push/page.tsx:76:0",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "INCOMPLETE-87EBEA8FC8BC",
+          "key": "app/(app)/admin/marketing/push/page.tsx:77:1",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        },
+        {
+          "id": "INCOMPLETE-B149280ED5FC",
+          "key": "app/(app)/admin/marketing/push/page.tsx:78:2",
+          "source": "app/(app)/admin/marketing/push/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/api/contact-center/email/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "82b4eaf456f1881c699475cee4e3bfb938e8181cd2585626f8267cd64dc1a26f",
+      "sourceSha256": "682a9eeb6a45fa4e3054407347a7d43afb4b8006d12ff72475ed45764506a216",
+      "bytes": 9665,
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 26,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 27,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 47,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "apiRoute": "/api/contact-center/email",
+      "httpMethods": [
+        "POST"
+      ],
+      "environmentNames": [
+        "CONTACT_CENTER_INBOUND_SECRET",
+        "NODE_ENV"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "API-0EB76703163C",
+          "key": "/api/contact-center/email:POST",
+          "source": "app/api/contact-center/email/route.ts"
+        },
+        {
+          "id": "CALLBACK-145967CDCF24",
+          "key": "/api/contact-center/email",
+          "source": "app/api/contact-center/email/route.ts"
+        }
+      ]
+    },
+    {
+      "path": "app/api/contact-center/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b17f1732e08cf42399adcae18412a6d434433ad1324e0ccc0c3520518561a355",
+      "sourceSha256": "48bd8e500d2a74b9839f7ea90dc1f23b78778da54e3b56c6edd932a54d3975fc",
+      "bytes": 6133,
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 32,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "apiRoute": "/api/contact-center/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "API-387E2B30BCD7",
+          "key": "/api/contact-center/sms:POST",
+          "source": "app/api/contact-center/sms/route.ts"
+        },
+        {
+          "id": "CALLBACK-24807E48E6E6",
+          "key": "/api/contact-center/sms",
+          "source": "app/api/contact-center/sms/route.ts"
+        }
+      ]
+    },
+    {
+      "path": "app/api/contact-center/voice/transcription/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "0abc2e49a0024ff018aa79d8fb5227f51e962964fe2eedafedccb8e671966cf8",
+      "sourceSha256": "1b8a041d56f19b506118eab8f9a84e67cbc4e6d5811641fd13628b6536a183b6",
+      "bytes": 4966,
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 16,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "apiRoute": "/api/contact-center/voice/transcription",
+      "httpMethods": [
+        "POST"
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "API-B4E47347CDDF",
+          "key": "/api/contact-center/voice/transcription:POST",
+          "source": "app/api/contact-center/voice/transcription/route.ts"
+        },
+        {
+          "id": "CALLBACK-5653FF7DBBF5",
+          "key": "/api/contact-center/voice/transcription",
+          "source": "app/api/contact-center/voice/transcription/route.ts"
+        }
+      ]
+    },
+    {
+      "path": "app/api/cron/contact-center-urgent/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "cc5d0f4e0384a8851cbbd516dd1fb9ce580dec007bc3ba18da996fd92c2df04d",
+      "bytes": 823,
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "maxDuration",
+          "line": 7,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "GET",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "runtime",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "maxDuration",
+          "line": 7,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "apiRoute": "/api/cron/contact-center-urgent",
+      "httpMethods": [
+        "GET"
+      ],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "components/modules/medications-module.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "09dbbad34314a6b1d4cfae67b213655fc35f747ebfc79513615a49a2d3ee4fb3",
+      "sourceSha256": "83a207c7701757eb4c55f61800f40854e5d39e60c9c4a9a674fbf79b061cfa29",
+      "bytes": 34206,
+      "exportedSymbols": [
+        {
+          "name": "MedicationsModule",
+          "line": 73,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-8DD7D691D391",
+          "key": "components/modules/medications-module.tsx",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-8F08A7119189",
+          "key": "components/modules/medications-module.tsx:274:ErrorState:0",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-C568141E0A2B",
+          "key": "components/modules/medications-module.tsx:284:Button:1",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-E128FBAE6809",
+          "key": "components/modules/medications-module.tsx:320:button:2",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-1B1D1EF4F589",
+          "key": "components/modules/medications-module.tsx:326:button:3",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-999DF98269BD",
+          "key": "components/modules/medications-module.tsx:357:button:4",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-83301D652874",
+          "key": "components/modules/medications-module.tsx:369:Button:5",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-963C82D016EF",
+          "key": "components/modules/medications-module.tsx:401:button:6",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-EB9419DD6884",
+          "key": "components/modules/medications-module.tsx:402:button:7",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-B6D8F43544C7",
+          "key": "components/modules/medications-module.tsx:420:button:8",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-B012C3A43623",
+          "key": "components/modules/medications-module.tsx:428:button:9",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-3F03F34D0047",
+          "key": "components/modules/medications-module.tsx:431:button:10",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-FCF6F4789E3E",
+          "key": "components/modules/medications-module.tsx:443:Modal:11",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-8352D9A54019",
+          "key": "components/modules/medications-module.tsx:444:form:12",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-F55AB17D88D2",
+          "key": "components/modules/medications-module.tsx:446:Input:13",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-675A1F7A3E0C",
+          "key": "components/modules/medications-module.tsx:449:Input:14",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-DA942F1171D6",
+          "key": "components/modules/medications-module.tsx:453:Select:15",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-CEF736246431",
+          "key": "components/modules/medications-module.tsx:460:Textarea:16",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-B6216325C5BB",
+          "key": "components/modules/medications-module.tsx:464:Input:17",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-F9ECEF73E3DD",
+          "key": "components/modules/medications-module.tsx:467:Input:18",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-6FB01C759C3D",
+          "key": "components/modules/medications-module.tsx:470:label:19",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-6A63EEB96188",
+          "key": "components/modules/medications-module.tsx:471:input:20",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-AF0C5FD817E0",
+          "key": "components/modules/medications-module.tsx:475:Button:21",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-CF1958BD3D97",
+          "key": "components/modules/medications-module.tsx:476:Button:22",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-5626F2B88E03",
+          "key": "components/modules/medications-module.tsx:482:Modal:23",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-624BC02AC856",
+          "key": "components/modules/medications-module.tsx:483:form:24",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-FF3F53BABA8B",
+          "key": "components/modules/medications-module.tsx:485:Input:25",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-458D550D0650",
+          "key": "components/modules/medications-module.tsx:491:button:26",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-CEDFDFB540E9",
+          "key": "components/modules/medications-module.tsx:501:Input:27",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-3710FE526613",
+          "key": "components/modules/medications-module.tsx:504:Input:28",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-E9C2DFF37004",
+          "key": "components/modules/medications-module.tsx:508:Button:29",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "CONTROL-857EC29B4408",
+          "key": "components/modules/medications-module.tsx:509:Button:30",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "INCOMPLETE-7285F5B372C9",
+          "key": "components/modules/medications-module.tsx:446:0",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "INCOMPLETE-085581DD5CF5",
+          "key": "components/modules/medications-module.tsx:449:1",
+          "source": "components/modules/medications-module.tsx"
+        },
+        {
+          "id": "INCOMPLETE-5AB41CC78E45",
+          "key": "components/modules/medications-module.tsx:460:2",
+          "source": "components/modules/medications-module.tsx"
+        }
+      ]
+    },
+    {
+      "path": "lib/contact-center/server.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ea11d23ba039f12c390727c005280d4769d500d703a426ea5360bb3511864149",
+      "sourceSha256": "67129cd0c0a4a21e549ea14b46da1f5a7788f7dbca08deee2c14cf2a2a3fdea0",
+      "bytes": 20212,
+      "exportedSymbols": [
+        {
+          "name": "ContactChannel",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "getOrCreateChannelResult",
+          "line": 23,
+          "kind": "function"
+        },
+        {
+          "name": "getOrCreateChannel",
+          "line": 38,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumberResult",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumber",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocalResult",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocal",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "provisionFamilyNumber",
+          "line": 88,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRecord",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "inboundProviderRef",
+          "line": 161,
+          "kind": "function"
+        },
+        {
+          "name": "findInboundMessage",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "recordInboundMessage",
+          "line": 183,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRouteOutcome",
+          "line": 230,
+          "kind": "type"
+        },
+        {
+          "name": "routeInboundToPlanner",
+          "line": 261,
+          "kind": "function"
+        },
+        {
+          "name": "fileInboundPaperwork",
+          "line": 344,
+          "kind": "function"
+        },
+        {
+          "name": "recordOutboundMessage",
+          "line": 408,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "inboundProviderRef",
+          "line": 161,
+          "kind": "function"
+        },
+        {
+          "name": "findInboundMessage",
+          "line": 166,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "inboundProviderRef",
+          "line": 161,
+          "kind": "function"
+        },
+        {
+          "name": "findInboundMessage",
+          "line": 166,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-40E0E0D25B95",
+          "key": "lib/contact-center/server.ts",
+          "source": "lib/contact-center/server.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/contact-center/urgent-delivery.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "129cf3087bcaa97ac431e2eef3fe300ba30526aa8b625c0b8d639a19daba613c",
+      "bytes": 16553,
+      "exportedSymbols": [
+        {
+          "name": "UrgentOutcome",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "captureInboundWithUrgency",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "attemptUrgentDelivery",
+          "line": 123,
+          "kind": "function"
+        },
+        {
+          "name": "drainUrgentDeliveries",
+          "line": 207,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureInboundWithUrgency",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "attemptUrgentDelivery",
+          "line": 123,
+          "kind": "function"
+        },
+        {
+          "name": "drainUrgentDeliveries",
+          "line": 207,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "UrgentOutcome",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "captureInboundWithUrgency",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "attemptUrgentDelivery",
+          "line": 123,
+          "kind": "function"
+        },
+        {
+          "name": "drainUrgentDeliveries",
+          "line": 207,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "lib/guardian/twilio.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "eb2ac4da20dca4ce043a93edc10f501df3646ed480d834e729d6e9878fea4746",
+      "sourceSha256": "c34540c5dfa39a08bbe832645fdcd290d756b30fbaa64ba7d1faabb4355da166",
+      "bytes": 10706,
+      "exportedSymbols": [
+        {
+          "name": "isTwilioConfigured",
+          "line": 35,
+          "kind": "function"
+        },
+        {
+          "name": "twimlSay",
+          "line": 42,
+          "kind": "function"
+        },
+        {
+          "name": "twimlGather",
+          "line": 48,
+          "kind": "function"
+        },
+        {
+          "name": "twimlRecord",
+          "line": 65,
+          "kind": "function"
+        },
+        {
+          "name": "twimlDial",
+          "line": 80,
+          "kind": "function"
+        },
+        {
+          "name": "twimlHangup",
+          "line": 86,
+          "kind": "function"
+        },
+        {
+          "name": "twimlPause",
+          "line": 91,
+          "kind": "function"
+        },
+        {
+          "name": "wrapTwiml",
+          "line": 96,
+          "kind": "function"
+        },
+        {
+          "name": "sendSms",
+          "line": 103,
+          "kind": "function"
+        },
+        {
+          "name": "SmsReceiptResult",
+          "line": 108,
+          "kind": "type"
+        },
+        {
+          "name": "sendSmsWithReceipt",
+          "line": 116,
+          "kind": "function"
+        },
+        {
+          "name": "initiateCall",
+          "line": 141,
+          "kind": "function"
+        },
+        {
+          "name": "updateCall",
+          "line": 158,
+          "kind": "function"
+        },
+        {
+          "name": "validateTwilioSignature",
+          "line": 163,
+          "kind": "function"
+        },
+        {
+          "name": "searchAvailableNumber",
+          "line": 186,
+          "kind": "function"
+        },
+        {
+          "name": "provisionNumber",
+          "line": 198,
+          "kind": "function"
+        },
+        {
+          "name": "lookupCallerName",
+          "line": 213,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "sendSmsWithReceipt",
+          "line": 116,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "SmsReceiptResult",
+          "line": 108,
+          "kind": "type"
+        },
+        {
+          "name": "sendSmsWithReceipt",
+          "line": 116,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-8E49FD8EE110",
+          "key": "lib/guardian/twilio.ts",
+          "source": "lib/guardian/twilio.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "dbc1aac12e0af06a9b3a179fac5b40700bffc27d22a845cb6a43ba2d9aba56ce",
+      "sourceSha256": "7539485489470b742b4146af275741bce497557f726d2e763e1a347b4670baa4",
+      "bytes": 976734,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-88F1E3670486",
+          "key": "lib/i18n/messages/de-DE.json",
+          "source": "lib/i18n/messages/de-DE.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "f569e6ff15161c032cf10623d95132e68775a4e100f3e263877d011bf8fd18f8",
+      "sourceSha256": "9fab16c145bf461cb89e8c8fc2e8f77a3d1b8c4a727e3aaba92e35040d493a30",
+      "bytes": 872774,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-C346841E8649",
+          "key": "lib/i18n/messages/en-US.json",
+          "source": "lib/i18n/messages/en-US.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "3fb396fae1493732cb07161b856a505650ea5c3e38b5656dc40a692fee06c0eb",
+      "sourceSha256": "2e350f14ed60c7b8ff64a0d8ac7f4f5b519209dc2459a31fec6037aa2b620709",
+      "bytes": 961115,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-DC666FC0E80F",
+          "key": "lib/i18n/messages/es-ES.json",
+          "source": "lib/i18n/messages/es-ES.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "b500a629c44d3c13a989a8c0e5e383bfaf9ff03bac80b3fe9b52fcbf7e69a9c2",
+      "sourceSha256": "593a2366b77916ee1918f6b3311fc78d4cc0b58a2495dfdd5bb281a4b660adcd",
+      "bytes": 985998,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-24D39068AF0B",
+          "key": "lib/i18n/messages/fr-FR.json",
+          "source": "lib/i18n/messages/fr-FR.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "ceacfa1b60088551138420ae57f8559183145fac89c8b9bf6daa77629ba02e5b",
+      "sourceSha256": "638b243c54a9761470c34f0d0e8afb340cd7bc2bfcfd8dab49d4d5ea1c08e297",
+      "bytes": 948949,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-9E9B391BC4E5",
+          "key": "lib/i18n/messages/it-IT.json",
+          "source": "lib/i18n/messages/it-IT.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "16541efc1d8edd94f98c344344f1daac18d6c357c472a73c05b050aaf6a48d37",
+      "sourceSha256": "282b397c4d4048fb1c86fbef0dde26b2096025c44788b294ac57fe4b4c8a99bf",
+      "bytes": 933081,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-6F4C71EB2624",
+          "key": "lib/i18n/messages/nl-NL.json",
+          "source": "lib/i18n/messages/nl-NL.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "e8ab4e1f1c90311c61ca621fcdf23c923dd5716b8d51aa917c5e11d8118680db",
+      "sourceSha256": "8e2eddb791ef030316a270a8841b80f3e4e79edf90ec64bea05e38a97d72c140",
+      "bytes": 962977,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-091D62717E32",
+          "key": "lib/i18n/messages/pt-PT.json",
+          "source": "lib/i18n/messages/pt-PT.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/marketing/push.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "521e0d3146d32c34e25064165173ef6df000a2b5d232f9cfbceff324c6314c18",
+      "sourceSha256": "6a135d2c7ee73d9c724cffdf3617cdfd84476f75efba8f484ca22d5ae5edbebf",
+      "bytes": 4136,
+      "exportedSymbols": [
+        {
+          "name": "selectPushRecipients",
+          "line": 6,
+          "kind": "function"
+        },
+        {
+          "name": "deliveryRate",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "pushDeliveryPhase",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "canSendPush",
+          "line": 42,
+          "kind": "function"
+        },
+        {
+          "name": "canDeletePush",
+          "line": 48,
+          "kind": "function"
+        },
+        {
+          "name": "PushCampaignLike",
+          "line": 53,
+          "kind": "type"
+        },
+        {
+          "name": "needsPushReview",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "pushDeliveryCounts",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "summarizePush",
+          "line": 73,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "pushDeliveryPhase",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "canDeletePush",
+          "line": 48,
+          "kind": "function"
+        },
+        {
+          "name": "needsPushReview",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "pushDeliveryCounts",
+          "line": 64,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "pushDeliveryPhase",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "canDeletePush",
+          "line": 48,
+          "kind": "function"
+        },
+        {
+          "name": "needsPushReview",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "pushDeliveryCounts",
+          "line": 64,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-C21364950370",
+          "key": "lib/marketing/push.ts",
+          "source": "lib/marketing/push.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/medications/adherence.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "17e257f57525c8422025224f716f4672c7a589160d1dbe4a1fd16a59d250c00b",
+      "sourceSha256": "1b73eb12f550cf8a49fbbf5ea07f8ebf94535d19c4e664a570d435dd8e277d37",
+      "bytes": 4799,
+      "exportedSymbols": [
+        {
+          "name": "DoseStatus",
+          "line": 6,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleLike",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "DoseLogLike",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "DueDose",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "shortTime",
+          "line": 34,
+          "kind": "function"
+        },
+        {
+          "name": "localDateKey",
+          "line": 41,
+          "kind": "function"
+        },
+        {
+          "name": "doseSlotInstant",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleCoversDay",
+          "line": 61,
+          "kind": "function"
+        },
+        {
+          "name": "dosesForDay",
+          "line": 72,
+          "kind": "function"
+        },
+        {
+          "name": "adherenceRate",
+          "line": 103,
+          "kind": "function"
+        },
+        {
+          "name": "doseStatusCounts",
+          "line": 110,
+          "kind": "function"
+        },
+        {
+          "name": "DAY_LABELS",
+          "line": 116,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "doseSlotInstant",
+          "line": 50,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "doseSlotInstant",
+          "line": 50,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-47A7FE099D19",
+          "key": "lib/medications/adherence.ts",
+          "source": "lib/medications/adherence.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/server/push.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "2370f896f668877f82c63f59f59740741f46ff28d3b81fe2ca13ee7e8e6b10d9",
+      "sourceSha256": "3f1db2f634969f2ffda67243a92e4d43c4388a2a10e8aefcfc7707b8b9c8efd2",
+      "bytes": 15051,
+      "exportedSymbols": [
+        {
+          "name": "PushPayload",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "PushResult",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "PushPreparationError",
+          "line": 27,
+          "kind": "class"
+        },
+        {
+          "name": "sendPushToUser",
+          "line": 143,
+          "kind": "function"
+        },
+        {
+          "name": "sendPushToUsers",
+          "line": 148,
+          "kind": "function"
+        },
+        {
+          "name": "pushConfigured",
+          "line": 159,
+          "kind": "function"
+        },
+        {
+          "name": "dispatchPendingPushes",
+          "line": 204,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [
+        {
+          "name": "PushPreparationError",
+          "line": 27,
+          "kind": "class"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_VAPID_PUBLIC_KEY",
+        "VAPID_PRIVATE_KEY",
+        "VAPID_SUBJECT"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-E981DDB50E9C",
+          "key": "lib/server/push.ts",
+          "source": "lib/server/push.ts"
+        },
+        {
+          "id": "PUSH-003",
+          "key": "PUSH-003",
+          "source": "lib/server/push.ts"
+        }
+      ]
+    },
+    {
+      "path": "scripts/cron-dispatch.mjs",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "45132d6d5c68ad037d6240b16a6699ec7973ac6f43e14655964c47203787fc7c",
+      "sourceSha256": "30bea2e93ea55bb5269856793f15e9382a2e0aa3c6065fc7ead1ee54ddad12ff",
+      "bytes": 9575,
+      "exportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 61,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 81,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 93,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 105,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [
+        "CRON_BASE_URL",
+        "CRON_SECRET"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "DEPLOY-1ED5966CA454",
+          "key": "scripts/cron-dispatch.mjs",
+          "source": "scripts/cron-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "tests/contact-center-callback-boundary.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "b536d2951ac613f9ab38e9031b09e0723a77c39e97648c615d7884a10e99c08a",
+      "sourceSha256": "dcee86b7a5c1aac13b52809fb5217304665787c10cfbdd75825168d135378931",
+      "bytes": 14181,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-97318DE46875",
+          "key": "tests/contact-center-callback-boundary.test.ts",
+          "source": "tests/contact-center-callback-boundary.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/contact-center-intake-query-contract.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "1ccb0c6d06fab5378d37884b0528b1afff0f1263f55a579ff27284a851960f05",
+      "bytes": 4654,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/contact-center-urgent-durability-repro.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "9ef99a178acacad879339c0d4c885771d9773b18502246e19afb38e1e9c6323f",
+      "bytes": 11256,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/contact-center-urgent-execution.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b94b1fa2ce10b09162b8e39c4f00dab7e67c194c11867d17dc004b618d9292e4",
+      "bytes": 12930,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/contact-center-urgent-review.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "53e437dd42d5735aac410ae81d0fe4c7fff4062d71ecf8d698a4b357ac6c486e",
+      "bytes": 3760,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/contact-center.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "8883cf0c173e249dbc5a8c7717ef3571080db9271282a92fe9b74c1c88e6604e",
+      "sourceSha256": "c1e9e4e9e6103c4486359ce684bbf96b5f57fa78ec671cd0b6e2141246d404a9",
+      "bytes": 6395,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-A558D12B6C5C",
+          "key": "tests/contact-center.test.ts",
+          "source": "tests/contact-center.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch-execution.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "3697afe196d3b3251497cc3d286d4924cc08d3875c0277046fa5142f3f886e93",
+      "sourceSha256": "e72449bb5ef1525d5c9f58c72274b2e1e38106bf8bfe235cbbc5d4b52297e66a",
+      "bytes": 7894,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [
+        "CRON_SECRET"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-104264503A45",
+          "key": "tests/cron-dispatch-execution.test.ts",
+          "source": "tests/cron-dispatch-execution.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "281a26745e3bb65cf2f80cf3aeda6971f696f65f07a4669453cd7b048a4a26ae",
+      "sourceSha256": "719c2c8017cf340040f177bd70b2d6631faeb70b0c96a225ad13b9845b3192a5",
+      "bytes": 3266,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-A0B42E783221",
+          "key": "tests/cron-dispatch.test.ts",
+          "source": "tests/cron-dispatch.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/e2e/medications-ledger.spec.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "6d79c7f35f9f0531288d5f53aba36cc55f2f9f40556cb9ac3d24602a727f1c20",
+      "bytes": 37987,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/helpers/push-dispatch-db.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "c2737bfeb5561eafca1fc199db93345ce144263b6bb4bee85f2055519465fc59",
+      "sourceSha256": "61b8bc4258838a7857b5bb94cbbefc3ecdad469d776d83d5951587905318ce16",
+      "bytes": 6555,
+      "exportedSymbols": [
+        {
+          "name": "PushFixtureRow",
+          "line": 4,
+          "kind": "type"
+        },
+        {
+          "name": "notificationId",
+          "line": 5,
+          "kind": "function"
+        },
+        {
+          "name": "pushDispatchDb",
+          "line": 50,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-18628D564A36",
+          "key": "tests/helpers/push-dispatch-db.ts",
+          "source": "tests/helpers/push-dispatch-db.ts"
+        },
+        {
+          "id": "SERVICE-A2DE8140849F",
+          "key": "tests/helpers/push-dispatch-db.ts:notificationId",
+          "source": "tests/helpers/push-dispatch-db.ts"
+        },
+        {
+          "id": "SERVICE-F1269BF1F02C",
+          "key": "tests/helpers/push-dispatch-db.ts:pushDispatchDb",
+          "source": "tests/helpers/push-dispatch-db.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/inbound-email-entity-retry.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "2ac6cee621ab5c37abff1c4da441c29f825eb0b54ef7b4a1ff2edd32d4df313e",
+      "sourceSha256": "d9e6db63e28a56dc88b8bbd64bdd4645c181beed32fe9f7a90c23497c80b3b12",
+      "bytes": 6173,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-9D18F6FA499F",
+          "key": "tests/inbound-email-entity-retry.test.ts",
+          "source": "tests/inbound-email-entity-retry.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/marketing-push-consumer-review.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "454a06aee50e2053e5e5f380f460cafee9bc4fc97a08b34f658ed8b6373ca65b",
+      "bytes": 8296,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/marketing-push-outcome-execution.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f34900f47112347086fb90586f12263518e9863fad090db57f2ea7c5b8cd1411",
+      "bytes": 7592,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/marketing-push.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "cf2e0d58d556105dcfb1015f66d92b1163e9ec2fc44e8789a1b0cb0946a5294f",
+      "sourceSha256": "b64ed533b193312681329826a16de9752ff57b9038effb070c33b5f8712cd121",
+      "bytes": 1777,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-E406EF2FA1E1",
+          "key": "tests/marketing-push.test.ts",
+          "source": "tests/marketing-push.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/push-consent-boundary.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "07a02661b7f06e5ab4a9b7319af3c8f0ddb7d119d614c8c10fa6df2d8e05e04c",
+      "sourceSha256": "27ba934e99d23163d3649deb8a89f5fb834eef8c7f968063f0f6558f886b139a",
+      "bytes": 11570,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "vercel.json",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "1e6b6230d1e6fcdbdb03b277b0ebed797e590e4cb91f4cfcd99ed9b8c2517c22",
+      "sourceSha256": "94e0ca36ac2e885995ca3743251964489e078d2ed4e342b78b62a4c90aabb7a5",
+      "bytes": 2000,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-A3265310F552",
+          "key": "vercel.json",
+          "source": "vercel.json"
+        }
+      ]
+    }
+  ],
+  "catalogues": [
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "previousKeys": 13477,
+      "addedKeys": [
+        "medicationsModule.doseChanged",
+        "contactUrgent.alertTitle",
+        "contactUrgent.smsPrefix",
+        "contactUrgent.smsUnknown",
+        "contactUrgent.smsRejected",
+        "contactUrgent.smsUnavailable",
+        "contactUrgent.legacyUnknown",
+        "marketingPush.accepted",
+        "marketingPush.review",
+        "marketingPush.completed",
+        "marketingPush.enabledDevices",
+        "marketingPush.unconfirmed",
+        "marketingPush.notStarted",
+        "marketingPush.outcomes",
+        "marketingPush.legacyCounts",
+        "contactUrgent.replySaved"
+      ],
+      "oldValuesAndOrderPreserved": true
+    }
+  ]
+}

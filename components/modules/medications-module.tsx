@@ -77,17 +77,23 @@ export function MedicationsModule() {
   const canEdit = isManager(role);
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
-  const [medModalOpen, setMedModalOpen] = useState(false);
+  const [medOpening, setMedOpening] = useState<object | null>(null);
+  const currentMedOpening = useRef<object | null>(null);
+  const medModalOpen = medOpening !== null;
   const [medForm, setMedForm] = useState(blankMed);
   const [scheduleFor, setScheduleFor] = useState<Medication | null>(null);
+  const [scheduleOpening, setScheduleOpening] = useState<object | null>(null);
+  const currentScheduleOpening = useRef<object | null>(null);
   const [scheduleForm, setScheduleForm] = useState(blankSchedule);
   const [busy, setBusy] = useState<string | null>(null);
+  const [readbackBlocked, setReadbackBlocked] = useState(false);
   const savingMed = busy === 'medication';
   const savingSchedule = busy === 'schedule';
   const [dayKey, setDayKey] = useState(() => localDateKey(new Date()));
   const owner = useMemo(() => ({ active: false, pending: false, familyId, userId, role }), [familyId, userId, role]);
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
+  const deferredCompletion = useRef<{ owner: typeof owner; complete: () => void } | null>(null);
   // Keep the synchronous write guard until React commits the readback and the
   // released busy state together; a queued callback must see the new rows.
   useLayoutEffect(() => { if (busy === null) owner.pending = false; });
@@ -95,10 +101,15 @@ export function MedicationsModule() {
   useEffect(() => {
     owner.active = true;
     setBusy(null);
+    setReadbackBlocked(false);
+    deferredCompletion.current = null;
     setMemberFilter('all');
-    setMedModalOpen(false);
+    currentMedOpening.current = null;
+    setMedOpening(null);
     setMedForm(blankMed);
     setScheduleFor(null);
+    currentScheduleOpening.current = null;
+    setScheduleOpening(null);
     setScheduleForm(blankSchedule);
     return () => { owner.active = false; };
   }, [owner]);
@@ -125,29 +136,50 @@ export function MedicationsModule() {
   }, [dayKey]);
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: meds, loading: medsLoading, error: medsError, refresh: refreshMeds, stale: medsStale } = useRealtimeQuery<Medication>({
+  const { data: meds, loading: medsLoading, error: medsError, refreshAndConfirm: confirmMeds, stale: medsStale } = useRealtimeQuery<Medication>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).order('is_active', { ascending: false }).order('name'),
   });
-  const { data: schedules, loading: schedulesLoading, error: schedulesError, refresh: refreshSchedules, stale: schedulesStale } = useRealtimeQuery<Schedule>({
+  const { data: schedules, loading: schedulesLoading, error: schedulesError, refreshAndConfirm: confirmSchedules, stale: schedulesStale } = useRealtimeQuery<Schedule>({
     table: 'medication_schedules', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
-  const { data: doses, loading: dosesLoading, error: dosesError, refresh: refreshDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
+  const { data: doses, loading: dosesLoading, error: dosesError, refreshAndConfirm: confirmDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
     table: 'medication_doses', familyId, deps: [familyId, dayKey],
     fetcher: (sb) => sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart),
   });
   const loading = medsLoading || schedulesLoading || dosesLoading;
   const readError = medsError || schedulesError || dosesError;
-  const verified = !loading && !readError && !medsStale && !schedulesStale && !dosesStale;
+  const verified = !readbackBlocked && !loading && !readError && !medsStale && !schedulesStale && !dosesStale;
   const latest = useRef({ meds, schedules, doses, verified, dayKey, members });
   latest.current = { meds, schedules, doses, verified, dayKey, members };
   const isCurrent = () => owner.active && currentOwner.current === owner;
   const canMutate = (manager = false) => isCurrent() && !owner.pending && latest.current.verified && (!manager || canEdit);
-  const refreshAll = async () => { await Promise.all([refreshMeds(), refreshSchedules(), refreshDoses()]); };
+  const confirmAll = async () => (await Promise.all([confirmMeds(), confirmSchedules(), confirmDoses()])).every(result => result.ok);
+  const confirmDoseReadback = async () => (await confirmDoses()).ok;
+
+  async function retryReadback() {
+    if (!isCurrent() || owner.pending) return;
+    owner.pending = true;
+    setBusy('readback');
+    try {
+      const confirmed = await confirmAll();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        if (confirmed && deferredCompletion.current?.owner === owner) {
+          const complete = deferredCompletion.current.complete;
+          deferredCompletion.current = null;
+          complete();
+        }
+      }
+    } finally {
+      if (isCurrent()) setBusy(null);
+      else owner.pending = false;
+    }
+  }
 
   async function mutate(key: string, manager: boolean, write: () => PromiseLike<{ error: unknown }>,
-    readback: () => Promise<void>, complete?: () => void) {
+    readback: () => Promise<boolean>, complete?: () => void) {
     if (!canMutate(manager)) return;
     owner.pending = true;
     setBusy(key);
@@ -155,15 +187,22 @@ export function MedicationsModule() {
       const { error } = await write();
       if (error) throw error;
       if (!isCurrent()) return;
-      await readback();
-      if (isCurrent()) complete?.();
+      const confirmed = await readback();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        if (confirmed) complete?.();
+        else if (complete) deferredCompletion.current = { owner, complete };
+      }
     } catch (error) {
       if (!isCurrent()) return;
       // A conflict or lost response can follow another writer's successful
       // action. Read back before allowing the next toggle against this slot.
-      await readback();
-      if (isCurrent()) toastError(key.startsWith('dose:') && (error as { code?: string } | null)?.code === '23505'
-        ? t('medicationsModule.doseChanged') : describeDbError(error));
+      const confirmed = await readback();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        toastError(key.startsWith('dose:') && (error as { code?: string } | null)?.code === '23505'
+          ? t('medicationsModule.doseChanged') : describeDbError(error));
+      }
     } finally {
       if (isCurrent()) setBusy(null);
       else owner.pending = false;
@@ -252,20 +291,30 @@ export function MedicationsModule() {
         member_id: med.member_id, scheduled_for: scheduledFor, status,
         taken_at: status === 'taken' ? new Date().toISOString() : null, logged_by: userId,
       });
-    }, refreshDoses, () => { if (status === 'taken' && existing?.status !== status) success(t('medicationsModule.doseLogged')); });
+    }, confirmDoseReadback, () => { if (status === 'taken' && existing?.status !== status) success(t('medicationsModule.doseLogged')); });
   }
 
   // ── Medication CRUD ───────────────────────────────────────
-  function openNewMed() { if (canMutate(true)) { setMedForm(blankMed); setMedModalOpen(true); } }
+  function openNewMed() {
+    if (!canMutate(true)) return;
+    const opening = {};
+    currentMedOpening.current = opening;
+    setMedOpening(opening);
+    setMedForm(blankMed);
+  }
   function openEditMed(m: Medication) {
     if (!canMutate(true) || m.family_id !== familyId) return;
+    const opening = {};
+    currentMedOpening.current = opening;
+    setMedOpening(opening);
     setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active, refill_on: m.refill_on ?? '', refill_reminder_days: m.refill_reminder_days ?? 7 });
-    setMedModalOpen(true);
   }
 
   async function saveMed(e: React.FormEvent) {
     e.preventDefault();
-    if (!canMutate(true)) return;
+    // A retained submit belongs to one opening, even when the same owner opens
+    // another form after this one was canceled or its write was confirmed.
+    if (!canMutate(true) || !medOpening || currentMedOpening.current !== medOpening) return;
     if (medForm.id && !latest.current.meds.some((m) => m.id === medForm.id && m.family_id === familyId)) return;
     if (medForm.member_id && !latest.current.members.some((m) => m.id === medForm.member_id && m.family_id === familyId)) return;
     if (!medForm.name.trim()) { toastError(t('medicationsModule.nameIsRequired')); return; }
@@ -280,9 +329,11 @@ export function MedicationsModule() {
     };
     await mutate('medication', true, () => medForm.id
       ? createClient().from('medications').update(fields).eq('id', medForm.id).eq('family_id', familyId).select('id').single()
-      : createClient().from('medications').insert({ ...fields, family_id: familyId, created_by: userId }), refreshAll, () => {
+      : createClient().from('medications').insert({ ...fields, family_id: familyId, created_by: userId }), confirmAll, () => {
+      if (currentMedOpening.current !== medOpening) return;
+      currentMedOpening.current = null;
+      setMedOpening(null);
       success(medForm.id ? 'Medication updated' : 'Medication added');
-      setMedModalOpen(false);
     });
   }
 
@@ -290,24 +341,28 @@ export function MedicationsModule() {
     if (!canMutate(true) || !latest.current.meds.some((item) => item.id === m.id && item.family_id === familyId)) return;
     if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
     await mutate('remove-medication', true, () => createClient().from('medications').delete().eq('id', m.id).eq('family_id', familyId).select('id').single(),
-      refreshAll, () => success(t('medicationsModule.medicationDeleted')));
+      confirmAll, () => success(t('medicationsModule.medicationDeleted')));
   }
 
   async function toggleActive(m: Medication) {
     const current = latest.current.meds.find((item) => item.id === m.id && item.family_id === familyId);
     if (!canMutate(true) || !current) return;
-    await mutate('active', true, () => createClient().from('medications').update({ is_active: !current.is_active }).eq('id', current.id).eq('family_id', familyId).select('id').single(), refreshAll);
+    await mutate('active', true, () => createClient().from('medications').update({ is_active: !current.is_active }).eq('id', current.id).eq('family_id', familyId).select('id').single(), confirmAll);
   }
 
   // ── Schedule CRUD ─────────────────────────────────────────
   function openSchedule(m: Medication) {
     if (!canMutate(true) || m.family_id !== familyId) return;
+    const opening = {};
+    currentScheduleOpening.current = opening;
+    setScheduleOpening(opening);
     setScheduleFor(m); setScheduleForm({ ...blankSchedule, starts_on: localDateKey(new Date()) });
   }
 
   async function saveSchedule(e: React.FormEvent) {
     e.preventDefault();
-    if (!canMutate(true) || !scheduleFor || !latest.current.meds.some((m) => m.id === scheduleFor.id && m.family_id === familyId)) return;
+    if (!canMutate(true) || !scheduleOpening || currentScheduleOpening.current !== scheduleOpening
+      || !scheduleFor || !latest.current.meds.some((m) => m.id === scheduleFor.id && m.family_id === familyId)) return;
     if (scheduleForm.days_of_week.length === 0) { toastError(t('medicationsModule.pickAtLeastOneDay')); return; }
     await mutate('schedule', true, () => createClient().from('medication_schedules').insert({
       family_id: familyId, medication_id: scheduleFor.id,
@@ -315,7 +370,10 @@ export function MedicationsModule() {
       days_of_week: scheduleForm.days_of_week,
       starts_on: scheduleForm.starts_on,
       ends_on: scheduleForm.ends_on || null,
-    }), refreshAll, () => {
+    }), confirmAll, () => {
+      if (currentScheduleOpening.current !== scheduleOpening) return;
+      currentScheduleOpening.current = null;
+      setScheduleOpening(null);
       success(t('medicationsModule.scheduleAdded'));
       setScheduleFor(null);
     });
@@ -323,10 +381,19 @@ export function MedicationsModule() {
 
   async function deleteSchedule(id: string) {
     if (!canMutate(true) || !latest.current.schedules.some((s) => s.id === id && s.family_id === familyId)) return;
-    await mutate('remove-schedule', true, () => createClient().from('medication_schedules').delete().eq('id', id).eq('family_id', familyId).select('id').single(), refreshAll);
+    await mutate('remove-schedule', true, () => createClient().from('medication_schedules').delete().eq('id', id).eq('family_id', familyId).select('id').single(), confirmAll);
   }
-  function closeMed() { if (!owner.pending) setMedModalOpen(false); }
-  function closeSchedule() { if (!owner.pending) setScheduleFor(null); }
+  function closeMed() {
+    if (owner.pending || currentMedOpening.current !== medOpening) return;
+    currentMedOpening.current = null;
+    setMedOpening(null);
+  }
+  function closeSchedule() {
+    if (owner.pending || currentScheduleOpening.current !== scheduleOpening) return;
+    currentScheduleOpening.current = null;
+    setScheduleOpening(null);
+    setScheduleFor(null);
+  }
 
   function toggleDay(day: number) {
     setScheduleForm((f) => ({
@@ -344,7 +411,7 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
-  if (readError) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
+  if (readError || readbackBlocked) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void retryReadback(); }} />;
   if (!verified) return <SkeletonList count={5} />;
 
   return (
