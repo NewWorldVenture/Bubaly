@@ -15,10 +15,11 @@ describe('health read boundaries', () => {
   });
 
   it('coordinates medication, schedule, and dose reads before adherence metrics', () => {
-    expect(medicationsSource).toContain('error: schedulesError, refresh: refreshSchedules');
-    expect(medicationsSource).toContain('error: dosesError, refresh: refreshDoses');
+    // Actual loading/error/retry and overlapping readback behavior executes in
+    // medications-ledger.spec.ts and medications-readback-review.spec.ts.
+    expect(medicationsSource).toContain('const loading = medsLoading || schedulesLoading || dosesLoading;');
+    expect(medicationsSource).toContain('const readError = medsError || schedulesError || dosesError;');
     expectSays(medicationsSource, 'medicationsModule.couldNotLoadMedicationData', 'Could not load medication data. Refresh and try again.');
-    expect(medicationsSource).toContain('void refreshMeds(); void refreshSchedules(); void refreshDoses();');
   });
 
   it('coordinates active-medication reads with Medical Records data', () => {
