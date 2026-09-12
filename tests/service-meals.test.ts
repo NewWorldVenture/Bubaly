@@ -4,7 +4,8 @@
 // replan is a no-op rather than an empty week. The rest pins the column
 // choices (auth user id in `created_by`), family scoping on every query, the
 // per-meal-type slot clearing, and the pure helpers the planner relies on.
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import {
@@ -68,6 +69,30 @@ const MEAL = (id: string, name: string, ingredients: unknown[] = []) => ({
   ingredients, notes: null, created_by: 'auth-user-1', created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
 });
 
+afterEach(() => vi.restoreAllMocks());
+
+function memoryDb() {
+  return createInMemorySupabase<SupabaseClient<Database>>({ defaults: {
+    meals: { ingredients: [], recipe_url: null, image_url: null, meal_type: 'dinner' },
+    meal_plans: { meal_id: null, idempotency_key: null },
+  } });
+}
+
+/** Intercept one public builder operation while retaining real filter/readback behavior. */
+function intercept(db: ReturnType<typeof memoryDb>, tableName: string,
+  operation: 'insert' | 'delete' | 'select', handle: (builder: Record<string, unknown>, args: unknown[]) => void) {
+  const realFrom = db.from.bind(db);
+  vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+    const builder = realFrom(table);
+    if (table === tableName) {
+      const target = builder as unknown as Record<string, unknown>;
+      const original = target[operation] as (...args: unknown[]) => unknown;
+      target[operation] = (...args: unknown[]) => { const result = original.apply(builder, args); handle(target, args); return result; };
+    }
+    return builder;
+  }) as typeof db.from);
+}
+
 describe('pure helpers', () => {
   it('produces seven consecutive UTC-safe day keys', () => {
     expect(weekDayKeys('2026-09-07')).toEqual([
@@ -109,8 +134,36 @@ describe('pure helpers', () => {
 });
 
 describe('ensureMealByName', () => {
+  it('retains an explicitly chosen library meal type when a same-name dish has another type', async () => {
+    const db = memoryDb();
+    db.seed('meals', [{ ...MEAL('breakfast-toast', 'Toast'), meal_type: 'breakfast' }]);
+    const result = await ensureMealByName(scopeWith(db), { name: 'Toast', mealType: 'dinner', ingredients: [] });
+    expect(result).toMatchObject({ ok: true, data: { created: true, meal: { meal_type: 'dinner' } } });
+  });
+
+  it('reuses the matching ingredient variant on retry without modifying the older dish', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('empty-tacos', 'Tacos')]);
+    const input = { name: 'Tacos', ingredients: [{ name: 'beans', quantity: '1/2', unit: 'cup' }], recipeUrl: 'https://example.com/tacos' };
+    const first = await ensureMealByName(scopeWith(db), input);
+    const retry = await ensureMealByName(scopeWith(db), input);
+    expect(first).toMatchObject({ ok: true, data: { created: true } });
+    expect(retry).toMatchObject({ ok: true, data: { created: false } });
+    if (first.ok && retry.ok) expect(retry.data.meal.id).toBe(first.data.meal.id);
+    expect(db.table('meals')).toHaveLength(2);
+    expect(db.table('meals')[0].ingredients).toEqual([]);
+  });
+
+  it('rejects altered meal receipts and does not claim an unconfirmed readback succeeded', async () => {
+    const { db } = makeDb((call) => {
+      if (call.kind === 'insert') return { data: MEAL('new', 'Pasta'), error: null };
+      return { data: [], error: null };
+    });
+    expect((await ensureMealByName(scopeWith(db), { name: 'Pasta', ingredients: [{ name: 'pasta', quantity: '1', unit: 'box' }] })).ok).toBe(false);
+  });
+
   it('reuses an existing dish case-insensitively instead of inserting', async () => {
-    const { db, calls } = makeDb(() => ({ data: MEAL('meal-1', 'Tacos'), error: null }));
+    const { db, calls } = makeDb(() => ({ data: [MEAL('meal-1', 'Tacos')], error: null }));
     const res = await ensureMealByName(scopeWith(db), { name: 'tacos' });
     expect(res.ok && !res.data.created && res.data.meal.id === 'meal-1').toBe(true);
     expect(calls).toHaveLength(1);
@@ -119,139 +172,143 @@ describe('ensureMealByName', () => {
   });
 
   it('creates the dish with the auth user id in created_by', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'insert'
-      ? { data: MEAL('meal-9', 'Ramen'), error: null }
-      : { data: null, error: null }));
+    const db = memoryDb();
     const res = await ensureMealByName(scopeWith(db), { name: ' Ramen ', mealType: 'lunch', ingredients: [{ name: 'noodles', quantity: '1', unit: 'pack' }] });
     expect(res.ok && res.data.created).toBe(true);
-    const insert = calls.find((c) => c.kind === 'insert');
-    expect(insert?.table).toBe('meals');
-    expect(insert?.payload).toMatchObject({
+    expect(db.table('meals')[0]).toMatchObject({
       family_id: 'fam-1', name: 'Ramen', meal_type: 'lunch', created_by: 'auth-user-1',
       ingredients: [{ name: 'noodles', qty: '1', unit: 'pack' }],
     });
   });
 });
 
-describe('planWeek', () => {
-  it('rejects bad input before touching the database', async () => {
-    const { db, calls } = makeDb(() => ({ data: null, error: null }));
-    const scope = scopeWith(db);
-    expect(await planWeek(scope, [])).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(await planWeek(scope, [{ date: 'monday', mealName: 'Tacos' }])).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(await planWeek(scope, [{ date: '2026-09-07' }])).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(await planWeek(scope, [
-      { date: '2026-09-07', mealName: 'Tacos' }, { date: '2026-09-07', mealName: 'Curry' },
-    ])).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(calls).toHaveLength(0);
+describe('planWeek / setSlot persistence', () => {
+  const previous = (id = 'previous', mealType = 'dinner', date = '2026-09-07') => ({
+    id, family_id: 'fam-1', meal_id: 'old-meal', plan_date: date, meal_type: mealType, created_by: 'auth-user-1',
+  });
+  const deny = (builder: Record<string, unknown>) => {
+    builder.then = (resolve: (value: Reply) => void) => resolve({ data: null, error: { code: '42501', message: 'permission denied' } });
+  };
+
+  it('rejects malformed entries, conflicting sources, invalid links and duplicate slots before writes', async () => {
+    const db = memoryDb();
+    const invalid = [[], [null], [{ date: 'monday', mealName: 'Tacos' }], [{ date: '2026-09-07' }],
+      [{ date: '2026-09-07', mealId: 'a', mealName: 'Tacos' }], [{ date: '2026-09-07', recipeId: 'r', ingredients: [] }],
+      [{ date: '2026-09-07', mealName: 42 }], [{ date: '2026-09-07', mealName: 'Tacos', ingredients: [null] }],
+      [{ date: '2026-09-07', mealName: 'Tacos', recipeUrl: 'javascript:alert(1)' }],
+      [{ date: '2026-09-07', mealName: 'Tacos' }, { date: '2026-09-07', mealName: 'Curry' }]];
+    for (const entries of invalid) expect(await planWeek(scopeWith(db), entries as never)).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(db.log).toHaveLength(0);
   });
 
-  it('creates missing dishes, clears only the targeted slots per meal type, and inserts the plan', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'meals' && call.kind === 'select') {
-        return { data: call.filters['ilike:name'] === 'Tacos' ? MEAL('meal-1', 'Tacos') : null, error: null };
-      }
-      if (call.table === 'meals' && call.kind === 'insert') return { data: MEAL('meal-2', 'Curry'), error: null };
-      if (call.table === 'meal_plans' && call.kind === 'select') {
-        // Only the dinner group holds something today; the lunch group is empty.
-        return call.filters.meal_type === 'dinner'
-          ? { data: [{ family_id: 'fam-1', meal_id: 'meal-old', plan_date: '2026-09-07', meal_type: 'dinner', created_by: 'auth-user-1' }], error: null }
-          : { data: [], error: null };
-      }
-      if (call.table === 'meal_plans' && call.kind === 'insert') {
-        const rows = call.payload as Record<string, unknown>[];
-        return { data: rows.map((r, i) => ({ ...r, id: `plan-${i}`, created_at: NOW.toISOString(), updated_at: NOW.toISOString() })), error: null };
-      }
-      if (call.table === 'agent_activity') return { data: { id: 'activity-1' }, error: null };
-      return { data: null, error: null };
-    });
-    const res = await planWeek(scopeWith(db, { actorKind: 'ai' }), [
-      { date: '2026-09-07', mealType: 'dinner', mealName: 'Tacos' },
-      { date: '2026-09-09', mealType: 'lunch', mealName: 'Curry' },
+  it('replaces exact slots, preserves unrelated and foreign rows, and returns persisted ingredient details', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('tacos', 'Tacos', [{ name: 'tortilla', qty: '8', unit: null }])]);
+    db.seed('meal_plans', [previous(), previous('unrelated', 'lunch'), { ...previous('foreign'), family_id: 'other' }]);
+    const result = await planWeek(scopeWith(db, { actorKind: 'ai' }), [
+      { date: '2026-09-07', mealType: 'dinner', mealId: 'tacos' },
+      { date: '2026-09-09', mealType: 'lunch', mealName: 'Curry', ingredients: [{ name: 'rice', quantity: '1/2', unit: 'cup' }] },
     ]);
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    expect(res.data.planned.map((p) => [p.date, p.mealType, p.name])).toEqual([
-      ['2026-09-07', 'dinner', 'Tacos'], ['2026-09-09', 'lunch', 'Curry'],
-    ]);
-    expect(res.data.createdMeals).toBe(1);
-    expect(res.data.replaced).toBe(1);
-
-    const deletes = calls.filter((c) => c.table === 'meal_plans' && c.kind === 'delete');
-    expect(deletes).toHaveLength(2);
-    // Monday dinner and Wednesday lunch are cleared as two groups; Monday lunch is never touched.
-    expect(deletes.map((d) => [d.filters.meal_type, d.filters.plan_date])).toEqual([
-      ['dinner', ['2026-09-07']], ['lunch', ['2026-09-09']],
-    ]);
-    for (const call of calls) expect(call.filters.family_id ?? (call.payload as Record<string, unknown>[])?.[0]?.family_id ?? 'fam-1').toBe('fam-1');
-
-    const insert = calls.find((c) => c.table === 'meal_plans' && c.kind === 'insert');
-    expect(insert?.payload).toEqual([
-      { family_id: 'fam-1', meal_id: 'meal-1', plan_date: '2026-09-07', meal_type: 'dinner', created_by: 'auth-user-1' },
-      { family_id: 'fam-1', meal_id: 'meal-2', plan_date: '2026-09-09', meal_type: 'lunch', created_by: 'auth-user-1' },
-    ]);
-    const activity = calls.find((c) => c.table === 'agent_activity');
-    expect(activity?.kind).toBe('insert');
-    expect(activity?.payload).toMatchObject({ agent: 'meal_planner', href: '/dashboard/meals' });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({ replaced: 1, createdMeals: 1, planned: [
+      { date: '2026-09-07', mealType: 'dinner', name: 'Tacos', ingredients: [{ name: 'tortilla', quantity: '8', unit: null }] },
+      { date: '2026-09-09', mealType: 'lunch', name: 'Curry', ingredients: [{ name: 'rice', quantity: '1/2', unit: 'cup' }] },
+    ] });
+    expect(db.table('meal_plans').map((row) => row.id)).toEqual(expect.arrayContaining(['unrelated', 'foreign', ...result.data.planned.map((slot) => slot.id)]));
+    expect(db.table('meal_plans')).toHaveLength(4);
+    expect(db.table('agent_activity')).toHaveLength(1);
   });
 
-  it('restores the previous slots and removes created dishes when the insert fails', async () => {
-    const snapshot = [{ family_id: 'fam-1', meal_id: 'meal-old', plan_date: '2026-09-07', meal_type: 'dinner', created_by: 'auth-user-1' }];
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'meals' && call.kind === 'select') return { data: null, error: null };
-      if (call.table === 'meals' && call.kind === 'insert') return { data: MEAL('meal-new', 'Curry'), error: null };
-      if (call.table === 'meal_plans' && call.kind === 'select') return { data: snapshot, error: null };
-      if (call.table === 'meal_plans' && call.kind === 'insert') {
-        const rows = call.payload as Record<string, unknown>[];
-        // The first insert is the plan (fails); the second is the restore (succeeds).
-        if (rows[0]?.meal_id === 'meal-new') return { data: null, error: { code: '23503', message: 'insert or update on table "meal_plans" violates foreign key constraint' } };
-        return { data: rows, error: null };
-      }
-      return { data: null, error: null };
-    });
-    const res = await planWeek(scopeWith(db), [{ date: '2026-09-07', mealName: 'Curry' }]);
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.code).toBe('db');
-
-    const planWrites = calls.filter((c) => c.table === 'meal_plans' && c.kind !== 'select');
-    expect(planWrites.map((c) => c.kind)).toEqual(['delete', 'insert', 'delete', 'insert']);
-    expect(planWrites[3].payload).toEqual(snapshot);
-    const mealDelete = calls.find((c) => c.table === 'meals' && c.kind === 'delete');
-    expect(mealDelete?.filters).toMatchObject({ family_id: 'fam-1', id: ['meal-new'] });
-    expect(calls.some((c) => c.table === 'agent_activity')).toBe(false);
+  it('restores captured IDs after a later meal-type deletion fails', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('tacos', 'Tacos')]);
+    db.seed('meal_plans', [previous(), previous('lunch-old', 'lunch')]);
+    let deletes = 0;
+    intercept(db, 'meal_plans', 'delete', (builder) => { if (++deletes === 2) deny(builder); });
+    const result = await planWeek(scopeWith(db), [
+      { date: '2026-09-07', mealType: 'dinner', mealId: 'tacos' },
+      { date: '2026-09-07', mealType: 'lunch', mealId: 'tacos' },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(db.table('meal_plans')).toHaveLength(2);
+    expect(db.table('meal_plans')).toEqual(expect.arrayContaining([
+      expect.objectContaining(previous()), expect.objectContaining(previous('lunch-old', 'lunch')),
+    ]));
   });
 
-  it('removes created dishes and stops when a slot read fails, before anything is cleared', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'meals' && call.kind === 'insert') return { data: MEAL('meal-new', 'Curry'), error: null };
-      if (call.table === 'meal_plans' && call.kind === 'select') return { data: null, error: { code: '42501', message: 'permission denied' } };
-      return { data: null, error: null };
+  it('restores previous slots and removes unreferenced created dishes after an insert failure', async () => {
+    const db = memoryDb();
+    db.seed('meal_plans', [previous()]);
+    let inserts = 0;
+    intercept(db, 'meal_plans', 'insert', (builder) => { if (++inserts === 1) deny(builder); });
+    const result = await planWeek(scopeWith(db), [{ date: '2026-09-07', mealName: 'Curry' }]);
+    expect(result.ok).toBe(false);
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
+    expect(db.table('meals')).toHaveLength(0);
+    expect(db.table('agent_activity')).toHaveLength(0);
+  });
+
+  it('refuses equal-count but incorrect insert receipts and restores the previous slot', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('tacos', 'Tacos')]);
+    db.seed('meal_plans', [previous()]);
+    let inserts = 0;
+    intercept(db, 'meal_plans', 'insert', (builder) => {
+      if (++inserts !== 1) return;
+      const originalThen = builder.then as (resolve: (reply: Reply) => void) => unknown;
+      builder.then = (resolve: (reply: Reply) => void) => originalThen.call(builder, (reply) => resolve({ ...reply,
+        data: (reply.data as Record<string, unknown>[]).map((row) => ({ ...row, meal_id: 'wrong' })),
+      }));
     });
-    const res = await planWeek(scopeWith(db), [{ date: '2026-09-07', mealName: 'Curry' }]);
-    expect(res).toMatchObject({ ok: false, code: 'db' });
-    expect(calls.some((c) => c.table === 'meal_plans' && c.kind === 'delete')).toBe(false);
-    expect(calls.find((c) => c.table === 'meals' && c.kind === 'delete')?.filters.id).toEqual(['meal-new']);
+    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' })).ok).toBe(false);
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
+  });
+
+  it('reports missing persisted rows despite a successful insert receipt', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('tacos', 'Tacos')]);
+    intercept(db, 'meal_plans', 'insert', (builder) => {
+      const originalThen = builder.then as (resolve: (reply: Reply) => void) => unknown;
+      builder.then = (resolve: (reply: Reply) => void) => originalThen.call(builder, (reply) => {
+        db.table('meal_plans').splice(0); resolve(reply);
+      });
+    });
+    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' })).ok).toBe(false);
+    expect(db.table('agent_activity')).toHaveLength(0);
+  });
+
+  it('does not erase a competing newer row while compensating for a failed insertion', async () => {
+    const db = memoryDb();
+    db.seed('meals', [MEAL('tacos', 'Tacos')]);
+    db.seed('meal_plans', [previous()]);
+    let inserts = 0;
+    intercept(db, 'meal_plans', 'insert', (builder) => {
+      if (++inserts !== 1) return;
+      db.seed('meal_plans', [{ ...previous('newer'), meal_id: 'newer-meal' }]);
+      deny(builder);
+    });
+    const result = await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('refresh') });
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ id: 'newer', meal_id: 'newer-meal' })]);
+  });
+
+  it('stops before clearing when a snapshot read fails', async () => {
+    const db = memoryDb();
+    db.seed('meal_plans', [previous()]);
+    intercept(db, 'meal_plans', 'select', (builder) => deny(builder));
+    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealName: 'Curry' })).ok).toBe(false);
+    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
+  });
+
+  it('setSlot reports replacement and returns its persisted ID', async () => {
+    const db = memoryDb();
+    db.seed('meal_plans', [previous()]);
+    const result = await setSlot(scopeWith(db), { date: '2026-09-07', mealName: 'Tacos' });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (result.ok) expect(result.data).toMatchObject({ id: db.table('meal_plans')[0].id, date: '2026-09-07', mealType: 'dinner', name: 'Tacos', replaced: true });
   });
 });
-
-describe('setSlot', () => {
-  it('plans one slot and reports whether it replaced something', async () => {
-    const { db } = makeDb((call) => {
-      if (call.table === 'meals' && call.kind === 'select') return { data: MEAL('meal-1', 'Tacos'), error: null };
-      if (call.table === 'meal_plans' && call.kind === 'select') return { data: [], error: null };
-      if (call.table === 'meal_plans' && call.kind === 'insert') {
-        const rows = call.payload as Record<string, unknown>[];
-        return { data: rows.map((r) => ({ ...r, id: 'plan-1' })), error: null };
-      }
-      return { data: null, error: null };
-    });
-    const res = await setSlot(scopeWith(db), { date: '2026-09-07', mealName: 'Tacos' });
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data).toMatchObject({ id: 'plan-1', date: '2026-09-07', mealType: 'dinner', name: 'Tacos', replaced: false });
-  });
-});
-
 describe('getMealPlan', () => {
   it('joins dishes onto the week and sorts by day then meal', async () => {
     const { db, calls } = makeDb((call) => {

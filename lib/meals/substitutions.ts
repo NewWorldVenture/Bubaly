@@ -438,8 +438,9 @@ export function applySubstitutions(
       return;
     }
     const qty = item.quantity?.trim();
-    if (qty && existing.quantity && !existing.quantity.includes(qty)) existing.quantity = `${existing.quantity} + ${qty}`;
-    else if (qty && !existing.quantity) existing.quantity = qty;
+    // These are separate requirements even when their amounts are equal or
+    // one string contains the other. Keep unknown amounts explicit as well.
+    existing.quantity = `${existing.quantity?.trim() || 'amount unspecified'} + ${qty || 'amount unspecified'}`;
   };
 
   for (const item of items ?? []) {

@@ -15,6 +15,7 @@ import { getTool, listTools } from '@/lib/ai/tools/registry';
 import { toolInputSchema } from '@/lib/ai/tools/legacy-adapter';
 import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { ServiceScope } from '@/lib/services/types';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown };
@@ -128,23 +129,16 @@ describe('registration', () => {
 
 describe('meals.setSlot', () => {
   it('accepts the legacy create_meal_plan_entry shape and plans the slot', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'meals' && call.kind === 'select') return { data: null, error: null };
-      if (call.table === 'meals' && call.kind === 'insert') return { data: { id: 'meal-1', family_id: 'fam-1', name: 'Tacos', meal_type: 'dinner', recipe_url: null, image_url: null, ingredients: [], notes: null, created_by: 'auth-user-1', created_at: '', updated_at: '' }, error: null };
-      if (call.table === 'meal_plans' && call.kind === 'select') return { data: [], error: null };
-      if (call.table === 'meal_plans' && call.kind === 'insert') return { data: (call.payload as Record<string, unknown>[]).map((r) => ({ ...r, id: 'plan-1' })), error: null };
-      if (call.table === 'agent_activity') return { data: { id: 'activity-1' }, error: null };
-      return { data: null, error: null };
-    });
+    const db = createInMemorySupabase<SupabaseClient<Database>>();
     const tool = getTool('create_meal_plan_entry')!;
     const res = await run(tool, scopeWith(db), { meal_name: 'Tacos', plan_date: '2026-09-07', meal_type: 'dinner' });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.data).toMatchObject({ id: 'plan-1', date: '2026-09-07', meal_type: 'dinner', name: 'Tacos', replaced: false });
+      expect(res.data).toMatchObject({ id: db.table('meal_plans')[0].id, date: '2026-09-07', meal_type: 'dinner', name: 'Tacos', replaced: false });
       expect(tool.summarize({ meal_name: 'Tacos', plan_date: '2026-09-07' }, res.data)).toBe('Planned Tacos for dinner on Mon, Sep 7');
     }
-    expect(calls.find((c) => c.table === 'meal_plans' && c.kind === 'insert')?.payload).toEqual([
-      { family_id: 'fam-1', meal_id: 'meal-1', plan_date: '2026-09-07', meal_type: 'dinner', created_by: 'auth-user-1' },
+    expect(db.table('meal_plans')).toEqual([
+      expect.objectContaining({ family_id: 'fam-1', meal_id: db.table('meals')[0].id, plan_date: '2026-09-07', meal_type: 'dinner', created_by: 'auth-user-1' }),
     ]);
   });
 
@@ -190,6 +184,7 @@ describe('meals.planWeek', () => {
 
 describe('groceries.addFromMealPlan', () => {
   it('expands week_start into a seven-day window and adds what is not in the pantry', async () => {
+    let saved: Record<string, unknown>[] = [];
     const { db, calls } = makeDb((call) => {
       switch (call.table) {
         case 'meal_plans':
@@ -201,9 +196,8 @@ describe('groceries.addFromMealPlan', () => {
         case 'grocery_lists':
           return { data: { id: 'list-1' }, error: null };
         case 'grocery_items':
-          return call.kind === 'insert'
-            ? { data: (call.payload as Record<string, unknown>[]).map((r, i) => ({ ...r, id: `item-${i}`, is_checked: false })), error: null }
-            : { data: [], error: null };
+          if (call.kind === 'insert') saved = (call.payload as Record<string, unknown>[]).map((r, i) => ({ ...r, id: `item-${i}`, is_checked: false }));
+          return { data: saved, error: null };
         default:
           return { data: null, error: null };
       }

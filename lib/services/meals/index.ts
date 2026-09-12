@@ -27,6 +27,7 @@
 // because that is the single medical fact a meal planner must know and the
 // rest is none of its business.
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import type { Json, MealType, Tables } from '@/lib/database.types';
 import { normalizeAllergies } from '@/lib/meals/pantry-chef';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -105,6 +106,36 @@ function ingredientsToJson(list: Ingredient[] | undefined): Json {
   return (list ?? []).map((i) => ({ name: i.name, qty: i.quantity, unit: i.unit }));
 }
 
+export type MealLibraryInput = {
+  name: string;
+  mealType?: MealType | null;
+  ingredients?: Ingredient[];
+  recipeUrl?: string | null;
+  imageUrl?: string | null;
+};
+
+function validIngredients(value: unknown): value is Ingredient[] {
+  return Array.isArray(value) && value.length <= 100 && value.every((line) =>
+    line && typeof line === 'object' && !Array.isArray(line)
+    && typeof line.name === 'string' && line.name.trim().length > 0 && line.name.length <= 300
+    && (line.quantity == null || (typeof line.quantity === 'string' && line.quantity.length <= 100))
+    && (line.unit == null || (typeof line.unit === 'string' && line.unit.length <= 100)));
+}
+
+function validOptionalUrl(value: unknown): boolean {
+  if (value == null || value === '') return true;
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
+function matchesMealInput(meal: Meal, input: MealLibraryInput): boolean {
+  return normalizeDishName(meal.name) === normalizeDishName(input.name)
+    && (input.mealType == null || meal.meal_type === input.mealType)
+    && (input.ingredients === undefined || JSON.stringify(parseIngredients(meal.ingredients)) === JSON.stringify(parseIngredients(ingredientsToJson(input.ingredients))))
+    && (input.recipeUrl === undefined || (meal.recipe_url || null) === (input.recipeUrl?.trim() || null))
+    && (input.imageUrl === undefined || (meal.image_url || null) === (input.imageUrl?.trim() || null));
+}
+
 // ── Meal library ────────────────────────────────────────────────────────────
 
 /**
@@ -116,10 +147,14 @@ function ingredientsToJson(list: Ingredient[] | undefined): Json {
  */
 export async function ensureMealByName(
   scope: ServiceScope,
-  input: { name: string; mealType?: MealType | null; ingredients?: Ingredient[]; recipeUrl?: string | null },
+  input: MealLibraryInput,
 ): Promise<ServiceResult<{ meal: Meal; created: boolean }>> {
-  const name = input.name?.trim() ?? '';
-  if (!name) return fail('A meal needs a name.', { code: SERVICE_CODES.invalidInput });
+  const name = typeof input?.name === 'string' ? input.name.trim() : '';
+  if (!name || name.length > 300 || (input.mealType != null && !isMealType(input.mealType))
+    || (input.ingredients !== undefined && !validIngredients(input.ingredients))
+    || !validOptionalUrl(input.recipeUrl) || !validOptionalUrl(input.imageUrl)) {
+    return fail('Check the meal name, ingredients and links.', { code: SERVICE_CODES.invalidInput });
+  }
   const mealType = isMealType(input.mealType) ? input.mealType : 'dinner';
 
   const term = name.replace(/[%_]/g, (m) => `\\${m}`);
@@ -129,13 +164,15 @@ export async function ensureMealByName(
     .eq('family_id', scope.familyId)
     .ilike('name', term)
     .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(200);
   if (lookupError) {
     console.error('[service:meals] meal lookup failed', lookupError);
     return fail(describeDbError(lookupError, 'Could not look up that meal.'), { code: SERVICE_CODES.db });
   }
-  if (existing) return ok({ meal: existing, created: false });
+  if (!Array.isArray(existing)) return fail('Could not read the meal library.', { code: SERVICE_CODES.db });
+  const matching = existing.find((meal) => matchesMealInput(meal, input));
+  if (matching) return ok({ meal: matching, created: false });
+  if (existing.length === 200) return fail('Choose an existing meal with that name from the library.', { code: SERVICE_CODES.invalidInput });
 
   const { data, error } = await scope.db
     .from('meals')
@@ -145,16 +182,23 @@ export async function ensureMealByName(
       meal_type: mealType,
       ingredients: ingredientsToJson(input.ingredients),
       recipe_url: input.recipeUrl?.trim() || null,
+      image_url: input.imageUrl?.trim() || null,
       // meals.created_by references auth.users (0002).
       created_by: scope.userId,
     })
     .select('*')
     .single();
-  if (error || !data) {
+  if (error || !data || data.family_id !== scope.familyId || data.meal_type !== mealType || !matchesMealInput(data, input)) {
     console.error('[service:meals] meal create failed', error);
     return fail(describeDbError(error, 'Could not save that meal.'), { code: SERVICE_CODES.db });
   }
-  return ok({ meal: data, created: true });
+  const { data: saved, error: readError } = await scope.db.from('meals').select('*')
+    .eq('family_id', scope.familyId).eq('id', data.id).maybeSingle();
+  if (readError || !saved || saved.id !== data.id || saved.family_id !== scope.familyId
+    || saved.meal_type !== mealType || !matchesMealInput(saved, input)) {
+    return fail('Could not confirm the saved meal. Refresh before trying again.', { code: SERVICE_CODES.db });
+  }
+  return ok({ meal: saved, created: true });
 }
 
 // ── Meal plan ───────────────────────────────────────────────────────────────
@@ -227,12 +271,16 @@ export type PlanEntryInput = {
   mealType?: MealType | null;
   /** Either an existing `meals.id`… */
   mealId?: string | null;
+  /** A saved recipe belonging to this family; its ingredients are read on the server. */
+  recipeId?: string | null;
   /** …or a dish name, reused from the library when it already exists. */
   mealName?: string | null;
   ingredients?: Ingredient[];
+  recipeUrl?: string | null;
+  imageUrl?: string | null;
 };
 
-type ResolvedEntry = { date: string; mealType: MealType; mealId: string; name: string };
+type ResolvedEntry = { date: string; mealType: MealType; mealId: string; name: string; ingredients: Ingredient[] };
 
 /**
  * Turn each entry into a concrete `meals.id`, creating dishes as needed and
@@ -259,21 +307,31 @@ async function resolveEntries(
         return fail(describeDbError(error, 'Could not read that meal.'), { code: SERVICE_CODES.db });
       }
       if (!data) return fail('That meal could not be found.', { code: SERVICE_CODES.notFound });
-      resolved.push({ date: entry.date, mealType, mealId: data.id, name: data.name });
+      resolved.push({ date: entry.date, mealType, mealId: data.id, name: data.name, ingredients: parseIngredients(data.ingredients) });
       continue;
     }
-    const name = entry.mealName?.trim() ?? '';
-    const key = normalizeDishName(name);
+    let source: MealLibraryInput = {
+      name: entry.mealName?.trim() ?? '', mealType, ingredients: entry.ingredients,
+      recipeUrl: entry.recipeUrl, imageUrl: entry.imageUrl,
+    };
+    if (entry.recipeId) {
+      const { data: recipe, error } = await scope.db.from('family_recipes').select('*')
+        .eq('family_id', scope.familyId).eq('id', entry.recipeId).maybeSingle();
+      if (error) return fail(describeDbError(error, 'Could not read that recipe.'), { code: SERVICE_CODES.db });
+      if (!recipe) return fail('That recipe could not be found.', { code: SERVICE_CODES.notFound });
+      source = { name: recipe.name, mealType, ingredients: parseIngredients(recipe.ingredients), recipeUrl: recipe.source_url, imageUrl: recipe.photo_url };
+    }
+    const key = JSON.stringify({ ...source, name: normalizeDishName(source.name) });
     const cached = byName.get(key);
     if (cached) {
-      resolved.push({ date: entry.date, mealType, mealId: cached.id, name: cached.name });
+      resolved.push({ date: entry.date, mealType, mealId: cached.id, name: cached.name, ingredients: parseIngredients(cached.ingredients) });
       continue;
     }
-    const ensured = await ensureMealByName(scope, { name, mealType, ingredients: entry.ingredients });
+    const ensured = await ensureMealByName(scope, source);
     if (!ensured.ok) return ensured;
     if (ensured.data.created) createdMealIds.push(ensured.data.meal.id);
     byName.set(key, ensured.data.meal);
-    resolved.push({ date: entry.date, mealType, mealId: ensured.data.meal.id, name: ensured.data.meal.name });
+    resolved.push({ date: entry.date, mealType, mealId: ensured.data.meal.id, name: ensured.data.meal.name, ingredients: parseIngredients(ensured.data.meal.ingredients) });
   }
   return ok(resolved);
 }
@@ -283,9 +341,17 @@ function validateEntries(entries: PlanEntryInput[]): ServiceResult<PlanEntryInpu
   if (entries.length > 40) return fail('That is more than a week of meals — plan at most 40 slots at a time.', { code: SERVICE_CODES.invalidInput });
   const seen = new Set<string>();
   for (const entry of entries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fail('Check the meals to plan.', { code: SERVICE_CODES.invalidInput });
     if (!isDayKey(entry.date)) return fail(`"${entry.date}" is not a date like 2026-09-07.`, { code: SERVICE_CODES.invalidInput });
     if (entry.mealType != null && !isMealType(entry.mealType)) return fail(`"${entry.mealType}" is not a meal type.`, { code: SERVICE_CODES.invalidInput });
-    if (!entry.mealId && !entry.mealName?.trim()) return fail(`The ${entry.mealType ?? 'dinner'} on ${entry.date} has no dish.`, { code: SERVICE_CODES.invalidInput });
+    const sources = [entry.mealId, entry.recipeId, entry.mealName];
+    if (sources.some((value) => value != null && (typeof value !== 'string' || value.length > 300))
+      || sources.filter((value) => typeof value === 'string' && value.trim()).length !== 1
+      || ((entry.mealId || entry.recipeId) && (entry.ingredients !== undefined || entry.recipeUrl !== undefined || entry.imageUrl !== undefined))
+      || (entry.ingredients !== undefined && !validIngredients(entry.ingredients))
+      || !validOptionalUrl(entry.recipeUrl) || !validOptionalUrl(entry.imageUrl)) {
+      return fail('Choose one meal, recipe or custom dish with valid ingredients.', { code: SERVICE_CODES.invalidInput });
+    }
     const slot = `${entry.date}|${entry.mealType ?? 'dinner'}`;
     if (seen.has(slot)) return fail(`The ${entry.mealType ?? 'dinner'} on ${entry.date} was given twice.`, { code: SERVICE_CODES.invalidInput });
     seen.add(slot);
@@ -313,14 +379,9 @@ export type PlanWeekResult = {
 };
 
 /**
- * Write a set of slots as one unit, replacing whatever those slots held.
- *
- * Failure handling, in order: a dish that cannot be resolved aborts before
- * anything is cleared; a failed clear removes the dishes created so far; a
- * failed insert re-clears the slots, restores the snapshot and removes the
- * created dishes. Each rollback step logs its own failure rather than hiding
- * behind the first one, because a half-restored week is what a person will
- * actually be looking at.
+ * Replace only the captured rows and verify the resulting slots. Without a
+ * database transaction this is best-effort compensation: a competing writer
+ * is reported as a conflict and its rows are never cleared during rollback.
  */
 export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): Promise<ServiceResult<PlanWeekResult>> {
   const valid = validateEntries(entries);
@@ -342,15 +403,25 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   const groups = slotGroups(resolved.data);
 
   // Snapshot what the targeted slots hold today, so they can be put back.
-  const snapshot: { family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; created_by: string | null }[] = [];
+  const snapshot: MealPlanRow[] = [];
+  const readTargetRows = async (): Promise<ServiceResult<MealPlanRow[]>> => {
+    const found: MealPlanRow[] = [];
+    for (const group of groups) {
+      const { data, error } = await scope.db.from('meal_plans').select('*')
+        .eq('family_id', scope.familyId).eq('meal_type', group.mealType).in('plan_date', group.dates);
+      if (error || !Array.isArray(data)) return fail('Could not read the current meal plan.', { code: SERVICE_CODES.db });
+      found.push(...data);
+    }
+    return ok(found);
+  };
   for (const group of groups) {
     const { data, error } = await scope.db
       .from('meal_plans')
-      .select('family_id, meal_id, plan_date, meal_type, created_by')
+      .select('*')
       .eq('family_id', scope.familyId)
       .eq('meal_type', group.mealType)
       .in('plan_date', group.dates);
-    if (error) {
+    if (error || !Array.isArray(data)) {
       console.error('[service:meals] existing slot read failed', error);
       await removeCreatedMeals();
       return fail(describeDbError(error, 'Could not read the current meal plan.'), { code: SERVICE_CODES.db });
@@ -358,27 +429,8 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
     snapshot.push(...(data ?? []));
   }
 
-  const clearSlots = async (): Promise<unknown> => {
-    for (const group of groups) {
-      const { error } = await scope.db
-        .from('meal_plans')
-        .delete()
-        .eq('family_id', scope.familyId)
-        .eq('meal_type', group.mealType)
-        .in('plan_date', group.dates);
-      if (error) return error;
-    }
-    return null;
-  };
-
-  const clearError = await clearSlots();
-  if (clearError) {
-    console.error('[service:meals] slot clear failed', clearError);
-    await removeCreatedMeals();
-    return fail(describeDbError(clearError, 'Could not update the meal plan.'), { code: SERVICE_CODES.db });
-  }
-
   const rows = resolved.data.map((e) => ({
+    id: randomUUID(),
     family_id: scope.familyId,
     meal_id: e.mealId,
     plan_date: e.date,
@@ -386,28 +438,80 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
     // meal_plans.created_by references auth.users (0002).
     created_by: scope.userId,
   }));
-  const { data: inserted, error: insertError } = await scope.db.from('meal_plans').insert(rows).select('*');
-  if (insertError || !inserted || inserted.length !== rows.length) {
-    console.error('[service:meals] plan insert failed', insertError ?? new Error('meal plan insert returned an incomplete result'));
-    const reclearError = await clearSlots();
-    if (reclearError) console.error('[service:meals] rollback clear failed', reclearError);
-    if (snapshot.length) {
-      const { error: restoreError } = await scope.db.from('meal_plans').insert(snapshot);
-      if (restoreError) console.error('[service:meals] rollback restore failed', restoreError);
+  const restore = async (removeInserted: boolean): Promise<boolean> => {
+    if (removeInserted) {
+      const { error } = await scope.db.from('meal_plans').delete()
+        .eq('family_id', scope.familyId).in('id', rows.map((row) => row.id));
+      if (error) { console.error('[service:meals] rollback clear failed', error); return false; }
     }
-    await removeCreatedMeals();
-    return fail(describeDbError(insertError, 'Could not save the meal plan.'), { code: SERVICE_CODES.db });
-  }
+    const current = await readTargetRows();
+    if (!current.ok) return false;
+    const presentIds = new Set(current.data.map((row) => row.id));
+    const occupied = new Set(current.data.map((row) => `${row.plan_date}|${row.meal_type}`));
+    const missing = snapshot.filter((row) => !presentIds.has(row.id));
+    const safe = missing.filter((row) => !occupied.has(`${row.plan_date}|${row.meal_type}`));
+    if (safe.length) {
+      const { error } = await scope.db.from('meal_plans').insert(safe.map((row) => ({
+        id: row.id, family_id: row.family_id, meal_id: row.meal_id, plan_date: row.plan_date,
+        meal_type: row.meal_type, created_by: row.created_by, idempotency_key: row.idempotency_key,
+      })));
+      if (error) { console.error('[service:meals] rollback restore failed', error); return false; }
+    }
+    const verified = await readTargetRows();
+    if (!verified.ok) return false;
+    const restored = new Map(verified.data.map((row) => [row.id, row]));
+    return snapshot.every((row) => {
+      const saved = restored.get(row.id);
+      return saved?.meal_id === row.meal_id && saved.plan_date === row.plan_date && saved.meal_type === row.meal_type;
+    }) && missing.length === safe.length;
+  };
+  const failure = async (message: string, removeInserted = false) => {
+    const restored = await restore(removeInserted);
+    // A concurrently adopted meal must not be removed merely because this plan failed.
+    if (restored && createdMealIds.length) {
+      const { data: references, error } = await scope.db.from('meal_plans').select('meal_id')
+        .eq('family_id', scope.familyId).in('meal_id', createdMealIds);
+      if (!error && Array.isArray(references) && references.length === 0) await removeCreatedMeals();
+    }
+    return fail(`${message}${restored ? '' : ' The plan may have changed; refresh before trying again.'}`, { code: SERVICE_CODES.db });
+  };
 
-  const nameById = new Map(resolved.data.map((e) => [e.mealId, e.name]));
-  const planned = inserted.map((row): PlanSlot => ({
-    id: row.id,
-    date: row.plan_date,
-    mealType: row.meal_type,
-    mealId: row.meal_id,
-    name: row.meal_id ? nameById.get(row.meal_id) ?? null : null,
-    ingredients: [],
-  }));
+  // Capture IDs before deletion, so a new row from another editor survives.
+  for (const group of groups) {
+    const captured = snapshot.filter((row) => row.meal_type === group.mealType && group.dates.includes(row.plan_date));
+    if (!captured.length) continue;
+    const { data: deleted, error } = await scope.db.from('meal_plans').delete()
+      .eq('family_id', scope.familyId).eq('meal_type', group.mealType).in('plan_date', group.dates)
+      .in('id', captured.map((row) => row.id)).select('*');
+    if (error || !deleted || deleted.length !== captured.length
+      || captured.some((row) => !deleted.some((saved) => saved.id === row.id && saved.meal_id === row.meal_id))) {
+      return failure('Could not update the meal plan.');
+    }
+  }
+  const beforeInsert = await readTargetRows();
+  if (!beforeInsert.ok || beforeInsert.data.length) return failure('The meal plan changed while saving.');
+
+  const { data: inserted, error: insertError } = await scope.db.from('meal_plans').insert(rows).select('*');
+  const matchesRows = (actual: MealPlanRow[]) => actual.length === rows.length && rows.every((row) =>
+    actual.some((saved) => saved.id === row.id && saved.family_id === row.family_id && saved.meal_id === row.meal_id
+      && saved.plan_date === row.plan_date && saved.meal_type === row.meal_type && saved.created_by === row.created_by));
+  if (insertError || !inserted || !matchesRows(inserted)) {
+    console.error('[service:meals] plan insert failed', insertError ?? new Error('meal plan insert returned an incomplete result'));
+    return failure(describeDbError(insertError, 'Could not save the meal plan.'), true);
+  }
+  const savedRows = await readTargetRows();
+  if (!savedRows.ok) return fail('Could not confirm the saved meal plan. Refresh before trying again.', { code: SERVICE_CODES.db });
+  if (!matchesRows(savedRows.data)) return failure('The meal plan changed while saving.', true);
+  const savedSlots = await loadSlots(scope, [...new Set(rows.map((row) => row.plan_date))]);
+  if (!savedSlots.ok) return savedSlots;
+  const ownedIds = new Set<string>(rows.map((row) => row.id));
+  const planned = savedSlots.data.filter((slot) => ownedIds.has(slot.id));
+  if (planned.length !== rows.length || rows.some((row) => !planned.some((slot) =>
+    slot.id === row.id && slot.date === row.plan_date && slot.mealType === row.meal_type && slot.mealId === row.meal_id))
+    || planned.some((slot) => !resolved.data.some((entry) => entry.date === slot.date && entry.mealType === slot.mealType
+      && entry.name === slot.name && JSON.stringify(entry.ingredients) === JSON.stringify(slot.ingredients)))) {
+    return fail('Could not confirm the saved dishes. Refresh before trying again.', { code: SERVICE_CODES.db });
+  }
 
   const dates = [...new Set(planned.map((p) => p.date))].sort();
   await recordActivitySafely(scope, {
