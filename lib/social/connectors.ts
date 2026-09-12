@@ -17,6 +17,7 @@ import {
 import type { TargetStatus } from './content';
 import { publishX } from './providers/x';
 import { getTranslations } from '@/lib/i18n/server';
+import type { ScheduledClaim } from './scheduled-authority';
 
 export type ConnectorPublishInput = {
   platform: SocialPlatform;
@@ -28,6 +29,8 @@ export type ConnectorPublishInput = {
   accountId?: string;
   userId?: string | null;
   kind?: string;
+  scheduledClaim?: ScheduledClaim;
+  signal?: AbortSignal;
 };
 
 export type ConnectorPublishOutput = {

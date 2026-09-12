@@ -6,7 +6,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { getConnector, type ConnectorPublishOutput } from './connectors';
+import { getConnector, type ConnectorPublishInput, type ConnectorPublishOutput } from './connectors';
+import { needsPublishApproval, scheduleFailure } from './scheduled-authority';
 import { derivePostStatus, type TargetStatus } from './content';
 import type { SocialPlatform } from './capabilities';
 
@@ -165,6 +166,7 @@ export async function runPublishNow(
   familyId: string,
   postId: string,
   userId: string | null,
+  options: { publishTarget?: (input: ConnectorPublishInput, targetId: string) => Promise<ConnectorPublishOutput> } = {},
 ): Promise<PublishOutcome> {
   const { data: post, error: postError } = await supabase
     .from('social_posts')
@@ -184,6 +186,7 @@ export async function runPublishNow(
   if (!['draft', 'scheduled', 'failed', 'partially_published'].includes(post.status)) {
     throw new Error('This post is not available for publishing.');
   }
+  if (await needsPublishApproval(supabase, familyId, post.approval_status)) scheduleFailure('approvalRequired');
 
   const variantByPlatform = new Map<SocialPlatform, string>();
   let variantCursor: string | null = null;
@@ -258,13 +261,14 @@ export async function runPublishNow(
 
       let result: ConnectorPublishOutput;
       try {
-        result = confirmedResult(await getConnector(target.platform).publish({
+        const input: ConnectorPublishInput = {
           platform: target.platform, familyId, accountId: target.account_id ?? undefined,
           userId: userId ?? undefined, kind: post.kind,
           providerAccountId: providerAccounts.get(target.id) ?? null,
           body: variantByPlatform.get(target.platform) ?? post.body,
           link: post.link ?? null, mediaUrls: [],
-        }));
+        };
+        result = confirmedResult(await (options.publishTarget ? options.publishTarget(input, target.id) : getConnector(target.platform).publish(input)));
       } catch {
         result = uncertainResult();
       }

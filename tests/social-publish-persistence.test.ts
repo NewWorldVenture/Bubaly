@@ -27,9 +27,11 @@ describe('social publishing persistence boundaries', () => {
 
     expect(source).toContain('async function cleanupPost(');
     expect(source).toContain("const { error: variantsError } = await supabase.from('social_post_variants').insert(variants)");
-    expect(source).toContain("const { error: scheduleError } = await supabase.from('social_schedules').insert({");
+    expect(source).toContain("const { data: schedule, error: scheduleError } = await supabase.from('social_schedules').insert({");
     expect(source).toContain("const { data: calendarRows, error: calendarError } = await supabase.from('social_calendar_items').insert(calItems).select('id')");
-    expect(source).toContain('if (postId && !publishStarted) await cleanupPost');
+    expect(source).toContain('if (postId && !publishStarted && !scheduleArmStarted) {');
+    expect(source).toContain('reviewRequired = !(await cleanupPost(supabase, fid, postId))');
+    expect(source.indexOf('scheduleArmStarted = true;')).toBeLessThan(source.indexOf('await armScheduledPublishReceipt(receiptId)'));
     expect(source).toContain('if (intent !== \'draft\' && accountIds.length === 0)');
   });
 
@@ -38,7 +40,7 @@ describe('social publishing persistence boundaries', () => {
 
     expect(source).toContain("import { describeActionError } from '@/lib/supabase/errors';");
     expect(source).toContain("const SOCIAL_SAVE_FAILURE = 'Social publishing could not be saved completely. Review the post status before retrying.'");
-    expect(source).toContain("return { ok: false, postId, error: describeActionError(error, SOCIAL_SAVE_FAILURE) }");
+    expect(source).toContain('error instanceof ScheduledPublishError ? tr(error.key) : describeActionError(error, SOCIAL_SAVE_FAILURE)');
   });
 
   it('keeps unexpected live-provider exceptions uncertain without exposing diagnostics', () => {

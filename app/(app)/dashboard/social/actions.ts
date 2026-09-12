@@ -18,17 +18,25 @@ import { createTargets, runPublishNow } from '@/lib/social/publish';
 import type { PublishOutcome } from '@/lib/social/publish';
 import { beginXAuthorization, X_COOKIE, xCookieOptions } from '@/lib/social/x-oauth';
 import { clearXTokens, XBoundaryError } from '@/lib/social/account-tokens';
+import { resolveScheduleTime, validateScheduleInstant } from '@/lib/social/schedule-time';
+import { armScheduledPublishReceipt, createScheduledPublishReceipt, publishScheduledPostNow, ScheduledPublishError } from '@/lib/social/scheduled-publish';
+import { safeSocialLink } from '@/lib/social/links';
 
 type SocialSupabase = Awaited<ReturnType<typeof createServer>>;
 const SOCIAL_SAVE_FAILURE = 'Social publishing could not be saved completely. Review the post status before retrying.';
+const isRecordId = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-async function cleanupPost(supabase: SocialSupabase, familyId: string, postId: string): Promise<void> {
-  const { error } = await supabase
-    .from('social_posts')
-    .delete()
-    .eq('id', postId)
-    .eq('family_id', familyId);
-  if (error) console.error('[social-action] incomplete post cleanup failed', error);
+async function cleanupPost(supabase: SocialSupabase, familyId: string, postId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.from('social_posts').delete()
+      .eq('id', postId).eq('family_id', familyId).select('id');
+    return !error && data?.length === 1 && data[0].id === postId;
+  } catch { return false; }
+}
+
+function definitiveCreateRejection(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+  return typeof code === 'string' && (/^(22|23|40|42|44)[A-Z0-9]{3}$/.test(code) || code === 'P0001');
 }
 
 async function familyId() {
@@ -110,6 +118,8 @@ export type CreatePostResult = {
   postId?: string;
   action?: 'draft' | 'schedule' | 'publish';
   outcome?: PublishOutcome;
+  schedulePhase?: 'queued' | 'approval_required';
+  reviewRequired?: boolean;
 };
 
 /**
@@ -121,7 +131,9 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   const tr = await getTranslations();
   const { familyId: fid, userId } = await familyId();
 
-  const intent = (String(formData.get('intent') ?? 'draft') as 'draft' | 'schedule' | 'publish');
+  const intentValue = String(formData.get('intent') ?? 'draft');
+  if (intentValue !== 'draft' && intentValue !== 'schedule' && intentValue !== 'publish') return { ok: false, error: tr('socialSchedule.invalid') };
+  const intent = intentValue;
   const permission = intent === 'publish' ? 'publish_posts' : intent === 'schedule' ? 'schedule_posts' : 'create_drafts';
   try {
     await requireSocialPermission(fid, permission);
@@ -133,25 +145,62 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   const body = String(formData.get('body') ?? '').trim();
   const kind = (String(formData.get('kind') ?? 'text') as PostKind);
   const link = String(formData.get('link') ?? '').trim() || null;
+  if (link && !safeSocialLink(link)) return { ok: false, error: tr('actions.enterAValidPublicWeb') };
   const scheduledForRaw = String(formData.get('scheduled_for') ?? '').trim();
   let scheduledFor: string | null = null;
-  if (intent === 'schedule' && scheduledForRaw) {
-    const parsedDate = new Date(scheduledForRaw);
-    if (Number.isNaN(parsedDate.getTime())) return { ok: false, error: tr('actions.pickAValidDateAnd') };
-    scheduledFor = parsedDate.toISOString();
+  let timezone: string | null = null;
+  if (intent === 'schedule') {
+    const zone = String(formData.get('timezone') ?? '');
+    const parsed = validateScheduleInstant(scheduledForRaw, zone);
+    if (!parsed.ok) return { ok: false, error: tr(parsed.key) };
+    const local = String(formData.get('scheduled_local') ?? '');
+    if (local) {
+      const resolved = resolveScheduleTime(local, zone);
+      if (!resolved.ok) return { ok: false, error: tr(resolved.key) };
+      if (resolved.scheduledFor !== parsed.scheduledFor) return { ok: false, error: tr('socialSchedule.invalidTime') };
+    }
+    scheduledFor = parsed.scheduledFor;
+    timezone = parsed.timezone;
   }
 
-  const platforms = formData.getAll('platforms').map(String).filter(isPlatform) as SocialPlatform[];
+  const platformValues = formData.getAll('platforms').map(String);
+  if (platformValues.some(platform => !isPlatform(platform))) return { ok: false, error: tr('actions.unknownPlatform') };
+  const platforms = Array.from(new Set(platformValues)) as SocialPlatform[];
   const accountIds = Array.from(new Set(formData.getAll('account_ids').map(String).filter(Boolean)));
 
   if (!body && !title) return { ok: false, error: tr('actions.addATitleOrBody') };
   if (intent === 'schedule' && !scheduledFor) return { ok: false, error: tr('actions.pickADateAndTime') };
   if (intent !== 'draft' && accountIds.length === 0) return { ok: false, error: tr('actions.selectAtLeastOneSocial') };
+  if (intent === 'schedule' && ((kind !== 'text' && kind !== 'link') || accountIds.length > 10
+    || platforms.some(platform => platform !== 'x') || body.length > 10_000
+    || String(formData.get('recurrence') ?? 'none') !== 'none')) {
+    return { ok: false, error: tr('socialSchedule.unsupported') };
+  }
+  if (intent === 'schedule') {
+    const text = [body, link].filter(Boolean).join('\n');
+    if ((kind === 'link' && !link) || !text || effectiveLength(text, 'x') > 280) {
+      return { ok: false, error: tr('socialX.invalidContent') };
+    }
+  }
 
   const supabase = await createServer();
   let postId: string | null = null;
   let publishStarted = false;
+  let scheduleArmStarted = false;
+  let postCreateStarted = false;
   try {
+    // Reject unsupported scheduled targets before creating a public draft.
+    if (intent === 'schedule') {
+      const accounts = await supabase.from('social_accounts').select('id, platform, status, provider_account_id')
+        .eq('family_id', fid).in('id', accountIds).is('deleted_at', null);
+      if (accounts.error || !accounts.data) throw new ScheduledPublishError('socialSchedule.storageUnavailable');
+      if (accounts.data.length !== accountIds.length || accounts.data.some(account => account.platform !== 'x'
+        || account.status !== 'connected' || !account.provider_account_id)
+        || new Set(accounts.data.map(account => account.provider_account_id)).size !== accountIds.length) {
+        return { ok: false, error: tr('socialSchedule.unsupported') };
+      }
+    }
+    postCreateStarted = true;
     const { data: post, error: postErr } = await supabase
       .from('social_posts')
       .insert({
@@ -163,18 +212,24 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
         link,
         status: intent === 'draft' ? 'draft' : 'scheduled',
         scheduled_for: scheduledFor,
+        ...(timezone ? { metadata: { schedule_timezone: timezone } } : {}),
         created_by: userId,
       })
       .select('id')
       .single();
-    if (postErr || !post) {
-      return { ok: false, error: describeActionError(postErr, tr('actions.couldNotCreateThisSocial')) };
+    if (postErr || !post || !isRecordId(post.id)) {
+      const reviewRequired = !definitiveCreateRejection(postErr);
+      return {
+        ok: false, error: reviewRequired ? tr('socialStudio.requestUnconfirmed') : describeActionError(postErr, tr('actions.couldNotCreateThisSocial')),
+        ...(reviewRequired ? { reviewRequired: true, action: intent, ...(isRecordId(post?.id) ? { postId: post.id } : {}) } : {}),
+      };
     }
     postId = post.id;
 
     // Per-platform variants (one body per platform; studio may later override).
-    if (platforms.length) {
-      const variants = platforms.map((p) => ({
+    const variantPlatforms: SocialPlatform[] = intent === 'schedule' ? ['x'] : platforms;
+    if (variantPlatforms.length) {
+      const variants = variantPlatforms.map((p) => ({
         post_id: post.id,
         family_id: fid,
         platform: p,
@@ -192,24 +247,34 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     const targetCount = await createTargets(supabase, fid, post.id, accountIds, scheduledFor);
     if (intent !== 'draft' && targetCount === 0) throw new Error(tr('actions.selectAtLeastOneSocial'));
 
-    if (intent === 'schedule' && scheduledFor) {
-      const { error: scheduleError } = await supabase.from('social_schedules').insert({
-        post_id: post.id, family_id: fid, scheduled_for: scheduledFor, created_by: userId,
-      });
-      if (scheduleError) throw scheduleError;
-      const calItems = (platforms.length ? platforms : [null as SocialPlatform | null]).map((p) => ({
+    if (intent === 'schedule' && scheduledFor && timezone) {
+      const { data: schedule, error: scheduleError } = await supabase.from('social_schedules').insert({
+        post_id: post.id, family_id: fid, scheduled_for: scheduledFor, timezone, created_by: userId,
+      }).select('id').single();
+      if (scheduleError || !schedule || !isRecordId(schedule.id)) throw scheduleError ?? new Error('Schedule was not saved.');
+      const calItems = variantPlatforms.map((p) => ({
         family_id: fid,
         post_id: post.id,
         title: title ?? body.slice(0, 60),
         platform: p,
         scheduled_for: scheduledFor,
+        metadata: { schedule_timezone: timezone },
         created_by: userId,
       }));
       const { data: calendarRows, error: calendarError } = await supabase.from('social_calendar_items').insert(calItems).select('id');
-      if (calendarError || (calendarRows?.length ?? 0) !== calItems.length) throw calendarError ?? new Error('Calendar rows were not saved.');
+      if (calendarError || !calendarRows || calendarRows.length !== calItems.length
+        || calendarRows.some(row => !isRecordId(row.id)) || new Set(calendarRows.map(row => row.id)).size !== calItems.length) {
+        throw calendarError ?? new Error('Calendar rows were not saved.');
+      }
+      const { receiptId } = await createScheduledPublishReceipt({
+        familyId: fid, postId: post.id, scheduleId: schedule.id, scheduledFor, timezone,
+        expected: { kind, body, link, accountIds },
+      });
+      scheduleArmStarted = true;
+      const armed = await armScheduledPublishReceipt(receiptId);
       revalidatePath('/dashboard/social/calendar');
       revalidatePath('/dashboard/social/scheduled');
-      return { ok: true, postId: post.id, action: 'schedule' };
+      return { ok: true, postId: post.id, action: 'schedule', schedulePhase: armed.phase };
     }
 
     if (intent === 'publish') {
@@ -224,11 +289,14 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     revalidatePath('/dashboard/social/posts');
     return { ok: true, postId: post.id, action: 'draft' };
   } catch (error) {
-    if (postId && !publishStarted) await cleanupPost(supabase, fid, postId);
+    let reviewRequired = publishStarted || scheduleArmStarted || (postCreateStarted && !postId && !definitiveCreateRejection(error));
+    if (postId && !publishStarted && !scheduleArmStarted) {
+      reviewRequired = !(await cleanupPost(supabase, fid, postId));
+    }
     console.error('[social-action] create post failed', error);
     return {
-      ok: false, error: describeActionError(error, SOCIAL_SAVE_FAILURE),
-      ...(postId && publishStarted ? { postId, action: 'publish' as const } : {}),
+      ok: false, error: error instanceof ScheduledPublishError ? tr(error.key) : describeActionError(error, SOCIAL_SAVE_FAILURE),
+      ...(reviewRequired ? { reviewRequired: true, action: intent, ...(postId ? { postId } : {}) } : {}),
     };
   }
 }
@@ -244,13 +312,15 @@ export async function retryPublishAction(postId: string): Promise<CreatePostResu
   }
   const supabase = await createServer();
   try {
-    const outcome = await runPublishNow(supabase, fid, postId, userId);
+    const outcome = await publishScheduledPostNow(postId) ?? await runPublishNow(supabase, fid, postId, userId);
     revalidatePath(`/dashboard/social/posts/${postId}`);
     revalidatePath('/dashboard/social/failed');
+    revalidatePath('/dashboard/social/scheduled');
+    revalidatePath('/dashboard/social/calendar');
     return { ok: true, postId, action: 'publish', outcome };
   } catch (error) {
     console.error('[social-action] retry publish failed', error);
-    return { ok: false, postId, error: describeActionError(error, SOCIAL_SAVE_FAILURE) };
+    return { ok: false, postId, error: error instanceof ScheduledPublishError ? tr(error.key) : describeActionError(error, SOCIAL_SAVE_FAILURE) };
   }
 }
 

@@ -6,6 +6,8 @@ import { InMemorySupabase } from './helpers/in-memory-supabase';
 
 const { publish } = vi.hoisted(() => ({ publish: vi.fn() }));
 vi.mock('@/lib/social/connectors', () => ({ getConnector: () => ({ publish }) }));
+// This direct pipeline fixture has no request session; approval reads still run.
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: () => { throw new Error('Unexpected request actor lookup'); } }));
 import { runPublishNow } from '@/lib/social/publish';
 
 const confirmed: ConnectorPublishOutput = { ok: true, status: 'published', providerObjectId: 'external-1', permalinkUrl: 'https://x.com/user/status/1' };
@@ -16,7 +18,7 @@ const actor = 'user-a';
 
 function fixture(status = 'draft') {
   const db = new InMemorySupabase();
-  db.seed('social_posts', [{ id: pid, family_id: fid, body: 'Hello', kind: 'text', link: null, status, published_at: null, metadata: { retained: true }, deleted_at: null }]);
+  db.seed('social_posts', [{ id: pid, family_id: fid, body: 'Hello', kind: 'text', link: null, status, approval_status: 'not_required', published_at: null, metadata: { retained: true }, deleted_at: null }]);
   db.seed('social_accounts', [{ id: 'account-a', family_id: fid, platform: 'x', provider_account_id: 'external-account', deleted_at: null }]);
   db.seed('social_post_targets', [{ id: 'target-a', post_id: pid, family_id: fid, account_id: 'account-a', platform: 'x', status: 'pending', metadata: { retained: true }, published_at: null }]);
   return db;

@@ -9,7 +9,92 @@ import { parseEvent, parseDueDate, splitItems, parseGroceryItem, type CaptureKin
 export type CaptureTable = 'notes' | 'calendar_events' | 'todo_items' | 'grocery_items';
 
 /** Everything needed to undo a capture: the table and the created row ids. */
-export type CaptureUndo = { table: CaptureTable; ids: string[] };
+export type CaptureUndo = { table: CaptureTable; ids: string[]; familyId?: string };
+
+export type CaptureOperationGuard = { isCurrent?: () => boolean };
+type CaptureStage = 'lookup' | 'list' | 'capture' | 'undo';
+
+/** An uncertain dispatched write must be reviewed, never blindly created again. */
+export class CaptureSaveError extends Error {
+  readonly code?: string;
+  constructor(
+    readonly outcome: 'failed' | 'uncertain' | 'retired',
+    readonly stage: CaptureStage,
+    readonly href: string,
+    readonly dispatched: boolean,
+    cause?: unknown,
+  ) {
+    const detail = cause && typeof cause === 'object' ? cause as { message?: unknown; code?: unknown } : null;
+    super(outcome === 'retired' ? 'Capture operation is no longer current'
+      : outcome === 'uncertain' ? 'Capture result is unconfirmed. Review the destination before trying again.'
+        : typeof detail?.message === 'string' ? detail.message : 'Could not save capture', { cause });
+    this.name = 'CaptureSaveError';
+    if (typeof detail?.code === 'string') this.code = detail.code;
+  }
+}
+
+const HREF: Record<CaptureTable, string> = { notes: '/dashboard/notes', calendar_events: '/dashboard/calendar', todo_items: '/dashboard/todos', grocery_items: '/dashboard/grocery' };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const REQUEST_TIMEOUT_MS = 15_000;
+type Operation = CaptureOperationGuard & { href: string; dispatched: boolean };
+type Reply = { data: unknown; error: unknown };
+
+function current(operation: Operation, stage: CaptureStage) {
+  if (operation.isCurrent && !operation.isCurrent()) throw new CaptureSaveError('retired', stage, operation.href, operation.dispatched);
+}
+function failure(operation: Operation, stage: CaptureStage, outcome: 'failed' | 'uncertain', cause?: unknown): never {
+  throw new CaptureSaveError(outcome, stage, operation.href, operation.dispatched, cause);
+}
+function validId(value: unknown): value is string { return typeof value === 'string' && UUID.test(value); }
+function receiptIds(data: unknown, expected: number): string[] | null {
+  if (!Array.isArray(data) || data.length !== expected) return null;
+  const ids = data.map(row => row && typeof row === 'object' ? row.id : undefined);
+  return ids.every(validId) && new Set(ids).size === expected ? ids : null;
+}
+function definitiveRejection(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+  // These PostgreSQL errors reject/roll back the statement. Transport errors,
+  // gateway failures and post-mutation representation errors remain uncertain.
+  return typeof code === 'string' && (/^(22|23|40|42|44)[A-Z0-9]{3}$/.test(code) || code === 'P0001');
+}
+async function request(operation: Operation, stage: CaptureStage, mutation: boolean, build: (signal: AbortSignal) => PromiseLike<Reply>): Promise<unknown> {
+  current(operation, stage);
+  const controller = new AbortController();
+  let query: PromiseLike<Reply>;
+  try { query = build(controller.signal); } catch (error) { failure(operation, stage, 'failed', error); }
+  current(operation, stage);
+  if (mutation) operation.dispatched = true;
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      expired = true;
+      // The installed SDK recognizes AbortError as terminal; TimeoutError would
+      // enter its automatic GET retry loop even though this signal is aborted.
+      const error = new DOMException('Capture request timed out', 'AbortError');
+      controller.abort(error);
+      reject(error);
+    }, REQUEST_TIMEOUT_MS);
+  });
+  let reply: Reply;
+  // Abort the actual SDK fetch; the deadline also bounds a transport that fails
+  // to settle on abort. A delayed acknowledgement can never resolve this save.
+  try { reply = await Promise.race([query, deadline]); } catch (error) {
+    current(operation, stage);
+    failure(operation, stage, mutation ? 'uncertain' : 'failed', error);
+  } finally { clearTimeout(timer); }
+  current(operation, stage);
+  if (expired) failure(operation, stage, mutation ? 'uncertain' : 'failed');
+  if (reply.error) failure(operation, stage, !mutation || definitiveRejection(reply.error) ? 'failed' : 'uncertain', reply.error);
+  return reply.data;
+}
+async function write(operation: Operation, stage: 'list' | 'capture' | 'undo', count: number, build: (signal: AbortSignal) => PromiseLike<Reply>): Promise<string[]> {
+  const data = await request(operation, stage, true, build);
+  current(operation, stage);
+  const ids = receiptIds(data, count);
+  if (!ids) failure(operation, stage, 'uncertain');
+  return ids;
+}
 
 export type CaptureSaveResult = {
   kind: CaptureKind;
@@ -33,7 +118,7 @@ export function tableForKind(kind: CaptureKind): CaptureTable {
   }
 }
 
-export type CaptureSaveInput = {
+export type CaptureSaveInput = CaptureOperationGuard & {
   kind: CaptureKind;
   text: string;
   familyId: string;
@@ -44,23 +129,29 @@ export type CaptureSaveInput = {
 
 /** Get-or-create the family's default to-do list. `todo_lists.created_by`
  *  references family_members(id), not auth.users, so it takes the member id. */
-async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, memberId: string | null): Promise<string | null> {
-  const { data: existing } = await supabase.from('todo_lists').select('id')
-    .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing) return existing.id;
-  const { data: created } = await supabase.from('todo_lists')
-    .insert({ family_id: familyId, name: 'To-Do', created_by: memberId }).select('id').maybeSingle();
-  return created?.id ?? null;
+async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, memberId: string | null, operation: Operation): Promise<string> {
+  const existing = await request(operation, 'lookup', false, signal => supabase.from('todo_lists').select('id')
+    .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).abortSignal(signal).maybeSingle());
+  current(operation, 'lookup');
+  if (existing !== null) {
+    if (typeof existing !== 'object' || !('id' in existing) || !validId(existing.id)) failure(operation, 'lookup', 'failed');
+    return existing.id;
+  }
+  return (await write(operation, 'list', 1, signal => supabase.from('todo_lists')
+    .insert({ family_id: familyId, name: 'To-Do', created_by: memberId }).select('id').abortSignal(signal)))[0];
 }
 
 /** Get-or-create the family's default grocery list. */
-async function defaultGroceryListId(supabase: SupabaseBrowser, familyId: string, userId: string): Promise<string | null> {
-  const { data: existing } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing) return existing.id;
-  const { data: created } = await supabase.from('grocery_lists')
-    .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
-  return created?.id ?? null;
+async function defaultGroceryListId(supabase: SupabaseBrowser, familyId: string, userId: string, operation: Operation): Promise<string> {
+  const existing = await request(operation, 'lookup', false, signal => supabase.from('grocery_lists').select('id')
+    .eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).abortSignal(signal).maybeSingle());
+  current(operation, 'lookup');
+  if (existing !== null) {
+    if (typeof existing !== 'object' || !('id' in existing) || !validId(existing.id)) failure(operation, 'lookup', 'failed');
+    return existing.id;
+  }
+  return (await write(operation, 'list', 1, signal => supabase.from('grocery_lists')
+    .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').abortSignal(signal)))[0];
 }
 
 /**
@@ -70,61 +161,66 @@ async function defaultGroceryListId(supabase: SupabaseBrowser, familyId: string,
  */
 export async function saveCapture(supabase: SupabaseBrowser, input: CaptureSaveInput): Promise<CaptureSaveResult> {
   const { kind, familyId, userId, memberId } = input;
+  const operation: Operation = { isCurrent: input.isCurrent, href: HREF[tableForKind(kind)], dispatched: false };
+  current(operation, 'capture');
   const value = input.text.trim();
   if (!value) throw new Error('Nothing to capture');
 
   if (kind === 'note') {
-    const { data, error } = await supabase.from('notes')
-      .insert({ family_id: familyId, body: value, created_by: userId }).select('id');
-    if (error) throw error;
-    return { kind, count: 1, title: value.slice(0, 60), href: '/dashboard/notes', undo: { table: 'notes', ids: ids(data) } };
+    const ids = await write(operation, 'capture', 1, signal => supabase.from('notes')
+      .insert({ family_id: familyId, body: value, created_by: userId }).select('id').abortSignal(signal));
+    current(operation, 'capture');
+    return { kind, count: ids.length, title: value.slice(0, 60), href: operation.href, undo: { table: 'notes', ids, familyId } };
   }
 
   if (kind === 'event') {
     const parsed = parseEvent(value);
-    const { data, error } = await supabase.from('calendar_events').insert({
+    const ids = await write(operation, 'capture', 1, signal => supabase.from('calendar_events').insert({
       family_id: familyId, title: parsed.title, starts_at: parsed.startsAt.toISOString(),
       all_day: parsed.allDay, category: 'general', created_by: userId,
-    }).select('id');
-    if (error) throw error;
-    return { kind, count: 1, title: parsed.title, href: '/dashboard/calendar', undo: { table: 'calendar_events', ids: ids(data) } };
+    }).select('id').abortSignal(signal));
+    current(operation, 'capture');
+    return { kind, count: ids.length, title: parsed.title, href: operation.href, undo: { table: 'calendar_events', ids, familyId } };
   }
 
   if (kind === 'task') {
     // todo_lists/todo_items.created_by reference family_members(id) (migration
     // 0015) — the auth user id violates that FK and the task never saves.
-    const listId = await defaultTodoListId(supabase, familyId, memberId ?? null);
-    if (!listId) throw new Error('Could not find a to-do list');
+    const listId = await defaultTodoListId(supabase, familyId, memberId ?? null, operation);
+    current(operation, 'capture');
     const { title, dueDate } = parseDueDate(value);
-    const { data, error } = await supabase.from('todo_items').insert({
+    const ids = await write(operation, 'capture', 1, signal => supabase.from('todo_items').insert({
       family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: memberId ?? null,
       assigned_to_id: memberId ?? null,
-    }).select('id');
-    if (error) throw error;
-    return { kind, count: 1, title, href: '/dashboard/todos', undo: { table: 'todo_items', ids: ids(data) } };
+    }).select('id').abortSignal(signal));
+    current(operation, 'capture');
+    return { kind, count: ids.length, title, href: operation.href, undo: { table: 'todo_items', ids, familyId } };
   }
 
   // shopping
-  const listId = await defaultGroceryListId(supabase, familyId, userId);
-  if (!listId) throw new Error('Could not find a grocery list');
+  const listId = await defaultGroceryListId(supabase, familyId, userId, operation);
+  current(operation, 'capture');
   const items = splitItems(value);
   const parsed = (items.length ? items : [value]).map(parseGroceryItem);
-  const { data, error } = await supabase.from('grocery_items')
+  const ids = await write(operation, 'capture', parsed.length, signal => supabase.from('grocery_items')
     .insert(parsed.map((p) => ({ family_id: familyId, list_id: listId, name: p.name, quantity: p.quantity, created_by: userId })))
-    .select('id');
-  if (error) throw error;
-  return { kind, count: parsed.length, title: parsed.map((p) => p.name).join(', '), href: '/dashboard/grocery', undo: { table: 'grocery_items', ids: ids(data) } };
-}
-
-/** Pull the created row ids out of a Supabase insert .select('id') result. */
-function ids(data: { id: string }[] | null): string[] {
-  return (data ?? []).map((r) => r.id);
+    .select('id').abortSignal(signal));
+  current(operation, 'capture');
+  return { kind, count: ids.length, title: parsed.map((p) => p.name).join(', '), href: operation.href, undo: { table: 'grocery_items', ids, familyId } };
 }
 
 /** Undo a capture by deleting the rows it created. No-op when there's nothing
  *  to delete. Throws on a database error (caller shows a toast). */
-export async function undoCapture(supabase: SupabaseBrowser, undo: CaptureUndo): Promise<void> {
+export async function undoCapture(supabase: SupabaseBrowser, undo: CaptureUndo, options: CaptureOperationGuard = {}): Promise<void> {
+  const operation: Operation = { ...options, href: HREF[undo.table], dispatched: false };
+  current(operation, 'undo');
   if (!undo.ids.length) return;
-  const { error } = await supabase.from(undo.table).delete().in('id', undo.ids);
-  if (error) throw error;
+  if (!undo.ids.every(validId) || new Set(undo.ids).size !== undo.ids.length) failure(operation, 'undo', 'failed');
+  const removed = await write(operation, 'undo', undo.ids.length, signal => {
+    let query = supabase.from(undo.table).delete().in('id', undo.ids);
+    if (undo.familyId) query = query.eq('family_id', undo.familyId);
+    return query.select('id').abortSignal(signal);
+  });
+  current(operation, 'undo');
+  if (removed.some(id => !undo.ids.includes(id))) failure(operation, 'undo', 'uncertain');
 }

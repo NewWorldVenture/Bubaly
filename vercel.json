@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/social-publish",
+      "schedule": "5 1 * * *"
+    },
+    {
       "path": "/api/cron/admin-digest",
       "schedule": "30 12 * * *"
     },

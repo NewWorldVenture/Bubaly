@@ -22,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 
 /** Route → real cadence (5-field cron, UTC). Keep in sync with the comment block in vercel.json. */
 export const SCHEDULES = {
+  '/api/cron/social-publish': '*/5 * * * *',
   '/api/cron/contact-center-urgent': '*/5 * * * *',
   '/api/cron/feedback-github-sync': '15 * * * *',
   '/api/cron/chore-reminders': '0 18 * * 0',

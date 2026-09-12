@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import ts from 'typescript';
 import React from 'react';
@@ -11,11 +12,13 @@ import type { ConnectorPublishOutput } from '@/lib/social/connectors';
 // Real React Studio/retry/detail consumers, server actions, publish pipeline and
 // installed Supabase/PostgREST execute against persisted in-memory HTTP rows.
 // Auth/permissions and the external provider receipt are controlled boundaries.
+// The scheduling receipt prepare/arm seam is controlled in this existing
+// consumer suite; separate scheduling execution tests verify its private ledger.
 // No database, OAuth credential or external publishing service is contacted.
 type Row = Record<string, unknown> & { id: string };
 const messages: Record<string, string> = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8'));
 const clientFiles = ['components/social/studio-form.tsx', 'components/social/retry-button.tsx',
-  'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts',
+  'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts', 'lib/social/schedule-time.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
   'components/social/platform.tsx', 'components/ui/card.tsx', 'components/ui/badge.tsx'];
 const compile = (file: string) => ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -31,11 +34,10 @@ declare global { interface Window { __socialConsumer: Probe } }
 async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
   const catalogue: Record<string, string> = JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8'));
   const rows: Record<string, Row[]> = Object.fromEntries(['social_posts', 'social_post_targets', 'social_post_variants',
-    'social_publish_jobs', 'social_publish_results', 'social_usage_events', 'social_schedules', 'social_calendar_items'].map(table => [table, []]));
+    'social_publish_jobs', 'social_publish_results', 'social_usage_events', 'social_schedules', 'social_calendar_items', 'social_settings'].map(table => [table, []]));
   rows.social_accounts = [{ id: 'account-x', family_id: 'family', platform: 'x', provider_account_id: 'provider-account', deleted_at: null, status: 'connected' }];
   const state = { rows, requests: [] as Array<{ table: string; method: string }>, providerCalls: 0,
     receipt: unknown, failTable: '', loseResponse: false, holdProvider: false, release: () => {} };
-  let sequence = 0;
   const sdk = createClient('https://social-consumer-fixture.supabase.co', 'non-secret-fixture', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (input, init = {}) => {
@@ -55,8 +57,8 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
       });
       let selected = rows[table].filter(matches);
       if (method === 'POST') {
-        selected = (Array.isArray(body) ? body : [body]).map(item => ({ id: `id-${String(++sequence).padStart(3, '0')}`, metadata: {},
-          deleted_at: null, updated_at: new Date().toISOString(), attempted_at: new Date().toISOString(), published_at: null, permalink_url: null, error: null,
+        selected = (Array.isArray(body) ? body : [body]).map(item => ({ id: randomUUID(), metadata: {},
+          deleted_at: null, approval_status: 'not_required', updated_at: new Date().toISOString(), attempted_at: new Date().toISOString(), published_at: null, permalink_url: null, error: null,
           ...item }));
         rows[table].push(...selected);
       } else if (method === 'PATCH') selected.forEach(row => Object.assign(row, body, { updated_at: new Date().toISOString() }));
@@ -72,12 +74,18 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
     'next/link': { __esModule: true, default: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => React.createElement('a', props) },
     'next/navigation': { notFound() { throw new Error('Fixture post missing'); } },
     'lucide-react': new Proxy({}, { get: () => () => null }),
-    '@/lib/i18n/server': { getTranslations: async () => (key: string) => catalogue[key] ?? key },
+    '@/lib/i18n/server': { getTranslations: async () => (key: string) => catalogue[key] ?? key, getLocaleContext: async () => ({ locale: { code: locale } }) },
     '@/components/i18n/locale-provider': { useTranslations: () => (key: string) => catalogue[key] ?? key },
     '@/lib/supabase/auth': { requireUserContext: async () => ({ active: { familyId: 'family' }, user: { id: 'user' } }) },
     '@/lib/supabase/server': { createServer: async () => sdk },
     '@/lib/social/access': { requireSocialPermission: async () => {} },
     '@/lib/social/x-oauth': {}, '@/lib/social/account-tokens': {},
+    '@/lib/social/scheduled-publish': {
+      createScheduledPublishReceipt: async () => ({ receiptId: 'synthetic-schedule-receipt' }),
+      armScheduledPublishReceipt: async () => ({ phase: 'queued' }),
+      publishScheduledPostNow: async () => null,
+      get ScheduledPublishError() { return (load('@/lib/social/scheduled-authority') as { ScheduledPublishError: typeof Error }).ScheduledPublishError; },
+    },
     '@/lib/social/connectors': { getConnector: () => ({ publish: async () => {
       state.providerCalls += 1;
       if (state.holdProvider) await new Promise<void>(resolve => { state.release = () => { state.holdProvider = false; resolve(); }; });

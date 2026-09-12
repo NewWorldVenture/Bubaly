@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock, Sparkles, Settings2, Check } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -10,7 +10,7 @@ import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
-import { saveCapture, undoCapture } from '@/lib/capture/save';
+import { CaptureSaveError, saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
@@ -48,9 +48,52 @@ export function QuickCapture() {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [customizing, setCustomizing] = useState(false);
+  const [opening, setOpening] = useState(0);
+  const [reviewHref, setReviewHref] = useState<string | null>(null);
+  const owner = JSON.stringify([familyId, userId, selfMember?.id ?? null]);
+  const lifetime = useRef({ mounted: false, owner, open: false, opening: 0, pending: null as object | null, review: false });
   const journey = useJourney('capture');
 
   function reset() { setText(''); setType('task'); }
+
+  useLayoutEffect(() => {
+    const current = lifetime.current;
+    current.mounted = true;
+    current.owner = owner;
+    current.open = false;
+    current.pending = null;
+    current.review = false;
+    setOpen(false); setSaving(false); setReviewHref(null); setCustomizing(false);
+    setText(''); setType('task');
+    return () => { current.mounted = false; current.open = false; current.opening++; current.pending = null; };
+  }, [owner]);
+
+  const begin = useCallback(() => {
+    const current = lifetime.current;
+    if (!current.mounted || current.open) return;
+    current.open = true;
+    setOpening(++current.opening);
+    setOpen(true);
+  }, []);
+
+  function isCurrentOpening() {
+    const current = lifetime.current;
+    return current.mounted && current.owner === owner && current.open && current.opening === opening;
+  }
+
+  function close() {
+    if (!isCurrentOpening() || lifetime.current.pending) return;
+    lifetime.current.open = false;
+    lifetime.current.opening++;
+    setOpen(false); setCustomizing(false);
+  }
+
+  function editDraft(change: () => void) {
+    if (!isCurrentOpening() || lifetime.current.pending || lifetime.current.review) return;
+    // Editing also retires callbacks that captured an earlier type or text.
+    setOpening(++lifetime.current.opening);
+    change();
+  }
 
   // Global shortcut: press "c" anywhere (outside a text field) to open capture.
   useEffect(() => {
@@ -59,11 +102,11 @@ export function QuickCapture() {
       const el = document.activeElement as HTMLElement | null;
       if (isTypingTarget(el?.tagName, el?.isContentEditable)) return;
       e.preventDefault();
-      setOpen(true);
+      begin();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, begin]);
 
   // Telemetry: a capture "journey" starts when the sheet opens (Experience
   // Scorecard). Completion is recorded on a successful save below.
@@ -75,26 +118,50 @@ export function QuickCapture() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const value = text.trim();
-    if (!value) return;
+    if (!value || !familyId || !userId || !isCurrentOpening() || lifetime.current.pending || lifetime.current.review) return;
+    const attempt = {};
+    lifetime.current.pending = attempt;
+    const isCurrent = () => isCurrentOpening() && lifetime.current.pending === attempt;
     setSaving(true);
-    const supabase = createClient();
     try {
-      const res = await saveCapture(supabase, { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null });
+      const res = await saveCapture(createClient(), { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null, isCurrent });
+      if (!isCurrent()) return;
+      let undoUsed = false;
       success(
         res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`,
-        { label: 'Undo', onClick: () => {
-          undoCapture(createClient(), res.undo)
-            .then(() => success(tr('quickCapture.undone')))
-            .catch(() => toastError(tr('quickCapture.couldNotUndo')));
+        { label: 'Undo', onClick: async () => {
+          // This deliberately names the earlier capture, even after a family
+          // switch. A consumed toast callback must never dispatch twice.
+          if (undoUsed || !res.undo.ids.length) return;
+          undoUsed = true;
+          try {
+            await undoCapture(createClient(), res.undo);
+            success(tr('quickCapture.undone'));
+          } catch {
+            toastError(tr('quickCapture.couldNotUndo'));
+          }
         } },
       );
       journey.complete();
       reset();
+      lifetime.current.open = false;
+      lifetime.current.opening++;
       setOpen(false);
     } catch (err) {
-      toastError(describeDbError(err, tr('quickCapture.couldNotSave')));
+      if (!isCurrent()) return;
+      if (err instanceof CaptureSaveError && err.outcome === 'retired') return;
+      if (err instanceof CaptureSaveError && err.outcome === 'uncertain') {
+        lifetime.current.review = true;
+        setReviewHref(err.href);
+      } else {
+        toastError(describeDbError(err, tr('quickCapture.couldNotSave')));
+      }
     } finally {
-      setSaving(false);
+      const current = lifetime.current;
+      if (current.mounted && current.owner === owner && current.pending === attempt) {
+        current.pending = null;
+        setSaving(false);
+      }
     }
   }
 
@@ -134,7 +201,7 @@ export function QuickCapture() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={begin}
         aria-label={tr('quickCapture.quickCapture')}
         title={tr('quickCapture.quickCapturePressC')}
         className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-[calc(1rem+var(--safe-right))] z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6"
@@ -144,12 +211,13 @@ export function QuickCapture() {
 
       <Modal
         open={open}
-        onClose={() => { setOpen(false); setCustomizing(false); }}
+        onClose={close}
         title={tr('quickCapture.quickCapture')}
         headerAction={
           <button
             type="button"
-            onClick={() => setCustomizing((v) => !v)}
+            disabled={saving || !!reviewHref}
+            onClick={() => { if (isCurrentOpening() && !lifetime.current.pending && !lifetime.current.review) setCustomizing((v) => !v); }}
             aria-pressed={customizing}
             className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-text transition hover:bg-brand/10"
           >
@@ -167,7 +235,8 @@ export function QuickCapture() {
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setType(t.key)}
+                disabled={saving || !!reviewHref}
+                onClick={() => editDraft(() => setType(t.key))}
                 className={cn('flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs font-medium transition',
                   type === t.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}
               >
@@ -182,16 +251,17 @@ export function QuickCapture() {
           <CaptureShortcuts
             columns={4}
             heading=""
-            onNavigate={() => setOpen(false)}
+            onNavigate={close}
             editing={customizing}
-            onEditingChange={setCustomizing}
+            onEditingChange={(value) => { if (isCurrentOpening() && !lifetime.current.pending && !lifetime.current.review) setCustomizing(value); }}
             showCustomizeButton={false}
           />
 
           {suggested && (
             <button
               type="button"
-              onClick={() => setType(suggested)}
+              disabled={saving || !!reviewHref}
+              onClick={() => editDraft(() => setType(suggested))}
               className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand-text transition hover:bg-brand/10"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
@@ -201,8 +271,8 @@ export function QuickCapture() {
 
           <Field label={active.label}>
             {(id) => type === 'note'
-              ? <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder={active.placeholder} autoFocus />
-              : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={active.placeholder} autoFocus />}
+              ? <Textarea id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} rows={4} placeholder={active.placeholder} autoFocus />
+              : <Input id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} placeholder={active.placeholder} autoFocus />}
           </Field>
 
           {type === 'shopping' && shoppingItems && (
@@ -237,9 +307,16 @@ export function QuickCapture() {
             )
           )}
 
+          {reviewHref && (
+            <div role="alert" className="space-y-2 rounded-xl border border-border bg-elevated p-3 text-sm">
+              <p>{tr('quickCapture.saveUncertain')}</p>
+              <a className="font-medium text-brand-text underline" href={reviewHref}>{tr('quickCapture.reviewCapture')}</a>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}><X className="h-4 w-4" /> {tr('quickCapture.cancel')}</Button>
-            <Button type="submit" loading={saving}><Plus className="h-4 w-4" /> {tr('quickCapture.save')}</Button>
+            <Button type="button" variant="ghost" disabled={saving} onClick={close}><X className="h-4 w-4" /> {tr('quickCapture.cancel')}</Button>
+            <Button type="submit" loading={saving} disabled={!!reviewHref}><Plus className="h-4 w-4" /> {tr('quickCapture.save')}</Button>
           </div>
         </form>
       </Modal>

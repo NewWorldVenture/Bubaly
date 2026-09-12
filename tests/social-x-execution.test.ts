@@ -6,7 +6,9 @@ import { InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 const state = vi.hoisted(() => ({ db: undefined as unknown as InMemorySupabase, userId: '11111111-1111-4111-8111-111111111111', familyId: '22222222-2222-4222-8222-222222222222',
   cookie: '', options: {} as Record<string, unknown>, fault: null as null | { table: string; op: string; occurrence: number; mode: 'error' | 'throw' }, operations: [] as { table: string; op: string }[], responseCap: Infinity, missingCount: '', copy: null as string | null }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: state.userId }, active: { familyId: state.familyId } }) }));
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: state.userId }, active: {
+  familyId: state.familyId, member: { id: '33333333-3333-4333-8333-333333333333', family_id: state.familyId, user_id: state.userId },
+} }) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key === 'socialX.callbackInvalid' && state.copy ? state.copy : key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: (_key: string, value: string, options: Record<string, unknown>) => { state.cookie = value; state.options = options; } }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -55,8 +57,8 @@ function installFaults(db: InMemorySupabase) {
 beforeEach(() => {
   vi.stubEnv('X_CLIENT_ID', 'app-client'); vi.stubEnv('X_CLIENT_SECRET', 'app-secret'); vi.stubEnv('SYNC_TOKEN_KEY', '11'.repeat(32)); vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example');
   state.userId = originalUser; state.familyId = originalFamily; state.cookie = ''; state.fault = null; state.operations = []; state.responseCap = Infinity; state.missingCount = ''; state.copy = null;
-  state.db = new InMemorySupabase({ userId: originalUser, uniques: { social_accounts: [['id'], ['family_id', 'platform', 'provider_account_id']], social_account_tokens: [['id']] }, defaults: { social_accounts: { deleted_at: null, provider_account_id: null }, social_account_tokens: { provider_account_id: null } } });
-  state.db.seed('family_members', [{ family_id: originalFamily, user_id: originalUser, role: 'parent', is_active: true }]);
+  state.db = new InMemorySupabase({ userId: originalUser, uniques: { social_accounts: [['id'], ['family_id', 'platform', 'provider_account_id']], social_account_tokens: [['id']] }, defaults: { social_posts: { approval_status: 'not_required' }, social_accounts: { deleted_at: null, provider_account_id: null }, social_account_tokens: { provider_account_id: null } } });
+  state.db.seed('family_members', [{ id: '33333333-3333-4333-8333-333333333333', family_id: originalFamily, user_id: originalUser, role: 'parent', is_active: true }]);
   installFaults(state.db);
   provider.mockReset(); vi.stubGlobal('fetch', provider);
 });

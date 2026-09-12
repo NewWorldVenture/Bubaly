@@ -5,6 +5,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { requireSocialPermission } from './access';
 import { decryptSecret, encryptSecret } from '@/lib/sync/crypto';
 import type { Tables } from '@/lib/database.types';
+import { authorizeScheduledToken, scheduleSignal } from './scheduled-authority';
+import type { ConnectorPublishInput } from './connectors';
 
 export class XBoundaryError extends Error {
   constructor(public readonly key: string) { super(key); }
@@ -31,17 +33,17 @@ export async function requireXActor(actor: XActor, permission: 'connect_accounts
   if (access.userId !== actor.userId) xFailure('permissionDenied');
 }
 
-async function tokenRow(db: Db, actor: XActor, accountId: string): Promise<Token | null> {
+async function tokenRow(db: Db, actor: XActor, accountId: string, signal?: AbortSignal): Promise<Token | null> {
   // account_id has a nonunique index. Never select an arbitrary credential row.
-  const result = await db.from('social_account_tokens').select('*', { count: 'exact' }).eq('account_id', accountId).limit(2);
+  const result = await db.from('social_account_tokens').select('*', { count: 'exact' }).eq('account_id', accountId).limit(2).abortSignal(scheduleSignal(signal));
   if (result.error || !result.data || typeof result.count !== 'number' || result.count !== result.data.length || result.count > 1) xFailure();
   const row = result.data[0] ?? null;
   if (row && (row.id !== accountId || row.family_id !== actor.familyId || row.platform !== 'x')) xFailure();
   return row;
 }
 
-async function accountRow(db: Db, actor: XActor, accountId: string): Promise<Account> {
-  const result = await db.from('social_accounts').select('*').eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x').single();
+async function accountRow(db: Db, actor: XActor, accountId: string, signal?: AbortSignal): Promise<Account> {
+  const result = await db.from('social_accounts').select('*').eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x').abortSignal(scheduleSignal(signal)).single();
   if (result.error || !result.data) xFailure();
   return result.data;
 }
@@ -144,10 +146,28 @@ export async function saveXConnection(flow: XFlow, grant: XGrant, identity: { id
 
 export async function loadXAccessToken(actor: XActor, accountId: string, providerAccountId: string): Promise<string> {
   await requireXActor(actor, 'publish_posts');
+  return readXAccessToken(actor, accountId, providerAccountId);
+}
+
+/** Scheduling validates present credentials without returning tokens or sending. */
+export async function assertXCredentials(actor: XActor, accounts: Array<{ accountId: string; providerAccountId: string }>): Promise<void> {
+  await requireXActor(actor, 'publish_posts');
+  const signal = AbortSignal.timeout(12_000);
+  await Promise.all(accounts.map(account => readXAccessToken(actor, account.accountId, account.providerAccountId, signal)));
+}
+
+/** A private receipt/claim must authorize the exact payload before token access. */
+export async function loadScheduledXAccessToken(input: ConnectorPublishInput): Promise<string> {
+  if (!input.scheduledClaim || !input.familyId || !input.userId || !input.accountId || !input.providerAccountId) return xFailure('permissionDenied');
+  await authorizeScheduledToken(input, input.scheduledClaim);
+  return readXAccessToken({ familyId: input.familyId, userId: input.userId }, input.accountId, input.providerAccountId, input.signal);
+}
+
+async function readXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<string> {
   const db = createServiceClient();
-  const account = await accountRow(db, actor, accountId);
+  const account = await accountRow(db, actor, accountId, signal);
   if (account.status !== 'connected' || account.deleted_at || account.provider_account_id !== providerAccountId) xFailure('reconnectRequired');
-  const row = await tokenRow(db, actor, accountId);
+  const row = await tokenRow(db, actor, accountId, signal);
   if (!row || row.provider_account_id !== providerAccountId || meta(row).x_state !== 'ready' || !row.access_token_enc) xFailure('reconnectRequired');
   let token: Envelope;
   try { token = JSON.parse(decryptSecret(row.access_token_enc)) as Envelope; } catch { return xFailure(); }
