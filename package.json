@@ -16,6 +16,7 @@
     "i18n:scan": "node scripts/i18n-scan.mjs --list app components",
     "i18n:gate": "node scripts/i18n-gate.mjs",
     "typecheck": "tsc --noEmit",
+    "verify:oauth": "node scripts/verify-oauth-config.mjs",
     "db:reset": "supabase db reset",
     "db:push": "npm run db:audit:migrations && supabase migration list --linked && supabase db push",
     "db:audit:migrations": "node scripts/audit-migration-versions.mjs",
