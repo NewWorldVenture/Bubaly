@@ -181,7 +181,7 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       // A repeated request leaves existing list amounts intact and creates no
       // extra rows; it must not silently double the week's quantities.
       await page.getByRole('button', { name: 'Add this week to the list', exact: true }).click();
-      await expect(page.getByText(/Already on the list.*4|4.*already on the list/i)).toBeVisible();
+      await expect(page.getByRole('listitem').filter({ hasText: /^Already on the list: 4\.$/ })).toBeVisible();
       expect(await readGroceries(mealFixture)).toEqual(groceries);
 
       await page.goto(`${origin}/dashboard/meals`, { waitUntil: 'domcontentloaded' });
