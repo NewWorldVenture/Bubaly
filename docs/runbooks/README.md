@@ -56,6 +56,12 @@ provider sandboxes: `/api/webhooks/stripe` + `/api/webhooks/money` (Stripe CLI `
 `/api/webhooks/resend` (Svix test), the Twilio-signed `/api/guardian/inbound/*`, plus Google OAuth
 round-trip and web push. Per callback: valid→200, replay→idempotent, forged signature→4xx.
 
+**Configure Google/Microsoft OAuth first:** `docs/runbooks/google-oauth-production.md` — which of the
+two Google clients owns which flow, the redirect URIs to register on each, the Vercel variables, and
+the consent-screen **publishing status** that produces `Error 403: access_denied` for every non-tester
+while it stays in Testing. Check a candidate environment with `npm run verify:oauth` before deploying
+it; the table at the end maps each provider error back to the variable at fault.
+
 ## 7. Product decisions (no code blocked on them until decided)
 
 - **LB-009** — `family-media` public→signed URLs. Plan ready:
