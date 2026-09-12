@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -60,6 +62,19 @@ const HOUR_HEIGHT = 64; // px per hour
 function GoogleGlyph({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
+  );
+}
+
+/** Outlook's four-square mark. Inline for the same reason GoogleGlyph is:
+ *  no network fetch, and it renders identically in both themes. */
+function OutlookGlyph({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path d="M8.5 1.5H1.5v7h7v-7Z" fill="#0364B8" />
+      <path d="M16.5 1.5h-7v7h7v-7Z" fill="#0F78D4" />
+      <path d="M8.5 9.5H1.5v7h7v-7Z" fill="#14A0E4" />
+      <path d="M16.5 9.5h-7v7h7v-7Z" fill="#28C3F3" />
+    </svg>
   );
 }
 
@@ -198,6 +213,13 @@ export function CalendarModule() {
   // Side-by-side per-member columns for the focused day (opt-in checkbox).
   const [splitByMember, setSplitByMember] = useState(false);
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
+  // Outlook carries TWO flags where Google carries one. `connected` is the same
+  // question; `configured` asks whether the server even holds Microsoft OAuth
+  // credentials. They are independent — an unconfigured deployment is never
+  // connected, but a configured one usually is not either — and conflating them
+  // would either hide the button on every deployment that has not registered an
+  // Entra app yet, or promise a connection the server cannot complete.
+  const [outlookStatus, setOutlookStatus] = useState<{ configured: boolean; connected: boolean } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(() => {
     const now = new Date();
@@ -226,6 +248,16 @@ export function CalendarModule() {
 
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
+    // Independent of the Google probe on purpose: one provider being unreachable
+    // must never decide what the other's control says. On any failure this
+    // settles to "configured, not connected", which renders the Connect link —
+    // and that link is safe even when the server holds no credentials, because
+    // /api/sync/microsoft/auth redirects to the setup page rather than erroring.
+    fetch('/api/sync/microsoft/status')
+      .then(r => r.json())
+      .then((d: { configured?: boolean; connected?: boolean }) =>
+        setOutlookStatus({ configured: d.configured !== false, connected: d.connected === true }))
+      .catch(() => setOutlookStatus({ configured: true, connected: false }));
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
     else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
@@ -440,6 +472,30 @@ export function CalendarModule() {
             description={tr('calendarModule.stayOnTopOfYour')}
             action={
               <div className="flex items-center gap-2">
+                {/* Outlook sits to the LEFT of Google, and renders as soon as the
+                    probe answers — including when it answers "not configured".
+                    A plain <a>, like the Google control: no click handler, no
+                    JS state machine to get stuck in, so it cannot land in a
+                    half-pressed state and a middle-click still opens a tab.
+                    /api/sync/microsoft/auth resolves every case itself —
+                    signed out, unconfigured, or ready — which is why this needs
+                    no branching beyond connected vs not. */}
+                {outlookStatus?.connected === false && (
+                  <a
+                    href="/api/sync/microsoft/auth"
+                    className="btn-inline"
+                    title={outlookStatus.configured
+                      ? tr('calendar.connectOutlookTitle')
+                      : tr('calendar.connectOutlookSetupTitle')}
+                  >
+                    <OutlookGlyph /> {tr('calendar.connectOutlook')}
+                  </a>
+                )}
+                {outlookStatus?.connected === true && (
+                  <Link href="/dashboard/sync/accounts/microsoft" className="btn-inline">
+                    <OutlookGlyph /> {tr('calendar.outlookConnected')}
+                  </Link>
+                )}
                 {gcalConnected === false && (
                   <a href="/api/google/calendar/auth" className="btn-inline">
                     <GoogleGlyph /> {tr('calendar.connectGoogle')}
