@@ -64,3 +64,37 @@ export function householdSummary(adults: number, children: number): string {
   if (c > 0) parts.push(`${c} kid${c === 1 ? '' : 's'}`);
   return parts.join(' · ');
 }
+
+/**
+ * The owner's display name for an account that never went through the wizard,
+ * or null when the account carries no name at all.
+ *
+ * A phone signup collects only a number — no name field anywhere in the flow —
+ * so `profiles.full_name` is '', `user_metadata` is empty and `email` is null.
+ * Every source is therefore genuinely absent, and the caller has to say so
+ * rather than invent one.
+ */
+export function autoOwnerName(candidates: readonly (string | null | undefined)[]): string | null {
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+/**
+ * What to call a family space provisioned without the wizard.
+ *
+ * `null` is the case worth naming: the previous code funnelled a nameless
+ * account through the same possessive as a named one, with the literal string
+ * 'My' standing in for the person — so the space was created as "My's Family"
+ * and the only member was called "My". Both were visible in the sidebar.
+ */
+export function autoFamilyName(ownerName: string | null | undefined): string {
+  const name = ownerName?.trim();
+  if (!name) return 'My Family';
+  return name.endsWith('s') ? `${name}' Family` : `${name}'s Family`;
+}
+
+/** The member row's display name for that same nameless account. */
+export const DEFAULT_OWNER_DISPLAY_NAME = 'Parent';
