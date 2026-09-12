@@ -1,0 +1,2888 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T15:50:57.434Z",
+  "baselineCommit": "d36602ebf154f1ebbd35fac0876839fd8c369705",
+  "sourceCommit": "910cd271bc273e68c286c3b10aaf1f27f6b933c2",
+  "methodology": [
+    "Only committed git blobs between fixed source commits; later uncommitted work excluded. All changed files except finalaudit.md and docs/final-audit/** are included.",
+    "Source SHA256 covers exact committed bytes, not working-tree newline conversion.",
+    "Top-level exported function, value, type, class and re-export boundaries parsed with installed TypeScript; source discovery is not workflow verification.",
+    "Environment names only, parsed from static process.env access; addedEnvironmentNames are newly referenced per changed file, not a claim of new deployment requirements. No secret values.",
+    "Jobs are statically read from committed dispatcher SCHEDULES and Vercel crons. Existing master identities are copied from the source commit, matching exact or semicolon-separated source paths."
+  ],
+  "counts": {
+    "files": 47,
+    "newFiles": 13,
+    "production": 22,
+    "tests": 16,
+    "locales": 7,
+    "support": 2,
+    "exportedSymbols": 115,
+    "addedExportedFunctions": 29,
+    "addedSymbols": 44,
+    "addedApiRoutes": 1,
+    "addedJobRegistrations": 2
+  },
+  "masterIdentitySource": {
+    "path": "docs/final-audit/audit-state.json",
+    "sourceCommit": "910cd271bc273e68c286c3b10aaf1f27f6b933c2",
+    "sourceSha256": "f770ee40dcc0df526d99243cc144a94797c5e4254e120a56e21e51bbf99738c1"
+  },
+  "scopeMasterRecords": [
+    {
+      "id": "DATA-007",
+      "key": "DATA-007",
+      "source": "components/app/quick-capture.tsx; lib/capture/save.ts; todo_lists; todo_items; components/capture/capture-shell.tsx; components/modules/voice-module.tsx; components/app/command-bar.tsx"
+    },
+    {
+      "id": "SOCIAL-003",
+      "key": "SOCIAL-003",
+      "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+    },
+    {
+      "id": "SEC-004",
+      "key": "SEC-004",
+      "source": "app/(app)/dashboard/social/actions.ts; app/(app)/dashboard/social/posts/[id]/page.tsx; app/(app)/dashboard/social/feed/page.tsx; app/(app)/dashboard/social/inbox/page.tsx"
+    }
+  ],
+  "addedApiRoutes": [
+    {
+      "path": "/api/cron/social-publish",
+      "source": "app/api/cron/social-publish/route.ts",
+      "httpMethods": [
+        "GET"
+      ]
+    }
+  ],
+  "addedJobs": [
+    {
+      "source": "scripts/cron-dispatch.mjs",
+      "path": "/api/cron/social-publish",
+      "schedule": "*/5 * * * *",
+      "kind": "dispatcher-cron",
+      "line": 25
+    },
+    {
+      "source": "vercel.json",
+      "path": "/api/cron/social-publish",
+      "schedule": "5 1 * * *",
+      "kind": "vercel-cron"
+    }
+  ],
+  "addedEnvironmentNames": [
+    "CAPTURE_VOICE_BASELINE"
+  ],
+  "addedProductionEnvironmentNames": [],
+  "files": [
+    {
+      "path": "app/(app)/dashboard/social/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "59b8253498f5cc60f24e3703d0671cf86bbefc043e87b3a0da62e1cacb5fe749",
+      "sourceSha256": "ccc1bcf1e8b922c288013203eb0b0295f6be11f3077c57af764397b15ff32338",
+      "bytes": 21044,
+      "exportedSymbols": [
+        {
+          "name": "connectAccountAction",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "disconnectAccountAction",
+          "line": 91,
+          "kind": "function"
+        },
+        {
+          "name": "CreatePostResult",
+          "line": 115,
+          "kind": "type"
+        },
+        {
+          "name": "createPostAction",
+          "line": 130,
+          "kind": "function"
+        },
+        {
+          "name": "retryPublishAction",
+          "line": 305,
+          "kind": "function"
+        },
+        {
+          "name": "resolveCommentAction",
+          "line": 327,
+          "kind": "function"
+        },
+        {
+          "name": "createMediaAction",
+          "line": 344,
+          "kind": "function"
+        },
+        {
+          "name": "updateSettingsAction",
+          "line": 376,
+          "kind": "function"
+        },
+        {
+          "name": "grantAccessAction",
+          "line": 398,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "ACTION-38924C6BA1BC",
+          "key": "app/(app)/dashboard/social/actions.ts:connectAccountAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-34DED829EF63",
+          "key": "app/(app)/dashboard/social/actions.ts:disconnectAccountAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-3C9C7E7C3208",
+          "key": "app/(app)/dashboard/social/actions.ts:createPostAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-FD08580CBD41",
+          "key": "app/(app)/dashboard/social/actions.ts:retryPublishAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-29B242DBD1B3",
+          "key": "app/(app)/dashboard/social/actions.ts:resolveCommentAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-9F9715F212FF",
+          "key": "app/(app)/dashboard/social/actions.ts:createMediaAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-FD1221F34629",
+          "key": "app/(app)/dashboard/social/actions.ts:updateSettingsAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-EB48756176AA",
+          "key": "app/(app)/dashboard/social/actions.ts:grantAccessAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "SOCIAL-003",
+          "key": "SOCIAL-003",
+          "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+        },
+        {
+          "id": "SEC-004",
+          "key": "SEC-004",
+          "source": "app/(app)/dashboard/social/actions.ts; app/(app)/dashboard/social/posts/[id]/page.tsx; app/(app)/dashboard/social/feed/page.tsx; app/(app)/dashboard/social/inbox/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/social/calendar/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "735b8a08095a015a087b296d421d82ce55f627a57d9743d8b9fad917820c2b5a",
+      "sourceSha256": "98537feecbda4fddba6c745c98f2a010a0e0a6abc689a0ee02ee8619a4de5f0b",
+      "bytes": 3228,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 13,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "CalendarPage",
+          "line": 16,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0243",
+          "key": "app/(app)/dashboard/social/calendar/page.tsx",
+          "source": "app/(app)/dashboard/social/calendar/page.tsx"
+        },
+        {
+          "id": "CONTROL-3901D4F25165",
+          "key": "app/(app)/dashboard/social/calendar/page.tsx:34:Link:0",
+          "source": "app/(app)/dashboard/social/calendar/page.tsx"
+        },
+        {
+          "id": "CONTROL-3E870FF8E8BC",
+          "key": "app/(app)/dashboard/social/calendar/page.tsx:48:Link:1",
+          "source": "app/(app)/dashboard/social/calendar/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/social/content-studio/new/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "99fb94345078cbda31e90b9bc3337e57abe5c904eb17d8a2f7a32060f0f63dfa",
+      "sourceSha256": "801a1fddba439559709375a36ed2dbb0fa01a31049c7c0d21b6e470d3b1c9716",
+      "bytes": 1778,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 12,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 13,
+          "kind": "value"
+        },
+        {
+          "name": "NewContentPage",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0244",
+          "key": "app/(app)/dashboard/social/content-studio/new/page.tsx",
+          "source": "app/(app)/dashboard/social/content-studio/new/page.tsx"
+        },
+        {
+          "id": "CONTROL-D5E58AEBB213",
+          "key": "app/(app)/dashboard/social/content-studio/new/page.tsx:26:Link:0",
+          "source": "app/(app)/dashboard/social/content-studio/new/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/social/feed/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "25447fae3fd4fb69d6467c774528f477f9dd2a8df9a5dcf9c421a64d83ec7b52",
+      "sourceSha256": "72db1ae498c15ecf12b45e6b5990a08580dc21ffdb5cf25a8b702ad85ba92966",
+      "bytes": 5784,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "FeedPage",
+          "line": 19,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0247",
+          "key": "app/(app)/dashboard/social/feed/page.tsx",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-6F5576DEE3DC",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:44:Link:0",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-E194AC782F84",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:46:Link:1",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-B8A67E5303DC",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:51:form:2",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-2EE716B13D65",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:52:input:3",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-53BAA64D14EF",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:53:input:4",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-A079A62FB128",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:54:button:5",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-863409DA6D75",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:69:Link:6",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-B9C783FBE9E3",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:87:ExternalLink:7",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "CONTROL-D68DC7BFBC57",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:100:a:8",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "INCOMPLETE-DE0F07E5E1BF",
+          "key": "app/(app)/dashboard/social/feed/page.tsx:53:0",
+          "source": "app/(app)/dashboard/social/feed/page.tsx"
+        },
+        {
+          "id": "SEC-004",
+          "key": "SEC-004",
+          "source": "app/(app)/dashboard/social/actions.ts; app/(app)/dashboard/social/posts/[id]/page.tsx; app/(app)/dashboard/social/feed/page.tsx; app/(app)/dashboard/social/inbox/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/social/inbox/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "2d2073dee57f70924f05cfbcc6f322c09257d9c1e5b1bbea9cd051bade9ddd47",
+      "sourceSha256": "a3dfb946f7dc7179792a98b995f1d93acfd47b0318d1c936cf389d658d82e4ca",
+      "bytes": 4634,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 16,
+          "kind": "value"
+        },
+        {
+          "name": "InboxPage",
+          "line": 18,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0248",
+          "key": "app/(app)/dashboard/social/inbox/page.tsx",
+          "source": "app/(app)/dashboard/social/inbox/page.tsx"
+        },
+        {
+          "id": "CONTROL-FD74C804C58D",
+          "key": "app/(app)/dashboard/social/inbox/page.tsx:51:a:0",
+          "source": "app/(app)/dashboard/social/inbox/page.tsx"
+        },
+        {
+          "id": "CONTROL-67271EC85694",
+          "key": "app/(app)/dashboard/social/inbox/page.tsx:51:ExternalLink:1",
+          "source": "app/(app)/dashboard/social/inbox/page.tsx"
+        },
+        {
+          "id": "CONTROL-106E380B3E18",
+          "key": "app/(app)/dashboard/social/inbox/page.tsx:53:form:2",
+          "source": "app/(app)/dashboard/social/inbox/page.tsx"
+        },
+        {
+          "id": "CONTROL-7599F47C750C",
+          "key": "app/(app)/dashboard/social/inbox/page.tsx:54:button:3",
+          "source": "app/(app)/dashboard/social/inbox/page.tsx"
+        },
+        {
+          "id": "SEC-004",
+          "key": "SEC-004",
+          "source": "app/(app)/dashboard/social/actions.ts; app/(app)/dashboard/social/posts/[id]/page.tsx; app/(app)/dashboard/social/feed/page.tsx; app/(app)/dashboard/social/inbox/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/social/posts/[id]/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "be1d2483fa6bed27f770e1f532032beba0d97056c71f8b7432421ad80728aa5c",
+      "sourceSha256": "44c8cf5a180647570d82a2bd3d34f5f3dce4bb496474b224ba56481008d6452f",
+      "bytes": 6751,
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 16,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "PostDetailPage",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0251",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-3CB6AA07883E",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:32:Link:0",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-1782EA39EECE",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:44:a:1",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-D00399292B7B",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:44:ExternalLink:2",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-BFD303B2CC07",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:69:RetryPublishButton:3",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-B9E062E336CF",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:80:a:4",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-C563CB81B5B8",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:80:ExternalLink:5",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "SEC-004",
+          "key": "SEC-004",
+          "source": "app/(app)/dashboard/social/actions.ts; app/(app)/dashboard/social/posts/[id]/page.tsx; app/(app)/dashboard/social/feed/page.tsx; app/(app)/dashboard/social/inbox/page.tsx"
+        }
+      ]
+    },
+    {
+      "path": "app/api/cron/social-publish/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3d71505d661fd2dc90e59b7c9a2d7051169743c1cb5dd104215b9d661303b48d",
+      "bytes": 687,
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 5,
+          "kind": "value"
+        },
+        {
+          "name": "maxDuration",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "GET",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "runtime",
+          "line": 5,
+          "kind": "value"
+        },
+        {
+          "name": "maxDuration",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "apiRoute": "/api/cron/social-publish",
+      "httpMethods": [
+        "GET"
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "components/app/quick-capture.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d322ab8be7ada32e0a82df6b01d5802fb46412841069155ab3b448ef39f1fc89",
+      "sourceSha256": "fe3c127ec3f8eea654581fda6e56b72084504eaedb34113585e584d05ff23801",
+      "bytes": 14484,
+      "exportedSymbols": [
+        {
+          "name": "QuickCapture",
+          "line": 42,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-97EAFCA06075",
+          "key": "components/app/quick-capture.tsx",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-387ED0558436",
+          "key": "components/app/quick-capture.tsx:136:button:0",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-3713E0A66B31",
+          "key": "components/app/quick-capture.tsx:145:Modal:1",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-40801B49711F",
+          "key": "components/app/quick-capture.tsx:150:button:2",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-C7BEF2FB673A",
+          "key": "components/app/quick-capture.tsx:160:form:3",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-0F74F6360E5F",
+          "key": "components/app/quick-capture.tsx:167:button:4",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-2959743CFB58",
+          "key": "components/app/quick-capture.tsx:182:CaptureShortcuts:5",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-5A91A989E3F6",
+          "key": "components/app/quick-capture.tsx:192:button:6",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-57D89C82454D",
+          "key": "components/app/quick-capture.tsx:204:Textarea:7",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-610D0A4EDE70",
+          "key": "components/app/quick-capture.tsx:205:Input:8",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-B61D321E542A",
+          "key": "components/app/quick-capture.tsx:241:Button:9",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "CONTROL-0516597B3612",
+          "key": "components/app/quick-capture.tsx:242:Button:10",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-A5391C007499",
+          "key": "components/app/quick-capture.tsx:35:0",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-A770B7A82392",
+          "key": "components/app/quick-capture.tsx:36:1",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-901BEB3EB5DA",
+          "key": "components/app/quick-capture.tsx:37:2",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-5A1AD15D61F5",
+          "key": "components/app/quick-capture.tsx:38:3",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-20F79BE92223",
+          "key": "components/app/quick-capture.tsx:39:4",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-872716210BCD",
+          "key": "components/app/quick-capture.tsx:204:5",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "INCOMPLETE-5F820E212F07",
+          "key": "components/app/quick-capture.tsx:205:6",
+          "source": "components/app/quick-capture.tsx"
+        },
+        {
+          "id": "DATA-007",
+          "key": "DATA-007",
+          "source": "components/app/quick-capture.tsx; lib/capture/save.ts; todo_lists; todo_items; components/capture/capture-shell.tsx; components/modules/voice-module.tsx; components/app/command-bar.tsx"
+        }
+      ]
+    },
+    {
+      "path": "components/capture/capture-shell.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "223ea5fc508461749aca9bad391abad8ae794643299a6580b773c9efc25ac1a5",
+      "sourceSha256": "634eafaa1259cccf564464a1e87a7a16d5626ad6fbc2652106b10c0a47111306",
+      "bytes": 18737,
+      "exportedSymbols": [
+        {
+          "name": "CaptureShell",
+          "line": 52,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-3D24E37A8E78",
+          "key": "components/capture/capture-shell.tsx",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-B6409E21DC69",
+          "key": "components/capture/capture-shell.tsx:173:button:0",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-99A12807D559",
+          "key": "components/capture/capture-shell.tsx:187:button:1",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-D231B9AFCCAC",
+          "key": "components/capture/capture-shell.tsx:198:a:2",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-856889D01644",
+          "key": "components/capture/capture-shell.tsx:209:button:3",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-B5CAE31FF58A",
+          "key": "components/capture/capture-shell.tsx:212:textarea:4",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-8E99C6B8D61E",
+          "key": "components/capture/capture-shell.tsx:225:button:5",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-05045A731DB7",
+          "key": "components/capture/capture-shell.tsx:241:button:6",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-54C3B412876A",
+          "key": "components/capture/capture-shell.tsx:247:button:7",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-2DBD99EBCEF8",
+          "key": "components/capture/capture-shell.tsx:251:button:8",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-D6551400103A",
+          "key": "components/capture/capture-shell.tsx:267:button:9",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-B43590F00B92",
+          "key": "components/capture/capture-shell.tsx:271:button:10",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "CONTROL-6E29A79CDC8F",
+          "key": "components/capture/capture-shell.tsx:278:button:11",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "INCOMPLETE-337F58C36856",
+          "key": "components/capture/capture-shell.tsx:47:0",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "INCOMPLETE-FCE0EB2716C9",
+          "key": "components/capture/capture-shell.tsx:217:1",
+          "source": "components/capture/capture-shell.tsx"
+        },
+        {
+          "id": "DATA-007",
+          "key": "DATA-007",
+          "source": "components/app/quick-capture.tsx; lib/capture/save.ts; todo_lists; todo_items; components/capture/capture-shell.tsx; components/modules/voice-module.tsx; components/app/command-bar.tsx"
+        }
+      ]
+    },
+    {
+      "path": "components/modules/voice-module.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d4985742a5a3497bab1b58fa2f3a59eb728eca7d6de971efdd0d76ea1e18c269",
+      "sourceSha256": "5df9e6ac6805a8a0036ea986c5976a9eaccf27b122c35df497a02831ea64bd0d",
+      "bytes": 13822,
+      "exportedSymbols": [
+        {
+          "name": "VoiceModule",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-1F5EB12FAD0C",
+          "key": "components/modules/voice-module.tsx",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-ABC070069243",
+          "key": "components/modules/voice-module.tsx:145:button:0",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-443B2A46EB96",
+          "key": "components/modules/voice-module.tsx:163:Textarea:1",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-E69B97B36034",
+          "key": "components/modules/voice-module.tsx:187:Button:2",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-2B1820688C6C",
+          "key": "components/modules/voice-module.tsx:188:Button:3",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-06CC062062FB",
+          "key": "components/modules/voice-module.tsx:198:button:4",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-E777BF7BF9C5",
+          "key": "components/modules/voice-module.tsx:213:ErrorState:5",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-21D9A4192132",
+          "key": "components/modules/voice-module.tsx:236:button:6",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "CONTROL-0152BCC7264B",
+          "key": "components/modules/voice-module.tsx:238:button:7",
+          "source": "components/modules/voice-module.tsx"
+        },
+        {
+          "id": "DATA-007",
+          "key": "DATA-007",
+          "source": "components/app/quick-capture.tsx; lib/capture/save.ts; todo_lists; todo_items; components/capture/capture-shell.tsx; components/modules/voice-module.tsx; components/app/command-bar.tsx"
+        }
+      ]
+    },
+    {
+      "path": "components/social/retry-button.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "f6c3b718b165298c8a39b6e32269d3550a1ecdfad6b212740d3edfc20d36abef",
+      "sourceSha256": "a0d7ad6bb36e671fa829f6aff11f41dca3c75f5dc09da273176ebb8a78dd8e3a",
+      "bytes": 1832,
+      "exportedSymbols": [
+        {
+          "name": "RetryPublishButton",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-E066C861D997",
+          "key": "components/social/retry-button.tsx",
+          "source": "components/social/retry-button.tsx"
+        },
+        {
+          "id": "CONTROL-C56F758DD7A0",
+          "key": "components/social/retry-button.tsx:14:button:0",
+          "source": "components/social/retry-button.tsx"
+        }
+      ]
+    },
+    {
+      "path": "components/social/studio-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ab0fb7347a6577e59a889e4c7911ded45d2fe47a4db9f545c5ced85225ea7b49",
+      "sourceSha256": "54f36a08306f72aa2b74816a9b7dbf9844bd05b512e382b2ec1cb0a2c493587b",
+      "bytes": 20691,
+      "exportedSymbols": [
+        {
+          "name": "StudioForm",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-71B08AF10F6E",
+          "key": "components/social/studio-form.tsx",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-47A21081716A",
+          "key": "components/social/studio-form.tsx:106:label:0",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-6C3676384976",
+          "key": "components/social/studio-form.tsx:107:input:1",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-143E0D8C55B4",
+          "key": "components/social/studio-form.tsx:116:button:2",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-9C22999F5AE5",
+          "key": "components/social/studio-form.tsx:129:label:3",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-D2E1243B35D9",
+          "key": "components/social/studio-form.tsx:130:textarea:4",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-A3298E02A6F6",
+          "key": "components/social/studio-form.tsx:137:label:5",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-2F1D4699ECE3",
+          "key": "components/social/studio-form.tsx:138:input:6",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-4FA0DD8FD909",
+          "key": "components/social/studio-form.tsx:231:button:7",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-07C88A53D191",
+          "key": "components/social/studio-form.tsx:254:label:8",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-CEDF2EA6CF3A",
+          "key": "components/social/studio-form.tsx:255:input:9",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-963848C9C0E0",
+          "key": "components/social/studio-form.tsx:270:select:10",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-7B642BA72986",
+          "key": "components/social/studio-form.tsx:273:input:11",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-7D706DBFBF9D",
+          "key": "components/social/studio-form.tsx:275:input:12",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-8AEDE3B9ACD0",
+          "key": "components/social/studio-form.tsx:276:select:13",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-F23A019E493B",
+          "key": "components/social/studio-form.tsx:281:button:14",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-14F8F60475E7",
+          "key": "components/social/studio-form.tsx:289:button:15",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-758163AE2D26",
+          "key": "components/social/studio-form.tsx:290:button:16",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-A15EBCEB001B",
+          "key": "components/social/studio-form.tsx:298:label:17",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-F3094D631555",
+          "key": "components/social/studio-form.tsx:299:input:18",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-CC31041A149F",
+          "key": "components/social/studio-form.tsx:306:button:19",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-91D6AA10F7CD",
+          "key": "components/social/studio-form.tsx:309:button:20",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-61BC51156470",
+          "key": "components/social/studio-form.tsx:312:button:21",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "INCOMPLETE-7E5D8FFFA9ED",
+          "key": "components/social/studio-form.tsx:273:0",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "INCOMPLETE-1AC1C23F5CC8",
+          "key": "components/social/studio-form.tsx:275:1",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-500E3CB76770",
+          "key": "social-studio-existing-post-review",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-CE67470D62E2",
+          "key": "social-studio-lost-response-review",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "SOCIAL-003",
+          "key": "SOCIAL-003",
+          "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "lib/capture/save.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "3d913b9867076e90d2539eec1aa95d6ec232862e0d82ff53d7e7f714d1f7c4e2",
+      "sourceSha256": "0e9fa9122587ad3367075aa18fa9417c03b672de67a12274bef324621cde81d4",
+      "bytes": 12067,
+      "exportedSymbols": [
+        {
+          "name": "CaptureTable",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "CaptureUndo",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "CaptureOperationGuard",
+          "line": 14,
+          "kind": "type"
+        },
+        {
+          "name": "CaptureSaveError",
+          "line": 18,
+          "kind": "class"
+        },
+        {
+          "name": "CaptureSaveResult",
+          "line": 99,
+          "kind": "type"
+        },
+        {
+          "name": "tableForKind",
+          "line": 112,
+          "kind": "function"
+        },
+        {
+          "name": "CaptureSaveInput",
+          "line": 121,
+          "kind": "type"
+        },
+        {
+          "name": "saveCapture",
+          "line": 162,
+          "kind": "function"
+        },
+        {
+          "name": "undoCapture",
+          "line": 214,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [
+        {
+          "name": "CaptureOperationGuard",
+          "line": 14,
+          "kind": "type"
+        },
+        {
+          "name": "CaptureSaveError",
+          "line": 18,
+          "kind": "class"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-3010D3A2884E",
+          "key": "lib/capture/save.ts",
+          "source": "lib/capture/save.ts"
+        },
+        {
+          "id": "DATA-007",
+          "key": "DATA-007",
+          "source": "components/app/quick-capture.tsx; lib/capture/save.ts; todo_lists; todo_items; components/capture/capture-shell.tsx; components/modules/voice-module.tsx; components/app/command-bar.tsx"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "66542293c1c16a7b290426b4141c465924947a575fcddd02010ba3be54ade9f0",
+      "sourceSha256": "732a120f98c9ecb69556a199f1a1f4f8c1b01b0dce62ca9762376de8b185836f",
+      "bytes": 979612,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-88F1E3670486",
+          "key": "lib/i18n/messages/de-DE.json",
+          "source": "lib/i18n/messages/de-DE.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "29c78a6eb673761120ffa9cd0b3a01f3d4094ffff1303e51c573a4a416ebea1c",
+      "sourceSha256": "2fa62cdaad282c6587be64d8df09541a9e317d45966a1e3511c52fc838a1f3d0",
+      "bytes": 875013,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-C346841E8649",
+          "key": "lib/i18n/messages/en-US.json",
+          "source": "lib/i18n/messages/en-US.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "a7758b8c339cab48e0887c985f4e2820bb6abc5da64caebef47f6110a62b1efa",
+      "sourceSha256": "29a5515b719e8d37808d9614bc07c291c36b296885853e61d9e5d0b87f4fd2ff",
+      "bytes": 963662,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-DC666FC0E80F",
+          "key": "lib/i18n/messages/es-ES.json",
+          "source": "lib/i18n/messages/es-ES.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "b308cff4510412ae051569e12818036ca7185740da75cabbc69bf07bdb35b502",
+      "sourceSha256": "79b0508cd4ce09b9721415202b036125d81c0315f492846ca3e34d64970deb1b",
+      "bytes": 988689,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-24D39068AF0B",
+          "key": "lib/i18n/messages/fr-FR.json",
+          "source": "lib/i18n/messages/fr-FR.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "409ce9743623c445c4a48b6cff9bbec184c6b7d6121163dc2fa04057b00c00a4",
+      "sourceSha256": "f22054f26e019333266d8280800012a5e2548b743843933267600c136186718f",
+      "bytes": 951444,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-9E9B391BC4E5",
+          "key": "lib/i18n/messages/it-IT.json",
+          "source": "lib/i18n/messages/it-IT.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "55f02ec7bc018998c511c582e68bbaabf439fe17bb112eea33047e9ab4cdadae",
+      "sourceSha256": "0dc92588056e025c18cc654285a6119d39141eb712f68db16852bdf32ca0b94c",
+      "bytes": 935698,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-6F4C71EB2624",
+          "key": "lib/i18n/messages/nl-NL.json",
+          "source": "lib/i18n/messages/nl-NL.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "localization",
+      "isNew": false,
+      "baselineSha256": "59a81f6106ee22f4be12fc97aaa8eab015192f0a8c5ed467d61fe0560606fc48",
+      "sourceSha256": "f0d44257245104964dbd2874f86100d2ab8f71b76ae545b683d107289a72eabc",
+      "bytes": 965533,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-091D62717E32",
+          "key": "lib/i18n/messages/pt-PT.json",
+          "source": "lib/i18n/messages/pt-PT.json"
+        }
+      ]
+    },
+    {
+      "path": "lib/social/account-tokens.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "60bfe6fc1baf4b7230312c817cea248d70684f55912bef11335ad1dfd8a2c810",
+      "sourceSha256": "1b07845dd60f422a75a80033198bd3ea0b3ac28bd8cc19d3eb65515be8efeb83",
+      "bytes": 13916,
+      "exportedSymbols": [
+        {
+          "name": "XBoundaryError",
+          "line": 11,
+          "kind": "class"
+        },
+        {
+          "name": "xFailure",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "X_SCOPES",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "isXId",
+          "line": 16,
+          "kind": "function"
+        },
+        {
+          "name": "XActor",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "XFlow",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "XGrant",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "requireXActor",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "createXReceipt",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "claimXReceipt",
+          "line": 73,
+          "kind": "function"
+        },
+        {
+          "name": "saveXConnection",
+          "line": 87,
+          "kind": "function"
+        },
+        {
+          "name": "loadXAccessToken",
+          "line": 147,
+          "kind": "function"
+        },
+        {
+          "name": "assertXCredentials",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "loadScheduledXAccessToken",
+          "line": 160,
+          "kind": "function"
+        },
+        {
+          "name": "clearXTokens",
+          "line": 182,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "assertXCredentials",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "loadScheduledXAccessToken",
+          "line": 160,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "assertXCredentials",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "loadScheduledXAccessToken",
+          "line": 160,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-90A14267D9AB",
+          "key": "lib/social/account-tokens.ts",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-29F92A78FE3C",
+          "key": "lib/social/account-tokens.ts:xFailure",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-B2EBE7B38719",
+          "key": "lib/social/account-tokens.ts:isXId",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-40E029B396EB",
+          "key": "lib/social/account-tokens.ts:requireXActor",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-2FAF9ABC34E1",
+          "key": "lib/social/account-tokens.ts:createXReceipt",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-A03C93512AD3",
+          "key": "lib/social/account-tokens.ts:claimXReceipt",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-D028AB6D5174",
+          "key": "lib/social/account-tokens.ts:saveXConnection",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-78C15D965A3A",
+          "key": "lib/social/account-tokens.ts:loadXAccessToken",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-AD532888480E",
+          "key": "lib/social/account-tokens.ts:clearXTokens",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SOCIAL-003",
+          "key": "SOCIAL-003",
+          "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "lib/social/connectors.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "73637d433da2737204cbd541515098958f71e05a60fe02a864d266472e9d25bd",
+      "sourceSha256": "dddb0e4233a4dbb28e3000c17bcd007b78a48fec7a0b02214058afa70a89caef",
+      "bytes": 3919,
+      "exportedSymbols": [
+        {
+          "name": "ConnectorPublishInput",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "ConnectorPublishOutput",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "Connector",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "getConnector",
+          "line": 106,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-B015E80C1907",
+          "key": "lib/social/connectors.ts",
+          "source": "lib/social/connectors.ts"
+        },
+        {
+          "id": "SOCIAL-001",
+          "key": "SOCIAL-001",
+          "source": "lib/social/connectors.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/social/links.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "55dc71b880a0da3201ce1f7cc8590048d3607c47d37210697d238ea46423c56c",
+      "bytes": 424,
+      "exportedSymbols": [
+        {
+          "name": "safeSocialLink",
+          "line": 2,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "safeSocialLink",
+          "line": 2,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "safeSocialLink",
+          "line": 2,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "lib/social/providers/x.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "f3d3b37d2ea27f00e7ffe8cb7bcd5a3679bcbd31ab349e5e4151d557451b19ea",
+      "sourceSha256": "39c915250d123ebdd77265f42fad764542f38804493ea65dda06f8fe5db9935c",
+      "bytes": 3388,
+      "exportedSymbols": [
+        {
+          "name": "publishX",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-FF3F39A469CA",
+          "key": "lib/social/providers/x.ts",
+          "source": "lib/social/providers/x.ts"
+        },
+        {
+          "id": "SERVICE-DC8E395A8A0C",
+          "key": "lib/social/providers/x.ts:publishX",
+          "source": "lib/social/providers/x.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/social/publish.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "7d2b28601e2b545ea1e480ce19b55cedfeca960c4177988fbcd3bd656e5971b5",
+      "sourceSha256": "1592c28470ad3e058d34137d1d5d28d70c9fc70c1fc82b4920c998e4a0b872c9",
+      "bytes": 16314,
+      "exportedSymbols": [
+        {
+          "name": "PublishOutcome",
+          "line": 53,
+          "kind": "type"
+        },
+        {
+          "name": "createTargets",
+          "line": 68,
+          "kind": "function"
+        },
+        {
+          "name": "runPublishNow",
+          "line": 164,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-F1EE974340EE",
+          "key": "lib/social/publish.ts",
+          "source": "lib/social/publish.ts"
+        },
+        {
+          "id": "SOCIAL-002",
+          "key": "SOCIAL-002",
+          "source": "lib/social/publish.ts; social_post_targets; social_publish_results; social_publish_jobs; social_posts"
+        },
+        {
+          "id": "SOCIAL-003",
+          "key": "SOCIAL-003",
+          "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "lib/social/schedule-time.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "83a6a82aad1c5f62dda070312b05cbea172649a3db1eb0b1170e974070b0ae14",
+      "bytes": 5809,
+      "exportedSymbols": [
+        {
+          "name": "ScheduleTimeResult",
+          "line": 3,
+          "kind": "type"
+        },
+        {
+          "name": "scheduleTimezone",
+          "line": 7,
+          "kind": "function"
+        },
+        {
+          "name": "resolveScheduleTime",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "validateScheduleInstant",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleDisplayTimezone",
+          "line": 62,
+          "kind": "function"
+        },
+        {
+          "name": "formatScheduledTime",
+          "line": 69,
+          "kind": "function"
+        },
+        {
+          "name": "scheduledDay",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleStatusKey",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "scheduleTimezone",
+          "line": 7,
+          "kind": "function"
+        },
+        {
+          "name": "resolveScheduleTime",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "validateScheduleInstant",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleDisplayTimezone",
+          "line": 62,
+          "kind": "function"
+        },
+        {
+          "name": "formatScheduledTime",
+          "line": 69,
+          "kind": "function"
+        },
+        {
+          "name": "scheduledDay",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleStatusKey",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "ScheduleTimeResult",
+          "line": 3,
+          "kind": "type"
+        },
+        {
+          "name": "scheduleTimezone",
+          "line": 7,
+          "kind": "function"
+        },
+        {
+          "name": "resolveScheduleTime",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "validateScheduleInstant",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleDisplayTimezone",
+          "line": 62,
+          "kind": "function"
+        },
+        {
+          "name": "formatScheduledTime",
+          "line": 69,
+          "kind": "function"
+        },
+        {
+          "name": "scheduledDay",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleStatusKey",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "lib/social/scheduled-authority.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "e8c360fa5ae3974be88b2e131bdf5c371c3ececa07973fe3e4a89c47c8c16760",
+      "bytes": 17004,
+      "exportedSymbols": [
+        {
+          "name": "ScheduledPublishError",
+          "line": 11,
+          "kind": "class"
+        },
+        {
+          "name": "scheduleFailure",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "SCHEDULE_TOOL",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "ScheduleDb",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleActor",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleInputs",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleOutputs",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleReceipt",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduledClaim",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleExpected",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "scheduleIdentity",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleSignal",
+          "line": 56,
+          "kind": "function"
+        },
+        {
+          "name": "validateSchedule",
+          "line": 65,
+          "kind": "function"
+        },
+        {
+          "name": "readSchedule",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "changeSchedule",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "needsPublishApproval",
+          "line": 104,
+          "kind": "function"
+        },
+        {
+          "name": "checkScheduleActor",
+          "line": 115,
+          "kind": "function"
+        },
+        {
+          "name": "requestScheduleActor",
+          "line": 131,
+          "kind": "function"
+        },
+        {
+          "name": "readScheduleSnapshot",
+          "line": 140,
+          "kind": "function"
+        },
+        {
+          "name": "verifyScheduleSnapshot",
+          "line": 172,
+          "kind": "function"
+        },
+        {
+          "name": "authorizeScheduledToken",
+          "line": 179,
+          "kind": "function"
+        },
+        {
+          "name": "priorProviderResult",
+          "line": 193,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "scheduleFailure",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleIdentity",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleSignal",
+          "line": 56,
+          "kind": "function"
+        },
+        {
+          "name": "validateSchedule",
+          "line": 65,
+          "kind": "function"
+        },
+        {
+          "name": "readSchedule",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "changeSchedule",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "needsPublishApproval",
+          "line": 104,
+          "kind": "function"
+        },
+        {
+          "name": "checkScheduleActor",
+          "line": 115,
+          "kind": "function"
+        },
+        {
+          "name": "requestScheduleActor",
+          "line": 131,
+          "kind": "function"
+        },
+        {
+          "name": "readScheduleSnapshot",
+          "line": 140,
+          "kind": "function"
+        },
+        {
+          "name": "verifyScheduleSnapshot",
+          "line": 172,
+          "kind": "function"
+        },
+        {
+          "name": "authorizeScheduledToken",
+          "line": 179,
+          "kind": "function"
+        },
+        {
+          "name": "priorProviderResult",
+          "line": 193,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "ScheduledPublishError",
+          "line": 11,
+          "kind": "class"
+        },
+        {
+          "name": "scheduleFailure",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "SCHEDULE_TOOL",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "ScheduleDb",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleActor",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleInputs",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleOutputs",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleReceipt",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduledClaim",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "ScheduleExpected",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "scheduleIdentity",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleSignal",
+          "line": 56,
+          "kind": "function"
+        },
+        {
+          "name": "validateSchedule",
+          "line": 65,
+          "kind": "function"
+        },
+        {
+          "name": "readSchedule",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "changeSchedule",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "needsPublishApproval",
+          "line": 104,
+          "kind": "function"
+        },
+        {
+          "name": "checkScheduleActor",
+          "line": 115,
+          "kind": "function"
+        },
+        {
+          "name": "requestScheduleActor",
+          "line": 131,
+          "kind": "function"
+        },
+        {
+          "name": "readScheduleSnapshot",
+          "line": 140,
+          "kind": "function"
+        },
+        {
+          "name": "verifyScheduleSnapshot",
+          "line": 172,
+          "kind": "function"
+        },
+        {
+          "name": "authorizeScheduledToken",
+          "line": 179,
+          "kind": "function"
+        },
+        {
+          "name": "priorProviderResult",
+          "line": 193,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "lib/social/scheduled-publish.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "e1738e819d90ddb16b90dd94c5c452c7fe4251929ab715059581e1b140f03b0c",
+      "bytes": 23943,
+      "exportedSymbols": [
+        {
+          "name": "ScheduledPublishError",
+          "line": 15,
+          "kind": "re-export",
+          "from": "./scheduled-authority"
+        },
+        {
+          "name": "createScheduledPublishReceipt",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "armScheduledPublishReceipt",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "reconcileScheduledPost",
+          "line": 89,
+          "kind": "function"
+        },
+        {
+          "name": "publishScheduledPostNow",
+          "line": 225,
+          "kind": "function"
+        },
+        {
+          "name": "runScheduledPublishDrain",
+          "line": 233,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "createScheduledPublishReceipt",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "armScheduledPublishReceipt",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "reconcileScheduledPost",
+          "line": 89,
+          "kind": "function"
+        },
+        {
+          "name": "publishScheduledPostNow",
+          "line": 225,
+          "kind": "function"
+        },
+        {
+          "name": "runScheduledPublishDrain",
+          "line": 233,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "ScheduledPublishError",
+          "line": 15,
+          "kind": "re-export",
+          "from": "./scheduled-authority"
+        },
+        {
+          "name": "createScheduledPublishReceipt",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "armScheduledPublishReceipt",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "reconcileScheduledPost",
+          "line": 89,
+          "kind": "function"
+        },
+        {
+          "name": "publishScheduledPostNow",
+          "line": 225,
+          "kind": "function"
+        },
+        {
+          "name": "runScheduledPublishDrain",
+          "line": 233,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "lib/social/x-oauth.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d32effe7f05155113a076941eb6103a06fda10f9b588ed4e38ff1a2bc3bab757",
+      "sourceSha256": "6e4cf1467f8c771265edae69c816839dbbea5c6dd81725849dfc24a555f0772d",
+      "bytes": 7750,
+      "exportedSymbols": [
+        {
+          "name": "X_COOKIE",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "X_CALLBACK_PATH",
+          "line": 9,
+          "kind": "value"
+        },
+        {
+          "name": "X_TIMEOUT_MS",
+          "line": 13,
+          "kind": "value"
+        },
+        {
+          "name": "xRedirectUri",
+          "line": 25,
+          "kind": "function"
+        },
+        {
+          "name": "xCookieOptions",
+          "line": 35,
+          "kind": "function"
+        },
+        {
+          "name": "beginXAuthorization",
+          "line": 39,
+          "kind": "function"
+        },
+        {
+          "name": "readXAuthorization",
+          "line": 53,
+          "kind": "function"
+        },
+        {
+          "name": "xJsonRequest",
+          "line": 68,
+          "kind": "function"
+        },
+        {
+          "name": "finishXAuthorization",
+          "line": 84,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_PUBLIC_SITE_URL",
+        "SYNC_TOKEN_KEY",
+        "X_CLIENT_ID",
+        "X_CLIENT_SECRET"
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-75C13DFECF07",
+          "key": "lib/social/x-oauth.ts",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-3E2F97076A5B",
+          "key": "lib/social/x-oauth.ts:xRedirectUri",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-CCCF0CE4E6D7",
+          "key": "lib/social/x-oauth.ts:xCookieOptions",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-AA1A8DD18D26",
+          "key": "lib/social/x-oauth.ts:beginXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-C339939E5A82",
+          "key": "lib/social/x-oauth.ts:readXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-DDD8BB404BA6",
+          "key": "lib/social/x-oauth.ts:xJsonRequest",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-DC2E51DF76FF",
+          "key": "lib/social/x-oauth.ts:finishXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        }
+      ]
+    },
+    {
+      "path": "scripts/cron-dispatch.mjs",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "30bea2e93ea55bb5269856793f15e9382a2e0aa3c6065fc7ead1ee54ddad12ff",
+      "sourceSha256": "6f8d9ebae5a62f8ea219ff8f4cdef8ae29459d236777703dab44e2aa18de41a3",
+      "bytes": 9620,
+      "exportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 62,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 82,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 94,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 106,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [
+        "CRON_BASE_URL",
+        "CRON_SECRET"
+      ],
+      "addedEnvironmentNames": [],
+      "jobNames": [
+        "/api/cron/social-publish",
+        "/api/cron/contact-center-urgent",
+        "/api/cron/feedback-github-sync",
+        "/api/cron/chore-reminders",
+        "/api/cron/weekly-digest",
+        "/api/cron/notifications",
+        "/api/cron/push-scan",
+        "/api/cron/calendar-feeds",
+        "/api/cron/automations",
+        "/api/cron/marketing",
+        "/api/cron/marketing-providers",
+        "/api/cron/checkout-abandoned",
+        "/api/cron/autopilot-scan",
+        "/api/cron/wallet-allowance",
+        "/api/cron/model-refresh",
+        "/api/cron/network-aggregate",
+        "/api/cron/guardian-learning",
+        "/api/cron/provider-sync",
+        "/api/cron/journey-recovery",
+        "/api/cron/close-auctions",
+        "/api/cron/return-reminders",
+        "/api/cron/admin-digest",
+        "/api/cron/ai-runs",
+        "/api/cron/family-routines"
+      ],
+      "addedJobs": [
+        {
+          "path": "/api/cron/social-publish",
+          "schedule": "*/5 * * * *",
+          "kind": "dispatcher-cron",
+          "line": 25
+        }
+      ],
+      "changedJobs": [],
+      "existingMasterRecords": [
+        {
+          "id": "DEPLOY-1ED5966CA454",
+          "key": "scripts/cron-dispatch.mjs",
+          "source": "scripts/cron-dispatch.mjs"
+        },
+        {
+          "id": "JOB-001",
+          "key": "JOB-001",
+          "source": "scripts/cron-dispatch.mjs; .github/workflows/cron-dispatch.yml"
+        },
+        {
+          "id": "SOCIAL-003",
+          "key": "SOCIAL-003",
+          "source": "components/social/studio-form.tsx; app/(app)/dashboard/social/actions.ts; lib/social/publish.ts; lib/social/account-tokens.ts; social_schedules; scripts/cron-dispatch.mjs"
+        }
+      ]
+    },
+    {
+      "path": "tests/capture-save-boundaries.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "38e56467b17c3c035357a51f2a49a2a23bc76ce4e830c1a99ab475b8ade60526",
+      "bytes": 15036,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/capture-save.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "4f791b77b3465a578d80fe28abff1e92e1080dd6d7c3d2e59e2b63bffca88da6",
+      "sourceSha256": "b0ea4ebf68f56443968dd8c209121ea8df74a997e9ff90fdb6cca6b131fef46a",
+      "bytes": 8395,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-D679643F139C",
+          "key": "tests/capture-save.test.ts",
+          "source": "tests/capture-save.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch-execution.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "e72449bb5ef1525d5c9f58c72274b2e1e38106bf8bfe235cbbc5d4b52297e66a",
+      "sourceSha256": "7cdbacdf7a0ab24588b1c01fc2100aaa01ce8eb8da146276ac3f7fadd0b4a212",
+      "bytes": 8128,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-104264503A45",
+          "key": "tests/cron-dispatch-execution.test.ts",
+          "source": "tests/cron-dispatch-execution.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "719c2c8017cf340040f177bd70b2d6631faeb70b0c96a225ad13b9845b3192a5",
+      "sourceSha256": "387791192436ea2cb799f58636471b9c6e38fff3deb9b998b947d9a195e0ad03",
+      "bytes": 3300,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-A0B42E783221",
+          "key": "tests/cron-dispatch.test.ts",
+          "source": "tests/cron-dispatch.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/document-capture-ui.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "550b286c257002b169a0dbe83df27c9850364bf8239707b0c1749a79c2cbc142",
+      "sourceSha256": "4572d23694031147bbe8924f99058a8ba9c22522ebcd70fd1a42fbd2d548e9d6",
+      "bytes": 10297,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-FA6B1B174C8E",
+          "key": "tests/document-capture-ui.test.ts",
+          "source": "tests/document-capture-ui.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/e2e/quick-capture-task.spec.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "5bf09646e418a87fb7b7933f9f8c489460b1e0f482f4b570d49512fcfd6331d0",
+      "bytes": 41695,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/e2e/social-publish-consumers.spec.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "29345138d344ea726dd1e1d66f5a08ec5d22648db3051cda5f24769a25c41d70",
+      "sourceSha256": "ef3f4ccbde845580e958aec4d7d845614b1ccc612d6d42fab357d10df5cf9e6d",
+      "bytes": 24970,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-361FF3F5A5FC",
+          "key": "tests/e2e/social-publish-consumers.spec.ts",
+          "source": "tests/e2e/social-publish-consumers.spec.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/e2e/social-scheduling-ui.spec.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "a1537010fa38dfd3b438a891ddba626f4a30c7eb9da6206653464b4a6fe14418",
+      "bytes": 22187,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/e2e/voice-capture-boundaries.spec.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f4ed3a2ddbf74022a7bcf0b30335c2796663a3ee2bc22d099168616025cc11a9",
+      "bytes": 13543,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [
+        "CAPTURE_VOICE_BASELINE"
+      ],
+      "addedEnvironmentNames": [
+        "CAPTURE_VOICE_BASELINE"
+      ],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/social-publish-execution.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "2655309a0f49c0c6b410918613cbe58b6d62e6b033c47a59fb0fe03af1279512",
+      "sourceSha256": "85e5bf4cb025e8f1286eb8d963a9f03e77b07fc3389b717e7f173fbab7d9f44c",
+      "bytes": 13191,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-D4B90940187E",
+          "key": "tests/social-publish-execution.test.ts",
+          "source": "tests/social-publish-execution.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/social-publish-persistence.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "e64cce584b9c1a6b1fb1027d4d8beb567bc191afb4de660598d2baf2e788e6a1",
+      "sourceSha256": "d92e9ff88ad8b143926b4a8025f5af32776461fda42f69c21a5d7cb00182191c",
+      "bytes": 3460,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-341042432152",
+          "key": "tests/social-publish-persistence.test.ts",
+          "source": "tests/social-publish-persistence.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/social-schedule-time.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "5a0ce5dc3739d60028960df3bb444a19e8d552747423369e4a48f4a8a6676d2d",
+      "bytes": 4481,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/social-scheduled-publish.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "2f8e706c9fabba6daa93de92b9987770256f6e04baf89f8a6164fdb809eb2a4f",
+      "bytes": 32274,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/social-scheduling-actions-review.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "6f271072b84869a61656e11d412ed876f4ebf101cbbdd14ab01a0b23e1eae16f",
+      "bytes": 19155,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/social-scheduling-presentation.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "85468b1a610b5f11689a8f3510f85ca540f3abd7663c6e26e8cd995e424bcbd8",
+      "bytes": 23471,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/social-x-execution.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "9fd1b40de1c3471fc0af7b751d643cf95074260577cb0be48e3347e1f68c73fe",
+      "sourceSha256": "40f7d5973209843c52660fd7da6c42edf827c669ff9dd8b601d6b57492513652",
+      "bytes": 29527,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-5E3C13BC4ACE",
+          "key": "tests/social-x-execution.test.ts",
+          "source": "tests/social-x-execution.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "vercel.json",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "94e0ca36ac2e885995ca3743251964489e078d2ed4e342b78b62a4c90aabb7a5",
+      "sourceSha256": "72a2d6f9690fad11b4fb80d7e5439068fa279d235ea086a2d788a558f42887ad",
+      "bytes": 2085,
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "jobNames": [
+        "/api/cron/social-publish",
+        "/api/cron/admin-digest",
+        "/api/cron/ai-runs",
+        "/api/cron/automations",
+        "/api/cron/autopilot-scan",
+        "/api/cron/calendar-feeds",
+        "/api/cron/checkout-abandoned",
+        "/api/cron/chore-reminders",
+        "/api/cron/close-auctions",
+        "/api/cron/contact-center-urgent",
+        "/api/cron/family-routines",
+        "/api/cron/feedback-github-sync",
+        "/api/cron/guardian-learning",
+        "/api/cron/journey-recovery",
+        "/api/cron/marketing",
+        "/api/cron/marketing-providers",
+        "/api/cron/model-refresh",
+        "/api/cron/network-aggregate",
+        "/api/cron/notifications",
+        "/api/cron/provider-sync",
+        "/api/cron/push-scan",
+        "/api/cron/return-reminders",
+        "/api/cron/wallet-allowance",
+        "/api/cron/weekly-digest"
+      ],
+      "addedJobs": [
+        {
+          "path": "/api/cron/social-publish",
+          "schedule": "5 1 * * *",
+          "kind": "vercel-cron"
+        }
+      ],
+      "changedJobs": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-A3265310F552",
+          "key": "vercel.json",
+          "source": "vercel.json"
+        }
+      ]
+    }
+  ],
+  "catalogues": [
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "previousKeys": 13496,
+      "addedKeys": [
+        "quickCapture.saveUncertain",
+        "quickCapture.reviewCapture",
+        "socialSchedule.invalid",
+        "socialSchedule.unsupported",
+        "socialSchedule.accessUnavailable",
+        "socialSchedule.permissionDenied",
+        "socialSchedule.storageUnavailable",
+        "socialSchedule.approvalRequired",
+        "socialSchedule.changed",
+        "socialSchedule.reconnectRequired",
+        "socialSchedule.awaitingConfirmation",
+        "socialSchedule.legacyUnverified",
+        "socialSchedule.saveUnconfirmed",
+        "socialSchedule.invalidTime",
+        "socialSchedule.invalidZone",
+        "socialSchedule.pastTime",
+        "socialSchedule.clockChange",
+        "socialSchedule.supported",
+        "socialSchedule.timezone",
+        "socialSchedule.instant",
+        "socialSchedule.queued"
+      ],
+      "oldValuesAndOrderPreserved": true
+    }
+  ]
+}
