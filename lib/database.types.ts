@@ -1660,6 +1660,21 @@ export interface Database {
         { id?: string; campaign_id?: string | null; platform?: string; content?: string; link?: string | null; status?: string; scheduled_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ platform: string; content: string; link: string | null; status: string; scheduled_at: string | null; metadata: Json }>
       >;
+      library_feeds: T<
+        { id: string; family_id: string; kind: string; title: string; feed_url: string; site_url: string | null; image_url: string | null; author: string | null; description: string | null; last_fetched_at: string | null; last_error: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; title: string; feed_url: string; site_url?: string | null; image_url?: string | null; author?: string | null; description?: string | null; last_fetched_at?: string | null; last_error?: string | null; created_by?: string | null },
+        Partial<{ title: string; site_url: string | null; image_url: string | null; author: string | null; description: string | null; last_fetched_at: string | null; last_error: string | null }>
+      >;
+      library_items: T<
+        { id: string; family_id: string; feed_id: string | null; kind: string; guid: string; title: string; author: string | null; description: string | null; media_url: string | null; page_url: string | null; image_url: string | null; duration_seconds: number | null; published_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; feed_id?: string | null; kind?: string; guid: string; title: string; author?: string | null; description?: string | null; media_url?: string | null; page_url?: string | null; image_url?: string | null; duration_seconds?: number | null; published_at?: string | null; created_by?: string | null },
+        Partial<{ title: string; author: string | null; description: string | null; media_url: string | null; page_url: string | null; image_url: string | null; duration_seconds: number | null; published_at: string | null }>
+      >;
+      library_progress: T<
+        { id: string; family_id: string; item_id: string; user_id: string; position_seconds: number; completed_at: string | null; saved: boolean; offline: boolean; updated_at: string },
+        { id?: string; family_id: string; item_id: string; user_id: string; position_seconds?: number; completed_at?: string | null; saved?: boolean; offline?: boolean; updated_at?: string },
+        Partial<{ position_seconds: number; completed_at: string | null; saved: boolean; offline: boolean; updated_at: string }>
+      >;
       assistant_links: T<
         { id: string; family_id: string; user_id: string; provider: string; label: string; token_hash: string; token_prefix: string; scopes: string[]; last_used_at: string | null; revoked_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; user_id: string; provider?: string; label: string; token_hash: string; token_prefix: string; scopes?: string[]; last_used_at?: string | null; revoked_at?: string | null; created_by?: string | null },
