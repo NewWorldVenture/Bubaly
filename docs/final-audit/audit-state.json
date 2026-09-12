@@ -188634,7 +188634,75 @@
       "fix": "None",
       "retest": "Pending",
       "notes": "Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate."
+    },
+    "FLOW-FC0B97223986": {
+      "id": "FLOW-FC0B97223986",
+      "key": "contact-center-family-reply-identity",
+      "area": "FLOW",
+      "name": "Contact Center replies use the resolved family email address",
+      "source": "app/api/contact-center/email/route.ts; lib/server/email.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "expected": "A verified inbound email receives a reply from and back to the resolved family address while retaining accurate intake status and recovery behavior.",
+      "issue": "Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.",
+      "tests": "Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures.",
+      "fix": "Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved.",
+      "retest": "Focused gate and independent review PASS; full combined hosted build/regression pending. See incoming-family-reply-identity-cycle.md.",
+      "notes": "Provider delivery and sender-domain verification remain open. Database SDK uses intercepted HTTP and modeled LIKE; actual PostgreSQL identity workflow not established. Best-effort auto-reply has no durable emission receipt."
+    },
+    "SERVICE-B716F647333E": {
+      "id": "SERVICE-B716F647333E",
+      "key": "lib/server/email.ts:familyReplySender",
+      "area": "SERVICE",
+      "name": "familyReplySender",
+      "source": "lib/server/email.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate.",
+      "line": 17
+    },
+    "SUPPORT-D10B8AAF95B2": {
+      "id": "SUPPORT-D10B8AAF95B2",
+      "key": "tests/contact-center-email-lookup.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-email-lookup.test.ts",
+      "source": "tests/contact-center-email-lookup.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-35A63EB97E7D": {
+      "id": "SUPPORT-35A63EB97E7D",
+      "key": "tests/contact-center-email-reply-execution.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-email-reply-execution.test.ts",
+      "source": "tests/contact-center-email-reply-execution.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-E3DC350AD73F": {
+      "id": "SUPPORT-E3DC350AD73F",
+      "key": "tests/contact-center-reply-identity.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-reply-identity.test.ts",
+      "source": "tests/contact-center-reply-identity.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate."
     }
   },
-  "lastUpdated": "2026-09-12T20:20:52.019Z"
+  "lastUpdated": "2026-09-12T20:29:41.807Z"
 }

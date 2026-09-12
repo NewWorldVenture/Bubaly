@@ -1,0 +1,381 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T20:29:32.555Z",
+  "baselineCommit": "d1214d102eef20915189f42aaf5713e611d34858",
+  "sourceCommit": "9be771a891b9753badf33901bc82a666b1a100e9",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 6,
+    "newFiles": 3,
+    "production": 3,
+    "tests": 3,
+    "addedExportedFunctions": 1,
+    "newPageRoutes": []
+  },
+  "files": [
+    {
+      "path": "app/api/contact-center/email/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "682a9eeb6a45fa4e3054407347a7d43afb4b8006d12ff72475ed45764506a216",
+      "sourceSha256": "3d50dd093594ac1cebc905eab8397598bbf73d69bd1be1b8805a9cd207930163",
+      "bytes": 10132,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 26,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 27,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 47,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 26,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 27,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 47,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "CONTACT_CENTER_INBOUND_SECRET",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/contact-center/email",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-0EB76703163C",
+        "FLOW-D82B9410319A",
+        "CALLBACK-145967CDCF24",
+        "INT-001",
+        "INT-002",
+        "OPS-INT-007"
+      ]
+    },
+    {
+      "path": "lib/contact-center/server.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "67129cd0c0a4a21e549ea14b46da1f5a7788f7dbca08deee2c14cf2a2a3fdea0",
+      "sourceSha256": "427471e9e625554b38886cb9177dc721ff014b511b6bdeb92cbeb8a8b688809a",
+      "bytes": 20786,
+      "baselineExportedSymbols": [
+        {
+          "name": "ContactChannel",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "getOrCreateChannelResult",
+          "line": 23,
+          "kind": "function"
+        },
+        {
+          "name": "getOrCreateChannel",
+          "line": 38,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumberResult",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumber",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocalResult",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocal",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "provisionFamilyNumber",
+          "line": 88,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRecord",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "inboundProviderRef",
+          "line": 161,
+          "kind": "function"
+        },
+        {
+          "name": "findInboundMessage",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "recordInboundMessage",
+          "line": 183,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRouteOutcome",
+          "line": 230,
+          "kind": "type"
+        },
+        {
+          "name": "routeInboundToPlanner",
+          "line": 261,
+          "kind": "function"
+        },
+        {
+          "name": "fileInboundPaperwork",
+          "line": 344,
+          "kind": "function"
+        },
+        {
+          "name": "recordOutboundMessage",
+          "line": 408,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "ContactChannel",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "getOrCreateChannelResult",
+          "line": 23,
+          "kind": "function"
+        },
+        {
+          "name": "getOrCreateChannel",
+          "line": 38,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumberResult",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByNumber",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocalResult",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "resolveFamilyByEmailLocal",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "provisionFamilyNumber",
+          "line": 97,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRecord",
+          "line": 131,
+          "kind": "type"
+        },
+        {
+          "name": "inboundProviderRef",
+          "line": 170,
+          "kind": "function"
+        },
+        {
+          "name": "findInboundMessage",
+          "line": 175,
+          "kind": "function"
+        },
+        {
+          "name": "recordInboundMessage",
+          "line": 192,
+          "kind": "function"
+        },
+        {
+          "name": "InboundRouteOutcome",
+          "line": 239,
+          "kind": "type"
+        },
+        {
+          "name": "routeInboundToPlanner",
+          "line": 270,
+          "kind": "function"
+        },
+        {
+          "name": "fileInboundPaperwork",
+          "line": 353,
+          "kind": "function"
+        },
+        {
+          "name": "recordOutboundMessage",
+          "line": 417,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-40E0E0D25B95",
+        "SERVICE-7F6A900AF295",
+        "SERVICE-A7E34BED0527"
+      ]
+    },
+    {
+      "path": "lib/server/email.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "65ca276d180c5766092bc184f1fe0b4dff21c58b790241c319c5dffe6e76948a",
+      "sourceSha256": "51e8003686e3e8ab6700b2df5c86a83a203fadc0ee60212961b1f0742ae58196",
+      "bytes": 3178,
+      "baselineExportedSymbols": [
+        {
+          "name": "sendEmail",
+          "line": 12,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "familyReplySender",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "sendEmail",
+          "line": 47,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "familyReplySender",
+          "line": 17,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "RESEND_API_KEY"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-A8DC953C15AA",
+        "OPS-INT-004"
+      ]
+    },
+    {
+      "path": "tests/contact-center-email-lookup.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b77b656bc7a4386c46e436d83c1a0fadec1547885d7212314e4265119723c15f",
+      "bytes": 3833,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-email-reply-execution.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "cfbadbee74a545bfaa7d7c9206afdf88dc3284aee0d2ab9a636249a9dd89145b",
+      "bytes": 6736,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-reply-identity.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d20d9deb80a3bf7fc02a035484a1bd9bbf8d391dd72a1c8c80d8429e4caff961",
+      "bytes": 5219,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    }
+  ]
+}

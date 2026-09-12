@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T20:20:52.019Z
-- Total Audit Items: 13832
-- Not Started: 13770
-- In Progress: 58
+- Last Updated: 2026-09-12T20:29:41.807Z
+- Total Audit Items: 13837
+- Not Started: 13774
+- In Progress: 59
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -73,6 +73,7 @@ PRODUCTION READY: NO
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Autonomous processing and hosted verification; provider delivery and production scheduler configuration remain separate.
+- FLOW-FC0B97223986: Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13909,6 +13910,11 @@ PRODUCTION READY: NO
 | SUPPORT-7E6D5F8A63A6 | SUPPORT | tests/guardian-sms-completion.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E389EACB2379 | SUPPORT | tests/guardian-sms-recovery-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-71F9B43410F2 | SUPPORT | tests/guardian-sms-recovery.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| FLOW-FC0B97223986 | FLOW | Contact Center replies use the resolved family email address | 🔄 IN PROGRESS | High | Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures. | Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved. | Focused gate and independent review PASS; full combined hosted build/regression pending. See incoming-family-reply-identity-cycle.md. | Provider delivery and sender-domain verification remain open. Database SDK uses intercepted HTTP and modeled LIKE; actual PostgreSQL identity workflow not established. Best-effort auto-reply has no durable emission receipt. |
+| SERVICE-B716F647333E | SERVICE | familyReplySender | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-D10B8AAF95B2 | SUPPORT | tests/contact-center-email-lookup.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-35A63EB97E7D | SUPPORT | tests/contact-center-email-reply-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-E3DC350AD73F | SUPPORT | tests/contact-center-reply-identity.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
 
 ## Inventory and evidence rules
 
@@ -15934,6 +15940,38 @@ Application source 966f08f3: 1,191 unit files and 14,598 tests pass in 41.93 sec
 
 #### Evidence
 Actual SDK tests reproduce provider-stop recovery, destination removal, child/member authority boundaries, cancellation and concurrent notification writes. Sustained-arrival starvation reproduced before finite-sweep repair. Prior publication 0b190659 passes all 1,061 hosted browser cases, including Guardian authority; new recovery execution is pending.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### FLOW-FC0B97223986 — Contact Center replies use the resolved family email address
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/contact-center/email/route.ts; lib/server/email.ts
+
+#### Expected Behavior
+A verified inbound email receives a reply from and back to the resolved family address while retaining accurate intake status and recovery behavior.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.
+
+#### Fixes Applied
+Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved.
+
+#### Retest Results
+Focused gate and independent review PASS; full combined hosted build/regression pending. See incoming-family-reply-identity-cycle.md.
+
+#### Evidence
+Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -19929,6 +19967,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Autonomous processing and hosted verification; provider delivery and production scheduler configuration remain separate.
+- FLOW-FC0B97223986: Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.
 
 ## Production Readiness
 NO
