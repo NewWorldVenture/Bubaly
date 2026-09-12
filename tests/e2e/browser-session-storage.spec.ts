@@ -4,8 +4,9 @@ import ts from 'typescript';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Production browser factory + installed SSR cookie adapter + installed auth SDK.
-// Only the provider HTTP response is synthetic. Cookies are transferred in memory;
-// no real account, JWT, provider, environment secret or storage-state file is used.
+// Only the provider HTTP response is synthetic. No real account, provider or
+// environment secret is used. The process-restart test owns a disposable browser
+// profile containing only synthetic cookies; other contexts transfer in memory.
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
@@ -34,7 +35,7 @@ const provider = 'https://session-fixture.supabase.co';
 type SessionProbe = { signIn: () => Promise<string | null>; user: () => Promise<string | null>; signOut: () => Promise<void>; singleton: () => boolean };
 declare global { interface Window { __browserSession: SessionProbe } }
 
-async function install(context: BrowserContext) {
+async function install(context: BrowserContext, refresh?: () => 'incomplete' | 'normal') {
   const calls: string[] = [];
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -56,6 +57,9 @@ async function install(context: BrowserContext) {
     ].join('.');
     const user = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', aud: 'authenticated', role: 'authenticated', email: 'fixture@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
     if (url.pathname === '/auth/v1/token') {
+      if (url.searchParams.get('grant_type') === 'refresh_token' && refresh?.() === 'incomplete') {
+        await route.fulfill({ contentType: 'application/json', headers, body: '{}' }); return;
+      }
       await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify({ access_token: jwt, refresh_token: 'synthetic-refresh-fixture', token_type: 'bearer', expires_in: 3600, expires_at: expires, user }) }); return;
     }
     if (url.pathname === '/auth/v1/user') {
@@ -91,6 +95,66 @@ async function load(page: Page) {
 }
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
+
+test('persistent cookies survive an actual browser-process restart until local sign-out', async ({ playwright, browserName }, testInfo) => {
+  const profile = testInfo.outputPath('synthetic-session-profile');
+  const options = { headless: true, ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}) };
+  const first = await playwright[browserName].launchPersistentContext(profile, options);
+  try {
+    await install(first);
+    const page = await first.newPage(); await load(page);
+    await page.evaluate(() => window.__browserSession.signIn());
+  } finally { await first.close(); }
+  const second = await playwright[browserName].launchPersistentContext(profile, options);
+  try {
+    const calls = await install(second);
+    const page = await second.newPage(); await load(page);
+    expect(await page.evaluate(() => window.__browserSession.user())).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    expect(calls.filter(call => call.includes('/auth/v1/token'))).toEqual([]);
+    await page.evaluate(() => window.__browserSession.signOut());
+  } finally { await second.close(); }
+  const third = await playwright[browserName].launchPersistentContext(profile, options);
+  try {
+    await install(third);
+    const page = await third.newPage(); await load(page);
+    expect(await page.evaluate(() => window.__browserSession.user())).toBeNull();
+  } finally { await third.close(); }
+});
+
+test('an expired session survives an incomplete renewal and recovers after reopening', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    let mode: 'incomplete' | 'normal' = 'normal';
+    await install(context, () => mode);
+    const page = await context.newPage(); await load(page);
+    await page.evaluate(() => window.__browserSession.signIn());
+    await page.close();
+    const cookies = (await context.cookies(origin)).filter(cookie => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
+    expect(cookies).toHaveLength(1);
+    const cookie = cookies[0];
+    const saved = JSON.parse(Buffer.from(cookie.value.slice('base64-'.length), 'base64url').toString('utf8'));
+    saved.expires_at = Math.floor(Date.now() / 1000) - 3600;
+    cookie.value = `base64-${Buffer.from(JSON.stringify(saved)).toString('base64url')}`;
+    await context.addCookies([cookie]);
+    mode = 'incomplete';
+    const returning = await context.newPage();
+    await returning.clock.install();
+    await load(returning);
+    const read = returning.evaluate(async () => {
+      try { await window.__browserSession.user(); return 'unexpected success'; }
+      catch (error) { return error instanceof Error ? error.name : 'unknown failure'; }
+    });
+    await returning.clock.runFor(40_000);
+    expect(await read).toBe('AuthRetryableFetchError');
+    expect((await context.cookies(origin)).some(item => item.name === cookie.name && item.value === cookie.value)).toBe(true);
+    await returning.close();
+    mode = 'normal';
+    const recovered = await context.newPage(); await load(recovered);
+    expect(await recovered.evaluate(() => window.__browserSession.user())).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    await recovered.evaluate(() => window.__browserSession.signOut());
+    expect((await context.cookies(origin)).some(item => /^sb-.+-auth-token(?:\.\d+)?$/.test(item.name))).toBe(false);
+  } finally { await context.close(); }
+});
 
 test('production browser client persists durable secure cookies and restores with cookies alone', async ({ browser }) => {
   const first = await browser.newContext();

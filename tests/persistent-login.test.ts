@@ -280,13 +280,14 @@ describe('the browser holds exactly one auth client', () => {
     expect(client).toContain('durableCookieOptions');
   });
 
-  it('is the only place a browser client is constructed', () => {
-    // A second `createBrowserClient` call site anywhere in the app would
-    // reintroduce the competing-timer logout.
+  it('is the only regular browser client, apart from the guarded recovery installer', () => {
+    // The recovery installer has no automatic refresh or URL detection; its
+    // installed-SDK lifecycle/cookie isolation is exercised by auth-recovery-ui.
+    // All ordinary app callers must continue using the shared singleton.
     const sources = [
       'components', 'app', 'lib',
     ].flatMap((dir) => walk(dir));
-    const offenders = sources.filter((file) => file !== 'lib/supabase/client.ts'
+    const offenders = sources.filter((file) => file !== 'lib/supabase/client.ts' && file !== 'components/auth/recovery-form.tsx'
       && readFileSync(file, 'utf8').includes('createBrowserClient'));
     expect(offenders).toEqual([]);
   });
