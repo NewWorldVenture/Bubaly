@@ -180492,9 +180492,9 @@
       "source": "",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; clean baseline production build/generated types PASS; baseline lint passes with 4 existing hook warnings. Private baseline + public-read patch: production rebuild PASS and 104 selected Chromium tests PASS (3.6m).",
+      "tests": "Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.",
       "fix": "None",
-      "retest": "Clean install, baseline build/types/lint and 104 selected public/mobile/overflow/accessibility/CSP/browser checks passed. Combined current-source regression remains pending; the earlier 425-test baseline browser attempt reached its bounded watchdog and is not counted as passed.",
+      "retest": "Final integrated local build/startup and applicable checks passed. 104 selected public/mobile/overflow/accessibility/CSP Chromium checks passed on cbfa0602; final display-only correction does not alter those public sources. Live deployment, authenticated database/provider workflows and the second whole audit regression remain unverified. The earlier 425-test browser attempt reached its watchdog and is not counted as passing.",
       "notes": ""
     },
     "TEST-001": {
@@ -180507,8 +180507,8 @@
       "severity": "High",
       "tests": "Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log",
       "fix": "None",
-      "retest": "Baseline only. Repeat applicable tests after fixes and final regression after workflow audits.",
-      "notes": "Baseline PASS. First combined run:12,573pass/1obsolete timeout-source-map failure; updated map to moved native sender, then4targeted suites/65assertions PASS. Final combined run pending."
+      "retest": "Final current-source suite: 1,136 Vitest files / 12,715 tests PASS in 74.37 seconds. This record verifies automated suite execution only; enclosing workflows and the second whole audit regression are separate obligations.",
+      "notes": "Initial combined run found an obsolete timeout-source-map expectation after the native transport moved. The map was corrected, targeted tests passed, and the final entire suite passed. Logs: bubaly-final-audit-locale-units-20260912.log; verification-checkpoint.md."
     },
     "AUTH-001": {
       "id": "AUTH-001",
@@ -180533,7 +180533,7 @@
       "severity": "High",
       "tests": "docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes",
       "fix": "Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures.",
-      "retest": "46 actual Chromium checks PASS (32 shared-hook,12 auth-lifecycle,2 installed-SDK cookie tests),12 related suites436assertions PASS,6files scoped lint/diff PASS. Fresh cookie-only context retains session; local signout removes it. Full live provider/device workflow pending.",
+      "retest": "46 actual Chromium checks PASS (32 shared hook, 12 auth lifecycle, two installed SDK cookie tests), included in the final 108-check component gate. A fresh cookie-only context retains the session and local sign-out removes it. Related 436 assertions and the final full suite pass. Live auth/provider/device policy and durable cross-owner/session cache partitions remain open.",
       "notes": "User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected.",
       "issue": "Definitive sign-out/account replacement leaves prior-user offline rows, and late shared-hook responses can repopulate caches after purge. Native listener removal rejection causes unhandled promises.",
       "remaining": "Local auth-transition purge, stale-response, failed-removal and native-listener defects repaired and verified. Persistent cache user/role partition, failed-purge browser restart, production session policy and live refresh/revocation/device restart remain unverified."
@@ -180856,7 +180856,7 @@
       "tests": "docs/final-audit/public-navigation-cycle.md; tests/marketing-public-read-budget.test.ts; private production Chromium feature-link and mobile-menu navigation timing; selected 104-test public browser run",
       "issue": "Two sequential SEO/AEO fallback reads inherit installed PostgREST retries and delay a public navigation stream about14seconds when the database is unavailable. Additional actual SDK test confirms cached social-profile read retries for 7049ms and blocks fresh public layout during database outage.",
       "fix": "Public SEO/AEO sequential fallback reads share a 1.5-second abort budget; abandoned requests cannot start fallback work. Successful configuration and authoritative empty values remain intact, and failed reads remain uncached. The optional cached social-profile read now has the same 1.5-second SDK abort deadline, preserving throw-inside/catch-outside cache semantics.",
-      "retest": "Installed-SDK deadline tests pass; actual production feature navigation commits in 1654ms and mobile header navigation in1595ms with expected destination content/menu closure and no pageerror/hydration diagnostic. 104 selected Chromium tests PASS in3.6m. Fresh home still ~7.6s due another optional read under outage. Additional social-profile regression initially failed at7049ms, then all3related suites/36assertions passed after repair; scoped lint PASS. Combined production browser verification for this added patch pending.",
+      "retest": "Installed-SDK read deadline and failure/recovery checks pass. After both editorial and social-read repairs, integrated production fresh-home load was 2120ms and feature navigation 1657ms with no page errors under a controlled database outage. 104 selected production Chromium checks PASS in 1.8 minutes. Final b4d4ad78 changes private display only. Live configured content and cache invalidation remain open.",
       "notes": "Missing service key also caused pricing error-boundary fixture failures; no pricing source defect inferred.",
       "remaining": "Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending."
     },
@@ -181835,7 +181835,7 @@
       "tests": "docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md",
       "issue": "Display uses process-local day, omits event ends/overnight overlap, converts failed reads to All clear and retains previous display settings. Legacy reminders mismatch needs verification.",
       "fix": "Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales.",
-      "retest": "10 server/helper/display/reminder suites164tests PASS;25 display React/Chromium cases PASS;6 clock/photo browsercases PASS;7 display/catalogue suites141assertions PASS; scopedlint/diff PASS. Combinedbuild/runtime gate next.",
+      "retest": "10 server/helper/display/reminder suites with 164 tests PASS; 25 display ownership and six clock/photo actual React/Chromium checks PASS, included in the final 108-check component gate. Strict tsc identified an actual Locale object/string mismatch, fixed using .code; corrected fixtures use real locale objects and exercise French dates. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.",
       "notes": "Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately.",
       "remaining": "Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified."
     },
@@ -181850,7 +181850,7 @@
       "tests": "docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts",
       "issue": "Shared realtime query commits responses and cached rows without current-key/request generation checks.",
       "fix": "Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion.",
-      "retest": "32 shared-hook actual React/Chromium cases pass within46-test auth/cache gate;12 related suites436assertions pass; scoped lint and diff PASS. Full authenticated/caller/role boundary verification remains open.",
+      "retest": "32 shared-hook React/Chromium cases PASS within the final 108-check component gate; related 436 assertions, full 12,715-test suite, strict TypeScript and production build pass. Persistent cache namespace isolation across user/session/restart and full caller/role verification remain open; see auth-cache-partition-proposal.md.",
       "notes": "No SQL or global navigation scope. Full family/user authorization remains separate.",
       "remaining": "Hook ownership/order/failure-completion defects repaired locally. User/role cache partition is caller-supplied and 22 direct consumers omit the error field; authenticated end-to-end isolation and consumer error presentation remain to verify."
     },
@@ -181865,7 +181865,7 @@
       "issue": "Actual marketing-action execution sends to a child with push_enabled=false and parental child_channels.push=false, with zero policy reads. Restrictions exist only in queue dispatcher and are bypassed by direct public senders.",
       "tests": "docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures",
       "fix": "Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts.",
-      "retest": "13 related suites144tests PASS; scoped lint PASS. Denied preferences/child policy sendnothing; failed policyreadmarks campaignfailed; recovery/adult/zeroaudience casesverified; late policychunkfailure sendsnothing.",
+      "retest": "13 related suites / 144 tests PASS; final two cron suites / 27 tests PASS; strict types, production build and full 12,715-test suite PASS. Denied user/parental policy sends nothing, policy-read failure marks campaign failed, and recovery/adult/zero-audience cases pass. Provider/device workflow and remaining campaign failure/recovery obligations stay open.",
       "notes": "No schema changes or live provider sends.",
       "remaining": "Shared sender optout/parental policy gap repaired and locally verified. Full live marketing delivery, audience pagination, campaign crash/replay and distributed device receipt guarantees remain open."
     },
@@ -182556,5 +182556,5 @@
       "notes": "Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending."
     }
   },
-  "lastUpdated": "2026-09-12T13:27:43.466Z"
+  "lastUpdated": "2026-09-12T13:44:37.001Z"
 }
