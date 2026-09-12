@@ -1660,6 +1660,16 @@ export interface Database {
         { id?: string; campaign_id?: string | null; platform?: string; content?: string; link?: string | null; status?: string; scheduled_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ platform: string; content: string; link: string | null; status: string; scheduled_at: string | null; metadata: Json }>
       >;
+      assistant_links: T<
+        { id: string; family_id: string; user_id: string; provider: string; label: string; token_hash: string; token_prefix: string; scopes: string[]; last_used_at: string | null; revoked_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; user_id: string; provider?: string; label: string; token_hash: string; token_prefix: string; scopes?: string[]; last_used_at?: string | null; revoked_at?: string | null; created_by?: string | null },
+        Partial<{ label: string; provider: string; scopes: string[]; last_used_at: string | null; revoked_at: string | null }>
+      >;
+      assistant_link_events: T<
+        { id: string; link_id: string; family_id: string; intent: string; utterance: string | null; outcome: string; created_at: string },
+        { id?: string; link_id: string; family_id: string; intent: string; utterance?: string | null; outcome: string; created_at?: string },
+        never
+      >;
       marketing_recurring_ads: T<
         { id: string; campaign_id: string | null; name: string; status: string; body_variants: string[]; link: string | null; media_urls: string[]; platforms: string[]; cadence: string; times_of_day: number[]; days_of_week: number[]; day_of_month: number | null; timezone: string; starts_at: string; ends_at: string | null; max_occurrences: number | null; next_run_at: string | null; last_run_at: string | null; occurrences: number; last_error: string | null; created_by: string | null; updated_by: string | null; metadata: Json; deleted_at: string | null } & Stamps,
         { id?: string; campaign_id?: string | null; name: string; status?: string; body_variants?: string[]; link?: string | null; media_urls?: string[]; platforms?: string[]; cadence?: string; times_of_day?: number[]; days_of_week?: number[]; day_of_month?: number | null; timezone?: string; starts_at?: string; ends_at?: string | null; max_occurrences?: number | null; next_run_at?: string | null; last_run_at?: string | null; occurrences?: number; last_error?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json; deleted_at?: string | null },
