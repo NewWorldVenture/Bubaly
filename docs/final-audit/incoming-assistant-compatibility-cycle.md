@@ -14,4 +14,6 @@ Root owns the permanent inventory and audit status updates. Both callback-bounda
 
 ## Results
 
-Pending targeted reproduction, fix, related regressions and combined hosted checks.
+Actual middleware reproduced both assistant redirects and all five improperly public Contact Center neighbors. Source `1aa4d6fb` restores the exact four Contact Center callbacks and adds only the two assistant POST paths. Actual middleware, both assistant handlers, installed token-link queries and related session tests pass 89 cases; full unit, build and source gates pass. Hosted checks are pending. Logs: `Temp/bubaly-assistant-middleware-<baseline|final|lint>-20260912.log`.
+
+The source inventory covers 38 changed files, 57 added functions, 23 new direct controls, two pages, two POST APIs and five new tables. Independent Git-blob and renderer checks preserve existing audit identities without duplicate keys. The companion `discovery/incoming-assistant-workflows.json` adds 17 workflow targets, including four separate voice-capture destinations, media lifecycle events, offline playback, provider setup and role matrices that syntax discovery alone cannot verify.
