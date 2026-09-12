@@ -88,7 +88,7 @@ if (fs.existsSync(socialDeltaPath)) {
     ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
   ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
 }
-for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json']) {
+for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json', 'auth-signout-inventory.json']) {
   if (!fs.existsSync(path.join(__dirname, 'discovery', inventory))) continue;
   const delta = read(`discovery/${inventory}`);
   for (const file of delta.files) {
@@ -102,6 +102,13 @@ for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inv
     if (file.apiRoute?.startsWith('/api/cron/')) add('JOB', file.apiRoute, file.apiRoute, file.path, evidence);
     for (const name of file.environmentNames) add('ENV', name, name, file.path, evidence);
   }
+}
+if (fs.existsSync(path.join(__dirname, 'discovery/auth-signout-inventory.json'))) {
+  for (const [key, source, line, name] of [
+    ['signout-review-current-session', 'components/auth/sign-out-form.tsx', 76, 'Review a changed or unreadable session before a new explicit logout decision'],
+    ['signout-completion-explicit-decision', 'components/auth/sign-out-completion.tsx', 30, 'Explicitly sign out after missing, expired or changed completion intent'],
+    ['signout-completion-continue', 'components/auth/sign-out-completion.tsx', 33, 'Continue to the current account without signing it out'],
+  ]) add('CONTROL', key, name, source, { line, notes: 'New control discovered at source44811fb6; controlled browser execution is recorded in auth-signout-cycle.md. Complete deployed workflow and accessibility verification remain separate.' });
 }
 if (fs.existsSync(path.join(__dirname, 'discovery/capture-scheduling-inventory.json'))) {
   for (const [key, source, line, name] of [

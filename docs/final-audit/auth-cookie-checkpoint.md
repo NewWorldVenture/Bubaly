@@ -1,5 +1,7 @@
 # Authentication cookie verification checkpoint
 
+Subsequent logout repairs and their verification are recorded in `auth-signout-cycle.md` and `auth-signout-checkpoint.md`. The statements below describe the earlier source checkpoint.
+
 Application source: `effe6a2edddba707d2bbc5b11cd790071080822a`. This combines the recovery/signup cookie repairs in `33e11d07` with incoming main `d8cd6be1`. The only merge conflict was the locale catalogue test: both branches had replaced costly per-key assertions with complete batched validation. The merged test retains all-key checking and bounded failure output.
 
 The hosted quality run for prior published head `4915cc63` failed eight newly added upstream signup tests. Their direct-component React fixture did not implement the form's current `useMemo`/`useLayoutEffect` hooks. Its receipt, auxiliary-promise and provider-error stubs also predated current contracts. The fixture now models those contracts and asserts an honest uncertain outcome after a lost network response. The duplicate-email anti-enumeration test and validation assertions remain. Seven related suites passed 196 tests before source freeze.
