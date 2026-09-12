@@ -146,15 +146,30 @@ describe('catalogues', () => {
 
   it('resolves every source key in every locale', () => {
     // A gap must fall back to English, never render a raw key at a visitor.
+    //
+    // Collected and asserted ONCE rather than per key. The property is
+    // unchanged; what changed is the cost of stating it. Eleven locales ×
+    // ~13,400 keys × two assertions is close to 300,000 expect() calls, and
+    // that overhead — not the comparison, which is a typeof and a string
+    // compare — put this test within a third of its 5s budget. It was
+    // consequently the first thing in the suite to time out whenever a
+    // parallel worker took CPU, failing for a reason that had nothing to do
+    // with the catalogues. Reporting every offender rather than dying on the
+    // first is a bonus: a missing key is rarely missing alone.
     const keys = Object.keys(SOURCE_MESSAGES);
     expect(keys.length).toBeGreaterThan(0);
+    const unresolved: string[] = [];
     for (const locale of LOCALES) {
       const messages = getMessages(locale.code);
       for (const key of keys) {
-        expect(typeof messages[key], `${locale.code} ${key}`).toBe('string');
-        expect(messages[key], `${locale.code} ${key}`).not.toBe('');
+        const value = messages[key];
+        if (typeof value !== 'string' || value === '') unresolved.push(`${locale.code} ${key}`);
       }
     }
+    // Bounded on purpose: a chain-wide regression would otherwise print tens of
+    // thousands of lines and bury the count that tells you it IS chain-wide.
+    expect({ count: unresolved.length, first: unresolved.slice(0, 10) })
+      .toEqual({ count: 0, first: [] });
   });
 
   it('has no key a translation invented on its own', () => {

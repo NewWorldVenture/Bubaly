@@ -16,6 +16,20 @@ function walk(dir: string, match: (path: string) => boolean, out: string[] = [])
 }
 
 /**
+ * Every TypeScript source in the repo, read exactly once.
+ *
+ * The first version of these guards walked the tree per describe block and
+ * re-read every file per exported name — thousands of full reads for a handful
+ * of answers. The suite runs in parallel workers, so that is not just slow for
+ * this file: it takes CPU from every other worker, and a neighbouring test with
+ * a tight budget is what notices first.
+ */
+const SOURCES: ReadonlyMap<string, string> = (() => {
+  const files = walk(process.cwd(), (p) => /\.tsx?$/.test(p) && !p.endsWith('.d.ts'));
+  return new Map(files.map((file) => [file, readFileSync(file, 'utf8')]));
+})();
+
+/**
  * The lines of a source file that are actually code.
  *
  * A guard that scans raw text cannot tell a defect from a description of one:
@@ -51,10 +65,10 @@ describe('a translation call inside a template literal is not a translation call
 
   it('no .ts source builds a string with an uninterpolated translation call', () => {
     const offenders: string[] = [];
-    for (const file of walk(process.cwd(), (p) => p.endsWith('.ts') && !p.endsWith('.d.ts'))) {
+    for (const [file, source] of SOURCES) {
+      if (!file.endsWith('.ts') || file.endsWith('.tsx')) continue;
       if (file.endsWith(FIXTURE_FILE)) continue; // its fixtures are the shape, on purpose
-      const lines = readFileSync(file, 'utf8').split('\n');
-      for (const [index, line] of lines.entries()) {
+      for (const [index, line] of source.split('\n').entries()) {
         if (codeLines(line).length === 0) continue;
         if (OFFENDER.test(line)) offenders.push(`${file.replace(process.cwd() + '/', '')}:${index + 1}`);
       }
@@ -94,19 +108,24 @@ describe('every onboarding server action is reachable from the app', () => {
   // so widening this list is a separate change, not a bigger regex here.
   const ACTION_FILES = ['app/onboarding/actions.ts', 'app/onboarding/calendar-actions.ts', 'app/(auth)/actions.ts'];
 
-  const callers = walk(process.cwd(), (p) => (p.endsWith('.ts') || p.endsWith('.tsx')));
-
   it.each(ACTION_FILES)('%s exports nothing the UI never calls', (relative) => {
     const source = readFileSync(join(process.cwd(), relative), 'utf8');
     expect(source.split('\n')[0]).toContain("'use server'");
     const exported = [...source.matchAll(/^export (?:async )?function (\w+)/gm)].map((m) => m[1]);
     expect(exported.length).toBeGreaterThan(0);
 
-    const orphans = exported.filter((name) => !callers.some((file) => {
-      if (file.endsWith(relative)) return false;
-      return new RegExp(`\\b${name}\\b`).test(readFileSync(file, 'utf8'));
-    }));
-    expect(orphans).toEqual([]);
+    // One pass over the already-read sources, testing every name per file,
+    // rather than one pass per name.
+    const referenced = new Set<string>();
+    const patterns = exported.map((name) => [name, new RegExp(`\\b${name}\\b`)] as const);
+    for (const [file, text] of SOURCES) {
+      if (file.endsWith(relative)) continue;
+      for (const [name, pattern] of patterns) {
+        if (!referenced.has(name) && pattern.test(text)) referenced.add(name);
+      }
+      if (referenced.size === exported.length) break;
+    }
+    expect(exported.filter((name) => !referenced.has(name))).toEqual([]);
   });
 });
 
