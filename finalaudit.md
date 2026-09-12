@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T15:53:42.424Z
-- Total Audit Items: 13528
-- Not Started: 13492
-- In Progress: 33
+- Last Updated: 2026-09-12T15:59:24.844Z
+- Total Audit Items: 13529
+- Not Started: 13491
+- In Progress: 35
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -57,6 +57,7 @@ PRODUCTION READY: NO
 - SOCIAL-003: Complete live database policy/concurrency, deployed cron/default-branch secrets, provider publication and end-user delivery remain unverified. Approval workflow, legacy schedule adoption, recurrence, editing/cancel/reschedule and unknown-provider reconciliation remain separate; AUTHZ003 is an unresolved release failure.
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
+- AUTH-003: Implement and verify visible request/completion, default admin-link handoff, wrong/expired/replayed recovery outcomes, duplicate/lifetime/unknown-save behavior and retained session. Full signup confirmation stays AUTH-001. Live email/template/redirect configuration and real provider semantics remain unverified.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13304,7 +13305,7 @@ PRODUCTION READY: NO
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
 | DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. Priorcarecheckpoint d36602e all4hostedjobs/697browser testsPASS; newsource hostedCI pending publication. |  |
 | TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | Obsolete source assertions updated alongside actual behavioral coverage; multipart incoming-request fixture repaired without weakening production limits. | Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | This full-suite execution PASS belongs to910cd271bc273e68c286c3b10aaf1f27f6b933c2. Initialf6e17ef run13251PASS/3obsolete cronassertionsFAIL; exactroute/failure fixture correction93focusedPASS beforefullrerun. Does not pass enclosing product workflows or next-cycle changes. |
-| AUTH-001 | AUTH | Registration, verification, OAuth and recovery | ⬜ NOT STARTED | High | Pending | None | Pending |  |
+| AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Discovery only for full registration/confirmation/recovery chain; existing persistent-session repairs remain underAUTH-002. | Coverage baseline only; no complete signup-confirmation/recovery workflow PASS. |  |
 | AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. | 68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. Next bounded repair preserves stable session identity across refresh/restart while separating saved family data after sign-out, new login or observed access change. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | INT-001 | INT | Contact Center authenticated provider callbacks and durable intake replay | 🔄 IN PROGRESS | High | docs/final-audit/contact-center-cycle.md | Exact four callback paths reach existing signature checks; persisted unhandled intake retries; bodyless 204; first urgency occurs before planner failure return. | 10 suites / 121 tests PASS; strict project types and scoped lint passed before final urgency tests. Production/deployed provider/database flow remains unverified; outbound durability tracked INT-002. |  |
@@ -13589,6 +13590,7 @@ PRODUCTION READY: NO
 | CONTROL-F009911B31D4 | CONTROL | Review the destination after an unconfirmed routed capture | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate. |
 | CONTROL-BF8BB076B387 | CONTROL | Review the destination after an unconfirmed voice capture | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate. |
 | CONTROL-878F7812DDC6 | CONTROL | Choose the timezone for a scheduled social post | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate. |
+| AUTH-003 | AUTH | Password recovery request, verified handoff and password replacement | 🔄 IN PROGRESS | High | Source trace finds mobileForgot link /login?reset=1 and admin reset sender redirect /login, but no web forgot/reset completion branch, PASSWORD_RECOVERY consumer or password update call. Controlled installedSDK probe: default service reset sends recover request withoutPKCEchallenge; PKCE browser rejects implicit recovery fragment and leaves fragment. ActualSSR adapter503 exchange retains server verifier cookie for a fresh-client retry; browser adapter removes verifier. No real accounts/email/provider operations. | Pending smallest bounded recovery contract and actual-module regressions; source findings recorded before production edits. | Discovery and synthetic SDK transport probes only. Prior910cd271 checkpoint remains separately verified. | See auth-recovery-discovery.md and auth-recovery-test-inventory.md. No SQL, shared navigation, live credentials or real password/account changes. Preserve all prior locale values/order and existing session guarantees. |
 
 ## Inventory and evidence rules
 
@@ -13700,7 +13702,7 @@ Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real prov
 
 ### AUTH-001 — Registration, verification, OAuth and recovery
 
-Status: ⬜ NOT STARTED
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: Trace using linked discovery inventory; record exact exercised chain before passing.
 
@@ -13719,16 +13721,16 @@ The complete supported workflow performs authorized actions, persists intended s
 No complete workflow finding yet; investigation pending.
 
 #### Fixes Applied
-None
+Discovery only for full registration/confirmation/recovery chain; existing persistent-session repairs remain underAUTH-002.
 
 #### Retest Results
-Pending
+Coverage baseline only; no complete signup-confirmation/recovery workflow PASS.
 
 #### Evidence
-Pending
+Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md.
 
 #### Final Status
-⬜ NOT STARTED
+🔄 IN PROGRESS
 
 ### AUTH-002 — Persistent sessions through refresh, navigation and restart until explicit sign-out
 
@@ -15070,6 +15072,38 @@ Independent real action andReactSSR tests pass all9URL-specific checks within37p
 
 #### Evidence
 Independent actual createPostAction plus real React18 PostPage static rendering persists javascript:alert(document.domain) and renders href=javascript despite a React warning. No browser code execution or live exploit claimed. Source trace also finds unvalidated target/feed/comment permalink anchors.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### AUTH-003 — Password recovery request, verified handoff and password replacement
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: components/auth/login-form.tsx; mobile/app/(auth)/sign-in.tsx; app/(app)/admin/actions.ts; app/auth/callback/route.ts; lib/supabase/client.ts; lib/supabase/server.ts
+
+#### Expected Behavior
+A locked-out user can request and open a recovery email, safely establish the intended account recovery session, replace the password once, and retain a valid session until explicit sign-out. Invalid, expired, replayed or uncertain outcomes must remain honest and must not overwrite a different account or discard an unrelated active session.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Existing recovery entry and administrator email sender have no complete recipient continuation. Default implicit admin recovery redirect is incompatible with the configured PKCE-only browser initialization. Existing tests do not connect real SDK recovery handoff to password replacement. Browser code-exchange verifier loss is separately scoped; no server callback cookie-loss defect is inferred from rawSDK behavior.
+
+#### Fixes Applied
+Pending smallest bounded recovery contract and actual-module regressions; source findings recorded before production edits.
+
+#### Retest Results
+Discovery and synthetic SDK transport probes only. Prior910cd271 checkpoint remains separately verified.
+
+#### Evidence
+Source trace finds mobileForgot link /login?reset=1 and admin reset sender redirect /login, but no web forgot/reset completion branch, PASSWORD_RECOVERY consumer or password update call. Controlled installedSDK probe: default service reset sends recover request withoutPKCEchallenge; PKCE browser rejects implicit recovery fragment and leaves fragment. ActualSSR adapter503 exchange retains server verifier cookie for a fresh-client retry; browser adapter removes verifier. No real accounts/email/provider operations.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -19049,6 +19083,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SOCIAL-003: Complete live database policy/concurrency, deployed cron/default-branch secrets, provider publication and end-user delivery remain unverified. Approval workflow, legacy schedule adoption, recurrence, editing/cancel/reschedule and unknown-provider reconciliation remain separate; AUTHZ003 is an unresolved release failure.
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
+- AUTH-003: Implement and verify visible request/completion, default admin-link handoff, wrong/expired/replayed recovery outcomes, duplicate/lifetime/unknown-save behavior and retained session. Full signup confirmation stays AUTH-001. Live email/template/redirect configuration and real provider semantics remain unverified.
 
 ## Production Readiness
 NO

@@ -180519,12 +180519,13 @@
       "area": "AUTH",
       "name": "Registration, verification, OAuth and recovery",
       "source": "",
-      "status": "NOT STARTED",
+      "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "Pending",
-      "fix": "None",
-      "retest": "Pending",
-      "notes": ""
+      "tests": "Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md.",
+      "fix": "Discovery only for full registration/confirmation/recovery chain; existing persistent-session repairs remain underAUTH-002.",
+      "retest": "Coverage baseline only; no complete signup-confirmation/recovery workflow PASS.",
+      "notes": "",
+      "remaining": "Execute actualSDK/signup/cookie/callback chain, invalid/expired/replayed confirmation, form lifetime/lost-response boundaries and password recovery underAUTH-003; deployed mail/redirect policy remain separate."
     },
     "AUTH-002": {
       "id": "AUTH-002",
@@ -184475,7 +184476,23 @@
       "retest": "Pending",
       "notes": "New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate.",
       "line": 378
+    },
+    "AUTH-003": {
+      "id": "AUTH-003",
+      "key": "AUTH-003",
+      "area": "AUTH",
+      "name": "Password recovery request, verified handoff and password replacement",
+      "source": "components/auth/login-form.tsx; mobile/app/(auth)/sign-in.tsx; app/(app)/admin/actions.ts; app/auth/callback/route.ts; lib/supabase/client.ts; lib/supabase/server.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "expected": "A locked-out user can request and open a recovery email, safely establish the intended account recovery session, replace the password once, and retain a valid session until explicit sign-out. Invalid, expired, replayed or uncertain outcomes must remain honest and must not overwrite a different account or discard an unrelated active session.",
+      "tests": "Source trace finds mobileForgot link /login?reset=1 and admin reset sender redirect /login, but no web forgot/reset completion branch, PASSWORD_RECOVERY consumer or password update call. Controlled installedSDK probe: default service reset sends recover request withoutPKCEchallenge; PKCE browser rejects implicit recovery fragment and leaves fragment. ActualSSR adapter503 exchange retains server verifier cookie for a fresh-client retry; browser adapter removes verifier. No real accounts/email/provider operations.",
+      "issue": "Existing recovery entry and administrator email sender have no complete recipient continuation. Default implicit admin recovery redirect is incompatible with the configured PKCE-only browser initialization. Existing tests do not connect real SDK recovery handoff to password replacement. Browser code-exchange verifier loss is separately scoped; no server callback cookie-loss defect is inferred from rawSDK behavior.",
+      "fix": "Pending smallest bounded recovery contract and actual-module regressions; source findings recorded before production edits.",
+      "retest": "Discovery and synthetic SDK transport probes only. Prior910cd271 checkpoint remains separately verified.",
+      "remaining": "Implement and verify visible request/completion, default admin-link handoff, wrong/expired/replayed recovery outcomes, duplicate/lifetime/unknown-save behavior and retained session. Full signup confirmation stays AUTH-001. Live email/template/redirect configuration and real provider semantics remain unverified.",
+      "notes": "See auth-recovery-discovery.md and auth-recovery-test-inventory.md. No SQL, shared navigation, live credentials or real password/account changes. Preserve all prior locale values/order and existing session guarantees."
     }
   },
-  "lastUpdated": "2026-09-12T15:53:42.424Z"
+  "lastUpdated": "2026-09-12T15:59:24.844Z"
 }
