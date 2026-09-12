@@ -88,7 +88,7 @@ if (fs.existsSync(socialDeltaPath)) {
     ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
   ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
 }
-for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json', 'auth-signout-inventory.json', 'password-adoption-inventory.json', 'weekly-meal-inventory.json', 'guardian-policy-inventory.json']) {
+for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json', 'auth-signout-inventory.json', 'password-adoption-inventory.json', 'weekly-meal-inventory.json', 'guardian-policy-inventory.json', 'guardian-replay-inventory.json']) {
   if (!fs.existsSync(path.join(__dirname, 'discovery', inventory))) continue;
   const delta = read(`discovery/${inventory}`);
   for (const file of delta.files) {
@@ -101,6 +101,14 @@ for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inv
     }
     if (file.apiRoute?.startsWith('/api/cron/')) add('JOB', file.apiRoute, file.apiRoute, file.path, evidence);
     for (const name of file.environmentNames) add('ENV', name, name, file.path, evidence);
+    for (const [index, control] of (file.controls ?? []).entries()) add('CONTROL', `${file.path}:${control.line}:${control.tag}:${index}`, `${control.tag} at line ${control.line}`, file.path, { ...evidence, line: control.line });
+    if (file.isNew && file.path.startsWith('supabase/migrations/')) add('MIGRATION', file.path, file.path, file.path, evidence);
+    for (const table of file.databaseTables ?? []) {
+      if (!Object.values(records).some(record => record.area === 'DB-TBL' && record.key === table.name)) add('DB-TBL', table.name, table.name, `${file.path}:${table.line}`, evidence);
+    }
+    for (const fn of file.databaseFunctions ?? []) {
+      if (!Object.values(records).some(record => record.area === 'DB-RPC' && record.key === fn.name)) add('DB-RPC', fn.name, fn.name, `${file.path}:${fn.line}`, evidence);
+    }
   }
 }
 if (fs.existsSync(path.join(__dirname, 'discovery/auth-signout-inventory.json'))) {
