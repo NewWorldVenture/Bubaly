@@ -14,8 +14,40 @@ describe('middleware public API boundary', () => {
   });
 
   it('lets scheduled and signed provider callbacks reach their own authorization checks', () => {
-    for (const path of ['/api/cron', '/api/concierge-calls', '/api/guardian', '/api/email/welcome', '/api/webhooks']) {
+    for (const path of [
+      '/api/cron', '/api/concierge-calls', '/api/guardian', '/api/email/welcome',
+      '/api/webhooks', '/api/contact-center',
+    ]) {
       expect(middleware, path).toContain(`'${path}'`);
+    }
+  });
+
+  it('keeps the Family Contact Center inbound webhooks reachable', () => {
+    // Found in production: /api/contact-center was missing from PUBLIC, so a
+    // POST to the inbound-email webhook answered 307 -> /login and the route
+    // never ran. Inbound email, SMS, voice and transcription could not work
+    // however the MX records and phone numbers were configured, and the failure
+    // presented as a provider problem rather than a routing one.
+    //
+    // Safe to be public because each authenticates ITSELF, which is the whole
+    // premise of this group: /email requires CONTACT_CENTER_INBOUND_SECRET and
+    // is fail-closed in production, and the three Twilio routes verify
+    // x-twilio-signature and answer 401.
+    expect(middleware).toContain("'/api/contact-center'");
+  });
+
+  it('does not open the contact centre wider than its webhooks', () => {
+    // The prefix covers /api/contact-center/*. The family-facing controls live
+    // in server actions under /dashboard/contact-center, not here, so nothing
+    // authenticated is exposed by this entry — but pin it, because adding a
+    // session-backed route under this prefix later would silently make it
+    // public.
+    const routes = ['email', 'sms', 'voice', 'voice/transcription'];
+    for (const route of routes) {
+      expect(
+        readFileSync(`app/api/contact-center/${route}/route.ts`, 'utf8'),
+        `${route} must authenticate itself`,
+      ).toMatch(/validateTwilioSignature|CONTACT_CENTER_INBOUND_SECRET/);
     }
   });
 
