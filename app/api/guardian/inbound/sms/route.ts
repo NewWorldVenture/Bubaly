@@ -13,12 +13,14 @@ import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianSms, finishGuardianSms, releaseGuardianSms } from '@/lib/guardian/sms-intake';
+import { readGuardianSmsReceipt, captureGuardianSmsReceipt, saveGuardianSmsDecision, type GuardianSmsDecision } from '@/lib/guardian/sms-receipt';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
+const MAX_DECISION_FILTER_CHARS = 4096;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUTING_MODES = ['immediate_ring', 'immediate_ai_summary', 'ai_handle_first', 'voicemail_first', 'silent_handling', 'blocked'];
 const TRUST_LEVELS = ['immediate_family', 'close_family', 'trusted_friend', 'known_contact', 'unknown', 'suspected_spam', 'blocked'];
@@ -38,13 +40,13 @@ type SmsDecision = Pick<SavedSms, keyof typeof PENDING_DECISION>;
 const DECISION_COLUMNS = Object.keys(PENDING_DECISION) as Array<keyof SmsDecision>;
 const sameDecision = (row: SavedSms, decision: SmsDecision): boolean => DECISION_COLUMNS.every(key => row[key] === decision[key]);
 const pendingDecision = (row: SavedSms): boolean => sameDecision(row, PENDING_DECISION);
-const decided = (row: SavedSms): boolean => row.status !== 'screening'
-  && ['received', 'handled', 'escalated', 'blocked', 'missed', 'failed'].includes(row.status)
-  && typeof row.routing_mode_used === 'string' && ROUTING_MODES.includes(row.routing_mode_used)
-  && typeof row.trust_level_at_time === 'string' && TRUST_LEVELS.includes(row.trust_level_at_time)
-  && typeof row.ai_decision_reason === 'string'
-  && typeof row.scam_detected === 'boolean' && Number.isInteger(row.scam_confidence)
-  && row.scam_confidence !== null && row.scam_confidence >= 0 && row.scam_confidence <= 100
+// Shape validates an observed row for a conditional repair, never authorship.
+const observedDecision = (row: SavedSms): boolean => ['received', 'screening', 'handled', 'escalated', 'blocked', 'missed', 'failed'].includes(row.status)
+  && (row.routing_mode_used === null || typeof row.routing_mode_used === 'string' && ROUTING_MODES.includes(row.routing_mode_used))
+  && (row.trust_level_at_time === null || typeof row.trust_level_at_time === 'string' && TRUST_LEVELS.includes(row.trust_level_at_time))
+  && (row.ai_decision_reason === null || typeof row.ai_decision_reason === 'string')
+  && typeof row.scam_detected === 'boolean'
+  && (row.scam_confidence === null || Number.isInteger(row.scam_confidence) && row.scam_confidence >= 0 && row.scam_confidence <= 100)
   && (row.routing_rule_id === null || validId(row.routing_rule_id))
   && (row.scam_type === null || typeof row.scam_type === 'string')
   && (row.from_name === null || typeof row.from_name === 'string') && (row.contact_id === null || validId(row.contact_id));
@@ -129,26 +131,45 @@ export async function POST(req: NextRequest) {
       const row = result.data[0] as unknown as SavedSms;
       if (!validId(row.id) || row.family_id !== familyId || row.member_id !== memberId || row.to_number !== to || row.from_number !== from
         || row.body !== body || row.twilio_sms_sid !== smsSid || row.comm_type !== 'sms_inbound' || row.direction !== 'inbound'
-        || (!pendingDecision(row) && !decided(row))) throw new Error('Communication identity unavailable');
+        || !observedDecision(row)) throw new Error('Communication identity unavailable');
       return row;
     };
     let comm = await readSaved();
-
-    if (!comm) {
-      // Retain the exact inbound message before any required policy or AI work.
-      // The existing nullable decision fields distinguish intake from a decision.
-      const intakeId = randomUUID();
+    const receiptInput = { smsSid, familyId, memberId, from, to, body };
+    const retainNeutral = async (intakeId: string): Promise<SavedSms | null> => {
       try {
         await gFrom('guardian_communications').insert({
           id: intakeId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
           from_number: from, to_number: to, body, twilio_sms_sid: smsSid, ...PENDING_DECISION,
         }).select('id').abortSignal(deadline()).retry(false);
       } catch { /* Reconcile a lost insert response through the unique provider SID. */ }
-      comm = await readSaved();
+      return readSaved();
+    };
+    let receipt: Awaited<ReturnType<typeof readGuardianSmsReceipt>>;
+    try {
+      receipt = await readGuardianSmsReceipt(supabase, receiptInput);
+    } catch {
+      if (!comm) {
+        // Retention does not establish authorship. If an unavailable older
+        // receipt names another pointer, a later retry must fail closed.
+        const intakeId = randomUUID();
+        const retained = await retainNeutral(intakeId);
+        if (!retained || retained.id !== intakeId || !pendingDecision(retained)) return fail();
+      }
+      return fail();
+    }
+
+    if (!comm) {
+      // Retain the exact inbound message before any required policy or AI work.
+      // The existing nullable decision fields distinguish intake from a decision.
+      const intakeId = receipt?.communicationId ?? randomUUID();
+      comm = await retainNeutral(intakeId);
       if (!comm || comm.id !== intakeId || !pendingDecision(comm)) return fail();
     }
 
-    if (pendingDecision(comm)) {
+    if (!receipt) receipt = await captureGuardianSmsReceipt(supabase, receiptInput, comm.id);
+    if (receipt.communicationId !== comm.id) return fail();
+    if (!receipt.decision) {
       // Run decision pipeline
       const decision = await runDecisionPipeline(supabase, {
         callerPhone: from,
@@ -169,29 +190,41 @@ export async function POST(req: NextRequest) {
       // an integer. Flooring preserves the existing >=80 blocking boundary.
       const confidence = Math.floor(scamResult.confidence);
 
-      const decisionFields: SmsDecision = {
+      const decisionFields: GuardianSmsDecision = {
         contact_id: decision.contactId, from_name: decision.contactName, trust_level_at_time: decision.trustLevel,
         routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId, ai_decision_reason: decision.reason,
         scam_detected: scamResult.isScam, scam_type: scamResult.scamType, scam_confidence: confidence,
         status: scamResult.isScam && confidence >= 80 ? 'blocked' : 'received',
       };
-      const intakeId = comm.id;
+      if (!await stillOwnsLease()) return fail();
+      receipt = await saveGuardianSmsDecision(supabase, receipt, decisionFields);
+    }
+
+    const decisionFields = receipt.decision;
+    if (!decisionFields || receipt.communicationId !== comm.id) return fail();
+    if (!sameDecision(comm, decisionFields)) {
+      const observed = comm;
+      const intakeId = observed.id;
+      // Preserve every observed-state predicate without allowing untrusted
+      // legacy decision text to create an unbounded request URL.
+      const filterChars = DECISION_COLUMNS.reduce((total, key) => total + (typeof observed[key] === 'string' ? encodeURIComponent(observed[key] as string).length : 0), 0);
+      if (filterChars > MAX_DECISION_FILTER_CHARS) return fail();
       if (!await stillOwnsLease()) return fail();
       try {
         let update = gFrom('guardian_communications').update(decisionFields)
           .eq('id', intakeId).eq('family_id', familyId).eq('member_id', memberId).eq('twilio_sms_sid', smsSid)
-          .eq('comm_type', 'sms_inbound').eq('direction', 'inbound').eq('to_number', to)
-          .eq('status', 'screening').eq('scam_detected', false)
-          .is('contact_id', null).is('from_name', null).is('trust_level_at_time', null).is('routing_mode_used', null)
-          .is('routing_rule_id', null).is('ai_decision_reason', null).is('scam_type', null).is('scam_confidence', null);
+          .eq('comm_type', 'sms_inbound').eq('direction', 'inbound').eq('to_number', to);
+        for (const key of DECISION_COLUMNS) {
+          update = observed[key] === null ? update.is(key, null) : update.eq(key, observed[key]);
+        }
         update = from === null ? update.is('from_number', null) : update.eq('from_number', from);
         await update.select('id').abortSignal(deadline()).retry(false);
       } catch { /* Reconcile a lost decision response without overwriting another decision. */ }
-      // SMS bodies are retained unchanged by this path. Verify the exact body
-      // again without placing private, potentially long text in the PATCH URL.
-      comm = await readSaved();
-      if (!comm || comm.id !== intakeId || !decided(comm) || !sameDecision(comm, decisionFields)) return fail();
     }
+    // Also reread an already matching replay after the awaited ledger reads.
+    // SMS bodies stay out of request URLs, and any changed content fails closed.
+    comm = await readSaved();
+    if (!comm || comm.id !== receipt.communicationId || !sameDecision(comm, decisionFields)) return fail();
 
     // Update contact last contact timestamp
     if (comm.contact_id) {
