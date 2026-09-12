@@ -20,9 +20,71 @@ export function normalizeEmailLocal(input: string): string {
     .slice(0, LOCAL_MAX);
 }
 
+/**
+ * Local-parts a family must never be able to claim.
+ *
+ * The address space is ONE namespace shared with the company: every family
+ * address is `<local>@bubaly.com`, the same domain the product itself sends and
+ * receives on. So claiming the wrong local-part does not just look official —
+ * it REDIRECTS real mail. Three kinds have to be held back:
+ *
+ *   1. Role addresses the operator reads (support, billing, security, admin).
+ *      A family holding these receives mail customers and vendors intended for
+ *      Bubaly — including account-recovery links for services registered to the
+ *      domain.
+ *   2. RFC 2142 / RFC 2821 addresses the domain is REQUIRED to answer
+ *      (postmaster, abuse, hostmaster, webmaster). Losing these breaks
+ *      deliverability and the ability to receive abuse reports.
+ *   3. The product's own sending identities (noreply, notifications, alerts…).
+ *      EMAIL_FROM is an address on this domain, so a family claiming its
+ *      local-part would receive the bounces and replies to Bubaly's own
+ *      transactional mail.
+ *
+ * Held back rather than merely discouraged: uniqueness alone does not help,
+ * because the FIRST family to ask would get it.
+ */
+export const RESERVED_EMAIL_LOCALS: ReadonlySet<string> = new Set([
+  // 1 — operator role addresses
+  'admin', 'administrator', 'support', 'help', 'helpdesk', 'contact', 'info',
+  'billing', 'invoices', 'accounts', 'payments', 'sales', 'security', 'legal',
+  'privacy', 'press', 'careers', 'jobs', 'team', 'staff', 'office',
+  // 2 — RFC 2142 / RFC 2821 required and conventional
+  'postmaster', 'abuse', 'hostmaster', 'webmaster', 'usenet', 'news', 'uucp',
+  'ftp', 'www', 'mail', 'mailer', 'mailer-daemon', 'daemon', 'root',
+  // 3 — the product's own sending identities and reserved surface
+  'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'notifications',
+  'notification', 'alerts', 'alert', 'system', 'bot', 'robot', 'auto',
+  'bubaly', 'bubalyteam', 'bubalysupport', 'api', 'dev', 'test', 'staging',
+  'onboarding', 'welcome', 'verify', 'verification', 'confirm', 'password',
+  'reset', 'account', 'accounts-noreply', 'concierge', 'assistant', 'ai',
+]);
+
+/**
+ * Is this local-part reserved? Compared after normalisation, and with
+ * separators stripped, so `s-u-p-p-o-r-t` and `s.upport` cannot walk around the
+ * list — the delivered mailbox is what matters, not the spelling used to ask.
+ */
+export function isReservedEmailLocal(local: string): boolean {
+  const normalized = normalizeEmailLocal(local);
+  if (RESERVED_EMAIL_LOCALS.has(normalized)) return true;
+  return RESERVED_EMAIL_LOCALS.has(normalized.replace(/[._-]/g, ''));
+}
+
 /** A local-part is valid when it fits the length + shape rules. */
 export function isValidEmailLocal(local: string): boolean {
   return local.length >= LOCAL_MIN && local.length <= LOCAL_MAX && LOCAL_RE.test(local);
+}
+
+/**
+ * May a family CLAIM this local-part? Shape plus the reserved namespace.
+ *
+ * Separate from `isValidEmailLocal`, which answers a different question: whether
+ * a string is a well-formed local-part at all. Inbound routing still has to
+ * recognise a reserved address as valid so mail to `support@` resolves and can
+ * be handled — it simply must never resolve to a FAMILY.
+ */
+export function isClaimableEmailLocal(local: string): boolean {
+  return isValidEmailLocal(local) && !isReservedEmailLocal(local);
 }
 
 /** Suggest a local-part from a family name, e.g. "The Smith Family" → "smith". */
@@ -33,9 +95,12 @@ export function suggestEmailLocal(familyName: string | null | undefined): string
       .replace(/\bfamily\b/gi, '')
       .trim(),
   );
-  if (isValidEmailLocal(base)) return base;
-  // Pad short/empty names so the suggestion is always usable.
-  return normalizeEmailLocal((base + 'family').padEnd(LOCAL_MIN, 'x')).slice(0, LOCAL_MAX);
+  // A family literally called "Support" must not be HANDED support@bubaly.com.
+  // Suffixing keeps the suggestion recognisable while leaving the namespace.
+  if (isValidEmailLocal(base) && !isReservedEmailLocal(base)) return base;
+  const padded = normalizeEmailLocal((base + 'family').padEnd(LOCAL_MIN, 'x')).slice(0, LOCAL_MAX);
+  if (isValidEmailLocal(padded) && !isReservedEmailLocal(padded)) return padded;
+  return normalizeEmailLocal(`${padded}home`).slice(0, LOCAL_MAX);
 }
 
 /** The full address for a local-part, e.g. "smith" → "smith@bubaly.com". */

@@ -6,7 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { describeActionError } from '@/lib/supabase/errors';
-import { normalizeEmailLocal, isValidEmailLocal } from '@/lib/contact-center/address';
+import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
 
 type Fail = { ok: false; error: string };
@@ -31,6 +31,12 @@ export async function assignEmailAction(rawLocal: string): Promise<{ ok: true; l
   const local = normalizeEmailLocal(rawLocal);
   if (!isValidEmailLocal(local)) {
     return { ok: false, error: 'Pick 3–30 letters/numbers (dots or dashes allowed), e.g. “smith-family”.' };
+  }
+  // Reserved names are refused BEFORE the unique index is consulted. Uniqueness
+  // alone would not protect these: the first family to ask would simply get
+  // support@bubaly.com, and every message meant for the company with it.
+  if (isReservedEmailLocal(local)) {
+    return { ok: false, error: 'That address is reserved for Bubaly. Please choose another.' };
   }
   const admin = createServiceClient();
   const channel = await getOrCreateChannelResult(admin, g.familyId);

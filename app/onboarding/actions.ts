@@ -3,6 +3,8 @@
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { logAudit } from '@/lib/server/audit';
+import { getOrCreateChannelResult } from '@/lib/contact-center/server';
+import { provisionFamilyEmailLocal } from '@/lib/contact-center/provision';
 import { familyDetailsSchema, finalizeOnboardingSchema, previewCalendarImportSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
 import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
@@ -807,6 +809,26 @@ export async function finalizeOnboardingAction(input: {
     } catch (e) {
       console.error('[onboarding] signup admin-notify failed', e);
     }
+  }
+
+  // Give the new family its @bubaly.com address — the one a teacher or a
+  // doctor's office can be given so appointment mail reaches the concierge.
+  //
+  // Best effort, and last, on purpose. The family already exists and setup has
+  // already succeeded by this point; a contended name or an unreachable table
+  // must not turn a finished onboarding into a retry. An unassigned family
+  // simply has no address yet and can claim one in the Contact Center, which is
+  // where that control has always been.
+  try {
+    const channel = await getOrCreateChannelResult(admin, familyId);
+    if (!channel.error) {
+      const provisioned = await provisionFamilyEmailLocal(admin, familyId, family.name);
+      if (!provisioned.assigned && provisioned.reason !== 'already_assigned') {
+        console.warn('[onboarding] family email address not assigned', familyId, provisioned.reason);
+      }
+    }
+  } catch (e) {
+    console.error('[onboarding] family email provisioning failed', e);
   }
 
   return { ok: true, data: { familyId, brief: finalBrief } };
