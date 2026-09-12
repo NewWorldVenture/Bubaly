@@ -13,7 +13,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
-import { sendEmail } from '@/lib/server/email';
+import { familyReplySender, sendEmail } from '@/lib/server/email';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
   resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
@@ -169,12 +169,20 @@ export async function POST(req: NextRequest) {
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
       const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
-      await sendEmail({
+      // Keep replies on the family's thread while respecting the configured
+      // sender domain. The footer and message body are plain text in HTML.
+      const familyAddress = buildBubalyAddress(local);
+      const escapedFamilyLabel = familyLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const sent = await sendEmail({
         to: from,
+        from: familyReplySender(familyLabel, familyAddress),
+        replyTo: familyAddress,
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
-        html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${buildBubalyAddress(local)}</p>`,
+        html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
       });
-      await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
+      if (sent.ok && !sent.skipped) {
+        await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
+      }
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }
 

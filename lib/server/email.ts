@@ -7,9 +7,44 @@ import { FROM_EMAIL, emailEnabled } from '@/lib/email';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 
-type SendArgs = { to: string; subject: string; html: string; replyTo?: string };
+function mailboxDomain(address: string): string | null {
+  if (/\s/.test(address)) return null;
+  const match = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i.exec(address);
+  return match?.[1].toLowerCase() ?? null;
+}
 
-export async function sendEmail({ to, subject, html, replyTo }: SendArgs): Promise<{ ok: boolean; skipped?: boolean }> {
+/** Use the family's mailbox only within the deployment's configured sender domain. */
+export function familyReplySender(familyLabel: string, familyAddress: string): string {
+  const configured = FROM_EMAIL.trim();
+  const sender = /^[^<>\r\n]*<([^<>\s]+)>$/.exec(configured)?.[1] ?? configured;
+  const familyDomain = mailboxDomain(familyAddress);
+  if (!familyDomain || familyDomain !== mailboxDomain(sender)) return FROM_EMAIL;
+  // Omit an unsafe label rather than letting it change mailbox/header syntax.
+  if (/[\u0000-\u001f\u007f-\u009f<>\u2028\u2029]/.test(familyLabel)) return familyAddress;
+  const label = familyLabel.trim();
+  if (!label) return familyAddress;
+  const quoted = label.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${quoted}" <${familyAddress}>`;
+}
+
+type SendArgs = {
+  to: string; subject: string; html: string; replyTo?: string;
+  /**
+   * Send AS this address instead of the product's own FROM_EMAIL.
+   *
+   * Only for mail a family sends from its own @bubaly.com address. Without it
+   * the Contact Center's reply to a teacher left as notifications@bubaly.com
+   * with the family address in a footer line — so Reply reached the product's
+   * inbox, not the family's, and the thread the teacher started simply ended.
+   *
+   * Optional and defaulted, so every other caller keeps the single product
+   * identity. The domain must be verified with the provider either way; this
+   * changes the local-part, not the domain.
+   */
+  from?: string;
+};
+
+export async function sendEmail({ to, subject, html, replyTo, from }: SendArgs): Promise<{ ok: boolean; skipped?: boolean }> {
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
@@ -17,7 +52,7 @@ export async function sendEmail({ to, subject, html, replyTo }: SendArgs): Promi
   const res = await fetchExternal('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html, reply_to: replyTo }),
+    body: JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo }),
   }, 15_000);
   if (!res.ok) {
     const bounded = await readBoundedResponseText(res, 64 * 1024);

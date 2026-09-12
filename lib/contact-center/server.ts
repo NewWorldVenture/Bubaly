@@ -67,10 +67,19 @@ export async function resolveFamilyByEmailLocalResult(admin: Admin, local: strin
 }> {
   const { data, error } = await admin
     .from('family_contact_channels')
-    .select('family_id')
-    .ilike('email_local', local)
+    .select('family_id,email_local')
+    // Keep legacy mixed-case addresses, but treat the local-part literally:
+    // an allowed underscore must not select another family's address.
+    .ilike('email_local', local.replace(/[\\%_]/g, '\\$&'))
+    .limit(2)
     .maybeSingle();
-  return { familyId: data?.family_id ?? null, error };
+  if (error) return { familyId: null, error };
+  if (!data) return { familyId: null, error: null };
+  if (typeof data.email_local !== 'string' || data.email_local.toLowerCase() !== local.toLowerCase()
+    || typeof data.family_id !== 'string' || !data.family_id.trim()) {
+    return { familyId: null, error: { message: 'Family email ownership could not be verified.' } };
+  }
+  return { familyId: data.family_id, error: null };
 }
 
 export async function resolveFamilyByEmailLocal(admin: Admin, local: string): Promise<string | null> {
