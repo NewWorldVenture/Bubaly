@@ -56,3 +56,18 @@ Open boundaries remain explicit:
 - A partial dispatch interrupted before later targets starts is conservatively held as unknown; it does not automatically resume unattempted targets. There is no user-facing operator tool to reconcile an ambiguous acceptance safely. Held rows can require manual operational review.
 - Private confirmation repairs visible post/target/calendar state but does not fabricate missing historical `social_publish_results`, usage events or completed job rows after a pipeline persistence failure. Those historical artifacts may remain incomplete/failed; private provider proof remains authoritative for preventing resend.
 - Multiple-table snapshots and live permission checks are not a cross-table database transaction. They recheck before every provider call and at token access; a concurrent revocation after the final check cannot cancel an already accepted external request. No new SQL transaction/locking guarantee is claimed.
+
+## Pinned-suite cron fixture correction
+
+Root's full pinned `f6e17ef` suite recorded1154passing files/13251passing tests and three failures in two existing cron fixtures. The failure log at `C:/Users/Daniel/AppData/Local/Temp/bubaly-capture-schedule-full-units-20260912.log` showed only stale expectations: the fixed five-minute tick now has five routes, and the Vercel-versus-dispatcher cadence list now includes `/api/cron/social-publish`.
+
+The authorized follow-up updates `tests/cron-dispatch-execution.test.ts` and `tests/cron-dispatch.test.ts` only. The real child-process CLI still executes. Exact expected route identities include all four previous routes plus social publishing; the failed-tick check now asserts every attempted URL, not only a count. Existing authorization, invalid configuration, redirect, HTTP failure, redaction and cancellation coverage is retained. No production source changed.
+
+```text
+node node_modules/vitest/vitest.mjs run tests/cron-dispatch-execution.test.ts tests/cron-dispatch.test.ts tests/social-scheduled-publish.test.ts --maxWorkers=2
+Test Files 3 passed
+Tests 93 passed (35 cron +58 scheduling)
+Duration 1.82s
+```
+
+Actual captured output: `C:/Users/Daniel/AppData/Local/Temp/bubaly-scheduling-cron-fixtures-20260912.log`. Root owns any final aggregate rerun and publication; this focused result does not replace the pinned full-suite record.
