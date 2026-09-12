@@ -169,10 +169,19 @@ export async function POST(req: NextRequest) {
   // Auto-reply (best-effort) unless the concierge is off or it's spam.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
+      // Reply AS the family, not as the product. The address was previously
+      // only named in the footer while the message came from FROM_EMAIL, so a
+      // teacher who hit Reply reached Bubaly's inbox rather than the family's
+      // and the conversation they started went nowhere. replyTo is set to the
+      // same address as well, so the thread survives even if a provider or a
+      // forwarder rewrites From.
+      const familyAddress = buildBubalyAddress(local);
       await sendEmail({
         to: from,
+        from: `${familyLabel} <${familyAddress}>`,
+        replyTo: familyAddress,
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
-        html: `<p>${result.reply.replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${buildBubalyAddress(local)}</p>`,
+        html: `<p>${result.reply.replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${familyAddress}</p>`,
       });
       await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: result.reply });
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
