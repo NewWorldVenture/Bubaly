@@ -1,0 +1,21 @@
+# Hosted login, meals and Guardian acceptance
+
+Publication: `0b1906593adee286e59a8330311e74ad43cdfef4`.
+Application source: `48e7e9e1939c8f4be2e4f70d283606ef29f5807c`.
+Main integrated through: `217c7be464c30f4f10a1bf672a07b5a9fca67e6a`.
+
+[CI 34715644176](https://github.com/NewWorldVenture/Bubaly/actions/runs/34715644176) completed successfully on 2026-09-12 at 20:11:14 UTC. Its checkout was merge `7f132c92db9969b4a902e7fc027086a59015ba0e`, with tree `d4c1fc3c661c7b7323930e8ada1268bdb91fc979`, identical to the published head. Both the PR trigger and actual tested source are recorded to avoid confusing a PR head with the CI merge checkout.
+
+- Web quality job `103612370554`: 1,188 files and 14,442 unit tests pass; production build completes 251 pages; strict types, lint, localization and query audits pass. Query inventory: 491 tables, 77 functions and 142 routes.
+- E2E job `103612370702`: 1,061 scheduled tests and 1,061 passes in 6.5 minutes; no failed, flaky or skipped summary. Both authenticated and durable-session flags were enabled.
+- Database job `103612370707`: 300 existing migrations replay with zero failures; all 11 boundary probes pass.
+- Mobile job `103612370387`: passes.
+- [Finance run 34715644149](https://github.com/NewWorldVenture/Bubaly/actions/runs/34715644149), job `103612271314`: 66 assertions pass.
+- Vercel deployment `2FHEa8zJQPpCedFLsb6djEQSqPZc`, GitHub deployment `6413783281`: succeeds for this exact publication. [Preview](https://bubaly-pdfponx09-newworldventure.vercel.app/dashboard/meals).
+
+The exact tested tree includes three Guardian receipt-authority cases, two child readiness cases, five durable login cases and the complete meal and grocery journey. The GitHub reporter does not print each successful case. Inclusion is established by source discovery, enabled flags, and equality of the scheduled and passed totals, rather than invented individual pass log lines.
+
+Sanitized local proof: `C:/Users/Daniel/AppData/Local/Temp/bubaly-0b190659-hosted-e2e-proof-20260912.log`. It retains checkout identity, enabled flags and test totals; no user payloads or credentials.
+
+This checkpoint verifies the preceding application batch. The subsequent autonomous SMS recovery cycle changes the receipt lifecycle and shared processing, so its new source and hosted journey require their own checks. Production session policies, physical devices, provider delivery, unresolved authorization failures and the second comprehensive regression remain outside this acceptance. Production readiness remains NO.
+

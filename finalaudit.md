@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T19:56:58.753Z
-- Total Audit Items: 13810
-- Not Started: 13749
-- In Progress: 57
+- Last Updated: 2026-09-12T20:20:52.019Z
+- Total Audit Items: 13832
+- Not Started: 13770
+- In Progress: 58
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -68,10 +68,11 @@ PRODUCTION READY: NO
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.
-- AUTHZ-004: Hosted authorization/replay acceptance and subsequent autonomous recovery. Cross-table operations remain non-atomic.
+- AUTHZ-004: Recovery extension verification is tracked under SMS-002. Existing Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations are non-atomic.
 - API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- SMS-002: Autonomous processing and hosted verification; provider delivery and production scheduler configuration remain separate.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13318,7 +13319,7 @@ PRODUCTION READY: NO
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
 | DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Combined source 48e7e9e1 passes all private gates. Publication ed4381b5 has a successful Vercel deployment and passing finance, database and mobile checks; its pending web/E2E run is superseded by the reproduced child-readiness repair. Await fresh hosted checks for the updated source. | Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md. |
-| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Full frozen unit gate at 48e7e9e1: 1,188 files / 14,442 PASS in 42.07 seconds. | Full suite includes repaired Guardian policy-read/intake regressions and prior meal/auth changes. The single meal E2E receipt locator fix is separate from unit execution. | Build, strict types, lint (four baseline warnings), locale and query audits pass. Exact revision appears in compiled build-info. See child-login-readiness-cycle.md. | Unit completion does not pass enclosing provider, database authorization or UI workflows. |
+| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Full frozen unit gate at 966f08f3: 1,191 files and 14,598 tests PASS in 41.93 seconds. | The full suite includes Guardian autonomous recovery, finite sweep fairness, receipt completion, prior persistent login and meal-planning repairs. | Production build of 252 pages, strict types, lint with four baseline warnings, localization and query audits pass. Subsequent 1bd04072 changes only the hosted test and whitespace; see guardian-sms-recovery-cycle.md. | Unit completion does not pass enclosing provider, database authorization or UI workflows. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Committed a02e82fb: synchronous form ownership and single-submit guards, honest accepted/uncertain signup receipts, retired callback fencing and handled auxiliary write failures. Recovery continuation is tracked under AUTH-003. Current repair: per-attempt signup client owns verifier cleanup, stages session adoption against current browser cookies and active form intent, and validates cookie write-back before publishing authentication. | 21 actual React/browser/installed-SDK signup cases pass; 30 original selection cases pass. Root combined five-suite Chromium auth gate passes 82 cases on bc22dbc9. One signup case deliberately retains the unresolved SDK verifier-loss characterization. Whole signup/email-confirmation workflow remains unverified. Exact source bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf in the private clean installation: 1162 files / 13537 unit tests PASS (122.55s), production build PASS (247 pages), post-build strict types PASS, lint PASS with four baseline warnings, i18n/query gates PASS, 82 focused Chromium checks PASS (13.3s). See docs/final-audit/persistent-login-renewal-cycle.md. New signup-verifier cycle: 46 actual React/Chromium/installed-SDK checks PASS; selection/persistence fixture integration 56 unit checks PASS. See signup-verifier-cycle.md. Combined source gate now passes; latest result below. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md. | Isolated signup verifier repair implemented; ordinary singleton remains unchanged. Main d8cd6be1 integrated in effe6a2e. New upstream signup fixture now models current hooks, typed receipts and uncertain outcomes; duplicate-email anti-enumeration assertions retained. Seven related suites / 196 tests PASS. |
 | AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Password/child source16f0f41c passed its full private gates. Hosted integration674f7a24 passed1,013 browser checks. Later1956a9e0 passed all1,056, including five real disposable GoTrue journeys. See password-adoption-checkpoint.md and weekly-meal-checkpoint.md. Actual server rendering and delayed hydration reproduce the early-input mismatch; repaired readiness plus existing child browser boundaries pass 19 cases, with 18 related action tests. | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. Integrated child readiness fix 48e7e9e1 prevents edits before React can receive the values; validation and session ownership guards are preserved. | Frozen source 48e7e9e1 passes 1,188 files / 14,442 units, production build (251 static pages), strict post-build types, lint, locale and query audits. Hosted child journey is pending; the historical flaky attempt has no retained DOM evidence proving its sole cause. | See child-login-readiness-cycle.md. Current behavior is verified in controlled SSR/browser execution; production session settings and physical devices remain unverified. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13747,7 +13748,7 @@ PRODUCTION READY: NO
 | SUPPORT-BBB58B510F38 | SUPPORT | tests/recurring-ads-schedule.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E715E678C1D9 | SUPPORT | tests/server-actions-contract.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-896D6DD7A407 | SUPPORT | tests/weekly-meal-dates.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
-| AUTHZ-004 | AUTHZ | Guardian replay must verify stored decision authorship | 🔄 IN PROGRESS | High | Two signed-route bypasses reproduced before repair; 79 receipt helper cases and209 signedSMS/lease/security cases PASS. Independent review PASS; realdatabase/HTTP acceptance pending. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md. | Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md. |
+| AUTHZ-004 | AUTHZ | Guardian replay must verify stored decision authorship | 🔄 IN PROGRESS | High | Two signed-route bypasses reproduced before repair. Hosted CI 34715644176 on the exact tree of publication 0b190659 passes all 1,061 scheduled browser cases, including three PostgreSQL and HTTP Guardian authority cases. See guardian-hosted-acceptance.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Publication 0b190659 passes 14,442 units, a build of 251 pages, strict types, lint, locale/query gates and all 1,061 hosted browser cases. The SMS-002 recovery extension changes completion semantics and is undergoing separate source and hosted checks. | Hosted checkout 7f132c92 has the identical tree to 0b190659. The current recovery candidate retains authority checks but still awaits combined gates; no provider delivery or production policy claim. |
 | SUPPORT-91A56D6A297E | SUPPORT | tests/guardian-policy-callers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Two assistant redirects and five Contact Center neighbor failures reproduced; actualmiddleware/handler/SDK and relatedsessiongroup89PASS. | Exact POST-only middleware exemption lets the handler enforce linked-device tokens; adjacent paths stay protected. | Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md. | See incoming-assistant-compatibility-cycle.md; full assistant feature workflow remains separate. |
@@ -13886,6 +13887,28 @@ PRODUCTION READY: NO
 | FLOW-5338E663827A | FLOW | New-family inbound address provisioning | ⬜ NOT STARTED | Unassessed | Source discovery only; full workflow execution pending. | None | Pending | Incoming9719a486..217c7be4; integrated1aa4d6fb. Mechanical source inventory and independent workflow review are separate from acceptance. |
 | FLOW-E72FA1A98568 | FLOW | Reserved mailbox namespace and provider ingress | ⬜ NOT STARTED | Unassessed | Source discovery only; full workflow execution pending. | None | Pending | Incoming9719a486..217c7be4; integrated1aa4d6fb. Mechanical source inventory and independent workflow review are separate from acceptance. |
 | SUPPORT-92D4AF759E3D | SUPPORT | tests/e2e/kid-login-readiness.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/child-readiness-inventory.json. Full workflow verification remains separate. |
+| SMS-002 | SMS | Guardian SMS recovery after provider retries stop | 🔄 IN PROGRESS | High | Actual SDK tests reproduce provider-stop recovery, destination removal, child/member authority boundaries, cancellation and concurrent notification writes. Sustained-arrival starvation reproduced before finite-sweep repair. Prior publication 0b190659 passes all 1,061 hosted browser cases, including Guardian authority; new recovery execution is pending. | Shared signed-ingress and service-receipt processing; independent terminal verification; stable notification identity with quiet hours; bounded scheduled recovery with a finite sweep endpoint. Temporary destination removal preserves retained work. Cursor revisions prevent lost progress under competing workers. | Application source 966f08f3: 1,191 unit files and 14,598 tests pass in 41.93 seconds; production build generates 252 pages; strict types, lint, localization and query audits pass. Source 1bd04072 strengthens only the hosted fixture. Hosted recovery is pending. | See guardian-sms-recovery-cycle.md. Production scheduler and provider delivery remain unverified. No SQL, dependency or shared navigation changes. |
+| SUPPORT-0E0FDE18B6EB | SUPPORT | app/api/cron/guardian-sms-recovery/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| API-C9192C0F02D9 | API | GET /api/cron/guardian-sms-recovery | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| JOB-7C2C80C9F161 | JOB | /api/cron/guardian-sms-recovery | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-085E4BBF3CE0 | LIBRARY | lib/guardian/sms-deadline.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-BC9ED5463E65 | SERVICE | smsStep | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-EC0B659A2F4D | LIBRARY | lib/guardian/sms-notification.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-5C936E0DCDB1 | SERVICE | guardianSmsScope | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-5CF6218528EA | SERVICE | notifyGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-F4955F439221 | LIBRARY | lib/guardian/sms-processing.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-7640CB35DB7E | SERVICE | receiveGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-33AC44AB7C66 | SERVICE | resumeGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-1684F92B9582 | SERVICE | guardianSmsReceiptId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-683A1CE5EE64 | SERVICE | guardianSmsNotificationId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-C97851B0C583 | SERVICE | readGuardianSmsReceiptById | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-D5740C64FA51 | SERVICE | markGuardianSmsCompleted | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-793896391919 | LIBRARY | lib/guardian/sms-recovery.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SERVICE-A6CA86EF9E55 | SERVICE | drainGuardianSmsReceipts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-368DD1DAF792 | SUPPORT | tests/e2e/guardian-sms-recovery.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-7E6D5F8A63A6 | SUPPORT | tests/guardian-sms-completion.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-E389EACB2379 | SUPPORT | tests/guardian-sms-recovery-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-71F9B43410F2 | SUPPORT | tests/guardian-sms-recovery.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 
 ## Inventory and evidence rules
 
@@ -13984,13 +14007,13 @@ Execute the complete checked-in unit suite for the pinned source without failed 
 No complete workflow finding yet; investigation pending.
 
 #### Fixes Applied
-Full suite includes repaired Guardian policy-read/intake regressions and prior meal/auth changes. The single meal E2E receipt locator fix is separate from unit execution.
+The full suite includes Guardian autonomous recovery, finite sweep fairness, receipt completion, prior persistent login and meal-planning repairs.
 
 #### Retest Results
-Build, strict types, lint (four baseline warnings), locale and query audits pass. Exact revision appears in compiled build-info. See child-login-readiness-cycle.md.
+Production build of 252 pages, strict types, lint with four baseline warnings, localization and query audits pass. Subsequent 1bd04072 changes only the hosted test and whitespace; see guardian-sms-recovery-cycle.md.
 
 #### Evidence
-Full frozen unit gate at 48e7e9e1: 1,188 files / 14,442 PASS in 42.07 seconds.
+Full frozen unit gate at 966f08f3: 1,191 files and 14,598 tests PASS in 41.93 seconds.
 
 #### Final Status
 ✅ PASS
@@ -15779,10 +15802,10 @@ Authenticated family members can insert communications. A preinserted valid deci
 Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.
 
 #### Retest Results
-Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md.
+Publication 0b190659 passes 14,442 units, a build of 251 pages, strict types, lint, locale/query gates and all 1,061 hosted browser cases. The SMS-002 recovery extension changes completion semantics and is undergoing separate source and hosted checks.
 
 #### Evidence
-Two signed-route bypasses reproduced before repair; 79 receipt helper cases and209 signedSMS/lease/security cases PASS. Independent review PASS; realdatabase/HTTP acceptance pending.
+Two signed-route bypasses reproduced before repair. Hosted CI 34715644176 on the exact tree of publication 0b190659 passes all 1,061 scheduled browser cases, including three PostgreSQL and HTTP Guardian authority cases. See guardian-hosted-acceptance.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -15882,6 +15905,38 @@ Independent complete named/dynamic policy-source trace confirms the repository b
 
 #### Final Status
 ❌ FAIL
+
+### SMS-002 — Guardian SMS recovery after provider retries stop
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/guardian/inbound/sms/route.ts; lib/guardian/sms-receipt.ts; lib/guardian/sms-intake.ts; scripts/cron-dispatch.mjs
+
+#### Expected Behavior
+A verified saved SMS resumes after temporary processing failures without needing another provider callback. Only exact service-owned receipts authorize recovery, and retries preserve the original household and decision without duplicate notification.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Retained screening communications and captured or decided receipts have no autonomous consumer. When provider retries stop, required processing or notification can remain unfinished.
+
+#### Fixes Applied
+Shared signed-ingress and service-receipt processing; independent terminal verification; stable notification identity with quiet hours; bounded scheduled recovery with a finite sweep endpoint. Temporary destination removal preserves retained work. Cursor revisions prevent lost progress under competing workers.
+
+#### Retest Results
+Application source 966f08f3: 1,191 unit files and 14,598 tests pass in 41.93 seconds; production build generates 252 pages; strict types, lint, localization and query audits pass. Source 1bd04072 strengthens only the hosted fixture. Hosted recovery is pending.
+
+#### Evidence
+Actual SDK tests reproduce provider-stop recovery, destination removal, child/member authority boundaries, cancellation and concurrent notification writes. Sustained-arrival starvation reproduced before finite-sweep repair. Prior publication 0b190659 passes all 1,061 hosted browser cases, including Guardian authority; new recovery execution is pending.
+
+#### Final Status
+🔄 IN PROGRESS
 
 ### FLOW-FB8E20FC2E4C — ab
 
@@ -19869,10 +19924,11 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.
-- AUTHZ-004: Hosted authorization/replay acceptance and subsequent autonomous recovery. Cross-table operations remain non-atomic.
+- AUTHZ-004: Recovery extension verification is tracked under SMS-002. Existing Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations are non-atomic.
 - API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- SMS-002: Autonomous processing and hosted verification; provider delivery and production scheduler configuration remain separate.
 
 ## Production Readiness
 NO
