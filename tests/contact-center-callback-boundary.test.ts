@@ -53,6 +53,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN);
   vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
+  vi.stubEnv('TWILIO_ACCOUNT_SID', '');
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'test-inbound-secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
@@ -85,7 +86,7 @@ describe('Contact Center provider callbacks through middleware', () => {
     expect(mocks.admin).not.toHaveBeenCalled();
   });
 
-  it.each(['/api/contact-center', '/api/contact-center/settings', '/api/contact-center/email/export', '/api/contact-center/sms-extra', '/api/contact-center/voice/transcription/private'])('keeps neighboring path %s protected', async path => {
+  it.each(['/api/contact-center', '/api/contact-center/settings', '/api/contact-center/email/export', '/api/contact-center/sms-extra', '/api/contact-center/sms/status/private', '/api/contact-center/sms/status-extra', '/api/contact-center/voice/transcription/private'])('keeps neighboring path %s protected', async path => {
     const { middleware } = await import('@/middleware');
     expect((await middleware(new NextRequest(`${ORIGIN}${path}`))).status).toBe(307);
   });
@@ -234,14 +235,55 @@ describe('voicemail empty acknowledgements', () => {
 });
 
 describe('SMS automatic reply reservation (not provider delivery verification)', () => {
+  it('binds both provider callback attributes to the reserved token and saved account', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const accountSid = `AC${'4'.repeat(32)}`;
+    const response = await deliver(SMS, { AccountSid: accountSid });
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    const saved = db.table('ai_tool_calls').find(row => row.tool_name === 'contact_center.sms_reply')!;
+    const outputs = saved.outputs as { emissionToken: string; emissionAccountSid: string; delivery?: unknown };
+    const target = `${ORIGIN}${SMS}/status?receipt=${saved.id}&amp;token=${outputs.emissionToken}`;
+    expect(body).toContain(`action="${target}" statusCallback="${target}" method="POST"`);
+    expect(outputs.emissionAccountSid).toBe(accountSid);
+    expect(outputs.delivery).toBeUndefined();
+    expect(body).toContain('>Thank you</Message>');
+  });
+
+  it.each(['wrong', `AC${'5'.repeat(32)}`])('rejects malformed or mismatched callback account %s before household access', async accountSid => {
+    vi.stubEnv('TWILIO_ACCOUNT_SID', `AC${'4'.repeat(32)}`);
+    expect((await deliver(SMS, { AccountSid: accountSid })).status).toBe(400);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it('uses the configured account snapshot when an otherwise signed inbound callback omits it', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    vi.stubEnv('TWILIO_ACCOUNT_SID', `AC${'4'.repeat(32)}`);
+    expect((await deliver(SMS)).status).toBe(200);
+    const saved = db.table('ai_tool_calls').find(row => row.tool_name === 'contact_center.sms_reply')!;
+    expect(saved.outputs).toMatchObject({ emissionAccountSid: `AC${'4'.repeat(32)}` });
+  });
+
+  it('does not consume a reply reservation for invalid callback origin configuration', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://bubaly.example/path?untrusted=1');
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const response = await deliver(SMS);
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain('<Message');
+    const saved = db.table('ai_tool_calls').find(row => row.tool_name === 'contact_center.sms_reply')!;
+    expect(saved.outputs).toMatchObject({ phase: 'queued', emissionToken: null });
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
+  });
+
   it('returns only the first automatic reply and keeps one outbound row across callback replay', async () => {
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const first = await deliver(SMS);
     const replay = await deliver(SMS);
     expect(first.status).toBe(200);
     expect(replay.status).toBe(200);
-    expect(await first.text()).toContain('<Message>Thank you</Message>');
-    expect(await replay.text()).not.toContain('<Message>');
+    expect(await first.text()).toContain('>Thank you</Message>');
+    expect(await replay.text()).not.toContain('<Message');
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(1);
     expect(mocks.submit).toHaveBeenCalledOnce();
@@ -253,12 +295,12 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     mocks.submit.mockResolvedValueOnce({ ok: false, error: 'Planner unavailable', retryable: true });
     const failed = await deliver(SMS);
     expect(failed.status).toBe(503);
-    expect(await failed.text()).not.toContain('<Message>');
+    expect(await failed.text()).not.toContain('<Message');
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
     mocks.concierge.mockResolvedValue({ intent: 'spam', summary: 'Changed classification', reply: 'Changed reply', aiUsed: false });
     const retry = await deliver(SMS);
     expect(retry.status).toBe(200);
-    expect(await retry.text()).toContain('<Message>Thank you</Message>');
+    expect(await retry.text()).toContain('>Thank you</Message>');
     expect(mocks.concierge).toHaveBeenCalledOnce();
     expect(db.table('ai_requests')).toHaveLength(1);
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')[0].ai_intent).toBe('appointment');
@@ -268,12 +310,12 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const responses = await Promise.all([deliver(SMS), deliver(SMS)]);
     const bodies = await Promise.all(responses.map(response => response.text()));
-    expect(bodies.filter(body => body.includes('<Message>'))).toHaveLength(1);
+    expect(bodies.filter(body => body.includes('<Message'))).toHaveLength(1);
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(1);
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
     const replay = await deliver(SMS);
     expect(replay.status).toBe(200);
-    expect(await replay.text()).not.toContain('<Message>');
+    expect(await replay.text()).not.toContain('<Message');
   });
 
   it('suppresses a prepared reply when the concierge is disabled during planner processing', async () => {
@@ -285,10 +327,10 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     });
     const response = await deliver(SMS);
     expect(response.status).toBe(200);
-    expect(await response.text()).not.toContain('<Message>');
+    expect(await response.text()).not.toContain('<Message');
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
-    expect(await (await deliver(SMS)).text()).not.toContain('<Message>');
+    expect(await (await deliver(SMS)).text()).not.toContain('<Message');
     expect(mocks.concierge).toHaveBeenCalledOnce();
   });
 
@@ -299,7 +341,7 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
       provider_ref: SMS_SID, ai_handled: true, ai_summary: 'Saved visit', ai_intent: 'appointment', status: 'read' }]);
     const response = await deliver(SMS);
     expect(response.status).toBe(200);
-    expect(await response.text()).not.toContain('<Message>');
+    expect(await response.text()).not.toContain('<Message');
     expect(mocks.concierge).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(db.table('family_inbox_messages')).toHaveLength(1);
@@ -310,7 +352,7 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const response = await deliver(SMS, { MessageSid: sid });
     expect(response.status).toBe(200);
-    expect(await response.text()).not.toContain('<Message>');
+    expect(await response.text()).not.toContain('<Message');
     expect(db.table('family_inbox_messages')).toHaveLength(1);
     expect(db.table('family_inbox_messages')[0].direction).toBe('inbound');
     expect(db.table('ai_tool_calls').filter(row => row.tool_name === 'contact_center.sms_reply')).toHaveLength(0);
@@ -346,8 +388,8 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     mocks.concierge.mockResolvedValue({ intent: 'urgent', summary: 'Urgent help', reply: 'Unsupported delivery claim', aiUsed: false });
     const first = await deliver(SMS);
     expect(first.status).toBe(200);
-    expect(await first.text()).toContain('<Message>contactUrgent.replySaved</Message>');
-    expect(await (await deliver(SMS)).text()).not.toContain('<Message>');
+    expect(await first.text()).toContain('>contactUrgent.replySaved</Message>');
+    expect(await (await deliver(SMS)).text()).not.toContain('<Message');
     expect(mocks.sendSms).toHaveBeenCalledOnce();
     expect(db.table('notifications')).toHaveLength(1);
   });
@@ -356,7 +398,7 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const response = await deliver(SMS, { Body: control, OptOutType: control });
     expect(response.status).toBe(200);
-    expect(await response.text()).not.toContain('<Message>');
+    expect(await response.text()).not.toContain('<Message');
     expect(mocks.concierge).not.toHaveBeenCalled();
     expect(mocks.admin).not.toHaveBeenCalled();
     expect(mocks.submit).not.toHaveBeenCalled();

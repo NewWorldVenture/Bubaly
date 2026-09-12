@@ -28,8 +28,10 @@ vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => {
 } }));
 
 const locales = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
-const statuses: SmsReplyStatus[] = ['prepared', 'confirmation_unknown', 'suppressed', 'legacy_unknown', 'unavailable'];
-const labels = ['prepared', 'confirmationUnknown', 'suppressed', 'legacyUnknown', 'unavailable'];
+const statuses: SmsReplyStatus[] = ['prepared', 'confirmation_unknown', 'suppressed', 'legacy_unknown', 'unavailable',
+  'provider_queued', 'sending', 'sent', 'delivered', 'undelivered', 'failed'];
+const labels = ['prepared', 'confirmationUnknown', 'suppressed', 'legacyUnknown', 'unavailable',
+  'providerQueued', 'sending', 'sent', 'delivered', 'undelivered', 'failed'];
 function messages(): InboxRow[] {
   return statuses.map((_status, i) => ({ id: `33333333-3333-4333-8333-${String(i).padStart(12, '0')}`, channel: 'sms', direction: 'outbound',
     from_addr: '+15555550101', to_addr: '+15555550202', subject: null, body: `Fixture reply ${i}`, ai_summary: null,
@@ -47,7 +49,7 @@ beforeEach(() => {
 });
 
 describe('actual Contact Center SMS status rendering', () => {
-  it.each(locales)('renders all five translated statuses and explanations in %s without retry controls', locale => {
+  it.each(locales)('renders all eleven translated statuses and explanations in %s without retry controls', locale => {
     catalogue(locale); const rows = messages();
     const html = render(rows, Object.fromEntries(rows.map((row, i) => [row.id, statuses[i]])));
     for (const key of labels) {
@@ -58,6 +60,12 @@ describe('actual Contact Center SMS status rendering', () => {
     }
     expect(html).not.toContain('contactSmsReply.');
     expect(html).not.toContain('<button');
+  });
+
+  it('distinguishes carrier acceptance from delivery and reading', () => {
+    const rows = messages(), html = render(rows, Object.fromEntries(rows.map((row, i) => [row.id, statuses[i]])));
+    expect(html).toContain('This does not confirm delivery to the recipient’s phone.');
+    expect(html).toContain('This does not mean the recipient has read it.');
   });
 
   it('shows unavailable when an SMS status was not verified', () => {

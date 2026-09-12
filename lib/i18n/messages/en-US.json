@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Previous reply status unknown",
   "contactSmsReply.legacyUnknownDetail": "This earlier message has no verified reply record. It will not be repeated automatically.",
   "contactSmsReply.unavailable": "Reply status unavailable",
-  "contactSmsReply.unavailableDetail": "We could not verify the reply status. Reload this page to check again."
+  "contactSmsReply.unavailableDetail": "We could not verify the reply status. Reload this page to check again.",
+  "contactSmsReply.providerQueued": "Reply queued by provider",
+  "contactSmsReply.providerQueuedDetail": "The provider accepted the reply into its queue. Delivery is not yet confirmed.",
+  "contactSmsReply.sending": "Reply sending",
+  "contactSmsReply.sendingDetail": "The provider is sending the reply. Delivery is not yet confirmed.",
+  "contactSmsReply.sent": "Reply sent to carrier",
+  "contactSmsReply.sentDetail": "The carrier accepted the reply. This does not confirm delivery to the recipient’s phone.",
+  "contactSmsReply.delivered": "Reply delivery reported",
+  "contactSmsReply.deliveredDetail": "The provider reports delivery. This does not mean the recipient has read it.",
+  "contactSmsReply.undelivered": "Reply not delivered",
+  "contactSmsReply.undeliveredDetail": "The provider reports that delivery failed. The reply will not be repeated automatically.",
+  "contactSmsReply.failed": "Reply failed to send",
+  "contactSmsReply.failedDetail": "The provider reports that sending failed. The reply will not be repeated automatically."
 }

@@ -7,7 +7,8 @@ import {
   validateSmsReplyReceipt, type SmsReplyReceipt,
 } from './sms-reply';
 
-export type SmsReplyStatus = 'prepared' | 'confirmation_unknown' | 'suppressed' | 'legacy_unknown' | 'unavailable';
+export type SmsReplyStatus = 'prepared' | 'confirmation_unknown' | 'suppressed' | 'legacy_unknown' | 'unavailable'
+  | 'provider_queued' | 'sending' | 'sent' | 'delivered' | 'undelivered' | 'failed';
 type Message = Pick<Tables<'family_inbox_messages'>,
   'id' | 'channel' | 'direction' | 'from_addr' | 'to_addr' | 'subject' | 'body' | 'ai_summary' | 'ai_intent' | 'status' | 'occurred_at'>;
 type Row = Record<string, unknown>;
@@ -118,7 +119,9 @@ export async function readSmsReplyStatuses(messages: readonly Message[]): Promis
       if (!receipt || !receipt.inboundId || !inboundMatches(displayed.get(receipt.inboundId), receipt)) continue;
       if (message.direction === 'inbound' ? receipt.inboundId !== messageId : !outboundMatches(message, receipt)) continue;
       if (receipt.phase === 'emission_reserved' && !outboundMatches(displayed.get(receipt.outboundId!), receipt)) continue;
-      result[messageId] = receipt.phase === 'queued' ? 'prepared' : receipt.phase === 'emission_reserved' ? 'confirmation_unknown' : receipt.phase;
+      result[messageId] = receipt.phase === 'queued' ? 'prepared' : receipt.phase === 'emission_reserved'
+        ? receipt.delivery ? receipt.delivery.status === 'queued' ? 'provider_queued' : receipt.delivery.status : 'confirmation_unknown'
+        : receipt.phase;
     }
     return result;
   } catch {

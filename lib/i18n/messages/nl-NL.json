@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Status van eerder antwoord onbekend",
   "contactSmsReply.legacyUnknownDetail": "Voor dit eerdere bericht is geen geverifieerd antwoord vastgelegd. Het wordt niet automatisch herhaald.",
   "contactSmsReply.unavailable": "Antwoordstatus niet beschikbaar",
-  "contactSmsReply.unavailableDetail": "We konden de antwoordstatus niet controleren. Laad deze pagina opnieuw om het nogmaals te proberen."
+  "contactSmsReply.unavailableDetail": "We konden de antwoordstatus niet controleren. Laad deze pagina opnieuw om het nogmaals te proberen.",
+  "contactSmsReply.providerQueued": "Antwoord in wachtrij bij provider",
+  "contactSmsReply.providerQueuedDetail": "De provider heeft het antwoord in de wachtrij geplaatst. De bezorging is nog niet bevestigd.",
+  "contactSmsReply.sending": "Antwoord wordt verzonden",
+  "contactSmsReply.sendingDetail": "De provider verzendt het antwoord. De bezorging is nog niet bevestigd.",
+  "contactSmsReply.sent": "Antwoord naar mobiele aanbieder verzonden",
+  "contactSmsReply.sentDetail": "De mobiele aanbieder heeft het antwoord geaccepteerd. Dit bevestigt geen bezorging op de telefoon van de ontvanger.",
+  "contactSmsReply.delivered": "Bezorging van antwoord gemeld",
+  "contactSmsReply.deliveredDetail": "De provider meldt dat het antwoord is bezorgd. Dit betekent niet dat de ontvanger het heeft gelezen.",
+  "contactSmsReply.undelivered": "Antwoord niet bezorgd",
+  "contactSmsReply.undeliveredDetail": "De provider meldt dat de bezorging is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden.",
+  "contactSmsReply.failed": "Verzenden van antwoord mislukt",
+  "contactSmsReply.failedDetail": "De provider meldt dat het verzenden is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden."
 }

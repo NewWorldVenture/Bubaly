@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Stato della risposta precedente sconosciuto",
   "contactSmsReply.legacyUnknownDetail": "Questo messaggio precedente non ha un riscontro verificato della risposta. Non verrà ripetuta automaticamente.",
   "contactSmsReply.unavailable": "Stato della risposta non disponibile",
-  "contactSmsReply.unavailableDetail": "Non è stato possibile verificare lo stato della risposta. Ricarica questa pagina per riprovare."
+  "contactSmsReply.unavailableDetail": "Non è stato possibile verificare lo stato della risposta. Ricarica questa pagina per riprovare.",
+  "contactSmsReply.providerQueued": "Risposta in coda presso il fornitore",
+  "contactSmsReply.providerQueuedDetail": "Il fornitore ha accettato la risposta nella coda. La consegna non è ancora confermata.",
+  "contactSmsReply.sending": "Invio della risposta in corso",
+  "contactSmsReply.sendingDetail": "Il fornitore sta inviando la risposta. La consegna non è ancora confermata.",
+  "contactSmsReply.sent": "Risposta inviata all’operatore",
+  "contactSmsReply.sentDetail": "L’operatore ha accettato la risposta. Questo non conferma la consegna al telefono del destinatario.",
+  "contactSmsReply.delivered": "Consegna della risposta segnalata",
+  "contactSmsReply.deliveredDetail": "Il fornitore segnala la consegna. Questo non significa che il destinatario abbia letto la risposta.",
+  "contactSmsReply.undelivered": "Risposta non consegnata",
+  "contactSmsReply.undeliveredDetail": "Il fornitore segnala che la consegna non è riuscita. La risposta non verrà inviata di nuovo automaticamente.",
+  "contactSmsReply.failed": "Invio della risposta non riuscito",
+  "contactSmsReply.failedDetail": "Il fornitore segnala che l’invio non è riuscito. La risposta non verrà inviata di nuovo automaticamente."
 }

@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Estado de la respuesta anterior desconocido",
   "contactSmsReply.legacyUnknownDetail": "Este mensaje anterior no tiene un registro de respuesta verificado. No se repetirá automáticamente.",
   "contactSmsReply.unavailable": "Estado de respuesta no disponible",
-  "contactSmsReply.unavailableDetail": "No hemos podido verificar el estado de la respuesta. Vuelve a cargar esta página para comprobarlo."
+  "contactSmsReply.unavailableDetail": "No hemos podido verificar el estado de la respuesta. Vuelve a cargar esta página para comprobarlo.",
+  "contactSmsReply.providerQueued": "Respuesta en cola del proveedor",
+  "contactSmsReply.providerQueuedDetail": "El proveedor ha aceptado la respuesta en su cola. La entrega aún no está confirmada.",
+  "contactSmsReply.sending": "Enviando respuesta",
+  "contactSmsReply.sendingDetail": "El proveedor está enviando la respuesta. La entrega aún no está confirmada.",
+  "contactSmsReply.sent": "Respuesta enviada al operador",
+  "contactSmsReply.sentDetail": "El operador ha aceptado la respuesta. Esto no confirma la entrega al teléfono de la persona destinataria.",
+  "contactSmsReply.delivered": "Entrega de la respuesta notificada",
+  "contactSmsReply.deliveredDetail": "El proveedor indica que se ha entregado. Esto no significa que la persona destinataria la haya leído.",
+  "contactSmsReply.undelivered": "Respuesta no entregada",
+  "contactSmsReply.undeliveredDetail": "El proveedor indica que la entrega ha fallado. La respuesta no se volverá a enviar automáticamente.",
+  "contactSmsReply.failed": "Error al enviar la respuesta",
+  "contactSmsReply.failedDetail": "El proveedor indica que el envío ha fallado. La respuesta no se volverá a enviar automáticamente."
 }

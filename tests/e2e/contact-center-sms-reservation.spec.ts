@@ -23,7 +23,7 @@ async function callback(origin: string, fields: Record<string, string>) {
     body: new URLSearchParams(fields),
   });
   const xml = await response.text();
-  return { status: response.status, emits: xml.includes('<Message>') };
+  return { status: response.status, emits: /<Message(?:\s|>)/.test(xml) };
 }
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });

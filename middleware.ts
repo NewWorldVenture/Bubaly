@@ -71,6 +71,7 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
 const PUBLIC_CONTACT_CALLBACKS = new Set([
   '/api/contact-center/email',
   '/api/contact-center/sms',
+  '/api/contact-center/sms/status',
   '/api/contact-center/voice',
   '/api/contact-center/voice/transcription',
 ]);

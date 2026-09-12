@@ -27,7 +27,7 @@ function xml(body: string): NextResponse {
   });
 }
 function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 export async function POST(req: NextRequest) {
@@ -52,6 +52,15 @@ export async function POST(req: NextRequest) {
   if (params.MessageSid && params.SmsSid && params.MessageSid !== params.SmsSid) {
     return new NextResponse('Invalid callback', { status: 400 });
   }
+  const configuredAccount = process.env.TWILIO_ACCOUNT_SID || undefined;
+  if (configuredAccount && !/^AC[0-9a-f]{32}$/i.test(configuredAccount)) {
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  if (params.AccountSid !== undefined && (!/^AC[0-9a-f]{32}$/i.test(params.AccountSid)
+    || configuredAccount && params.AccountSid.toLowerCase() !== configuredAccount.toLowerCase())) {
+    return new NextResponse('Invalid callback', { status: 400 });
+  }
+  const accountSid = params.AccountSid ?? configuredAccount;
 
   const from = params.From ?? null;
   const to = params.To ?? '';
@@ -151,8 +160,20 @@ export async function POST(req: NextRequest) {
   if (replyReceipt) {
     try {
       replyReceipt = await attachSmsReply(admin, replyReceipt, filed.messageId);
-      const reserved = await reserveSmsReply(admin, replyReceipt);
-      if (reserved.emission !== null) return xml(`<Message>${escapeXml(reserved.emission)}</Message>`);
+      // Validate callback configuration before consuming the single emission.
+      let origin: URL | null = null;
+      if (replyReceipt.phase === 'queued') {
+        origin = new URL(BASE_URL);
+        if (origin.origin !== BASE_URL || !['http:', 'https:'].includes(origin.protocol)) throw new Error('Invalid callback origin');
+      }
+      const reserved = await reserveSmsReply(admin, replyReceipt, { accountSid });
+      if (reserved.emission !== null) {
+        const callback = new URL('/api/contact-center/sms/status', origin!);
+        callback.searchParams.set('receipt', reserved.receipt.id);
+        callback.searchParams.set('token', reserved.receipt.emissionToken!);
+        const target = escapeXml(callback.toString());
+        return xml(`<Message action="${target}" statusCallback="${target}" method="POST">${escapeXml(reserved.emission)}</Message>`);
+      }
     } catch {
       return new NextResponse('Reply confirmation temporarily unavailable', { status: 503 });
     }

@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "État de la réponse précédente inconnu",
   "contactSmsReply.legacyUnknownDetail": "Ce message antérieur ne dispose d’aucune preuve de réponse vérifiée. Elle ne sera pas répétée automatiquement.",
   "contactSmsReply.unavailable": "État de la réponse indisponible",
-  "contactSmsReply.unavailableDetail": "Nous n’avons pas pu vérifier l’état de la réponse. Rechargez cette page pour réessayer."
+  "contactSmsReply.unavailableDetail": "Nous n’avons pas pu vérifier l’état de la réponse. Rechargez cette page pour réessayer.",
+  "contactSmsReply.providerQueued": "Réponse en attente chez le prestataire",
+  "contactSmsReply.providerQueuedDetail": "Le prestataire a accepté la réponse dans sa file d’attente. La livraison n’est pas encore confirmée.",
+  "contactSmsReply.sending": "Envoi de la réponse en cours",
+  "contactSmsReply.sendingDetail": "Le prestataire envoie la réponse. La livraison n’est pas encore confirmée.",
+  "contactSmsReply.sent": "Réponse transmise à l’opérateur",
+  "contactSmsReply.sentDetail": "L’opérateur a accepté la réponse. Cela ne confirme pas sa livraison sur le téléphone du destinataire.",
+  "contactSmsReply.delivered": "Livraison de la réponse signalée",
+  "contactSmsReply.deliveredDetail": "Le prestataire signale la livraison. Cela ne signifie pas que le destinataire a lu la réponse.",
+  "contactSmsReply.undelivered": "Réponse non livrée",
+  "contactSmsReply.undeliveredDetail": "Le prestataire signale un échec de livraison. La réponse ne sera pas renvoyée automatiquement.",
+  "contactSmsReply.failed": "Échec de l’envoi de la réponse",
+  "contactSmsReply.failedDetail": "Le prestataire signale un échec de l’envoi. La réponse ne sera pas renvoyée automatiquement."
 }

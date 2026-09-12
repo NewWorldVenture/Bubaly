@@ -7,10 +7,14 @@ import type { InboundIntent } from './routing';
 
 type Admin = SupabaseClient<Database>;
 type Options = { signal?: AbortSignal };
+type ReserveOptions = Options & { accountSid?: string };
 const TOOL = 'contact_center.sms_reply';
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 const timestamp = z.string().refine(value => Number.isFinite(Date.parse(value)));
 const sid = z.string().regex(/^(SM|MM)[0-9a-f]{32}$/i);
+const accountSid = z.string().regex(/^AC[0-9a-f]{32}$/i);
+const deliveryStatus = z.enum(['queued', 'sending', 'sent', 'delivered', 'undelivered', 'failed']);
+const deliverySchema = z.object({ providerSid: sid, status: deliveryStatus, observedAt: timestamp }).strict();
 const phone = z.string().regex(/^\+[1-9]\d{7,14}$/);
 const intent = z.enum(['urgent', 'appointment', 'delivery', 'sales', 'spam', 'personal', 'school', 'sports', 'other']);
 const suppression = z.enum(['disabled', 'spam', 'unsupported_recipient']);
@@ -38,18 +42,28 @@ const outputsSchema = z.object({
   version: z.literal(1), revision: uuid, phase: z.enum(['queued', 'emission_reserved', 'suppressed', 'legacy_unknown']),
   inboundId: uuid.nullable(), outboundId: uuid.nullable(), emissionToken: uuid.nullable(), emissionReservedAt: timestamp.nullable(),
   reason: z.enum(['disabled', 'spam', 'unsupported_recipient', 'reassigned', 'legacy']).nullable(),
+  emissionAccountSid: accountSid.optional(), delivery: deliverySchema.optional(),
 }).strict();
 type Inputs = z.infer<typeof inputsSchema>;
 type Outputs = z.infer<typeof outputsSchema>;
 export type SmsReplyBinding = z.infer<typeof bindingSchema>;
 export type SmsReplyCandidate = Omit<z.infer<typeof candidateSchema>, 'intent'> & { intent: InboundIntent };
-export type SmsReplyReceipt = Omit<Outputs, 'version'> & { id: string; binding: SmsReplyBinding; candidate: SmsReplyCandidate };
+export type SmsReplyDelivery = z.infer<typeof deliverySchema>;
+export type SmsReplyDeliveryStatus = z.infer<typeof deliveryStatus>;
+export type SmsReplyReceipt = Omit<Outputs, 'version' | 'emissionAccountSid' | 'delivery'> & {
+  id: string; binding: SmsReplyBinding; candidate: SmsReplyCandidate;
+  emissionAccountSid: string | null; delivery: SmsReplyDelivery | null;
+};
 export const SMS_REPLY_COLUMNS = 'id,family_id,tool_name,actor_kind,requested_by,requested_by_member_id,run_id,plan_step_id,request_id,conversation_id,message_id,inputs,outputs,state,attempt,locked_at,duration_ms,error,idempotency_key,resource_table,resource_id,finished_at,created_at,updated_at';
 const NULL_METADATA = ['requested_by', 'requested_by_member_id', 'run_id', 'plan_step_id', 'request_id', 'conversation_id', 'message_id', 'duration_ms', 'error'] as const;
 const INBOX_COLUMNS = 'id,family_id,channel,direction,from_addr,to_addr,subject,body,ai_summary,ai_intent,ai_handled,status,provider_ref,occurred_at';
 export class SmsReplyUnavailableError extends Error {
   constructor() { super('SMS reply state unavailable'); this.name = 'SmsReplyUnavailableError'; }
 }
+export class SmsReplyInvalidDeliveryError extends Error {
+  constructor() { super('SMS reply delivery identity invalid'); this.name = 'SmsReplyInvalidDeliveryError'; }
+}
+function invalidDelivery(): never { throw new SmsReplyInvalidDeliveryError(); }
 function unavailable(): never { throw new SmsReplyUnavailableError(); }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function stableId(value: string): string {
@@ -89,7 +103,9 @@ export function validateSmsReplyReceipt(raw: unknown): SmsReplyReceipt {
     if (reserved) {
       if (!outputs.inboundId || outputs.outboundId !== smsReplyOutboundId(expected.id) || !outputs.emissionToken
         || !outputs.emissionReservedAt || outputs.reason !== null || !inputs.candidate.reply || inputs.candidate.suppression !== null) return unavailable();
-    } else if (outputs.outboundId !== null || outputs.emissionToken !== null || outputs.emissionReservedAt !== null) return unavailable();
+      if (outputs.delivery && outputs.delivery.providerSid.toLowerCase() === inputs.binding.smsSid.toLowerCase()) return unavailable();
+    } else if (outputs.outboundId !== null || outputs.emissionToken !== null || outputs.emissionReservedAt !== null
+      || outputs.emissionAccountSid !== undefined || outputs.delivery !== undefined) return unavailable();
     if (outputs.phase === 'queued' && (!inputs.candidate.reply || inputs.candidate.suppression !== null || outputs.reason !== null)) return unavailable();
     if (outputs.phase === 'suppressed' && (!outputs.reason || outputs.reason === 'legacy')) return unavailable();
     if (outputs.phase === 'legacy_unknown' && (outputs.reason !== 'legacy' || !outputs.inboundId || inputs.candidate.reply !== null || inputs.candidate.suppression !== null)) return unavailable();
@@ -98,6 +114,7 @@ export function validateSmsReplyReceipt(raw: unknown): SmsReplyReceipt {
     if (!phone.safeParse(inputs.binding.from).success && !['suppressed', 'legacy_unknown'].includes(outputs.phase)) return unavailable();
     return { id: expected.id, revision: outputs.revision, phase: outputs.phase, inboundId: outputs.inboundId, outboundId: outputs.outboundId,
       emissionToken: outputs.emissionToken, emissionReservedAt: outputs.emissionReservedAt, reason: outputs.reason,
+      emissionAccountSid: outputs.emissionAccountSid ?? null, delivery: outputs.delivery ?? null,
       binding: inputs.binding, candidate: inputs.candidate };
   } catch { return unavailable(); }
 }
@@ -111,7 +128,7 @@ async function bounded<T>(parent: AbortSignal | undefined, run: (signal: AbortSi
     const interrupted = new Promise<never>((_, reject) => { abort = () => reject(new SmsReplyUnavailableError()); signal.addEventListener('abort', abort, { once: true }); });
     const value = await Promise.race([Promise.resolve().then(() => { signal.throwIfAborted(); return run(signal); }), interrupted]);
     signal.throwIfAborted(); return value;
-  } catch { return unavailable(); }
+  } catch (error) { if (error instanceof SmsReplyInvalidDeliveryError) throw error; return unavailable(); }
   finally { signal.removeEventListener('abort', abort); }
 }
 const operation = <T>(options: Options | undefined, run: (signal: AbortSignal) => Promise<T>) => bounded(options?.signal, run, 30_000);
@@ -147,7 +164,9 @@ function stored(receipt: SmsReplyReceipt): { inputs: Inputs; outputs: Outputs } 
   return { inputs: { version: 1, policyVersion: 1, binding: receipt.binding, candidate: receipt.candidate,
     fingerprint: hash(JSON.stringify({ binding: receipt.binding, candidate: receipt.candidate })) },
     outputs: { version: 1, revision: receipt.revision, phase: receipt.phase, inboundId: receipt.inboundId, outboundId: receipt.outboundId,
-      emissionToken: receipt.emissionToken, emissionReservedAt: receipt.emissionReservedAt, reason: receipt.reason } };
+      emissionToken: receipt.emissionToken, emissionReservedAt: receipt.emissionReservedAt, reason: receipt.reason,
+      ...(receipt.emissionAccountSid === null ? {} : { emissionAccountSid: receipt.emissionAccountSid }),
+      ...(receipt.delivery === null ? {} : { delivery: receipt.delivery }) } };
 }
 async function currentReceipt(admin: Admin, receipt: SmsReplyReceipt, signal: AbortSignal): Promise<SmsReplyReceipt> {
   const current = await read(admin, bindingSchema.parse(receipt.binding), signal);
@@ -183,7 +202,8 @@ export function prepareSmsReply(admin: Admin, binding: SmsReplyBinding,
     const terminal = !!legacy || candidate.suppression !== null;
     const receipt: SmsReplyReceipt = { id: expected.id, revision: randomUUID(), binding, candidate,
       phase: legacy ? 'legacy_unknown' : terminal ? 'suppressed' : 'queued', inboundId: legacy ? String(legacy.id) : null,
-      outboundId: null, emissionToken: null, emissionReservedAt: null, reason: legacy ? 'legacy' : candidate.suppression };
+      outboundId: null, emissionToken: null, emissionReservedAt: null, reason: legacy ? 'legacy' : candidate.suppression,
+      emissionAccountSid: null, delivery: null };
     const payload = stored(receipt);
     let write: unknown;
     try {
@@ -244,9 +264,8 @@ async function channelSuppression(admin: Admin, receipt: SmsReplyReceipt, signal
   if (row.family_id !== binding.familyId) return 'reassigned';
   return row.ai_concierge_enabled ? null : 'disabled';
 }
-async function projection(admin: Admin, receipt: SmsReplyReceipt, signal: AbortSignal): Promise<void> {
+async function readProjection(admin: Admin, receipt: SmsReplyReceipt, signal: AbortSignal): Promise<boolean> {
   const id = smsReplyOutboundId(receipt.id), providerRef = smsReplyOutboundRef(receipt.id);
-  const readProjection = async () => {
     const found = rows(await bounded(signal, current => admin.from('family_inbox_messages').select(INBOX_COLUMNS, { count: 'exact' })
       .eq('id', id).limit(2).retry(false).abortSignal(current)));
     if (!found.length) return false;
@@ -256,20 +275,23 @@ async function projection(admin: Admin, receipt: SmsReplyReceipt, signal: AbortS
       || row.provider_ref !== providerRef || row.subject !== null || row.ai_summary !== null || row.ai_intent !== null
       || row.ai_handled !== true || !['new', 'read', 'archived'].includes(String(row.status)) || !timestamp.safeParse(row.occurred_at).success) return unavailable();
     return true;
-  };
-  if (await readProjection()) return;
+}
+async function projection(admin: Admin, receipt: SmsReplyReceipt, signal: AbortSignal): Promise<void> {
+  const id = smsReplyOutboundId(receipt.id), providerRef = smsReplyOutboundRef(receipt.id);
+  if (await readProjection(admin, receipt, signal)) return;
   try {
     await bounded(signal, current => admin.from('family_inbox_messages').insert({ id, family_id: receipt.binding.familyId,
       channel: 'sms', direction: 'outbound', from_addr: receipt.binding.to, to_addr: receipt.binding.from,
       body: receipt.candidate.reply!, provider_ref: providerRef, subject: null, ai_summary: null, ai_intent: null, ai_handled: true, status: 'read',
     }).select('id').retry(false).abortSignal(current));
   } catch { /* Projection identity does not authorize emission. */ }
-  if (!await readProjection()) return unavailable();
+  if (!await readProjection(admin, receipt, signal)) return unavailable();
 }
 
 /** Only an exact successful CAS response grants emission; readback never does. */
-export function reserveSmsReply(admin: Admin, receipt: SmsReplyReceipt, options?: Options): Promise<{ receipt: SmsReplyReceipt; emission: string | null }> {
+export function reserveSmsReply(admin: Admin, receipt: SmsReplyReceipt, options?: ReserveOptions): Promise<{ receipt: SmsReplyReceipt; emission: string | null }> {
   return operation(options, async signal => {
+    const expectedAccount = options?.accountSid === undefined ? null : canonicalProviderId(accountSid.parse(options.accountSid));
     let current = await currentReceipt(admin, receipt, signal);
     const message = await inbound(admin, current.binding, signal);
     if (!message || message.id !== current.inboundId) return unavailable();
@@ -291,11 +313,71 @@ export function reserveSmsReply(admin: Admin, receipt: SmsReplyReceipt, options?
     const changed = await channelSuppression(admin, current, signal);
     if (changed) return suppress(changed);
     const next: SmsReplyReceipt = { ...current, revision: randomUUID(), phase: 'emission_reserved',
-      outboundId: smsReplyOutboundId(current.id), emissionToken: randomUUID(), emissionReservedAt: new Date().toISOString() };
+      outboundId: smsReplyOutboundId(current.id), emissionToken: randomUUID(), emissionReservedAt: new Date().toISOString(), emissionAccountSid: expectedAccount };
     const changedRows = rows(await transition(admin, current, next, signal, false));
     if (!changedRows.length) return { receipt: current, emission: null };
     const saved = validateSmsReplyReceipt(changedRows[0]);
     if (JSON.stringify(saved) !== JSON.stringify(next)) return unavailable();
     return { receipt: saved, emission: saved.candidate.reply };
+  });
+}
+
+const deliveryInputSchema = z.object({ receiptId: uuid, emissionToken: uuid, providerSid: sid, status: deliveryStatus,
+  from: phone.optional(), to: phone.optional(), accountSid: accountSid.optional() }).strict();
+export type SmsReplyDeliveryInput = z.infer<typeof deliveryInputSchema>;
+const canonicalProviderId = (value: string) => `${value.slice(0, 2).toUpperCase()}${value.slice(2).toLowerCase()}`;
+const terminalDelivery = (status: SmsReplyDeliveryStatus) => ['delivered', 'undelivered', 'failed'].includes(status);
+const deliveryRank: Record<SmsReplyDeliveryStatus, number> = { queued: 0, sending: 1, sent: 2, delivered: 3, undelivered: 3, failed: 3 };
+
+async function deliveryReceipt(admin: Admin, input: SmsReplyDeliveryInput, signal: AbortSignal): Promise<SmsReplyReceipt> {
+  const found = rows(await bounded(signal, current => admin.from('ai_tool_calls').select(SMS_REPLY_COLUMNS, { count: 'exact' })
+    .eq('id', input.receiptId).limit(2).retry(false).abortSignal(current)));
+  if (!found.length) return invalidDelivery();
+  const receipt = validateSmsReplyReceipt(found[0]);
+  if (receipt.id !== input.receiptId || receipt.phase !== 'emission_reserved' || receipt.emissionToken !== input.emissionToken
+    || receipt.binding.smsSid.toLowerCase() === input.providerSid.toLowerCase()
+    || input.from !== undefined && input.from !== receipt.binding.to
+    || input.to !== undefined && input.to !== receipt.binding.from
+    || input.accountSid !== undefined && input.accountSid !== receipt.emissionAccountSid
+    || receipt.delivery && receipt.delivery.providerSid !== input.providerSid) return invalidDelivery();
+  return receipt;
+}
+async function verifyDeliveryEffects(admin: Admin, receipt: SmsReplyReceipt, signal: AbortSignal): Promise<void> {
+  const message = await inbound(admin, receipt.binding, signal);
+  if (!message || message.id !== receipt.inboundId || message.ai_summary !== receipt.candidate.summary
+    || message.ai_intent !== receipt.candidate.intent || !await readProjection(admin, receipt, signal)) return unavailable();
+}
+
+/** Verified provider observations change delivery only, never emission authority. */
+export function recordSmsReplyDelivery(admin: Admin, input: SmsReplyDeliveryInput, options?: Options): Promise<{ outcome: 'updated' | 'unchanged' }> {
+  return operation(options, async signal => {
+    const parsed = deliveryInputSchema.safeParse(input);
+    if (!parsed.success) return invalidDelivery();
+    input = { ...parsed.data, receiptId: parsed.data.receiptId.toLowerCase(), emissionToken: parsed.data.emissionToken.toLowerCase(),
+      providerSid: canonicalProviderId(parsed.data.providerSid),
+      ...(parsed.data.accountSid === undefined ? {} : { accountSid: canonicalProviderId(parsed.data.accountSid) }) };
+    // Re-read and retry only status CAS contention. A bounded readback may
+    // reconcile a committed observation; it can never return TwiML authority.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const current = await deliveryReceipt(admin, input, signal);
+      await verifyDeliveryEffects(admin, current, signal);
+      if (current.delivery && (terminalDelivery(current.delivery.status) || deliveryRank[current.delivery.status] >= deliveryRank[input.status])) {
+        return { outcome: 'unchanged' };
+      }
+      const next: SmsReplyReceipt = { ...current, revision: randomUUID(), delivery: {
+        providerSid: input.providerSid, status: input.status, observedAt: new Date().toISOString(),
+      } };
+      try {
+        const changed = rows(await transition(admin, current, next, signal, false));
+        if (!changed.length) continue;
+        const saved = validateSmsReplyReceipt(changed[0]);
+        if (JSON.stringify(saved) !== JSON.stringify(next)) return unavailable();
+        return { outcome: 'updated' };
+      } catch (error) {
+        if (error instanceof SmsReplyInvalidDeliveryError) throw error;
+        signal.throwIfAborted();
+      }
+    }
+    return unavailable();
   });
 }

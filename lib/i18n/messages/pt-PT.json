@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Estado da resposta anterior desconhecido",
   "contactSmsReply.legacyUnknownDetail": "Esta mensagem anterior não tem um registo de resposta verificado. Não será repetida automaticamente.",
   "contactSmsReply.unavailable": "Estado da resposta indisponível",
-  "contactSmsReply.unavailableDetail": "Não foi possível verificar o estado da resposta. Atualize esta página para tentar novamente."
+  "contactSmsReply.unavailableDetail": "Não foi possível verificar o estado da resposta. Atualize esta página para tentar novamente.",
+  "contactSmsReply.providerQueued": "Resposta na fila do fornecedor",
+  "contactSmsReply.providerQueuedDetail": "O fornecedor aceitou a resposta na sua fila. A entrega ainda não foi confirmada.",
+  "contactSmsReply.sending": "Resposta em envio",
+  "contactSmsReply.sendingDetail": "O fornecedor está a enviar a resposta. A entrega ainda não foi confirmada.",
+  "contactSmsReply.sent": "Resposta enviada à operadora",
+  "contactSmsReply.sentDetail": "A operadora aceitou a resposta. Isto não confirma a entrega no telemóvel do destinatário.",
+  "contactSmsReply.delivered": "Entrega da resposta comunicada",
+  "contactSmsReply.deliveredDetail": "O fornecedor comunica a entrega. Isto não significa que o destinatário tenha lido a resposta.",
+  "contactSmsReply.undelivered": "Resposta não entregue",
+  "contactSmsReply.undeliveredDetail": "O fornecedor comunica uma falha na entrega. A resposta não será reenviada automaticamente.",
+  "contactSmsReply.failed": "Falha no envio da resposta",
+  "contactSmsReply.failedDetail": "O fornecedor comunica uma falha no envio. A resposta não será reenviada automaticamente."
 }

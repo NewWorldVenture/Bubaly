@@ -32,6 +32,12 @@ const SMS_REPLY_COPY = {
   suppressed: ['contactSmsReply.suppressed', 'contactSmsReply.suppressedDetail'],
   legacy_unknown: ['contactSmsReply.legacyUnknown', 'contactSmsReply.legacyUnknownDetail'],
   unavailable: ['contactSmsReply.unavailable', 'contactSmsReply.unavailableDetail'],
+  provider_queued: ['contactSmsReply.providerQueued', 'contactSmsReply.providerQueuedDetail'],
+  sending: ['contactSmsReply.sending', 'contactSmsReply.sendingDetail'],
+  sent: ['contactSmsReply.sent', 'contactSmsReply.sentDetail'],
+  delivered: ['contactSmsReply.delivered', 'contactSmsReply.deliveredDetail'],
+  undelivered: ['contactSmsReply.undelivered', 'contactSmsReply.undeliveredDetail'],
+  failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
 } as const;
 
 function timeAgo(iso: string): string {

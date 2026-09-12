@@ -84,6 +84,34 @@ describe('family-authorized SMS reply display through the installed PostgREST cl
     expect(state.calls.filter(url => url.pathname.endsWith('family_inbox_messages'))).toHaveLength(2);
   });
 
+  it.each(['queued', 'sending', 'sent', 'delivered', 'undelivered', 'failed'] as const)
+    ('shows verified provider %s only as a safe status, without the provider SID or token', async status => {
+      const { receipt, displayed } = fixture('emission_reserved');
+      (receipt.outputs as Row).delivery = { providerSid: `SM${'b'.repeat(32)}`, status, observedAt: NOW };
+      const result = await readSmsReplyStatuses(displayed());
+      expect(result).toEqual(Object.fromEntries(displayed().map(row => [row.id, status === 'queued' ? 'provider_queued' : status])));
+      expect(JSON.stringify(result)).not.toMatch(/SM|observedAt|emissionToken|providerSid|Private/);
+    });
+
+  it.each(['providerSid', 'status', 'observedAt', 'extra'] as const)('does not show delivery from malformed %s evidence', async field => {
+    const { receipt, displayed } = fixture('emission_reserved');
+    (receipt.outputs as Row).delivery = { providerSid: `SM${'b'.repeat(32)}`, status: 'delivered', observedAt: NOW, [field]: 'malformed' };
+    expect(await readSmsReplyStatuses(displayed())).toEqual(Object.fromEntries(displayed().map(row => [row.id, 'unavailable'])));
+  });
+
+  it('does not promote a prepared or legacy receipt with injected delivery fields', async () => {
+    const { receipt, displayed } = fixture();
+    (receipt.outputs as Row).delivery = { providerSid: `SM${'b'.repeat(32)}`, status: 'delivered', observedAt: NOW };
+    expect(await readSmsReplyStatuses(displayed())).toEqual({ [INBOUND]: 'unavailable' });
+  });
+
+  it('withholds delivered status when the bound reply body changes', async () => {
+    const { receipt, state, displayed } = fixture('emission_reserved');
+    (receipt.outputs as Row).delivery = { providerSid: `SM${'b'.repeat(32)}`, status: 'delivered', observedAt: NOW };
+    state.inbox[1].body = 'Different reply';
+    expect(await readSmsReplyStatuses(displayed())).toEqual(Object.fromEntries(displayed().map(row => [row.id, 'unavailable'])));
+  });
+
   it('keeps an old outbound row without a receipt explicitly unknown', async () => {
     const { state, outbound, displayed } = fixture(); outbound.provider_ref = null; state.inbox = [outbound]; state.receipts = [];
     expect(await readSmsReplyStatuses(displayed())).toEqual({ [String(outbound.id)]: 'legacy_unknown' });

@@ -13606,5 +13606,17 @@
   "contactSmsReply.legacyUnknown": "Status der früheren Antwort unbekannt",
   "contactSmsReply.legacyUnknownDetail": "Für diese frühere Nachricht liegt kein verifizierter Antwortnachweis vor. Die Antwort wird nicht automatisch erneut verschickt.",
   "contactSmsReply.unavailable": "Antwortstatus nicht verfügbar",
-  "contactSmsReply.unavailableDetail": "Der Antwortstatus konnte nicht überprüft werden. Laden Sie diese Seite erneut, um ihn noch einmal zu prüfen."
+  "contactSmsReply.unavailableDetail": "Der Antwortstatus konnte nicht überprüft werden. Laden Sie diese Seite erneut, um ihn noch einmal zu prüfen.",
+  "contactSmsReply.providerQueued": "Antwort beim Anbieter in der Warteschlange",
+  "contactSmsReply.providerQueuedDetail": "Der Anbieter hat die Antwort in seine Warteschlange aufgenommen. Die Zustellung ist noch nicht bestätigt.",
+  "contactSmsReply.sending": "Antwort wird gesendet",
+  "contactSmsReply.sendingDetail": "Der Anbieter sendet die Antwort. Die Zustellung ist noch nicht bestätigt.",
+  "contactSmsReply.sent": "Antwort an Mobilfunkanbieter gesendet",
+  "contactSmsReply.sentDetail": "Der Mobilfunkanbieter hat die Antwort angenommen. Dies bestätigt keine Zustellung auf dem Telefon der empfangenden Person.",
+  "contactSmsReply.delivered": "Zustellung der Antwort gemeldet",
+  "contactSmsReply.deliveredDetail": "Der Anbieter meldet die Zustellung. Das bedeutet nicht, dass die empfangende Person die Antwort gelesen hat.",
+  "contactSmsReply.undelivered": "Antwort nicht zugestellt",
+  "contactSmsReply.undeliveredDetail": "Der Anbieter meldet eine fehlgeschlagene Zustellung. Die Antwort wird nicht automatisch erneut gesendet.",
+  "contactSmsReply.failed": "Antwort konnte nicht gesendet werden",
+  "contactSmsReply.failedDetail": "Der Anbieter meldet einen Sendefehler. Die Antwort wird nicht automatisch erneut gesendet."
 }
