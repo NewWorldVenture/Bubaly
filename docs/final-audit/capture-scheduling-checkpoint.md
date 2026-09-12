@@ -42,7 +42,7 @@ Earlier actual reproductions and repairs remain in the capture, action, presenta
 
 ## Remaining verification and release decision
 
-The prior care checkpoint passed all four hosted CI jobs and 697 hosted browser tests on `d36602e`; those results do not apply to this new source. This checkpoint's hosted CI remains pending publication.
+The prior care checkpoint passed all four hosted CI jobs and 697 hosted browser tests on `d36602e`; those results do not apply to this new source. The published capture/scheduling checkpoint `ea3d6e40284e403a5ec986e993886420785f4162` subsequently passed all four jobs in [hosted CI run 34703680247](https://github.com/NewWorldVenture/Bubaly/actions/runs/34703680247): Typecheck · Lint · Test · Build; Mobile (Expo) · Typecheck · Config; Database (migration replay · RLS boundary probes); and E2E (public · a11y · authenticated · mobile device matrix). This terminal result was read with `gh run view` on 2026-09-12. It does not cover the subsequent uncommitted authentication work or prove live provider delivery.
 
 Live cron/default-branch deployment, current external account credentials and publication are unverified. Approval workflow, token refresh, legacy schedule adoption, recurrence, editing/cancellation, interrupted target continuation and operator reconciliation remain separate work. Private receipts can repair visible outcomes without recreating missing historical result/job/usage rows. Multi-table rechecks do not claim a database transaction or cancellation after a provider accepts a request.
 

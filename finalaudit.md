@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T15:59:24.844Z
-- Total Audit Items: 13529
-- Not Started: 13491
-- In Progress: 35
+- Last Updated: 2026-09-12T16:34:45.152Z
+- Total Audit Items: 13535
+- Not Started: 13492
+- In Progress: 40
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -24,6 +24,11 @@
 PRODUCTION READY: NO
 
 ## Critical Blockers
+- API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- API-BBD0A5DB630F: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- CALLBACK-07F1FB3AED21: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
 - DEPLOY-001: Local pinned-source gates pass. Deployed environment, current-source hosted CI, live database/provider workflows and final whole-application regression remain open.
 - AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
@@ -8747,7 +8752,7 @@ PRODUCTION READY: NO
 | API-80142EB1C3FC | API | GET /api/concierge-calls/place | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-1B0FCD08C0B2 | API | POST /api/contact | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-0EB76703163C | API | POST /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-387E2B30BCD7 | API | POST /api/contact-center/sms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-387E2B30BCD7 | API | POST /api/contact-center/sms | 🔄 IN PROGRESS | High | 34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery. | Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired. | 37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success. | See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished. |
 | API-97ED864085E2 | API | POST /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-B4E47347CDDF | API | POST /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-96040DFB5635 | API | GET /api/cron/admin-digest | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8785,7 +8790,7 @@ PRODUCTION READY: NO
 | API-DE92C0D3E1A2 | API | POST /api/guardian/escalate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-4624F4C80639 | API | GET /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-82DE1172411D | API | POST /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-BBD0A5DB630F | API | POST /api/guardian/inbound/sms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-BBD0A5DB630F | API | POST /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress. | Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker. | 64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent. | See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open. |
 | API-262DB8655008 | API | POST /api/guardian/inbound/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-90346B8397DA | API | POST /api/guardian/inbound/whatsapp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-5A16104BF051 | API | POST /api/guardian/screen | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9838,7 +9843,7 @@ PRODUCTION READY: NO
 | LIBRARY-388B2DC97BEF | LIBRARY | lib/groceries/add-summary.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D6350D824821 | LIBRARY | lib/grocery/retailers.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-0E5613731F04 | LIBRARY | lib/guardian/ai-screen.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-10D7AA8F3175 | LIBRARY | lib/guardian/callbacks.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-10D7AA8F3175 | LIBRARY | lib/guardian/callbacks.ts | 🔄 IN PROGRESS | High | Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress. | The shared callback helper is unchanged. The SMS route now uses lib/guardian/sms-intake.ts with typed outcomes and ownership checks. Other Guardian callback consumers retain the original boolean/error behavior. | 43 new SMS helper cases pass. They do not verify unchanged shared-helper consumers; this record remains IN PROGRESS. | User requested text messaging next. See docs/final-audit/text-messaging-discovery.md; distinguish marketing drafts, Guardian/Contact Center SMS and in-app chat. |
 | LIBRARY-D21643F4A61A | LIBRARY | lib/guardian/escalation.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E052EDE998EA | LIBRARY | lib/guardian/learning-run.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E15968D68A4A | LIBRARY | lib/guardian/learning.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11289,13 +11294,13 @@ PRODUCTION READY: NO
 | JOB-65B62EEA3CA1 | JOB | /api/cron/ai-runs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | JOB-905AB0CFE100 | JOB | /api/cron/family-routines | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-145967CDCF24 | CALLBACK | /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | 🔄 IN PROGRESS | High | 34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery. | Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired. | 37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success. | See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished. |
 | CALLBACK-A55C76501924 | CALLBACK | /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-5653FF7DBBF5 | CALLBACK | /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-FD4E5305F4FF | CALLBACK | /api/google/calendar/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-71A417C2F077 | CALLBACK | /api/guardian/escalate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-A484CD51076C | CALLBACK | /api/guardian/escalate/twiml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-07F1FB3AED21 | CALLBACK | /api/guardian/inbound/sms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| CALLBACK-07F1FB3AED21 | CALLBACK | /api/guardian/inbound/sms | 🔄 IN PROGRESS | High | Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress. | Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker. | 64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent. | See guardian-sms-intake-cycle.md and text-messaging-checkpoint.md. Legacy processed callbacks with missing messages, shared routing-policy read defaults, synchronous AI before durable queuing, provider retry/deadline behavior and non-atomic notification deduplication remain open. |
 | CALLBACK-F03F4B342194 | CALLBACK | /api/guardian/inbound/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-8B2E6E7A70BF | CALLBACK | /api/guardian/inbound/whatsapp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-C5ECD6199A9B | CALLBACK | /api/guardian/screen | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13304,7 +13309,7 @@ PRODUCTION READY: NO
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
 | DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. Priorcarecheckpoint d36602e all4hostedjobs/697browser testsPASS; newsource hostedCI pending publication. |  |
-| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | Obsolete source assertions updated alongside actual behavioral coverage; multipart incoming-request fixture repaired without weakening production limits. | Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | This full-suite execution PASS belongs to910cd271bc273e68c286c3b10aaf1f27f6b933c2. Initialf6e17ef run13251PASS/3obsolete cronassertionsFAIL; exactroute/failure fixture correction93focusedPASS beforefullrerun. Does not pass enclosing product workflows or next-cycle changes. |
+| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Exact committed SMS source f51bcd40 in the private clean installation: full Vitest suite, 1,158 files and 13,366 tests pass in 125.13 seconds under Node 24.21.0. | Obsolete source assertions updated alongside actual behavioral coverage; multipart incoming-request fixture repaired without weakening production limits. | Full suite PASS with no failures. Log: Temp/bubaly-sms-checkpoint-full-units.log. This result excludes later uncommitted authentication and marketing-copy changes. | This is the automated unit-suite gate only. Fixture execution does not establish live provider delivery or whole-application workflow completion. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Discovery only for full registration/confirmation/recovery chain; existing persistent-session repairs remain underAUTH-002. | Coverage baseline only; no complete signup-confirmation/recovery workflow PASS. |  |
 | AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. | 68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. Next bounded repair preserves stable session identity across refresh/restart while separating saved family data after sign-out, new login or observed access change. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13591,6 +13596,12 @@ PRODUCTION READY: NO
 | CONTROL-BF8BB076B387 | CONTROL | Review the destination after an unconfirmed voice capture | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate. |
 | CONTROL-878F7812DDC6 | CONTROL | Choose the timezone for a scheduled social post | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New control discovered at source910cd271; targeted browser evidence is recorded in capture-scheduling-checkpoint.md. Complete workflow/accessibility verification remains separate. |
 | AUTH-003 | AUTH | Password recovery request, verified handoff and password replacement | 🔄 IN PROGRESS | High | Source trace finds mobileForgot link /login?reset=1 and admin reset sender redirect /login, but no web forgot/reset completion branch, PASSWORD_RECOVERY consumer or password update call. Controlled installedSDK probe: default service reset sends recover request withoutPKCEchallenge; PKCE browser rejects implicit recovery fragment and leaves fragment. ActualSSR adapter503 exchange retains server verifier cookie for a fresh-client retry; browser adapter removes verifier. No real accounts/email/provider operations. | Pending smallest bounded recovery contract and actual-module regressions; source findings recorded before production edits. | Discovery and synthetic SDK transport probes only. Prior910cd271 checkpoint remains separately verified. | See auth-recovery-discovery.md and auth-recovery-test-inventory.md. No SQL, shared navigation, live credentials or real password/account changes. Preserve all prior locale values/order and existing session guarantees. |
+| LIBRARY-FB0D7FA5D9E1 | LIBRARY | lib/guardian/sms-intake.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
+| SERVICE-E303E0E2FC60 | SERVICE | claimGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
+| SERVICE-2C4570D69617 | SERVICE | finishGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
+| SERVICE-A75CB6CAC8B3 | SERVICE | releaseGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-322C46B32414 | SUPPORT | tests/guardian-sms-intake-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-F988DE7EA482 | SUPPORT | tests/guardian-sms-intake.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
 
 ## Inventory and evidence rules
 
@@ -13692,10 +13703,10 @@ No complete workflow finding yet; investigation pending.
 Obsolete source assertions updated alongside actual behavioral coverage; multipart incoming-request fixture repaired without weakening production limits.
 
 #### Retest Results
-Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md.
+Full suite PASS with no failures. Log: Temp/bubaly-sms-checkpoint-full-units.log. This result excludes later uncommitted authentication and marketing-copy changes.
 
 #### Evidence
-Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log
+Exact committed SMS source f51bcd40 in the private clean installation: full Vitest suite, 1,158 files and 13,366 tests pass in 125.13 seconds under Node 24.21.0.
 
 #### Final Status
 ✅ PASS
@@ -14275,6 +14286,166 @@ Pending
 
 #### Final Status
 ⬜ NOT STARTED
+
+### API-387E2B30BCD7 — POST /api/contact-center/sms
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/contact-center/sms/route.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+
+#### Fixes Applied
+Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.
+
+#### Retest Results
+37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.
+
+#### Evidence
+34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### API-BBD0A5DB630F — POST /api/guardian/inbound/sms
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/guardian/inbound/sms/route.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+
+#### Fixes Applied
+Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.
+
+#### Retest Results
+64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.
+
+#### Evidence
+Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### LIBRARY-10D7AA8F3175 — lib/guardian/callbacks.ts
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: lib/guardian/callbacks.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+
+#### Fixes Applied
+The shared callback helper is unchanged. The SMS route now uses lib/guardian/sms-intake.ts with typed outcomes and ownership checks. Other Guardian callback consumers retain the original boolean/error behavior.
+
+#### Retest Results
+43 new SMS helper cases pass. They do not verify unchanged shared-helper consumers; this record remains IN PROGRESS.
+
+#### Evidence
+Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### CALLBACK-24807E48E6E6 — /api/contact-center/sms
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/contact-center/sms/route.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+
+#### Fixes Applied
+Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.
+
+#### Retest Results
+37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.
+
+#### Evidence
+34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### CALLBACK-07F1FB3AED21 — /api/guardian/inbound/sms
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/api/guardian/inbound/sms/route.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+
+#### Fixes Applied
+Source f51bcd40: an SMS-specific lease distinguishes processed, busy and unavailable callbacks. The route requires a verified profile and saved message matching the unique provider SID. A lost insert response is reconciled before a checked notification and completion by the owning worker.
+
+#### Retest Results
+64 actual signed-route and installed-SDK cases pass, including four real scope/notification integration cases. The root four-file run passes 153 cases: 64 route, 43 lease, 37 Contact Center and nine existing callback cases. Full checkpoint gates are pending; no live SMS was sent.
+
+#### Evidence
+Actual signed Guardian POST + installed PostgREST baseline:3 desired failures/2healthycontrols. Claim503,profile503,communication503 all acknowledged200 without savedmessage; latter also notifiedwithnullreference. Repair in progress.
+
+#### Final Status
+🔄 IN PROGRESS
 
 ### MOBILE-002 — Native bootstrap listener lifecycle
 
@@ -19050,6 +19221,11 @@ Status: NOT STARTED — second regression follows individual verification; basel
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
+- API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- API-BBD0A5DB630F: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- CALLBACK-07F1FB3AED21: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
 - DEPLOY-001: Local pinned-source gates pass. Deployed environment, current-source hosted CI, live database/provider workflows and final whole-application regression remain open.
 - AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.

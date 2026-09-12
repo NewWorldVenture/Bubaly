@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T16:27:13.304Z",
+  "baselineCommit": "387e4d9e85d79c2a5fc01c4be610f6ddde08287e",
+  "sourceCommit": "f51bcd40b8d17072b92851facaf371e0ac5319c5",
+  "methodology": [
+    "Only committed git blobs between fixed source commits; later uncommitted work excluded. All changed files except finalaudit.md and docs/final-audit/** are included.",
+    "Source SHA256 covers exact committed bytes, not working-tree newline conversion.",
+    "Top-level exported function, value, type, class and re-export boundaries parsed with installed TypeScript; source discovery is not workflow verification.",
+    "Environment names only, parsed from static process.env access; addedEnvironmentNames are newly referenced per changed file, not a claim of new deployment requirements. No secret values.",
+    "Jobs are statically read from committed dispatcher SCHEDULES and Vercel crons. Existing master identities are copied from the source commit, matching exact, comma-separated or semicolon-separated source paths. Baseline export definitions and environment names are retained per file."
+  ],
+  "counts": {
+    "files": 7,
+    "newFiles": 3,
+    "production": 3,
+    "tests": 4,
+    "locales": 0,
+    "support": 0,
+    "exportedSymbols": 10,
+    "addedExportedFunctions": 3,
+    "addedSymbols": 5,
+    "addedApiRoutes": 0,
+    "addedJobRegistrations": 0
+  },
+  "masterIdentitySource": {
+    "path": "docs/final-audit/audit-state.json",
+    "sourceCommit": "f51bcd40b8d17072b92851facaf371e0ac5319c5",
+    "sourceSha256": "13fac6eb361645aa26c297bc20fb13241b22f8225a0934af2028509a3e1de14b"
+  },
+  "scopeMasterRecords": [
+    {
+      "id": "API-387E2B30BCD7",
+      "key": "/api/contact-center/sms:POST",
+      "source": "app/api/contact-center/sms/route.ts"
+    },
+    {
+      "id": "API-BBD0A5DB630F",
+      "key": "/api/guardian/inbound/sms:POST",
+      "source": "app/api/guardian/inbound/sms/route.ts"
+    },
+    {
+      "id": "CALLBACK-24807E48E6E6",
+      "key": "/api/contact-center/sms",
+      "source": "app/api/contact-center/sms/route.ts"
+    },
+    {
+      "id": "CALLBACK-07F1FB3AED21",
+      "key": "/api/guardian/inbound/sms",
+      "source": "app/api/guardian/inbound/sms/route.ts"
+    },
+    {
+      "id": "LIBRARY-10D7AA8F3175",
+      "key": "lib/guardian/callbacks.ts",
+      "source": "lib/guardian/callbacks.ts"
+    },
+    {
+      "id": "OPS-INT-007",
+      "key": "Contact center inbound",
+      "source": "app/api/contact-center/email/route.ts, app/api/contact-center/sms/route.ts, app/api/contact-center/voice/route.ts, app/api/contact-center/voice/transcription/route.ts"
+    }
+  ],
+  "addedApiRoutes": [],
+  "addedJobs": [],
+  "addedEnvironmentNames": [],
+  "addedProductionEnvironmentNames": [],
+  "files": [
+    {
+      "path": "app/api/contact-center/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "48bd8e500d2a74b9839f7ea90dc1f23b78778da54e3b56c6edd932a54d3975fc",
+      "sourceSha256": "f425a3f109581a9c0cc99fd8c69dde84de01838e9c7de9e7e68411da02a19104",
+      "bytes": 6370,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 32,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 32,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "apiRoute": "/api/contact-center/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "baselineEnvironmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "API-387E2B30BCD7",
+          "key": "/api/contact-center/sms:POST",
+          "source": "app/api/contact-center/sms/route.ts"
+        },
+        {
+          "id": "FLOW-D82B9410319A",
+          "key": "contact-center",
+          "source": "app/(app)/dashboard/contact-center/actions.ts, app/api/contact-center/email/route.ts, app/api/contact-center/sms/route.ts, app/api/contact-center/voice/route.ts, app/api/contact-center/voice/transcription/route.ts"
+        },
+        {
+          "id": "CALLBACK-24807E48E6E6",
+          "key": "/api/contact-center/sms",
+          "source": "app/api/contact-center/sms/route.ts"
+        },
+        {
+          "id": "INT-001",
+          "key": "INT-001",
+          "source": "middleware.ts; app/api/contact-center/email/route.ts; app/api/contact-center/sms/route.ts; app/api/contact-center/voice/transcription/route.ts"
+        },
+        {
+          "id": "INT-002",
+          "key": "INT-002",
+          "source": "app/api/contact-center/sms/route.ts; app/api/contact-center/voice/transcription/route.ts; app/api/contact-center/email/route.ts"
+        },
+        {
+          "id": "OPS-INT-007",
+          "key": "Contact center inbound",
+          "source": "app/api/contact-center/email/route.ts, app/api/contact-center/sms/route.ts, app/api/contact-center/voice/route.ts, app/api/contact-center/voice/transcription/route.ts"
+        }
+      ]
+    },
+    {
+      "path": "app/api/guardian/inbound/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6f1b3a23e548ee1df2673828f6ea429389900a74232523c3f38407bc60cbe897",
+      "sourceSha256": "00acc145027a80d074a5202a1c28e035dc7a58b81f1cc33e3e460b9c68958884",
+      "bytes": 12766,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 22,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 31,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "apiRoute": "/api/guardian/inbound/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "baselineEnvironmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "API-BBD0A5DB630F",
+          "key": "/api/guardian/inbound/sms:POST",
+          "source": "app/api/guardian/inbound/sms/route.ts"
+        },
+        {
+          "id": "FLOW-DDE6E8974B46",
+          "key": "guardian",
+          "source": "app/(app)/guardian/actions.ts, app/api/guardian/escalate/route.ts, app/api/guardian/escalate/twiml/route.ts, app/api/guardian/inbound/sms/route.ts, app/api/guardian/inbound/voice/route.ts, app/api/guardian/inbound/whatsapp/route.ts, app/api/guardian/screen/route.ts, app/api/guardian/status/voicemail/route.ts"
+        },
+        {
+          "id": "CALLBACK-07F1FB3AED21",
+          "key": "/api/guardian/inbound/sms",
+          "source": "app/api/guardian/inbound/sms/route.ts"
+        }
+      ]
+    },
+    {
+      "path": "lib/guardian/sms-intake.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3ec0728d5244e7bd83548d96f1d0ebb1317042affa691f52a40b62792bcdbf54",
+      "bytes": 7245,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "GuardianSmsLease",
+          "line": 7,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsClaim",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "claimGuardianSms",
+          "line": 54,
+          "kind": "function"
+        },
+        {
+          "name": "finishGuardianSms",
+          "line": 105,
+          "kind": "function"
+        },
+        {
+          "name": "releaseGuardianSms",
+          "line": 110,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "claimGuardianSms",
+          "line": 54,
+          "kind": "function"
+        },
+        {
+          "name": "finishGuardianSms",
+          "line": 105,
+          "kind": "function"
+        },
+        {
+          "name": "releaseGuardianSms",
+          "line": 110,
+          "kind": "function"
+        }
+      ],
+      "addedSymbols": [
+        {
+          "name": "GuardianSmsLease",
+          "line": 7,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsClaim",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "claimGuardianSms",
+          "line": 54,
+          "kind": "function"
+        },
+        {
+          "name": "finishGuardianSms",
+          "line": 105,
+          "kind": "function"
+        },
+        {
+          "name": "releaseGuardianSms",
+          "line": 110,
+          "kind": "function"
+        }
+      ],
+      "httpMethods": [],
+      "baselineEnvironmentNames": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/contact-center-callback-boundary.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "dcee86b7a5c1aac13b52809fb5217304665787c10cfbdd75825168d135378931",
+      "sourceSha256": "a388a4a708c0cdc05591eb821ef3529624bcb28af2ae2fa97c986d25c752b674",
+      "bytes": 15792,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "baselineEnvironmentNames": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-97318DE46875",
+          "key": "tests/contact-center-callback-boundary.test.ts",
+          "source": "tests/contact-center-callback-boundary.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/guardian-callback-security.test.ts",
+      "kind": "test",
+      "isNew": false,
+      "baselineSha256": "d9cc10ffc33d4676c06683eb30d54a6ae0fcddced19ee496555af75956f10922",
+      "sourceSha256": "08db159ea1701e82d994a46767f0c96cf7046b13e62dcbb89fb866f7128b24fb",
+      "bytes": 3086,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "baselineEnvironmentNames": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-4AECFBE14859",
+          "key": "tests/guardian-callback-security.test.ts",
+          "source": "tests/guardian-callback-security.test.ts"
+        }
+      ]
+    },
+    {
+      "path": "tests/guardian-sms-intake-execution.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "64bb057daef2f241f964540852c060b543d4970e3dcf47ab2bf58759bd8d61ee",
+      "bytes": 22163,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "baselineEnvironmentNames": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    },
+    {
+      "path": "tests/guardian-sms-intake.test.ts",
+      "kind": "test",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "2d7052d025f40257c8d6e9d815ed181bbdde37890d4b66c2fcb3546e080025db",
+      "bytes": 13048,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "addedSymbols": [],
+      "httpMethods": [],
+      "baselineEnvironmentNames": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": []
+    }
+  ],
+  "catalogues": []
+}
