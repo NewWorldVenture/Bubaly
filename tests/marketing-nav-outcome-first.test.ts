@@ -88,6 +88,7 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/autopay | Auto Pay | Repeat
         /dashboard/due | Due Reminders | Bell
       /dashboard/memories | Memories | Image
+      /dashboard/library | Library | Headphones
       /dashboard/messages | Messages | MessageCircle
       /dashboard/documents | Files | FolderLock
         /dashboard/documents | File Manager | FileText
@@ -101,7 +102,8 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/family/check-in | Check In | ShieldCheck
         /dashboard/family/find-phone | Find Phone | Smartphone
         /dashboard/family/driving-safety | Driving Safety | Car
-        /dashboard/family/play-dates | Play Dates | Heart"
+        /dashboard/family/play-dates | Play Dates | Heart
+      /dashboard/assistants | Assistants | Speaker"
     `);
   });
 
@@ -152,6 +154,7 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/relationship | Relationship Helper | HeartHandshake | L0
         /dashboard/readiness | Readiness | Gauge | L0
         /dashboard/memories | Memories | BookHeart | L0
+        /dashboard/library | Library | Headphones | L0
         /dashboard/family-tree | Family Tree | GitBranch | L0
         /dashboard/grandparent-portal | Grandparent Portal | Heart | L0
         /dashboard/pets | Pets | PawPrint | L0
@@ -228,6 +231,7 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/conflicts | AI Conflict Resolution | CalendarClock | L2
         /dashboard/autonomous-family-management | Autonomous AI | Bot | L2
         /dashboard/voice | Voice Control | Mic | L0
+        /dashboard/assistants | Assistants | Speaker | L0
         /dashboard/family-digital-twin | Digital Twin | Brain | L2
         /dashboard/family-cfo | Family CFO | Wallet | L2
         /dashboard/family-coo | Family COO | ClipboardList | L2
@@ -268,11 +272,13 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
       /dashboard/chores
       /dashboard/billing
       /dashboard/memories
+      /dashboard/library
       /dashboard/messages
       /dashboard/documents
       /wallet
       /dashboard/locator
-      /dashboard/family"
+      /dashboard/family
+      /dashboard/assistants"
     `);
     expect(NAV_CATALOG_KEYS.join('\n')).toMatchInlineSnapshot(`
       "/home
@@ -282,11 +288,13 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
       /dashboard/chores
       /dashboard/billing
       /dashboard/memories
+      /dashboard/library
       /dashboard/messages
       /dashboard/documents
       /wallet
       /dashboard/locator
       /dashboard/family
+      /dashboard/assistants
       /dashboard/moments
       /dashboard/next-best-actions
       /dashboard/family-operating-index
