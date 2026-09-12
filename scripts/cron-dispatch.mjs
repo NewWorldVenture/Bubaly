@@ -28,6 +28,10 @@ export const SCHEDULES = {
   '/api/cron/calendar-feeds': '0 5 * * *',
   '/api/cron/automations': '0 13 * * *',
   '/api/cron/marketing': '*/5 * * * *',
+  // Recurring social ads post on local wall-clock times, so the dispatcher has
+  // to tick finer than the schedules it serves: 15 minutes is the granularity
+  // an operator gets when they pick "09:00".
+  '/api/cron/marketing-social': '*/15 * * * *',
   '/api/cron/marketing-providers': '15 */6 * * *',
   '/api/cron/checkout-abandoned': '0 */6 * * *',
   '/api/cron/autopilot-scan': '30 6,18 * * *',
