@@ -27,10 +27,13 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 const DEFAULT_SCOPES = 'Calendars.ReadWrite Tasks.ReadWrite User.Read';
 
 export function microsoftClientId(): string {
-  return process.env.MICROSOFT_SYNC_CLIENT_ID ?? '';
+  // Trimmed for the same reason as the Google pair: these are pasted by hand,
+  // and a whitespace-only value is TRUTHY — it would read as "configured" and
+  // then fail at Entra as an unnamed client.
+  return process.env.MICROSOFT_SYNC_CLIENT_ID?.trim() || '';
 }
 export function microsoftClientSecret(): string {
-  return process.env.MICROSOFT_SYNC_CLIENT_SECRET ?? '';
+  return process.env.MICROSOFT_SYNC_CLIENT_SECRET?.trim() || '';
 }
 export function isMicrosoftSyncConfigured(): boolean {
   return !!(microsoftClientId() && microsoftClientSecret());

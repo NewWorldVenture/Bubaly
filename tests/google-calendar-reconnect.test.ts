@@ -156,3 +156,95 @@ describe('a blank redirect-uri env var falls back instead of being sent', () => 
     expect(src).not.toMatch(/_SYNC_REDIRECT_URI`\]\s*\?\?/);
   });
 });
+
+// Credentials are PASTED BY HAND out of a text file into a hosting dashboard.
+// A trailing newline or space rides along, and every provider answers with an
+// error that names nothing: Google `invalid_client`, Entra an unnamed client.
+// So every credential is trimmed at its single point of use.
+//
+// The blank case is worse than cosmetic. `.env.example` ships
+// GOOGLE_SYNC_CLIENT_ID= empty, and `??` treats "" as present — so the fallback
+// this file's own comment promised ("falls back to the legacy GOOGLE_* pair so
+// a single-client setup still works") never fired. isGoogleSyncConfigured()
+// returned false and /api/sync/google/auth answered `?error=not_configured`
+// with a perfectly good GOOGLE_CLIENT_ID sitting right there.
+describe('OAuth credentials survive being pasted', () => {
+  const pairs = {
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_SYNC_CLIENT_ID: process.env.GOOGLE_SYNC_CLIENT_ID,
+    GOOGLE_SYNC_CLIENT_SECRET: process.env.GOOGLE_SYNC_CLIENT_SECRET,
+    MICROSOFT_SYNC_CLIENT_ID: process.env.MICROSOFT_SYNC_CLIENT_ID,
+    MICROSOFT_SYNC_CLIENT_SECRET: process.env.MICROSOFT_SYNC_CLIENT_SECRET,
+  };
+  afterEach(() => {
+    for (const [k, v] of Object.entries(pairs)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it('strips whitespace a paste dragged along', async () => {
+    const { googleClientId, googleClientSecret } = await import('@/lib/google');
+    process.env.GOOGLE_CLIENT_ID = '  id.apps.googleusercontent.com\n';
+    process.env.GOOGLE_CLIENT_SECRET = 'not-a-real-secret  ';
+    expect(googleClientId()).toBe('id.apps.googleusercontent.com');
+    expect(googleClientSecret()).toBe('not-a-real-secret');
+  });
+
+  // The fallback the old `??` silently disabled.
+  it.each([
+    ['blank', ''],
+    ['whitespace', '   '],
+  ])('falls back to the legacy pair when the sync pair is %s', async (_case, value) => {
+    const { googleSyncClientId, googleSyncClientSecret, isGoogleSyncConfigured } =
+      await import('@/lib/sync/providers/google');
+    process.env.GOOGLE_SYNC_CLIENT_ID = value;
+    process.env.GOOGLE_SYNC_CLIENT_SECRET = value;
+    process.env.GOOGLE_CLIENT_ID = 'legacy-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'legacy-secret';
+    expect(googleSyncClientId()).toBe('legacy-id');
+    expect(googleSyncClientSecret()).toBe('legacy-secret');
+    // The whole point: the flow reports itself configured instead of answering
+    // /api/sync/google/auth with `?error=not_configured`.
+    expect(isGoogleSyncConfigured()).toBe(true);
+  });
+
+  it('prefers a real dedicated sync client over the legacy pair', async () => {
+    const { googleSyncClientId, googleSyncClientSecret } = await import('@/lib/sync/providers/google');
+    process.env.GOOGLE_SYNC_CLIENT_ID = ' sync-id ';
+    process.env.GOOGLE_SYNC_CLIENT_SECRET = ' sync-secret ';
+    process.env.GOOGLE_CLIENT_ID = 'legacy-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'legacy-secret';
+    expect(googleSyncClientId()).toBe('sync-id');
+    expect(googleSyncClientSecret()).toBe('sync-secret');
+  });
+
+  // Whitespace is TRUTHY, so an untrimmed blank-ish value reads as configured
+  // and then fails at the provider under a name nobody can search for.
+  it('does not call a whitespace-only Microsoft client configured', async () => {
+    const { isMicrosoftSyncConfigured } = await import('@/lib/sync/providers/microsoft');
+    process.env.MICROSOFT_SYNC_CLIENT_ID = '   ';
+    process.env.MICROSOFT_SYNC_CLIENT_SECRET = '   ';
+    expect(isMicrosoftSyncConfigured()).toBe(false);
+  });
+
+  it('keeps scopes clean when one scope var is blank', async () => {
+    const { googleSyncScopes } = await import('@/lib/sync/providers/google');
+    process.env.GOOGLE_SYNC_CALENDAR_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+    process.env.GOOGLE_SYNC_CALENDAR_READONLY_SCOPE = '   ';
+    process.env.GOOGLE_SYNC_TASKS_SCOPES = 'https://www.googleapis.com/auth/tasks';
+    const scopes = googleSyncScopes();
+    expect(scopes).not.toMatch(/ {2,}/);
+    expect(scopes.split(' ')).toContain('https://www.googleapis.com/auth/calendar.events');
+    expect(scopes.split(' ')).toContain('https://www.googleapis.com/auth/tasks');
+  });
+
+  // A repo-wide guarantee, not a per-site one: a new provider added later must
+  // not reintroduce the `??` that broke the fallback and the redirect URIs.
+  it('leaves no bare ?? on any provider env var', () => {
+    for (const f of ['lib/google.ts', 'lib/sync/providers/google.ts', 'lib/sync/providers/microsoft.ts']) {
+      const src = readFileSync(join(__dirname, '..', f), 'utf8');
+      expect(src, `${f} still has a bare ?? on an env var`).not.toMatch(/process\.env\.[A-Z_]+ \?\?/);
+    }
+  });
+});
