@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "Le résultat n’a pas pu être confirmé. Vérifiez vos publications avant de réessayer.",
   "socialStudio.reviewPosts": "Vérifier les publications",
   "socialPost.awaitingConfirmation": "La publication est en attente de confirmation. Vérifiez sur la plateforme avant de publier à nouveau.",
-  "socialPost.retryAttempted": "Une publication a été tentée. Vérifiez les résultats ci-dessous."
+  "socialPost.retryAttempted": "Une publication a été tentée. Vérifiez les résultats ci-dessous.",
+  "medicationsModule.doseChanged": "Cette prise a été modifiée. Actualisez la page et vérifiez-la avant de l’enregistrer.",
+  "contactUrgent.alertTitle": "Message urgent sur votre ligne familiale",
+  "contactUrgent.smsPrefix": "Urgent sur votre ligne Bubaly : {summary}",
+  "contactUrgent.smsUnknown": "Le SMS urgent a peut-être été envoyé. Vérifiez avant d’en envoyer un autre.",
+  "contactUrgent.smsRejected": "Le SMS urgent a été refusé. Vérifiez le numéro de secours.",
+  "contactUrgent.smsUnavailable": "Le SMS urgent attend la configuration de l’envoi.",
+  "contactUrgent.legacyUnknown": "Cet ancien message n’a pas de preuve d’envoi. Vérifiez les alertes précédentes avant de le renvoyer.",
+  "marketingPush.accepted": "Acceptées par le fournisseur",
+  "marketingPush.review": "Vérifier l’envoi",
+  "marketingPush.completed": "Terminé",
+  "marketingPush.enabledDevices": "Appareils activés",
+  "marketingPush.unconfirmed": "L’envoi est en cours ou non confirmé. Vérifiez avant de renvoyer.",
+  "marketingPush.notStarted": "Aucun envoi n’a commencé. Vous pouvez réessayer.",
+  "marketingPush.outcomes": "Acceptées par le fournisseur : {accepted} · Opérations échouées : {failed} · Appareils ignorés : {skipped} · Utilisateurs exclus : {withheld} · Appareils supprimés : {pruned}",
+  "marketingPush.legacyCounts": "Acceptées par le fournisseur : {accepted} · Opérations échouées : {failed} · Ignorés ou exclus : {skipped}",
+  "contactUrgent.replySaved": "Votre message est enregistré. La famille peut le consulter dans sa boîte de réception."
 }

@@ -132,7 +132,10 @@ describe('actual marketing action through the consent-aware sender', () => {
     await sendPushCampaignAction('campaign');
     expect(state.send).not.toHaveBeenCalled();
     expect(f.tables.marketing_push_campaigns[0]).toMatchObject({ status: 'sent', recipients: 1, sent: 0, failed: 0, skipped: 1 });
-    expect(state.audit.mock.calls[0][1].metadata).toEqual({ recipients: 1, sent: 0, withheld: 1, deviceSkipped: 0 });
+    expect(state.audit.mock.calls[0][1].metadata).toEqual({
+      attemptId: expect.any(String), recipients: 1, sent: 0, failed: 0,
+      withheld: 1, deviceSkipped: 0, pruned: 0,
+    });
   });
 
   it.each(['family_members', 'family_ai_settings', 'user_preferences'])('fails the campaign on a returned %s policy read error and sends only after recovery', async table => {

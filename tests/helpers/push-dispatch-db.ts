@@ -29,6 +29,14 @@ function clauses(expression: string): string[] {
   return out;
 }
 
+function contains(value: unknown, expected: unknown): boolean {
+  if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
+    return Boolean(value && typeof value === 'object' && Object.entries(expected).every(([key, child]) =>
+      contains((value as PushFixtureRow)[key], child)));
+  }
+  return value === expected;
+}
+
 function matches(row: PushFixtureRow, expression: string): boolean {
   if (expression.startsWith('and(') && expression.endsWith(')')) return clauses(expression.slice(4, -1)).every(part => matches(row, part));
   if (expression.startsWith('or(') && expression.endsWith(')')) return clauses(expression.slice(3, -1)).some(part => matches(row, part));
@@ -83,6 +91,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     const query = {
       select: () => query,
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
       is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
       gt: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) > 0); return query; },

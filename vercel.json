@@ -33,6 +33,10 @@
       "schedule": "0 10 * * *"
     },
     {
+      "path": "/api/cron/contact-center-urgent",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/family-routines",
       "schedule": "10 9 * * *"
     },

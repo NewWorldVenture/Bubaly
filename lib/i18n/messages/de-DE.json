@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "Das Ergebnis konnte nicht bestätigt werden. Überprüfen Sie Ihre Beiträge, bevor Sie es erneut versuchen.",
   "socialStudio.reviewPosts": "Beiträge überprüfen",
   "socialPost.awaitingConfirmation": "Die Bestätigung der Veröffentlichung steht noch aus. Überprüfen Sie die Plattform, bevor Sie erneut veröffentlichen.",
-  "socialPost.retryAttempted": "Die Veröffentlichung wurde versucht. Überprüfen Sie die Ergebnisse unten."
+  "socialPost.retryAttempted": "Die Veröffentlichung wurde versucht. Überprüfen Sie die Ergebnisse unten.",
+  "medicationsModule.doseChanged": "Diese Einnahme wurde geändert. Aktualisieren und überprüfen Sie den Eintrag, bevor Sie sie protokollieren.",
+  "contactUrgent.alertTitle": "Dringende Nachricht an Ihrer Familiennummer",
+  "contactUrgent.smsPrefix": "Dringend an Ihrer Bubaly-Nummer: {summary}",
+  "contactUrgent.smsUnknown": "Die dringende SMS wurde möglicherweise gesendet. Überprüfen Sie dies, bevor Sie eine weitere senden.",
+  "contactUrgent.smsRejected": "Die dringende SMS wurde abgelehnt. Überprüfen Sie die Ersatznummer.",
+  "contactUrgent.smsUnavailable": "Die dringende SMS wartet auf die Einrichtung der Zustellung.",
+  "contactUrgent.legacyUnknown": "Für diese ältere Nachricht liegt kein Zustellnachweis vor. Überprüfen Sie frühere Benachrichtigungen, bevor Sie sie erneut senden.",
+  "marketingPush.accepted": "Vom Anbieter angenommen",
+  "marketingPush.review": "Zustellung überprüfen",
+  "marketingPush.completed": "Abgeschlossen",
+  "marketingPush.enabledDevices": "Aktivierte Geräte",
+  "marketingPush.unconfirmed": "Die Zustellung läuft oder ist unbestätigt. Überprüfen Sie sie, bevor Sie erneut senden.",
+  "marketingPush.notStarted": "Es wurde keine Zustellung begonnen. Sie können es erneut versuchen.",
+  "marketingPush.outcomes": "Vom Anbieter angenommen: {accepted} · Fehlgeschlagene Vorgänge: {failed} · Übersprungene Geräte: {skipped} · Ausgeschlossene Nutzer: {withheld} · Entfernte Geräte: {pruned}",
+  "marketingPush.legacyCounts": "Vom Anbieter angenommen: {accepted} · Fehlgeschlagene Vorgänge: {failed} · Übersprungen oder ausgeschlossen: {skipped}",
+  "contactUrgent.replySaved": "Ihre Nachricht wurde gespeichert. Die Familie kann sie in ihrem Posteingang lesen."
 }

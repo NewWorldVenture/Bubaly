@@ -23,6 +23,14 @@ export type PushResult = {
   withheld: number;
 };
 
+/** Raised only while resolving consent, before this batch can contact a provider. */
+export class PushPreparationError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : 'Push preference read failed.');
+    this.name = 'PushPreparationError';
+  }
+}
+
 let vapidReady: boolean | null = null;
 function ensureVapid(): boolean {
   if (vapidReady !== null) return vapidReady;
@@ -139,7 +147,9 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
 /** Fan out with one consent resolution for the complete batch. Read failures throw before any send. */
 export async function sendPushToUsers(supabase: DB, userIds: string[], payload: PushPayload): Promise<PushResult> {
   const candidates = [...new Set(userIds.filter(Boolean))];
-  const blocked = await blockedPushRecipients(supabase, candidates);
+  let blocked: Set<string>;
+  try { blocked = await blockedPushRecipients(supabase, candidates); }
+  catch (error) { throw new PushPreparationError(error); }
   const allowed = candidates.filter(id => !blocked.has(id));
   const result = await sendPermittedPushes(supabase, allowed, payload);
   result.withheld = candidates.length - allowed.length;

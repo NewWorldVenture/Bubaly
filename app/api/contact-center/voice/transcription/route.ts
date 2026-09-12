@@ -6,11 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
-import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
+import { validateTwilioSignature } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { getOrCreateChannelResult, recordInboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,27 +45,15 @@ export async function POST(req: NextRequest) {
     console.error('[contact-center] transcription family context read failed', channelResult.error ?? familyResult.error);
     return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
   }
-  const channel = channelResult.data;
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
-  const filed = await recordInboundMessage(admin, {
-    familyId, channel: 'voice', from: from ?? undefined, subject: 'Voicemail', body: text,
+  let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
+  try { filed = await captureInboundWithUrgency(admin, {
+    familyId, channel: 'voice', from: from ?? undefined, to: params.To || channelResult.data?.phone_number || undefined, subject: 'Voicemail', body: text,
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
-  });
-
-  // Keep urgent escalation independent of planner availability. A retry keeps
-  // recovering the handoff below without repeating the original alert.
-  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
-    try {
-      await admin.from('notifications').insert({
-        family_id: familyId, type: 'system',
-        title: '🚨 Urgent voicemail at your family line', body: result.summary,
-        related_type: 'contact_center',
-      });
-    } catch (error) { console.error('[contact-center] urgent voicemail notification write failed', error); }
-  }
+  }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+  const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
 
   // Capture and planning can fail independently. Resume an unhandled saved
   // voicemail on replay, retaining the provider-ref intake idempotency key.
@@ -95,5 +83,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
   return new NextResponse(null, { status: 204 });
 }

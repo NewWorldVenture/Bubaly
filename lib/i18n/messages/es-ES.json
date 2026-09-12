@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "No se ha podido confirmar el resultado. Revisa tus publicaciones antes de volver a intentarlo.",
   "socialStudio.reviewPosts": "Revisar publicaciones",
   "socialPost.awaitingConfirmation": "La publicación está pendiente de confirmación. Compruébalo en la plataforma antes de volver a publicar.",
-  "socialPost.retryAttempted": "Se ha intentado publicar. Revisa los resultados a continuación."
+  "socialPost.retryAttempted": "Se ha intentado publicar. Revisa los resultados a continuación.",
+  "medicationsModule.doseChanged": "Esta toma ha cambiado. Actualiza y revísala antes de registrarla.",
+  "contactUrgent.alertTitle": "Mensaje urgente en tu línea familiar",
+  "contactUrgent.smsPrefix": "Urgente en tu línea de Bubaly: {summary}",
+  "contactUrgent.smsUnknown": "Es posible que el SMS urgente se haya enviado. Compruébalo antes de enviar otro.",
+  "contactUrgent.smsRejected": "El SMS urgente ha sido rechazado. Revisa el número alternativo.",
+  "contactUrgent.smsUnavailable": "El SMS urgente está pendiente de la configuración de envío.",
+  "contactUrgent.legacyUnknown": "Este mensaje anterior no tiene un comprobante de envío. Revisa las alertas anteriores antes de reenviarlo.",
+  "marketingPush.accepted": "Aceptadas por el proveedor",
+  "marketingPush.review": "Revisar envío",
+  "marketingPush.completed": "Completado",
+  "marketingPush.enabledDevices": "Dispositivos habilitados",
+  "marketingPush.unconfirmed": "El envío está en curso o no se ha confirmado. Revísalo antes de volver a enviar.",
+  "marketingPush.notStarted": "No se ha iniciado ningún envío. Puedes volver a intentarlo.",
+  "marketingPush.outcomes": "Aceptadas por el proveedor: {accepted} · Operaciones fallidas: {failed} · Dispositivos omitidos: {skipped} · Usuarios excluidos: {withheld} · Dispositivos eliminados: {pruned}",
+  "marketingPush.legacyCounts": "Aceptadas por el proveedor: {accepted} · Operaciones fallidas: {failed} · Omitidos o excluidos: {skipped}",
+  "contactUrgent.replySaved": "Tu mensaje se ha guardado. La familia puede consultarlo en su bandeja de entrada."
 }

@@ -9,18 +9,18 @@
 // endpoint is never an open relay; permitted in dev for local testing.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import { sendEmail } from '@/lib/server/email';
-import { sendSms } from '@/lib/guardian/twilio';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
-  resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage,
+  resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
   routeInboundToPlanner, fileInboundPaperwork,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { shouldNotifyFamily } from '@/lib/contact-center/routing';
+import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
 export const runtime = 'nodejs';
@@ -54,7 +54,9 @@ export async function POST(req: NextRequest) {
     if (ctype.includes('application/json')) {
       const raw = await readBoundedRequestText(req, MAX_BODY);
       if (!raw.ok) return new NextResponse('Payload too large', { status: 413 });
-      fields = JSON.parse(raw.text) as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(raw.text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new NextResponse('Invalid payload', { status: 400 });
+      fields = parsed as Record<string, unknown>;
     } else {
       const form = await readBoundedRequestFormData(req, MAX_MULTIPART_EMAIL_BYTES);
       if (!form.ok) return new NextResponse('Payload too large', { status: 413 });
@@ -97,17 +99,13 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'email', from: from ?? undefined, text: body || subject || '', familyLabel });
-  const filed = await recordInboundMessage(admin, {
+  let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
+  try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
     body: body || subject || '(no content)', providerRef: messageId ?? undefined,
     aiSummary: result.summary, aiIntent: result.intent,
-  });
-
-  // Urgent escalation must still reach the human if paperwork matching needs
-  // a retry. Keep it independent of the enrichment/planner availability below.
-  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent email at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent email SMS failed', error); }
-  }
+  }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+  const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
 
   // A saved inbox delivery can still need paperwork enrichment. Retry the
   // same captured row before acknowledging it, including on redelivery.
@@ -166,15 +164,17 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Auto-reply (best-effort) unless the concierge is off or it's spam.
+  if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
+  // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
+      const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
       await sendEmail({
         to: from,
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
-        html: `<p>${result.reply.replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${buildBubalyAddress(local)}</p>`,
+        html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${buildBubalyAddress(local)}</p>`,
       });
-      await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: result.reply });
+      await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }
 

@@ -8,7 +8,10 @@ vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth: { getUser: 
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mocks.admin }));
 vi.mock('@/lib/ai/runs/intake', () => ({ submitRequest: mocks.submit }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock('@/lib/guardian/twilio', async original => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), sendSms: mocks.sendSms }));
+vi.mock('@/lib/guardian/twilio', async original => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), sendSms: mocks.sendSms,
+  isTwilioConfigured: () => true,
+  sendSmsWithReceipt: async (to: string, body: string) => { await mocks.sendSms(to, body); return { kind: 'accepted', messageSid: `SM${'1'.repeat(32)}`, providerStatus: 'queued' }; },
+}));
 vi.mock('@/lib/contact-center/concierge', () => ({ runConcierge: mocks.concierge }));
 
 const ORIGIN = 'https://bubaly.example';
@@ -52,7 +55,8 @@ beforeEach(() => {
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'test-inbound-secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
-  db = createInMemorySupabase({ defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } } });
+  db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
+    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } } });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ id: 'channel-ours', family_id: FAMILY, phone_number: '+15555550100', email_local: 'ours', ai_concierge_enabled: false }]);
   mocks.admin.mockReturnValue(db);

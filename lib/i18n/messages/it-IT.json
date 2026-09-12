@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "Non è stato possibile confermare il risultato. Controlla i tuoi post prima di riprovare.",
   "socialStudio.reviewPosts": "Controlla i post",
   "socialPost.awaitingConfirmation": "La pubblicazione è in attesa di conferma. Controlla sulla piattaforma prima di pubblicare di nuovo.",
-  "socialPost.retryAttempted": "Pubblicazione tentata. Controlla i risultati qui sotto."
+  "socialPost.retryAttempted": "Pubblicazione tentata. Controlla i risultati qui sotto.",
+  "medicationsModule.doseChanged": "Questa assunzione è cambiata. Aggiorna e verifica prima di registrarla.",
+  "contactUrgent.alertTitle": "Messaggio urgente sulla tua linea familiare",
+  "contactUrgent.smsPrefix": "Urgente sulla tua linea Bubaly: {summary}",
+  "contactUrgent.smsUnknown": "L’SMS urgente potrebbe essere stato inviato. Controlla prima di inviarne un altro.",
+  "contactUrgent.smsRejected": "L’SMS urgente è stato rifiutato. Controlla il numero alternativo.",
+  "contactUrgent.smsUnavailable": "L’SMS urgente è in attesa della configurazione di invio.",
+  "contactUrgent.legacyUnknown": "Questo messaggio precedente non ha una ricevuta di invio. Controlla gli avvisi precedenti prima di inviarlo di nuovo.",
+  "marketingPush.accepted": "Accettate dal fornitore",
+  "marketingPush.review": "Verifica invio",
+  "marketingPush.completed": "Completato",
+  "marketingPush.enabledDevices": "Dispositivi abilitati",
+  "marketingPush.unconfirmed": "L’invio è in corso o non è confermato. Verifica prima di inviare di nuovo.",
+  "marketingPush.notStarted": "Nessun invio è stato avviato. Puoi riprovare.",
+  "marketingPush.outcomes": "Accettate dal fornitore: {accepted} · Operazioni non riuscite: {failed} · Dispositivi saltati: {skipped} · Utenti esclusi: {withheld} · Dispositivi rimossi: {pruned}",
+  "marketingPush.legacyCounts": "Accettate dal fornitore: {accepted} · Operazioni non riuscite: {failed} · Saltati o esclusi: {skipped}",
+  "contactUrgent.replySaved": "Il tuo messaggio è stato salvato. La famiglia può leggerlo nella propria casella di posta."
 }

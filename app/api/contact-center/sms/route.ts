@@ -4,13 +4,15 @@
 // family's human fallback number. Signature-validated in production.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
-import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
+import { validateTwilioSignature } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordOutboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { shouldNotifyFamily, autoReplyText } from '@/lib/contact-center/routing';
+import { autoReplyText } from '@/lib/contact-center/routing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,23 +68,13 @@ export async function POST(req: NextRequest) {
 
   const result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
 
-  const filed = await recordInboundMessage(admin, {
+  let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
+  try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'sms', from: from ?? undefined, to, body,
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
-  });
-
-  // Urgency must reach the human before any planner/replay read can fail.
-  // Only the original insertion escalates, so a later retry cannot alert twice.
-  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent SMS escalation failed', error); }
-    try {
-      await admin.from('notifications').insert({
-        family_id: familyId, type: 'system',
-        title: '🚨 Urgent message at your family line', body: result.summary,
-        related_type: 'contact_center',
-      });
-    } catch (error) { console.error('[contact-center] urgent notification write failed', error); }
-  }
+  }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+  // Provider failures remain durable and do not skip independent planner recovery.
+  const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
 
   // A saved inbox row may still need its first successful planner handoff.
   // Re-read its family-scoped completion stamp on replay; intake keeps the
@@ -113,9 +105,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Auto-reply unless the concierge is off or it's spam.
+  if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
+  // Auto-reply acknowledges durable intake without claiming SMS delivery.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam') {
-    const reply = result.reply || autoReplyText(result.intent, familyLabel);
+    const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply || autoReplyText(result.intent, familyLabel);
     await recordOutboundMessage(admin, { familyId, channel: 'sms', to: from ?? undefined, body: reply });
     return xml(`<Message>${escapeXml(reply)}</Message>`);
   }

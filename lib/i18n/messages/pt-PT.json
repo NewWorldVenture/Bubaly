@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "Não foi possível confirmar o resultado. Verifique as suas publicações antes de tentar novamente.",
   "socialStudio.reviewPosts": "Verificar publicações",
   "socialPost.awaitingConfirmation": "A publicação aguarda confirmação. Verifique na plataforma antes de voltar a publicar.",
-  "socialPost.retryAttempted": "Foi efetuada uma tentativa de publicação. Verifique os resultados abaixo."
+  "socialPost.retryAttempted": "Foi efetuada uma tentativa de publicação. Verifique os resultados abaixo.",
+  "medicationsModule.doseChanged": "Esta toma foi alterada. Atualize e verifique os dados antes de a registar.",
+  "contactUrgent.alertTitle": "Mensagem urgente na sua linha familiar",
+  "contactUrgent.smsPrefix": "Urgente na sua linha Bubaly: {summary}",
+  "contactUrgent.smsUnknown": "O SMS urgente pode ter sido enviado. Verifique antes de enviar outro.",
+  "contactUrgent.smsRejected": "O SMS urgente foi rejeitado. Verifique o número alternativo.",
+  "contactUrgent.smsUnavailable": "O SMS urgente aguarda a configuração de envio.",
+  "contactUrgent.legacyUnknown": "Esta mensagem antiga não tem comprovativo de envio. Verifique os alertas anteriores antes de a reenviar.",
+  "marketingPush.accepted": "Aceites pelo fornecedor",
+  "marketingPush.review": "Verificar envio",
+  "marketingPush.completed": "Concluído",
+  "marketingPush.enabledDevices": "Dispositivos ativados",
+  "marketingPush.unconfirmed": "O envio está em curso ou não foi confirmado. Verifique antes de voltar a enviar.",
+  "marketingPush.notStarted": "Não foi iniciado nenhum envio. Pode tentar novamente.",
+  "marketingPush.outcomes": "Aceites pelo fornecedor: {accepted} · Operações falhadas: {failed} · Dispositivos ignorados: {skipped} · Utilizadores excluídos: {withheld} · Dispositivos removidos: {pruned}",
+  "marketingPush.legacyCounts": "Aceites pelo fornecedor: {accepted} · Operações falhadas: {failed} · Ignorados ou excluídos: {skipped}",
+  "contactUrgent.replySaved": "A sua mensagem foi guardada. A família pode consultá-la na sua caixa de entrada."
 }

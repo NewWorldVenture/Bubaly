@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T14:31:33.654Z
-- Total Audit Items: 13444
+- Last Updated: 2026-09-12T14:50:11.987Z
+- Total Audit Items: 13445
 - Not Started: 13416
-- In Progress: 25
+- In Progress: 26
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -24,6 +24,7 @@
 PRODUCTION READY: NO
 
 ## Critical Blockers
+- DEPLOY-001: CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS.
 - AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
@@ -35,7 +36,7 @@ PRODUCTION READY: NO
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Single post-send pushed_at column cannot prevent duplicate device delivery from partial retries or concurrent workers.
 - EMAIL-002: Read-modify-write counters can lose concurrent events or double-count after failed receipt finalization.
-- INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.
+- INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay. Source review found recordInboundMessage used bare onConflict(channel,provider_ref) against only a partial unique index WHERE provider_ref IS NOT NULL, which cannot infer the PostgreSQL arbiter. This is a source-backed contract defect, not a live database reproduction.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
 - UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
@@ -48,6 +49,7 @@ PRODUCTION READY: NO
 - AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
 - AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
 - DATA-005: Repair current read/lifetime/day/action guards and mutation refresh, then verify supported medication workflows. Server/database role enforcement and atomic concurrent state remain separate.
+- PUSH-006: Repair and execute outcome/retry/UI boundaries. Durable per-device receipts and selective retry/reconciliation remain separate existing-schema work.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13293,7 +13295,7 @@ PRODUCTION READY: NO
 | SUPPORT-A3265310F552 | SUPPORT | vercel.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
-| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. |  |
+| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending. |  |
 | TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | None | Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. | Initial combined run found an obsolete timeout-source-map expectation after the native transport moved. The map was corrected, targeted tests passed, and the final entire suite passed. Logs: bubaly-final-audit-locale-units-20260912.log; verification-checkpoint.md. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. | 68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. Next bounded repair preserves stable session identity across refresh/restart while separating saved family data after sign-out, new login or observed access change. |
@@ -13317,7 +13319,7 @@ PRODUCTION READY: NO
 | JOB-001 | JOB | Cron dispatcher missing-configuration failure visibility | 🔄 IN PROGRESS | High | docs/final-audit/cron-dispatch-cycle.md | Missing/blank dispatch secret fails; dry-run remains read-only; validate registered route and HTTPS/HTTP-loopback base origin, reject redirects/failures, bound responses/deadlines and redact secret diagnostics. Schedule and lookback unchanged. | 4 suites /44 tests PASS; strict types, scoped lint, syntax and YAML parse PASS. Production configuration/real execution and durable catch-up remain unverified. |  |
 | PUSH-003 | PUSH | Distributed push delivery receipts and concurrent worker claims | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending |  |
 | EMAIL-002 | EMAIL | Transactional campaign webhook metrics | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending |  |
-| INT-002 | INT | Durable Contact Center outbound escalation and replies | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04. | Pending | Pending |  |
+| INT-002 | INT | Durable Contact Center outbound escalation and replies | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04. | Pending Replace with checked plain insert and exact family/channel/provider/direction duplicate verification on23505; no SQL changes. Durable system receipt before inbox capture, separate deterministic notification repair, revision-claimed one-shot provider attempt, bounded429-only retry, held ambiguous results and fair scheduled drain; intake ACK makes no delivery claim. | 11focused files/187tests pass; independent security review, installed-SDK query contract, handlers and cron execution included; scoped lint pass. Combined fourth-cycle gates pending. See docs/final-audit/contact-center-urgent-cycle.md and contact-center-urgent-security-review.md. |  |
 | SEC-003 | SEC | Native deep-link internal navigation boundary | 🔄 IN PROGRESS | High | docs/final-audit/native-cycle.md | Validate parsed pathname through existing safeInternalRedirect; preserve accepted OAuth query/hash unchanged. | Four adversarial paths failed before and pass after fix; ordinary and encoded OAuth returns remain accepted in actual-component Chromium tests. | Origin allowlist policy is separate; preserve supported same-origin navigation and OAuth query/hash. |
 | UI-002 | UI | Public feature-link browser navigation | 🔄 IN PROGRESS | High | docs/final-audit/public-navigation-cycle.md; tests/marketing-public-read-budget.test.ts; private production Chromium feature-link and mobile-menu navigation timing; selected 104-test public browser run | Public SEO/AEO sequential fallback reads share a 1.5-second abort budget; abandoned requests cannot start fallback work. Successful configuration and authoritative empty values remain intact, and failed reads remain uncached. The optional cached social-profile read now has the same 1.5-second SDK abort deadline, preserving throw-inside/catch-outside cache semantics. | Installed-SDK read deadline and failure/recovery checks pass. After both editorial and social-read repairs, integrated production fresh-home load was 2120ms and feature navigation 1657ms with no page errors under a controlled database outage. 104 selected production Chromium checks PASS in 1.8 minutes. Final b4d4ad78 changes private display only. Live configured content and cache invalidation remain open. | Missing service key also caused pricing error-boundary fixture failures; no pricing source defect inferred. |
 | UI-WF-001 | UI-FLOW | Sign in, sign up, referral, child PIN and identity stitching | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13467,7 +13469,7 @@ PRODUCTION READY: NO
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
 | AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
-| DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | Actual React/hooks/installed SDK browser execution on prior frozen source: 14 characterization cases (6 correct initial read controls, 8 defect reproductions). Unique(schedule_id,scheduled_for) constraint modeled: repeated inserts are repeated requests/conflicts, not duplicate durable rows. tests/e2e/medications-audit-repro.spec.ts is next-cycle uncommitted evidence, not part of social/rewards checkpoint6094eb04. | Pending. Findings recorded before medication production edits. | Pending repair and regression; characterization tests are not workflow PASS. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
+| DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required verified read gates, synchronous owner/lifetime mutation locks, explicit readback, exact unique slot matching, local midnight advancement and DST-gap review. | 33actual Chromium module/cache/query/SDK checks pass;19related unit checks and scoped lint pass. Combined fourth-cycle gates pending. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | LIBRARY-90A14267D9AB | LIBRARY | lib/social/account-tokens.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -13496,6 +13498,7 @@ PRODUCTION READY: NO
 | CONTROL-500E3CB76770 | CONTROL | Open the persisted post after a publish attempt | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | CONTROL-CE67470D62E2 | CONTROL | Review posts when the create response is unconfirmed | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | CONTROL-0B16B431843F | CONTROL | Return to Social Accounts after failed X authorization | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
+| PUSH-006 | PUSH | Marketing push outcomes, retry authority and display units must remain honest | 🔄 IN PROGRESS | High | Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md. | Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records. | Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending. | No SQL, shared navigation, live sends or dependency changes. Prior audience pagination repair remains independently verified. |
 
 ## Inventory and evidence rules
 
@@ -13559,13 +13562,13 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-No complete workflow finding yet; investigation pending.
+CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS.
 
 #### Fixes Applied
 None
 
 #### Retest Results
-Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI.
+Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending.
 
 #### Evidence
 Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.
@@ -14327,13 +14330,13 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.
+Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay. Source review found recordInboundMessage used bare onConflict(channel,provider_ref) against only a partial unique index WHERE provider_ref IS NOT NULL, which cannot infer the PostgreSQL arbiter. This is a source-backed contract defect, not a live database reproduction.
 
 #### Fixes Applied
-Pending
+Pending Replace with checked plain insert and exact family/channel/provider/direction duplicate verification on23505; no SQL changes. Durable system receipt before inbox capture, separate deterministic notification repair, revision-claimed one-shot provider attempt, bounded429-only retry, held ambiguous results and fair scheduled drain; intake ACK makes no delivery claim.
 
 #### Retest Results
-Pending
+11focused files/187tests pass; independent security review, installed-SDK query contract, handlers and cron execution included; scoped lint pass. Combined fourth-cycle gates pending. See docs/final-audit/contact-center-urgent-cycle.md and contact-center-urgent-security-review.md.
 
 #### Evidence
 Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04.
@@ -14714,13 +14717,45 @@ Dose actions reflect verified current records, active medication, the current ho
 Unpublished dose-table writes leave stale controls: taken→skip persists skipped while UI says taken, and a subsequent taken action deletes the skipped row. Cached pending dose reads, duplicate and retained prior-family callbacks remain actionable; rejected transport leaves controls busy. Inactive medications remain actionable and the memoized day does not advance at midnight.
 
 #### Fixes Applied
-Pending. Findings recorded before medication production edits.
+Required verified read gates, synchronous owner/lifetime mutation locks, explicit readback, exact unique slot matching, local midnight advancement and DST-gap review.
 
 #### Retest Results
-Pending repair and regression; characterization tests are not workflow PASS.
+33actual Chromium module/cache/query/SDK checks pass;19related unit checks and scoped lint pass. Combined fourth-cycle gates pending.
 
 #### Evidence
-Actual React/hooks/installed SDK browser execution on prior frozen source: 14 characterization cases (6 correct initial read controls, 8 defect reproductions). Unique(schedule_id,scheduled_for) constraint modeled: repeated inserts are repeated requests/conflicts, not duplicate durable rows. tests/e2e/medications-audit-repro.spec.ts is next-cycle uncommitted evidence, not part of social/rewards checkpoint6094eb04.
+See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts.
+
+#### Final Status
+🔄 IN PROGRESS
+
+### PUSH-006 — Marketing push outcomes, retry authority and display units must remain honest
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/(app)/admin/marketing/push/actions.ts; app/(app)/admin/marketing/push/page.tsx; lib/marketing/push.ts; lib/server/push.ts
+
+#### Expected Behavior
+Provider failures, unconfigured delivery and uncertain sends do not appear as successful delivery; only known pre-dispatch failures may be safely retried, and device outcomes are not divided by a user count.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+A campaign can be marked sent despite all provider requests failing or being unconfigured. UI compares per-device accepted sends with eligible user counts, producing rates above100%. Failed sender attempts can be retried without proof that no external delivery occurred. Independent actual action/core/page execution reproduced deletion hiding a sending campaign while its provider request continued and a second device was sent; retain active/uncertain receipts visibly with server-side conditional deletion protection.
+
+#### Fixes Applied
+Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records.
+
+#### Retest Results
+Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending.
+
+#### Evidence
+Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -18667,6 +18702,7 @@ Status: NOT STARTED — second regression follows individual verification; basel
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
+- DEPLOY-001: CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS.
 - AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
@@ -18678,7 +18714,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Single post-send pushed_at column cannot prevent duplicate device delivery from partial retries or concurrent workers.
 - EMAIL-002: Read-modify-write counters can lose concurrent events or double-count after failed receipt finalization.
-- INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.
+- INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay. Source review found recordInboundMessage used bare onConflict(channel,provider_ref) against only a partial unique index WHERE provider_ref IS NOT NULL, which cannot infer the PostgreSQL arbiter. This is a source-backed contract defect, not a live database reproduction.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
 - UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
@@ -18691,6 +18727,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
 - AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
 - DATA-005: Repair current read/lifetime/day/action guards and mutation refresh, then verify supported medication workflows. Server/database role enforcement and atomic concurrent state remain separate.
+- PUSH-006: Repair and execute outcome/retry/UI boundaries. Durable per-device receipts and selective retry/reconciliation remain separate existing-schema work.
 
 ## Production Readiness
 NO

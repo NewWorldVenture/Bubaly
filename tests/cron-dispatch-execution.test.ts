@@ -48,11 +48,11 @@ describe('cron dispatcher CLI configuration and dispatch', () => {
     expect(result.output).not.toContain(SECRET);
   });
 
-  it('dispatches all three routes due at the fixed five-minute tick, once each', () => {
+  it('dispatches all four routes due at the fixed five-minute tick, once each', () => {
     const result = cli(AT);
     expect(result.status).toBe(0);
     const calls = result.output.split('\n').filter(line => line.startsWith('TEST_DISPATCH ')).map(line => JSON.parse(line.slice('TEST_DISPATCH '.length)).url);
-    expect(calls.sort()).toEqual(['https://cron.invalid/api/cron/marketing', 'https://cron.invalid/api/cron/close-auctions', 'https://cron.invalid/api/cron/ai-runs'].sort());
+    expect(calls.sort()).toEqual(['https://cron.invalid/api/cron/marketing', 'https://cron.invalid/api/cron/close-auctions', 'https://cron.invalid/api/cron/ai-runs', 'https://cron.invalid/api/cron/contact-center-urgent'].sort());
   });
 
   it.each(['@unexpected.invalid', '/api/cron/not-registered', '/api/health', 'https://unexpected.invalid'])('rejects an unregistered manual route %s before dispatch', route => {
@@ -115,8 +115,8 @@ describe('cron dispatcher CLI configuration and dispatch', () => {
   it('reports a failed tick while still attempting every due route', () => {
     const result = cli(AT, {}, `globalThis.fetch = async url => { console.log('TEST_ATTEMPT'); return new Response('result', { status: String(url).endsWith('/marketing') ? 503 : 200 }); };`);
     expect(result.status).toBe(1);
-    expect(result.output.match(/TEST_ATTEMPT/g)).toHaveLength(3);
-    expect(result.output).toContain('1 of 3 cron route(s) failed');
+    expect(result.output.match(/TEST_ATTEMPT/g)).toHaveLength(4);
+    expect(result.output).toContain('1 of 4 cron route(s) failed');
   });
 
   it('cancels an oversized response after reading a bounded preview', () => {

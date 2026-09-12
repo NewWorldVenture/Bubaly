@@ -157,6 +157,23 @@ function derivedProviderRef(input: {
   return `derived:${digest.slice(0, 32)}`;
 }
 
+/** Share the exact intake identity with durable work recorded before capture. */
+export function inboundProviderRef(input: { familyId: string; channel: InboundChannel; from?: string; subject?: string; body: string; providerRef?: string }): string {
+  return (input.providerRef ?? '').trim() || derivedProviderRef(input);
+}
+
+/** The index is global: a duplicate must still belong to this inbound family. */
+export async function findInboundMessage(admin: Admin, input: { familyId: string; channel: InboundChannel; providerRef: string }, signal?: AbortSignal): Promise<string | null> {
+  const found = await admin.from('family_inbox_messages')
+    .select('id,family_id,channel,provider_ref,direction', { count: 'exact' })
+    .eq('channel', input.channel).eq('provider_ref', input.providerRef).limit(2).abortSignal(signal ?? AbortSignal.timeout(5000));
+  if (found.error || !Array.isArray(found.data) || found.count !== found.data.length || found.data.length > 1) throw new Error('Inbound identity read failed');
+  const row = found.data[0];
+  if (!row) return null;
+  if (!row.id || row.family_id !== input.familyId || row.channel !== input.channel || row.provider_ref !== input.providerRef || row.direction !== 'inbound') throw new Error('Inbound identity mismatch');
+  return row.id;
+}
+
 /**
  * File an inbound message into the family's unified inbox. Runs the deterministic
  * concierge classification, de-dupes on the provider ref, and pings the family
@@ -166,27 +183,18 @@ function derivedProviderRef(input: {
 export async function recordInboundMessage(admin: Admin, input: {
   familyId: string; channel: InboundChannel; from?: string; to?: string;
   subject?: string; body: string; providerRef?: string; aiSummary?: string; aiIntent?: string;
-}): Promise<InboundRecord> {
+}, signal?: AbortSignal): Promise<InboundRecord> {
   const intent = input.aiIntent ?? classifyIntent(input.body);
   const summary = input.aiSummary ?? summarizeInbound(input.body);
   const escalate = shouldNotifyFamily((intent as ReturnType<typeof classifyIntent>));
-  const providerRef = (input.providerRef ?? '').trim() || derivedProviderRef(input);
+  const providerRef = inboundProviderRef(input);
 
-  // Look before writing. `ignoreDuplicates` alone cannot tell the caller whether
-  // it inserted, and "has this delivery already arrived?" is the question the
-  // planner routing turns on.
-  const seen = await admin
-    .from('family_inbox_messages')
-    .select('id')
-    .eq('channel', input.channel)
-    .eq('provider_ref', providerRef)
-    .maybeSingle();
-  if (seen.error) console.error('[contact-center] inbound de-dupe read failed', seen.error);
-  if (seen.data?.id) {
-    return { intent, escalated: escalate, messageId: seen.data.id, inserted: false, providerRef };
-  }
+  const seen = await findInboundMessage(admin, { ...input, providerRef }, signal);
+  if (seen) return { intent, escalated: escalate, messageId: seen, inserted: false, providerRef };
 
-  const { data, error } = await admin.from('family_inbox_messages').upsert({
+  // PostgreSQL cannot infer the partial provider-ref index from a bare
+  // PostgREST on_conflict target. Insert and resolve only a verified collision.
+  const { data, error } = await admin.from('family_inbox_messages').insert({
     family_id: input.familyId,
     channel: input.channel,
     direction: 'inbound',
@@ -197,30 +205,20 @@ export async function recordInboundMessage(admin: Admin, input: {
     ai_summary: summary,
     ai_intent: intent,
     provider_ref: providerRef,
-  }, { onConflict: 'channel,provider_ref', ignoreDuplicates: true })
-    .select('id');
+  })
+    .select('id').abortSignal(signal ?? AbortSignal.timeout(5000));
   if (error) {
-    console.error('[contact-center] inbound message persistence failed', error);
+    if (error.code === '23505') {
+      const duplicate = await findInboundMessage(admin, { ...input, providerRef }, signal);
+      if (duplicate) return { intent, escalated: escalate, messageId: duplicate, inserted: false, providerRef };
+    }
     throw new Error('Inbound message persistence failed');
   }
 
   const messageId: string | null = data?.[0]?.id ?? null;
   if (messageId) return { intent, escalated: escalate, messageId, inserted: true, providerRef };
 
-  // `ignoreDuplicates` returns nothing when the unique index swallowed the row —
-  // two deliveries racing each other — so the id is read back by the ref the
-  // index is on, and this call reports that it did NOT insert.
-  const found = await admin
-    .from('family_inbox_messages')
-    .select('id')
-    .eq('channel', input.channel)
-    .eq('provider_ref', providerRef)
-    .maybeSingle();
-  if (found.error) console.error('[contact-center] inbound message id read failed', found.error);
-
-  // The caller (webhook) decides how to escalate (SMS the human fallback, etc.)
-  // using the returned flag — this lib stays storage-only.
-  return { intent, escalated: escalate, messageId: found.data?.id ?? null, inserted: false, providerRef };
+  throw new Error('Inbound message persistence returned no identity');
 }
 
 /** Paperwork triage kinds worth filing: a form, a bill, a receipt, a reservation. */

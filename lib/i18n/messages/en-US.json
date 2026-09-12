@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "The result could not be confirmed. Review your posts before trying again.",
   "socialStudio.reviewPosts": "Review posts",
   "socialPost.awaitingConfirmation": "Publication is awaiting confirmation. Review the provider before posting again.",
-  "socialPost.retryAttempted": "Publish attempted. Review the results below."
+  "socialPost.retryAttempted": "Publish attempted. Review the results below.",
+  "medicationsModule.doseChanged": "This dose changed. Refresh and review it before logging.",
+  "contactUrgent.alertTitle": "Urgent message at your family line",
+  "contactUrgent.smsPrefix": "Urgent at your Bubaly line: {summary}",
+  "contactUrgent.smsUnknown": "The urgent text may have been sent. Check before sending another.",
+  "contactUrgent.smsRejected": "The urgent text was rejected. Check the fallback number.",
+  "contactUrgent.smsUnavailable": "The urgent text is waiting for delivery configuration.",
+  "contactUrgent.legacyUnknown": "This older message has no delivery receipt. Check previous alerts before resending.",
+  "marketingPush.accepted": "Provider accepted",
+  "marketingPush.review": "Review delivery",
+  "marketingPush.completed": "Completed",
+  "marketingPush.enabledDevices": "Enabled devices",
+  "marketingPush.unconfirmed": "Delivery is in progress or unconfirmed. Review before sending again.",
+  "marketingPush.notStarted": "No delivery was started. You can retry.",
+  "marketingPush.outcomes": "Provider accepted: {accepted} · Failed operations: {failed} · Devices skipped: {skipped} · Users excluded: {withheld} · Devices removed: {pruned}",
+  "marketingPush.legacyCounts": "Provider accepted: {accepted} · Failed operations: {failed} · Skipped or excluded: {skipped}",
+  "contactUrgent.replySaved": "Your message is saved. The family can review it in their inbox."
 }

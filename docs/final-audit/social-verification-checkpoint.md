@@ -30,7 +30,9 @@ Host evidence is under the temporary directory with prefix `bubaly-social-` and 
 
 ## CI and deployment provenance
 
-The preceding published source19a6907f passed all four jobs in [run34698217047](https://github.com/NewWorldVenture/Bubaly/actions/runs/34698217047), including 576 disposable Supabase/authenticated browser tests. Its Vercel deployment succeeded, but bounded anonymous probes reached Vercel's authentication gate; deployed Bubaly behavior was not visible. This new source requires its own CI result after publication.
+The preceding published source19a6907f passed all four jobs in [run34698217047](https://github.com/NewWorldVenture/Bubaly/actions/runs/34698217047), including 576 disposable Supabase/authenticated browser tests. Its Vercel deployment succeeded, but bounded anonymous probes reached Vercel's authentication gate; deployed Bubaly behavior was not visible.
+
+Published checkpoint8b3df5e1 ran [CI34699583414](https://github.com/NewWorldVenture/Bubaly/actions/runs/34699583414). Database, mobile and Vercel checks passed. The browser job passed with608 passed and1 flaky authenticated first-task journey (the Task saved toast was absent on the first attempt); its log also contains Node TransformStream render errors on GET/. This is not a clean full-workflow result. The quality job passed12922 tests and failed only the all-source-key catalogue test at its5000ms timeout. Commit05e1b69b retains validation of every key in every locale, collecting invalid keys before each locale assertion to remove per-key assertion overhead. Its targeted test run passed; hosted rerun remains separately tracked.
 
 ## Remaining scope
 

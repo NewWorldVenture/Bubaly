@@ -108,7 +108,7 @@ describe('concierge routing', () => {
 describe('contact center persistence boundaries', () => {
   it('does not collapse channel and inbox failures into empty state', () => {
     expect(contactCenterServer).toContain('getOrCreateChannelResult');
-    expect(contactCenterServer).toContain('inbound message persistence failed');
+    expect(contactCenterServer).toContain("throw new Error('Inbound message persistence failed')");
     expect(contactCenterServer).toContain('outbound message persistence failed');
     expect(contactCenterPage).toContain('channelResult.error || messagesResult.error');
   });

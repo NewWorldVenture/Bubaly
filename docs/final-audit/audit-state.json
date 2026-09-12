@@ -180494,8 +180494,9 @@
       "severity": "High",
       "tests": "Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations.",
       "fix": "None",
-      "retest": "Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI.",
-      "notes": ""
+      "retest": "Frozen source 6094eb04045326fdd18a1a67785188cc805c2612: full 1143-file/12923-test suite PASS (144.60s,2workers); production build244pages PASS; strict TypeScript after build PASS;177 Chromium checks PASS (24.1s, runtime unchanged from d8b276db); full lint PASS with4unchanged warnings; query audit484tables/77functions/137routes and i18n gate PASS; startup home2101ms/navigation1675ms/no page errors. See docs/final-audit/social-verification-checkpoint.md. Prior-source CI19a6907f all4jobsPASS includes576 authenticated/disposable-Supabase browser tests; new source awaits publication CI. Hosted8b3df5e1 CI34699583414: DB/mobile/Vercel pass, E2E608passed+1flaky, quality12922passed+1catalogue timeout; isolated test optimization05e1b69b published, CI pending.",
+      "notes": "",
+      "issue": "CI source8b3df5e1 quality failed only all-key catalogue test timeout;05e1b69b preserves complete validation but batches invalid-key assertions, targeted catalogue test file passes. Hosted E2E job passed with608passed and1flaky authenticated first-task toast check; server log also records Node TransformStream render errors on GET/. These require investigation, not a clean full workflow PASS."
     },
     "TEST-001": {
       "id": "TEST-001",
@@ -180826,9 +180827,9 @@
       "status": "IN PROGRESS",
       "severity": "High",
       "tests": "Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04.",
-      "issue": "Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.",
-      "fix": "Pending",
-      "retest": "Pending",
+      "issue": "Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay. Source review found recordInboundMessage used bare onConflict(channel,provider_ref) against only a partial unique index WHERE provider_ref IS NOT NULL, which cannot infer the PostgreSQL arbiter. This is a source-backed contract defect, not a live database reproduction.",
+      "fix": "Pending Replace with checked plain insert and exact family/channel/provider/direction duplicate verification on23505; no SQL changes. Durable system receipt before inbox capture, separate deterministic notification repair, revision-claimed one-shot provider attempt, bounded429-only retry, held ambiguous results and fair scheduled drain; intake ACK makes no delivery claim.",
+      "retest": "11focused files/187tests pass; independent security review, installed-SDK query contract, handlers and cron execution included; scoped lint pass. Combined fourth-cycle gates pending. See docs/final-audit/contact-center-urgent-cycle.md and contact-center-urgent-security-review.md.",
       "notes": ""
     },
     "SEC-003": {
@@ -182922,9 +182923,9 @@
       "severity": "High",
       "expected": "Dose actions reflect verified current records, active medication, the current household and day, reject duplicate callbacks, recover from failed writes, and refresh successful mutations.",
       "issue": "Unpublished dose-table writes leave stale controls: taken→skip persists skipped while UI says taken, and a subsequent taken action deletes the skipped row. Cached pending dose reads, duplicate and retained prior-family callbacks remain actionable; rejected transport leaves controls busy. Inactive medications remain actionable and the memoized day does not advance at midnight.",
-      "tests": "Actual React/hooks/installed SDK browser execution on prior frozen source: 14 characterization cases (6 correct initial read controls, 8 defect reproductions). Unique(schedule_id,scheduled_for) constraint modeled: repeated inserts are repeated requests/conflicts, not duplicate durable rows. tests/e2e/medications-audit-repro.spec.ts is next-cycle uncommitted evidence, not part of social/rewards checkpoint6094eb04.",
-      "fix": "Pending. Findings recorded before medication production edits.",
-      "retest": "Pending repair and regression; characterization tests are not workflow PASS.",
+      "tests": "See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts.",
+      "fix": "Required verified read gates, synchronous owner/lifetime mutation locks, explicit readback, exact unique slot matching, local midnight advancement and DST-gap review.",
+      "retest": "33actual Chromium module/cache/query/SDK checks pass;19related unit checks and scoped lint pass. Combined fourth-cycle gates pending.",
       "remaining": "Repair current read/lifetime/day/action guards and mutation refresh, then verify supported medication workflows. Server/database role enforcement and atomic concurrent state remain separate.",
       "notes": "Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes."
     },
@@ -183310,7 +183311,23 @@
       "retest": "Pending",
       "notes": "New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.",
       "line": 24
+    },
+    "PUSH-006": {
+      "id": "PUSH-006",
+      "key": "PUSH-006",
+      "area": "PUSH",
+      "name": "Marketing push outcomes, retry authority and display units must remain honest",
+      "source": "app/(app)/admin/marketing/push/actions.ts; app/(app)/admin/marketing/push/page.tsx; lib/marketing/push.ts; lib/server/push.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "expected": "Provider failures, unconfigured delivery and uncertain sends do not appear as successful delivery; only known pre-dispatch failures may be safely retried, and device outcomes are not divided by a user count.",
+      "tests": "Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md.",
+      "issue": "A campaign can be marked sent despite all provider requests failing or being unconfigured. UI compares per-device accepted sends with eligible user counts, producing rates above100%. Failed sender attempts can be retried without proof that no external delivery occurred. Independent actual action/core/page execution reproduced deletion hiding a sending campaign while its provider request continued and a second device was sent; retain active/uncertain receipts visibly with server-side conditional deletion protection.",
+      "fix": "Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records.",
+      "retest": "Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending.",
+      "remaining": "Repair and execute outcome/retry/UI boundaries. Durable per-device receipts and selective retry/reconciliation remain separate existing-schema work.",
+      "notes": "No SQL, shared navigation, live sends or dependency changes. Prior audience pagination repair remains independently verified."
     }
   },
-  "lastUpdated": "2026-09-12T14:31:33.654Z"
+  "lastUpdated": "2026-09-12T14:50:11.987Z"
 }

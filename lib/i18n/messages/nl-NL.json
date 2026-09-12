@@ -13475,5 +13475,21 @@
   "socialStudio.requestUnconfirmed": "Het resultaat kon niet worden bevestigd. Controleer je berichten voordat je het opnieuw probeert.",
   "socialStudio.reviewPosts": "Berichten controleren",
   "socialPost.awaitingConfirmation": "De publicatie wacht op bevestiging. Controleer het platform voordat je opnieuw publiceert.",
-  "socialPost.retryAttempted": "Publicatie geprobeerd. Controleer de resultaten hieronder."
+  "socialPost.retryAttempted": "Publicatie geprobeerd. Controleer de resultaten hieronder.",
+  "medicationsModule.doseChanged": "Deze inname is gewijzigd. Vernieuw en controleer de gegevens voordat je de inname vastlegt.",
+  "contactUrgent.alertTitle": "Dringend bericht op je gezinslijn",
+  "contactUrgent.smsPrefix": "Dringend op je Bubaly-lijn: {summary}",
+  "contactUrgent.smsUnknown": "Het dringende sms-bericht is mogelijk verzonden. Controleer dit voordat je er nog een verstuurt.",
+  "contactUrgent.smsRejected": "Het dringende sms-bericht is geweigerd. Controleer het alternatieve nummer.",
+  "contactUrgent.smsUnavailable": "Het dringende sms-bericht wacht op de verzendconfiguratie.",
+  "contactUrgent.legacyUnknown": "Dit oudere bericht heeft geen verzendbewijs. Controleer eerdere meldingen voordat je het opnieuw verstuurt.",
+  "marketingPush.accepted": "Door provider geaccepteerd",
+  "marketingPush.review": "Verzending controleren",
+  "marketingPush.completed": "Voltooid",
+  "marketingPush.enabledDevices": "Ingeschakelde apparaten",
+  "marketingPush.unconfirmed": "De verzending is bezig of niet bevestigd. Controleer dit voordat je opnieuw verstuurt.",
+  "marketingPush.notStarted": "Er is geen verzending gestart. Je kunt het opnieuw proberen.",
+  "marketingPush.outcomes": "Door provider geaccepteerd: {accepted} · Mislukte bewerkingen: {failed} · Overgeslagen apparaten: {skipped} · Uitgesloten gebruikers: {withheld} · Verwijderde apparaten: {pruned}",
+  "marketingPush.legacyCounts": "Door provider geaccepteerd: {accepted} · Mislukte bewerkingen: {failed} · Overgeslagen of uitgesloten: {skipped}",
+  "contactUrgent.replySaved": "Je bericht is opgeslagen. Het gezin kan het in de inbox bekijken."
 }
