@@ -13455,5 +13455,8 @@
   "displayGrid.calendarUnavailable": "Terminmarkierungen im Kalender sind nicht verfügbar.",
   "displayGrid.remindersUnavailable": "Erinnerungen sind nicht verfügbar.",
   "displayGrid.timezoneFallback": "Die Zeitzone der Familie ist nicht verfügbar. Zeiten werden in UTC angezeigt.",
-  "displayGrid.dataUnavailable": "Einige Anzeigedaten sind nicht verfügbar. Die Anzeige versucht es automatisch erneut."
+  "displayGrid.dataUnavailable": "Einige Anzeigedaten sind nicht verfügbar. Die Anzeige versucht es automatisch erneut.",
+  "auth.cacheSessionUnavailable": "Ihre Sitzung ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.",
+  "auth.cacheSessionChanged": "Ihre Sitzung hat sich geändert. Bitte warten Sie, während die App aktualisiert wird.",
+  "auth.cacheFamilyMismatch": "Diese Familie stimmt nicht mit Ihrem aktuellen Kontokontext überein."
 }

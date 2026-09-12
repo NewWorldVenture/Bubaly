@@ -10,6 +10,7 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const sources = Object.fromEntries([
   'components/auth/session-keeper.tsx', 'components/auth/sign-out-button.tsx',
   'lib/offline/cache.ts', 'lib/hooks/use-realtime-query.ts',
+  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
@@ -38,9 +39,15 @@ test.beforeEach(async ({ page }) => {
     const p = window.__authLifecycle = { native: false, held: false, removalFails: false, removalThrows: false, removals: 0, refreshes: 0, errors: [], readHeld: false, pendingReads: 0 };
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
     let callback, release, currentUser = 'user-a', sessionError = false;
+    const userId = user => user === 'user-a' ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' : 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const sessionFor = user => user ? { access_token: [btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })),
+      btoa(JSON.stringify({ sub: userId(user), session_id: sessionId })).replace(/=/g, ''), 'synthetic-signature'].join('.'),
+      refresh_token: 'synthetic-refresh', token_type: 'bearer', expires_in: 3600,
+      user: { id: userId(user), aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' } } : null;
     const completeReads = [];
     const db = {
-      auth: { getSession: async () => ({ data: { session: currentUser ? { user: { id: currentUser } } : null }, error: sessionError ? new Error('Fixture refresh unavailable') : null }),
+      auth: { getSession: async () => ({ data: { session: sessionFor(currentUser) }, error: sessionError ? new Error('Fixture refresh unavailable') : null }),
         onAuthStateChange: handler => { callback = handler; return { data: { subscription: { unsubscribe() {} } } }; } },
       channel: () => ({ on() { return this; }, subscribe() { return this; } }), removeChannel: async () => {},
     };
@@ -71,11 +78,14 @@ test.beforeEach(async ({ page }) => {
     const { SignOutButton } = load('@/components/auth/sign-out-button');
     const { useRealtimeQuery } = load('@/lib/hooks/use-realtime-query');
     const cache = load('@/lib/offline/cache');
-    const key = cache.cacheKey('calendar_events', 'same-family', ['same-family']);
-    p.seed = () => { cache.writeCache(key, [{ id: 'user-a-private' }]); localStorage.setItem('unrelated-preference', 'keep'); };
-    p.cached = () => cache.readCache(key);
+    const { AuthenticatedCacheBoundary, cacheAccessKey } = load('@/lib/offline/cache-scope');
+    const access = user => ({ userId: userId(user), familyId: 'same-family', memberId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      membershipUpdatedAt: '2026-09-12T00:00:00Z', role: 'parent', isSuperAdmin: false, planLevel: 2, featureTiers: {} });
+    const key = cache.cacheIdentity({ userId: userId('user-a'), sessionId, accessIdentity: cacheAccessKey(access('user-a')) }, 'calendar_events', 'same-family', ['same-family']);
+    p.seed = () => { cache.writePartitionedCache(key, [{ id: 'user-a-private' }]); localStorage.setItem('unrelated-preference', 'keep'); };
+    p.cached = () => cache.readPartitionedCache(key);
     p.offline = () => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
-    p.emit = (event, user) => { currentUser = user; callback(event, user ? { user: { id: user } } : null); };
+    p.emit = (event, user) => { currentUser = user; callback(event, sessionFor(user)); };
     p.storedUser = (user, error = false) => { currentUser = user; sessionError = error; };
     p.release = () => release();
     p.completeRead = () => completeReads[0]();
@@ -91,8 +101,8 @@ test.beforeEach(async ({ page }) => {
     p.mount = (user, consumer = false) => {
       if (!root) root = ReactDOM.createRoot(document.getElementById('root'));
       ReactDOM.flushSync(() => root.render(React.createElement(React.Fragment, null,
-        React.createElement(SessionKeeper, { userId: user }), React.createElement(SignOutButton),
-        consumer ? React.createElement(Consumer, { user }) : null)));
+        React.createElement(SessionKeeper, { userId: userId(user) }), React.createElement(SignOutButton),
+        consumer ? React.createElement(AuthenticatedCacheBoundary, { access: access(user) }, React.createElement(Consumer, { user })) : null)));
     };
     p.unmount = () => { ReactDOM.flushSync(() => root.unmount()); root = null; };
   })();` });
@@ -142,7 +152,9 @@ for (const held of [false, true]) for (const synchronous of [false, true]) {
 
 for (const user of [null, 'user-b']) {
   test(`successful foreground identity reconciliation to ${user ?? 'signed-out'} clears offline cache`, async ({ page }) => {
-    await page.evaluate(user => { const p = window.__authLifecycle; p.seed(); p.mount('user-a'); p.storedUser(user); window.dispatchEvent(new Event('focus')); }, user);
+    await page.evaluate(() => { const p = window.__authLifecycle; p.seed(); p.mount('user-a'); });
+    await settle(page);
+    await page.evaluate(user => { const p = window.__authLifecycle; p.storedUser(user); const now = Date.now(); Date.now = () => now + 31_000; window.dispatchEvent(new Event('focus')); }, user);
     await settle(page);
     expect(await page.evaluate(() => window.__authLifecycle.refreshes)).toBe(1);
     expect(await page.evaluate(() => window.__authLifecycle.cached())).toBeNull();
@@ -150,7 +162,9 @@ for (const user of [null, 'user-b']) {
 }
 
 test('transient failed foreground refresh retains cached data and existing identity', async ({ page }) => {
-  await page.evaluate(() => { const p = window.__authLifecycle; p.seed(); p.mount('user-a'); p.storedUser(null, true); window.dispatchEvent(new Event('focus')); });
+  await page.evaluate(() => { const p = window.__authLifecycle; p.seed(); p.mount('user-a'); });
+  await settle(page);
+  await page.evaluate(() => { const p = window.__authLifecycle; p.storedUser(null, true); const now = Date.now(); Date.now = () => now + 31_000; window.dispatchEvent(new Event('focus')); });
   await settle(page);
   expect(await page.evaluate(() => window.__authLifecycle.refreshes)).toBe(0);
   expect(await page.evaluate(() => window.__authLifecycle.cached())).not.toBeNull();

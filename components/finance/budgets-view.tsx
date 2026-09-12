@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, budgetSpent, pct, type Period } from '@/lib/finance/hub';
@@ -26,17 +26,18 @@ export function BudgetsView() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: budgets, loading } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading, error, stale, refresh } = useRealtimeQuery<Budget>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId).order('category'),
   });
-  const { data: txns } = useRealtimeQuery<Txn>({
+  const { data: txns, loading: transactionsLoading, error: transactionsError, stale: transactionsStale, refresh: refreshTransactions } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).gte('date', new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)),
   });
 
   const [form, setForm] = useState(false);
   const rows = budgets ?? [];
+  const readError = error || transactionsError;
   const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
 
   async function remove(id: string) {
@@ -50,7 +51,9 @@ export function BudgetsView() {
       <PageHeader title={t('budgets.budgetPlanner')} description={t('budgetsView.setCategoryBudgetsAndTrack')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
 
-      {loading ? <SkeletonList /> : rows.length === 0 ? (
+      {readError ? (
+        <ErrorState message={readError} onRetry={() => { void refresh(); void refreshTransactions(); }} />
+      ) : loading || stale || transactionsLoading || transactionsStale ? <SkeletonList /> : rows.length === 0 ? (
         <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description={t('budgetsView.createABudgetForA')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
       ) : (

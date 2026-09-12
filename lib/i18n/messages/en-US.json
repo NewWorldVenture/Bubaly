@@ -13455,5 +13455,8 @@
   "displayGrid.calendarUnavailable": "Calendar event markers are unavailable.",
   "displayGrid.remindersUnavailable": "Reminders are unavailable.",
   "displayGrid.timezoneFallback": "Family timezone is unavailable. Times are shown in UTC.",
-  "displayGrid.dataUnavailable": "Some display data is unavailable. The display will retry automatically."
+  "displayGrid.dataUnavailable": "Some display data is unavailable. The display will retry automatically.",
+  "auth.cacheSessionUnavailable": "Your session is temporarily unavailable. Please try again.",
+  "auth.cacheSessionChanged": "Your session changed. Please wait while the app updates.",
+  "auth.cacheFamilyMismatch": "This family does not match your current account context."
 }

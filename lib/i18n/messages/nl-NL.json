@@ -13455,5 +13455,8 @@
   "displayGrid.calendarUnavailable": "Afspraakmarkeringen in de kalender zijn niet beschikbaar.",
   "displayGrid.remindersUnavailable": "Herinneringen zijn niet beschikbaar.",
   "displayGrid.timezoneFallback": "De tijdzone van het gezin is niet beschikbaar. Tijden worden weergegeven in UTC.",
-  "displayGrid.dataUnavailable": "Sommige schermgegevens zijn niet beschikbaar. Het scherm probeert het automatisch opnieuw."
+  "displayGrid.dataUnavailable": "Sommige schermgegevens zijn niet beschikbaar. Het scherm probeert het automatisch opnieuw.",
+  "auth.cacheSessionUnavailable": "Uw sessie is tijdelijk niet beschikbaar. Probeer het opnieuw.",
+  "auth.cacheSessionChanged": "Uw sessie is gewijzigd. Even geduld terwijl de app wordt bijgewerkt.",
+  "auth.cacheFamilyMismatch": "Dit gezin komt niet overeen met de huidige context van uw account."
 }

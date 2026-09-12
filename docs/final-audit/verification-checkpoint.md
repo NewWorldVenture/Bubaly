@@ -24,6 +24,7 @@ This is an incremental production-audit checkpoint, not final application sign-o
 | Translation gate | PASS | All declared gated surfaces; all previous keys/values/order preserved in seven base catalogues with eight additive display strings each. |
 | Component/browser execution | PASS | 108 corrected Chromium tests on b4d4ad78 in 7.6 seconds: auth cookies/lifecycle, cache ownership/purge, display state/clock, PWA and native callback lifecycle. |
 | Public production browser matrix | PASS | 104 selected public/mobile/overflow/accessibility/CSP/marketing checks on cbfa0602 in 1.8 minutes. Public sources are unchanged in b4d4ad78; this matrix was not relabeled as a rerun on the later commit. |
+| Final-build public smoke | PASS | On b4d4ad78: home readiness 2,106 ms, feature navigation 1,640 ms and no page errors. The localhost-only runner terminated normally. |
 
 The earlier 108 component checks ran on 9af12b1043fbb9ab1b8e89f23882bd6236d8c91f, followed by two cron fallback objects gaining `withheld: 0` and 27 focused cron checks before the cbfa0602 suite/build. Those earlier passes did not establish type correctness: the strict TypeScript gate subsequently found that `useLocale()` returns a `Locale` object, while the new display formatting calls expected a locale code. A string-returning test stub had masked that real contract defect and could allow formatting to fall back silently to the browser locale.
 
@@ -31,9 +32,7 @@ The final fix uses `useLocale().code` in the grid and clock. The clock browser f
 
 The generated route-type artifact has SHA-256 `3682dc788460e3c47d8cda480b7a5197d34ba886f230b9f26a415217518d9402` both before and after the final build. The already-passed strict check therefore covers the final generated types; another duplicate typecheck was unnecessary.
 
-The earlier integrated production browser timing probe measured fresh-home DOM readiness at 2,120 ms and feature-card navigation at 1,657 ms, with an empty page-error list. The baseline SDK waits were about 14 seconds for sequential editorial fallback and 7 seconds for optional social profiles. These measurements use the controlled outage fixture, not production telemetry.
-
-A bounded localhost startup probe on the final b4d4ad78 production build also passed: fresh home 2,106 ms, feature navigation 1,640 ms and no page errors. The server terminated normally after the probe. This is an additional final-build smoke check, not a rerun of the 104-case public matrix.
+The final b4d4ad78 production startup smoke measured home readiness at 2,106 ms and feature-card navigation at 1,640 ms, with `pageErrors: []`. Its localhost-only runner terminated normally. This quick final-source check is separate from the 104-case matrix on cbfa0602; it does not imply that the entire matrix ran again. The baseline SDK waits were about 14 seconds for sequential editorial fallback and 7 seconds for optional social profiles. These measurements use the controlled outage fixture, not production telemetry.
 
 Build/runtime logs contain deliberate unavailable-database/provider fixture errors, and the browser fixture can hit analytics rate limits. Page rendering and CSP checks do not establish a blanket production console/network pass.
 
@@ -50,5 +49,7 @@ The retained source snapshot archive is `bubaly-final-audit-verification-2026091
 The earlier incomplete 425-case browser run stopped at its bounded watchdog and is not included as a passing matrix. The first combined unit run found an obsolete external-fetch source map test; that map now follows the actual native provider transport and the final full suite passes. The earlier locale TypeScript failure remains part of the audit history despite the previous build and test passes.
 
 ## Remaining release work
+
+After this checkpoint was published as draft PR #510, GitHub CI run [34697312616](https://github.com/NewWorldVenture/Bubaly/actions/runs/34697312616) passed on commit `9d238e0c86bc8a1116c6ecf7786c09e70b07d111` (the same application source plus audit documentation). All four jobs passed: quality/build/types, Expo checks, disposable PostgreSQL migration replay/permission probes, and the disposable Supabase browser matrix. The browser job reports **540 tests passed in 3.3 minutes**, with no skipped cases. This includes the enabled durable-session and authenticated journeys; it verifies the disposable environment, not the deployed project or physical devices. Subsequent application changes require their own regression and CI evidence.
 
 Real authenticated database/provider/device workflows, persistent user/role cache partitioning, distributed push receipts, campaign recovery, full authorization/storage verification, unresolved public-media migration policy, incomplete social publishing connectors and the full second regression remain open. See finalaudit.md and the linked repair reports for permanent IDs and exact limits.

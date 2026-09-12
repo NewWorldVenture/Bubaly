@@ -13455,5 +13455,8 @@
   "displayGrid.calendarUnavailable": "Gli indicatori degli eventi nel calendario non sono disponibili.",
   "displayGrid.remindersUnavailable": "I promemoria non sono disponibili.",
   "displayGrid.timezoneFallback": "Il fuso orario della famiglia non è disponibile. Gli orari sono mostrati in UTC.",
-  "displayGrid.dataUnavailable": "Alcuni dati della schermata non sono disponibili. La schermata riproverà automaticamente."
+  "displayGrid.dataUnavailable": "Alcuni dati della schermata non sono disponibili. La schermata riproverà automaticamente.",
+  "auth.cacheSessionUnavailable": "La sessione è temporaneamente non disponibile. Riprova.",
+  "auth.cacheSessionChanged": "La sessione è cambiata. Attendi mentre l’app viene aggiornata.",
+  "auth.cacheFamilyMismatch": "Questa famiglia non corrisponde al contesto attuale del tuo account."
 }

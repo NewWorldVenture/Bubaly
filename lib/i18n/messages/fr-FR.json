@@ -13455,5 +13455,8 @@
   "displayGrid.calendarUnavailable": "Les repères d’événements du calendrier sont indisponibles.",
   "displayGrid.remindersUnavailable": "Les rappels sont indisponibles.",
   "displayGrid.timezoneFallback": "Le fuseau horaire de la famille est indisponible. Les heures sont affichées en UTC.",
-  "displayGrid.dataUnavailable": "Certaines données de l’affichage sont indisponibles. L’affichage réessaiera automatiquement."
+  "displayGrid.dataUnavailable": "Certaines données de l’affichage sont indisponibles. L’affichage réessaiera automatiquement.",
+  "auth.cacheSessionUnavailable": "Votre session est temporairement indisponible. Veuillez réessayer.",
+  "auth.cacheSessionChanged": "Votre session a changé. Veuillez patienter pendant la mise à jour de l’application.",
+  "auth.cacheFamilyMismatch": "Cette famille ne correspond pas au contexte actuel de votre compte."
 }

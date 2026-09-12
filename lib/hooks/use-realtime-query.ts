@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type SetStateAction } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { cacheKey, getCacheGeneration, readCache, subscribeCacheInvalidation, writeCache } from '@/lib/offline/cache';
+import { cacheIdentity, cacheKey, getCacheGeneration, readPartitionedCache, subscribeCacheInvalidation, writePartitionedCache } from '@/lib/offline/cache';
+import { isAuthenticatedCacheScopeCurrent, useAuthenticatedCacheScope } from '@/lib/offline/cache-scope';
 import { realtimeChannelFor } from '@/lib/realtime/published-tables';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
@@ -29,8 +30,9 @@ function emptyState<T>(scope: QueryScope): QueryState<T> {
  *
  * Last successful rows can be hydrated from this query's cache. Cached/failed
  * reads are marked stale; failures remain errors even when cached rows exist.
- * The caller supplies any user/role/query distinctions through deps: family
- * and table alone do not establish authorization or a user-specific cache.
+ * Persistent cache uses the central agreeing session and server access
+ * identity. Callers supply query distinctions through deps; without a cache
+ * provider this hook remains network-only and never hydrates persisted rows.
  */
 export function useRealtimeQuery<T>({
   table,
@@ -44,8 +46,16 @@ export function useRealtimeQuery<T>({
   deps?: unknown[];
 }) {
   const key = cacheKey(table, familyId, deps);
+  const authScope = useAuthenticatedCacheScope();
+  const queryIdentity = authScope?.partition && authScope.familyId === familyId
+    ? cacheIdentity(authScope.partition, table, familyId, deps) : null;
+  const partitionedKey = queryIdentity?.key ?? null;
+  const partitionedSignature = queryIdentity?.signature ?? null;
+  const identityKey = `${authScope?.key ?? 'network-only'}:${queryIdentity?.signature ?? key}`;
   const generation = useSyncExternalStore(subscribeCacheInvalidation, getCacheGeneration, getServerCacheGeneration);
-  const scope = useMemo<QueryScope>(() => ({ key, generation, active: false, request: 0 }), [key, generation]);
+  const scope = useMemo(() => ({ key: identityKey, generation, active: false, request: 0,
+    authScope, queryIdentity: partitionedKey && partitionedSignature ? { key: partitionedKey, signature: partitionedSignature } : null,
+  }), [identityKey, generation, authScope, partitionedKey, partitionedSignature]);
   const activeScope = useRef(scope);
   activeScope.current = scope;
   const fetcherRef = useRef({ scope, fetcher });
@@ -55,17 +65,19 @@ export function useRealtimeQuery<T>({
   const refresh = useCallback(async () => {
     // Old online/realtime callbacks must not pair a new fetcher with an old key.
     if (!scope.active || activeScope.current !== scope || fetcherRef.current.scope !== scope || scope.generation !== getCacheGeneration()) return;
+    if (scope.authScope && (!isAuthenticatedCacheScopeCurrent(scope.authScope) || scope.authScope.familyId !== familyId)) return;
     const fetchCurrent = fetcherRef.current.fetcher;
     const request = ++scope.request;
     const isCurrent = () => scope.active && activeScope.current === scope && scope.request === request
-      && scope.generation === getCacheGeneration();
+      && scope.generation === getCacheGeneration()
+      && (!scope.authScope || isAuthenticatedCacheScopeCurrent(scope.authScope));
     try {
       const { data: rows, error: err } = await fetchCurrent(createClient());
       if (!isCurrent()) return;
       if (err) throw err;
       const data = rows ?? [];
       const updatedAt = Date.now();
-      writeCache(scope.key, data);
+      if (scope.queryIdentity) writePartitionedCache(scope.queryIdentity, data);
       setState(previous => isCurrent()
         ? { scope, data, loading: false, error: null, stale: false, updatedAt }
         : previous);
@@ -76,31 +88,41 @@ export function useRealtimeQuery<T>({
         ? { ...(previous.scope === scope ? previous : emptyState<T>(scope)), loading: false, error, stale: true }
         : previous);
     }
-  }, [scope]);
+  }, [scope, familyId]);
 
   const setData = useCallback((update: SetStateAction<T[]>) => {
     if (!scope.active || activeScope.current !== scope || scope.generation !== getCacheGeneration()) return;
+    if (scope.authScope && !isAuthenticatedCacheScopeCurrent(scope.authScope)) return;
     // A caller's local mutation supersedes reads already in flight. Preserve
     // functional-setter batching; do not persist an unverified local mutation.
     scope.request += 1;
     setState(previous => {
       if (!scope.active || activeScope.current !== scope || scope.generation !== getCacheGeneration()) return previous;
+      if (scope.authScope && !isAuthenticatedCacheScopeCurrent(scope.authScope)) return previous;
       const current = previous.scope === scope ? previous : emptyState<T>(scope);
       const data = typeof update === 'function' ? update(current.data) : update;
       if (scope.generation !== getCacheGeneration()) return previous;
+      if (scope.authScope && !isAuthenticatedCacheScopeCurrent(scope.authScope)) return previous;
       return { ...current, data, loading: false, stale: true };
     });
   }, [scope]);
 
   useEffect(() => {
     scope.active = true;
-    const cached = readCache<T>(scope.key);
+    const authorized = !scope.authScope || isAuthenticatedCacheScopeCurrent(scope.authScope);
+    const cached = authorized && scope.queryIdentity ? readPartitionedCache<T>(scope.queryIdentity) : null;
     setState(cached
       ? { scope, data: cached.rows, loading: false, error: null, stale: true, updatedAt: cached.savedAt }
       : emptyState<T>(scope));
+    if (scope.authScope && (!authorized || scope.authScope.familyId !== familyId)) {
+      const error = scope.authScope.familyId !== familyId
+        ? scope.authScope.familyMismatchError : scope.authScope.error;
+      if (error) setState({ ...emptyState<T>(scope), loading: false, error });
+      return () => { scope.active = false; scope.request += 1; };
+    }
     void refresh();
     return () => { scope.active = false; scope.request += 1; };
-  }, [refresh, scope]);
+  }, [refresh, scope, familyId]);
 
   // Re-sync the moment connectivity returns.
   useEffect(() => {
@@ -117,6 +139,7 @@ export function useRealtimeQuery<T>({
     // nothing; the mount/deps refetch above is the honest refresh for those.
     const spec = realtimeChannelFor(table, familyId);
     if (!spec) return;
+    if (scope.authScope && (!isAuthenticatedCacheScopeCurrent(scope.authScope) || scope.authScope.familyId !== familyId)) return;
     const supabase = createClient();
     const channel = supabase
       .channel(spec.name)
@@ -127,7 +150,7 @@ export function useRealtimeQuery<T>({
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [table, familyId, refresh]);
+  }, [table, familyId, refresh, scope]);
 
   // Effects run after render. Mask an old owner's state on the first render
   // of a new key, including an A -> B -> A switch before requests finish.

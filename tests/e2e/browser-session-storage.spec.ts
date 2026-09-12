@@ -51,10 +51,10 @@ async function install(context: BrowserContext) {
     const expires = Math.floor(Date.now() / 1000) + 3600;
     const jwt = [
       Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
-      Buffer.from(JSON.stringify({ sub: 'fixture-user-a', exp: expires, aud: 'authenticated' })).toString('base64url'),
+      Buffer.from(JSON.stringify({ sub: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', session_id: '11111111-1111-4111-8111-111111111111', exp: expires, aud: 'authenticated' })).toString('base64url'),
       'synthetic-signature',
     ].join('.');
-    const user = { id: 'fixture-user-a', aud: 'authenticated', role: 'authenticated', email: 'fixture@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
+    const user = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', aud: 'authenticated', role: 'authenticated', email: 'fixture@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
     if (url.pathname === '/auth/v1/token') {
       await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify({ access_token: jwt, refresh_token: 'synthetic-refresh-fixture', token_type: 'bearer', expires_in: 3600, expires_at: expires, user }) }); return;
     }
@@ -99,7 +99,7 @@ test('production browser client persists durable secure cookies and restores wit
     await install(first);
     const page = await first.newPage(); await load(page);
     expect(await page.evaluate(() => window.__browserSession.singleton())).toBe(true);
-    expect(await page.evaluate(() => window.__browserSession.signIn())).toBe('fixture-user-a');
+    expect(await page.evaluate(() => window.__browserSession.signIn())).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     const cookies = (await first.cookies(origin)).filter(cookie => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
     expect(cookies.length).toBeGreaterThan(0);
     for (const cookie of cookies) {
@@ -111,7 +111,7 @@ test('production browser client persists durable secure cookies and restores wit
     const calls = await install(second);
     const restored = await second.newPage(); await load(restored);
     expect(await restored.evaluate(() => localStorage.length)).toBe(0);
-    expect(await restored.evaluate(() => window.__browserSession.user())).toBe('fixture-user-a');
+    expect(await restored.evaluate(() => window.__browserSession.user())).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(calls.filter(call => call.includes('/auth/v1/token'))).toEqual([]);
   } finally { await first.close(); await second.close(); }
 });

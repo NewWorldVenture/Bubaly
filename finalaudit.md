@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T13:44:37.001Z
-- Total Audit Items: 13389
-- Not Started: 13368
-- In Progress: 18
+- Last Updated: 2026-09-12T13:58:42.120Z
+- Total Audit Items: 13411
+- Not Started: 13388
+- In Progress: 20
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -24,7 +24,7 @@
 PRODUCTION READY: NO
 
 ## Critical Blockers
-- AUTH-002: Local auth-transition purge, stale-response, failed-removal and native-listener defects repaired and verified. Persistent cache user/role partition, failed-purge browser restart, production session policy and live refresh/revocation/device restart remain unverified.
+- AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes and final current-source integrated regression remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
@@ -39,8 +39,10 @@ PRODUCTION READY: NO
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
 - UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
-- DATA-002: Hook ownership/order/failure-completion defects repaired locally. User/role cache partition is caller-supplied and 22 direct consumers omit the error field; authenticated end-to-end isolation and consumer error presentation remain to verify.
-- PUSH-004: Shared sender optout/parental policy gap repaired and locally verified. Full live marketing delivery, audience pagination, campaign crash/replay and distributed device receipt guarantees remain open.
+- DATA-002: Durable owner/session/access cache partition is centrally enforced and locally verified. Seventeen remaining direct query consumers omit read errors after five finance queries were repaired under DATA-003. Full caller workflows, unobserved remote permission revocation and complete row-level offline freshness policy remain open.
+- PUSH-004: Shared sender user/parental opt-out checks and bounded campaign audience pagination are repaired and locally verified. Full live delivery, provider-failure status reporting, crash/replay and distributed device receipts remain open.
+- PUSH-005: Stable bounded audience/suppression traversal and failure recovery now pass local execution. Concurrent policy mutations are not atomic with selection/sends; provider skips/failures may still be recorded as sent, and durable crash/receipt recovery plus live delivery remain open.
+- DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13289,7 +13291,7 @@ PRODUCTION READY: NO
 | DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; production build and strict generated types PASS; lint PASS with four baseline warnings; source query/schema, migration-filename, marketing asset and i18n audits PASS. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | None | Final integrated local build/startup and applicable checks passed. 104 selected public/mobile/overflow/accessibility/CSP Chromium checks passed on cbfa0602; final display-only correction does not alter those public sources. Live deployment, authenticated database/provider workflows and the second whole audit regression remain unverified. The earlier 425-test browser attempt reached its watchdog and is not counted as passing. |  |
 | TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | None | Final current-source suite: 1,136 Vitest files / 12,715 tests PASS in 74.37 seconds. This record verifies automated suite execution only; enclosing workflows and the second whole audit regression are separate obligations. | Initial combined run found an obsolete timeout-source-map expectation after the native transport moved. The map was corrected, targeted tests passed, and the final entire suite passed. Logs: bubaly-final-audit-locale-units-20260912.log; verification-checkpoint.md. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | ⬜ NOT STARTED | High | Pending | None | Pending |  |
-| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. | 46 actual Chromium checks PASS (32 shared hook, 12 auth lifecycle, two installed SDK cookie tests), included in the final 108-check component gate. A fresh cookie-only context retains the session and local sign-out removes it. Related 436 assertions and the final full suite pass. Live auth/provider/device policy and durable cross-owner/session cache partitions remain open. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. |
+| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. | 68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys. New integrated regression is pending. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. Next bounded repair preserves stable session identity across refresh/restart while separating saved family data after sign-out, new login or observed access change. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | INT-001 | INT | Contact Center authenticated provider callbacks and durable intake replay | 🔄 IN PROGRESS | High | docs/final-audit/contact-center-cycle.md | Exact four callback paths reach existing signature checks; persisted unhandled intake retries; bodyless 204; first urgency occurs before planner failure return. | 10 suites / 121 tests PASS; strict project types and scoped lint passed before final urgency tests. Production/deployed provider/database flow remains unverified; outbound durability tracked INT-002. |  |
 | PUSH-001 | PUSH | Notification push delivery, failure retention and acknowledgement | 🔄 IN PROGRESS | High | docs/final-audit/push-cycle.md; docs/final-audit/push-cursor-cycle.md; actual cron/provider-boundary and stateful cursor execution tests | Delivery/device/prune failures stay pending; required family/parental/user-preference reads fail before delivery; push_enabled respected; acknowledgement failures count as failures. Saved service-only global/family keyset cursors traverse and wrap pending due rows without starvation; cursor writes are verified before sending. Both cron handlers report unconfigured skipped delivery as unsuccessful. | 12 related suites / 121 tests, strict TypeScript, scoped lint and diff check PASS. Healthy row 201 is delivered on scan 2; microsecond ordering, tied timestamps, separate scope, wrap, deleted cursor and failed cursor writes exercised. Live provider/physical-device workflow pending. | Existing single pushed_at cannot guarantee per-device exactly-once delivery or prevent concurrent worker double-send. Schema-level investigation remains. |
@@ -13381,7 +13383,7 @@ PRODUCTION READY: NO
 | SERVICE-FF9C62744FCD | SERVICE | nativePushConfigured | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-D6F2AF0CEBFB | SERVICE | sendNativePush | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-003 | UI | Family display calendar and availability correctness | 🔄 IN PROGRESS | High | docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md | Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales. | 10 server/helper/display/reminder suites with 164 tests PASS; 25 display ownership and six clock/photo actual React/Chromium checks PASS, included in the final 108-check component gate. Strict tsc identified an actual Locale object/string mismatch, fixed using .code; corrected fixtures use real locale objects and exercise French dates. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately. |
-| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. | 32 shared-hook React/Chromium cases PASS within the final 108-check component gate; related 436 assertions, full 12,715-test suite, strict TypeScript and production build pass. Persistent cache namespace isolation across user/session/restart and full caller/role verification remain open; see auth-cache-partition-proposal.md. | No SQL or global navigation scope. Full family/user authorization remains separate. |
+| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation. | 68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass. Full current-source integrated verification pending. | Next cycle active: durable v2 user/session/family/access partition, exact envelope/query identity, and descendant retirement after observed account/access change. Source evidence and scope in auth-cache-partition-proposal.md; master remains IN PROGRESS before implementation. |
 | PUSH-004 | PUSH | User and parental consent on every public push sender | 🔄 IN PROGRESS | High | docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures | Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts. | 13 related suites / 144 tests PASS; final two cron suites / 27 tests PASS; strict types, production build and full 12,715-test suite PASS. Denied user/parental policy sends nothing, policy-read failure marks campaign failed, and recovery/adult/zero-audience cases pass. Provider/device workflow and remaining campaign failure/recovery obligations stay open. | No schema changes or live provider sends. |
 | API-9173F41D99C0 | API | GET /api/sync/[provider]/status | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-2F04FE3C0839 | SUPPORT | docs/runbooks/google-oauth-production.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
@@ -13434,6 +13436,28 @@ PRODUCTION READY: NO
 | SUPPORT-728055A9A2D7 | SUPPORT | tests/social-links-read-budget.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-77CD9ECD7610 | SUPPORT | tests/sync-provider-status-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | DEPLOY-29B86C9FE9E8 | DEPLOY | app/api/sync/[provider]/status/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| PUSH-005 | PUSH | Complete marketing push audience and suppression pagination | 🔄 IN PROGRESS | High | docs/final-audit/push-audience-cycle.md; tests/marketing-push-audience-execution.test.ts | Stable keyset pages traverse devices and suppressions, with deduplicated profile-ID chunks and smaller-response-cap-safe empty terminators. All reads complete before delivery. Missing/malformed profile data, page failures and explicit global row/request limits fail the campaign before any send; verified null email preserves phone-only accounts. | 11 related suites / 164 tests PASS, including 30 new actual-action execution cases; scoped strict types and lint PASS. Original 1,000-row truncation defects reproduced before repair. Integrated full gate pending. | No SQL changes or live provider sends. Source work begins after this finding is recorded. |
+| DATA-003 | DATA | Finance read failures and pending data must not appear as verified empty balances | 🔄 IN PROGRESS | High | docs/final-audit/finance-read-state-cycle.md; tests/e2e/finance-read-states.spec.ts | Four finance views now consume error/loading/stale signals. Existing ErrorState exposes failures and retry; summaries and empty states wait for verified reads. Budget retry refreshes both required queries; payment search survives retry. | 14 actual React/Chromium checks PASS after reproducing all 14 original failures; five related suites / 115 tests PASS; scoped lint PASS. Combined current-source gates pending. | Household financial records only; no Stripe/pricing changes, no SQL or live money actions. |
+| LIBRARY-478BBDEF113D | LIBRARY | lib/auth/cache-session.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-0AD17213A84C | SERVICE | cacheSessionIdentity | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-498FF9278C86 | SERVICE | getCacheSessionSnapshot | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-224D78698802 | SERVICE | getServerCacheSessionSnapshot | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-302F44D76277 | SERVICE | subscribeCacheSession | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-D31DE05A02EA | SERVICE | subscribeCacheAuthEvents | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-353CD9BBF8DD | SERVICE | refreshCacheSession | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| LIBRARY-BD02682C5B61 | LIBRARY | lib/offline/cache-scope.tsx | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-DAC3AF3A46B6 | SERVICE | cacheAccessKey | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-0A39AA1471A1 | SERVICE | useAuthenticatedCacheScope | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-5B5CFD08F083 | SERVICE | isAuthenticatedCacheScopeCurrent | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-5B1CF3E6134B | SERVICE | AuthenticatedCacheBoundary | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| LIBRARY-4FE1D528B565 | LIBRARY | lib/marketing/push-audience.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SERVICE-856AA46CA62C | SERVICE | loadPushCampaignAudience | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-1068DA66AB3F | SUPPORT | tests/app-provider-access-context.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-F3E10DEDDB36 | SUPPORT | tests/cache-partition.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-2754B70257DB | SUPPORT | tests/cache-session.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-0BB0813F7C43 | SUPPORT | tests/e2e/auth-cache-partition.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-F6DEEF1D5B71 | SUPPORT | tests/e2e/finance-read-states.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 
 ## Inventory and evidence rules
 
@@ -13596,10 +13620,10 @@ The complete supported workflow performs authorized actions, persists intended s
 Definitive sign-out/account replacement leaves prior-user offline rows, and late shared-hook responses can repopulate caches after purge. Native listener removal rejection causes unhandled promises.
 
 #### Fixes Applied
-Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures.
+Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced.
 
 #### Retest Results
-46 actual Chromium checks PASS (32 shared hook, 12 auth lifecycle, two installed SDK cookie tests), included in the final 108-check component gate. A fresh cookie-only context retains the session and local sign-out removes it. Related 436 assertions and the final full suite pass. Live auth/provider/device policy and durable cross-owner/session cache partitions remain open.
+68 actual React/Chromium auth/cache/cookie checks PASS, including installed SDK event-order races, failed deletion + fresh browser context, same-session reuse, changed session/access, transient failure and real French status rendering. Six cache/auth unit suites / 114 tests pass; nine new server provider cases pass within a 22-test related gate. Published prior-source CI passed 540 browser checks including disposable GoTrue persistence/refresh/sign-out journeys. New integrated regression is pending.
 
 #### Evidence
 docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes
@@ -14396,10 +14420,10 @@ The complete supported workflow performs authorized actions, persists intended s
 Shared realtime query commits responses and cached rows without current-key/request generation checks.
 
 #### Fixes Applied
-Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion.
+Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation.
 
 #### Retest Results
-32 shared-hook React/Chromium cases PASS within the final 108-check component gate; related 436 assertions, full 12,715-test suite, strict TypeScript and production build pass. Persistent cache namespace isolation across user/session/restart and full caller/role verification remain open; see auth-cache-partition-proposal.md.
+68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass. Full current-source integrated verification pending.
 
 #### Evidence
 docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts
@@ -14435,6 +14459,70 @@ Every public sender resolves user and parental consent before accessing devices.
 
 #### Evidence
 docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures
+
+#### Final Status
+🔄 IN PROGRESS
+
+### PUSH-005 — Complete marketing push audience and suppression pagination
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: app/(app)/admin/marketing/push/actions.ts; lib/marketing/push-audience.ts
+
+#### Expected Behavior
+Campaign selection considers every supported device and suppression row, deduplicates users, applies complete profile and consent evidence, and reports incomplete reads before attempting delivery.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Unpaginated device and suppression reads silently truncate at the database response cap; an omitted suppression can permit unwanted campaign delivery and omitted devices leave recipients out.
+
+#### Fixes Applied
+Stable keyset pages traverse devices and suppressions, with deduplicated profile-ID chunks and smaller-response-cap-safe empty terminators. All reads complete before delivery. Missing/malformed profile data, page failures and explicit global row/request limits fail the campaign before any send; verified null email preserves phone-only accounts.
+
+#### Retest Results
+11 related suites / 164 tests PASS, including 30 new actual-action execution cases; scoped strict types and lint PASS. Original 1,000-row truncation defects reproduced before repair. Integrated full gate pending.
+
+#### Evidence
+docs/final-audit/push-audience-cycle.md; tests/marketing-push-audience-execution.test.ts
+
+#### Final Status
+🔄 IN PROGRESS
+
+### DATA-003 — Finance read failures and pending data must not appear as verified empty balances
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: components/finance/budgets-view.tsx; components/finance/bills-view.tsx; components/finance/payments-view.tsx; components/finance/savings-view.tsx
+
+#### Expected Behavior
+Finance summaries and empty states appear only after successful required reads; failures are visible and retryable, and unfinished reads show loading.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Failed reads can display No bills yet, Nothing due, No savings goals, No payments, or zero spending/available budget; payment totals also appear as zero before the first read finishes.
+
+#### Fixes Applied
+Four finance views now consume error/loading/stale signals. Existing ErrorState exposes failures and retry; summaries and empty states wait for verified reads. Budget retry refreshes both required queries; payment search survives retry.
+
+#### Retest Results
+14 actual React/Chromium checks PASS after reproducing all 14 original failures; five related suites / 115 tests PASS; scoped lint PASS. Combined current-source gates pending.
+
+#### Evidence
+docs/final-audit/finance-read-state-cycle.md; tests/e2e/finance-read-states.spec.ts
 
 #### Final Status
 🔄 IN PROGRESS
@@ -18381,7 +18469,7 @@ Status: NOT STARTED — second regression follows individual verification; basel
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
-- AUTH-002: Local auth-transition purge, stale-response, failed-removal and native-listener defects repaired and verified. Persistent cache user/role partition, failed-purge browser restart, production session policy and live refresh/revocation/device restart remain unverified.
+- AUTH-002: Durable cache partition and failed-purge restart isolation now pass controlled browser execution. Production session policy, real provider revocation/physical device behavior, unobserved permission changes and final current-source integrated regression remain to verify.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
@@ -18396,8 +18484,10 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
 - UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
-- DATA-002: Hook ownership/order/failure-completion defects repaired locally. User/role cache partition is caller-supplied and 22 direct consumers omit the error field; authenticated end-to-end isolation and consumer error presentation remain to verify.
-- PUSH-004: Shared sender optout/parental policy gap repaired and locally verified. Full live marketing delivery, audience pagination, campaign crash/replay and distributed device receipt guarantees remain open.
+- DATA-002: Durable owner/session/access cache partition is centrally enforced and locally verified. Seventeen remaining direct query consumers omit read errors after five finance queries were repaired under DATA-003. Full caller workflows, unobserved remote permission revocation and complete row-level offline freshness policy remain open.
+- PUSH-004: Shared sender user/parental opt-out checks and bounded campaign audience pagination are repaired and locally verified. Full live delivery, provider-failure status reporting, crash/replay and distributed device receipts remain open.
+- PUSH-005: Stable bounded audience/suppression traversal and failure recovery now pass local execution. Concurrent policy mutations are not atomic with selection/sends; provider skips/failures may still be recorded as sent, and durable crash/receipt recovery plus live delivery remain open.
+- DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 
 ## Production Readiness
 NO

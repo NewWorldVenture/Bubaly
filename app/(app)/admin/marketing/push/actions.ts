@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { sendPushToUsers, type PushResult } from '@/lib/server/push';
-import { selectPushRecipients, canSendPush } from '@/lib/marketing/push';
+import { canSendPush } from '@/lib/marketing/push';
+import { loadPushCampaignAudience } from '@/lib/marketing/push-audience';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -51,30 +52,10 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
     marketingActionFailure('send the push campaign', error);
   };
 
-  // Opted-in device owners.
-  const { data: devices, error: deviceError } = await supabase
-    .from('push_devices')
-    .select('user_id')
-    .eq('enabled', true);
-  if (deviceError) await markFailedAndThrow(deviceError);
-  const userIds = (devices ?? []).map((d) => d.user_id);
-
-  // Map user → email and pull the suppression list to exclude opted-out people.
-  const uniqueIds = [...new Set(userIds.filter(Boolean))];
-  const emailByUser: Record<string, string | null> = {};
-  if (uniqueIds.length) {
-    const { data: profiles, error: profileError } = await supabase.from('profiles').select('id, email').in('id', uniqueIds);
-    if (profileError) await markFailedAndThrow(profileError);
-    for (const p of profiles ?? []) emailByUser[p.id] = p.email;
-  }
-  const { data: supp, error: suppressionError } = await supabase.from('marketing_suppressions').select('email');
-  if (suppressionError) await markFailedAndThrow(suppressionError);
-  const suppressed = (supp ?? []).map((r) => r.email);
-
-  const recipients = selectPushRecipients(userIds, emailByUser, suppressed);
-
+  let recipients: string[] = [];
   let result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   try {
+    recipients = await loadPushCampaignAudience(supabase);
     result = recipients.length
       ? await sendPushToUsers(supabase, recipients, { title: campaign.title, body: campaign.body, url: campaign.url })
       : { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };

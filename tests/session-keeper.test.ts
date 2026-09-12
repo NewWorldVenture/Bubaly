@@ -48,9 +48,11 @@ vi.mock('@/lib/native/capacitor', () => ({ isNative: mocks.isNative }));
 vi.mock('@capacitor/app', () => ({ App: { addListener: mocks.addListener } }));
 
 function session(userId: string): Session {
+  const id = userId === 'user-a' ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222';
+  const claims = Buffer.from(JSON.stringify({ sub: id, session_id: '33333333-3333-4333-8333-333333333333' })).toString('base64url');
   return {
-    access_token: 'fixture-access', refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 3_600,
-    user: { id: userId, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-09-09T00:00:00Z' },
+    access_token: `fixture.${claims}.signature`, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 3_600,
+    user: { id, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-09-09T00:00:00Z' },
   };
 }
 function result(userId: string | null, error: Error | null = null): SessionResult {
@@ -63,7 +65,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function render(userId = 'user-a') {
-  expect(SessionKeeper({ userId })).toBeNull();
+  expect(SessionKeeper({ userId: session(userId).user.id })).toBeNull();
   mocks.pendingEffects.splice(0).forEach((effect) => effect());
 }
 function unmount() {
@@ -74,7 +76,7 @@ function emit(event: AuthChangeEvent, userId: string | null = 'user-a') {
   mocks.authCallback!(event, userId === null ? null : session(userId));
 }
 async function settle() {
-  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 async function nativeReady() {
   await vi.dynamicImportSettled();
@@ -228,10 +230,12 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     documentTarget.visibilityState = 'visible';
     documentTarget.dispatchEvent(new Event('visibilitychange'));
     for (const event of ['focus', 'online', 'pageshow']) windowTarget.dispatchEvent(new Event(event));
+    await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
     for (const [index, event] of ['focus', 'online', 'pageshow'].entries()) {
       vi.setSystemTime((index + 1) * 30_000);
       windowTarget.dispatchEvent(new Event(event));
+      await settle();
     }
     await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(4);
@@ -262,14 +266,16 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     await nativeReady();
     expect(mocks.addListener).toHaveBeenCalledWith('resume', expect.any(Function));
     const resume = mocks.addListener.mock.calls[0][1] as () => void;
+    expect(mocks.getSession).toHaveBeenCalledTimes(1); // shared initial bootstrap
+    vi.setSystemTime(30_000);
     resume();
     await settle();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
     unmount();
     expect(mocks.removeResume).toHaveBeenCalledTimes(1);
     vi.setSystemTime(30_000);
     resume();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
   });
 
   it('removes a native listener that finishes registering after unmount', async () => {
@@ -290,9 +296,10 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     mocks.addListener.mockRejectedValue(new Error('plugin unavailable'));
     render();
     await nativeReady();
+    vi.setSystemTime(30_000);
     windowTarget.dispatchEvent(new Event('online'));
     await settle();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2); // bootstrap plus lifecycle recovery
     expect(mocks.router.refresh).not.toHaveBeenCalled();
   });
 });

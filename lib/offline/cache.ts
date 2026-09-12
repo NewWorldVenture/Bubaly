@@ -1,8 +1,9 @@
-// Offline read-cache (competitor gap #13, v1: read-side).
+// Offline query read-cache. Production uses the v2 session/access/query
+// envelope; legacy helpers remain available for compatibility only.
 //
 // Last-known-good rows for family-scoped queries, persisted in localStorage so
-// pages paint instantly on revisit and keep working without a connection; the
-// realtime hook re-syncs automatically the moment connectivity returns.
+// an agreeing session can reuse its own stale rows on revisit; the realtime
+// hook uses only the partitioned API and re-syncs when connectivity returns.
 // Storage is injectable so the logic is unit-testable without a browser.
 
 export interface CacheEntry<T> {
@@ -14,6 +15,17 @@ export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+}
+
+export type CachePartition = { userId: string; sessionId: string; accessIdentity: string };
+export type CacheIdentity = { key: string; signature: string };
+
+/** Complete identity stays in the envelope; a compact key hash is not proof. */
+export function cacheIdentity(partition: CachePartition, table: string, familyId: string, deps: unknown[] = []): CacheIdentity | null {
+  try {
+    const signature = JSON.stringify([2, partition.userId, partition.sessionId, partition.accessIdentity, table, familyId, deps]);
+    return { key: `${PREFIX}v2:${hash(signature)}`, signature };
+  } catch { return null; }
 }
 
 const PREFIX = 'bub:cache:';
@@ -72,6 +84,16 @@ export function readCache<T>(key: string, store?: StorageLike, now = Date.now())
   }
 }
 
+/** No fallback to legacy entries or to an envelope owned by another query. */
+export function readPartitionedCache<T>(identity: CacheIdentity, store?: StorageLike, now = Date.now()): CacheEntry<T> | null {
+  const entry = readCache<T>(identity.key, store, now) as (CacheEntry<T> & { version?: unknown; identity?: unknown }) | null;
+  return entry?.version === 2 && entry.identity === identity.signature ? { rows: entry.rows, savedAt: entry.savedAt } : null;
+}
+
+export function writePartitionedCache<T>(identity: CacheIdentity, rows: T[], store?: StorageLike, now = Date.now()): void {
+  writeEntry(identity.key, { version: 2, identity: identity.signature, rows: rows.slice(0, MAX_ROWS), savedAt: now }, store);
+}
+
 /** Wipe every offline-cache entry — MUST run on sign-out (family data privacy). */
 export function clearAllCache(store?: StorageLike): void {
   generation += 1;
@@ -95,10 +117,14 @@ export function clearAllCache(store?: StorageLike): void {
 
 /** Persist rows (capped). Quota/serialization failures are silently ignored. */
 export function writeCache<T>(key: string, rows: T[], store?: StorageLike, now = Date.now()): void {
+  writeEntry(key, { rows: rows.slice(0, MAX_ROWS), savedAt: now }, store);
+}
+
+function writeEntry(key: string, entry: object, store?: StorageLike): void {
   const s = storage(store);
   if (!s) return;
   const persist = () => {
-    const raw = JSON.stringify({ rows: rows.slice(0, MAX_ROWS), savedAt: now });
+    const raw = JSON.stringify(entry);
     s.setItem(key, raw);
     if (hasInvalidated) {
       let writes = postPurgeWrites.get(s);

@@ -10,9 +10,10 @@ const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/pack
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sources = Object.fromEntries([
   'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
+  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts',
-].map(file => [`@/${file.replace(/\.ts$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
 
 type Row = { id: string };
@@ -38,6 +39,7 @@ type Probe = {
   blockStorage: () => void;
   restoreStorage: () => void;
   failRemoval: () => void;
+  ready: () => Promise<void>;
 };
 
 declare global { interface Window { __realtimeProbe: Probe } }
@@ -71,14 +73,24 @@ test.beforeEach(async ({ page }) => {
     const sources = ${JSON.stringify(sources)};
     const p = window.__realtimeProbe = { requests: [], renders: [], channels: [], errors: [], oldRefresh: null, oldSetData: null };
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
+    const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', sessionId = '11111111-1111-4111-8111-111111111111';
+    const jwt = [btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })), btoa(JSON.stringify({ sub: userId, session_id: sessionId })).replace(/=/g, ''), 'synthetic-signature'].join('.');
+    const session = { access_token: jwt, refresh_token: 'synthetic-refresh', token_type: 'bearer', expires_in: 3600,
+      user: { id: userId, aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' } };
     const db = {
+      auth: { getSession: async () => ({ data: { session }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) },
       channel(name) {
         const channel = { name, removed: false, on(_event, _filter, callback) { this.callback = callback; return this; }, subscribe() { return this; } };
         p.channels.push(channel); return channel;
       },
       removeChannel(channel) { channel.removed = true; return Promise.resolve(); },
     };
-    const mocks = { react: window.React, '@/lib/supabase/client': { createClient: () => db } };
+    const cacheMessages = { 'auth.cacheSessionUnavailable': 'Your session is temporarily unavailable. Please try again.',
+      'auth.cacheSessionChanged': 'Your session changed. Please wait while the app updates.',
+      'auth.cacheFamilyMismatch': 'This family does not match your current account context.' };
+    const mocks = { react: window.React, '@/lib/supabase/client': { createClient: () => db },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => cacheMessages[key] ?? key } };
     const modules = {};
     function load(id) {
       if (id in mocks) return mocks[id];
@@ -90,9 +102,18 @@ test.beforeEach(async ({ page }) => {
     }
     const { useRealtimeQuery } = load('@/lib/hooks/use-realtime-query');
     const cache = load('@/lib/offline/cache');
-    const key = config => cache.cacheKey(config.table || 'calendar_events', config.family, config.omitDeps ? [] : [config.family, config.day]);
-    p.seed = (config, rows) => cache.writeCache(key(config), rows);
-    p.cached = config => cache.readCache(key(config));
+    const { AuthenticatedCacheBoundary, cacheAccessKey } = load('@/lib/offline/cache-scope');
+    const sessionStore = load('@/lib/auth/cache-session');
+    // Keep the same SDK session subscription across query unmount/remount, as
+    // SessionKeeper does in the authenticated layout. The boundary is real.
+    sessionStore.subscribeCacheAuthEvents(() => {});
+    p.ready = () => sessionStore.refreshCacheSession();
+    const access = config => ({ userId, familyId: config.family, memberId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      membershipUpdatedAt: '2026-09-12T00:00:00Z', role: 'parent', isSuperAdmin: false, planLevel: 2, featureTiers: {} });
+    const key = config => cache.cacheIdentity({ userId, sessionId, accessIdentity: cacheAccessKey(access(config)) },
+      config.table || 'calendar_events', config.family, config.omitDeps ? [] : [config.family, config.day]);
+    p.seed = (config, rows) => cache.writePartitionedCache(key(config), rows);
+    p.cached = config => cache.readPartitionedCache(key(config));
     p.purge = () => cache.clearAllCache();
     p.generation = () => cache.getCacheGeneration();
     const originalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage');
@@ -113,13 +134,14 @@ test.beforeEach(async ({ page }) => {
     let root;
     p.mount = config => {
       if (!root) root = ReactDOM.createRoot(document.getElementById('root'));
-      const child = React.createElement(Consumer, config);
+      const child = React.createElement(AuthenticatedCacheBoundary, { access: access(config) }, React.createElement(Consumer, config));
       ReactDOM.flushSync(() => root.render(config.strict ? React.createElement(React.StrictMode, null, child) : child));
     };
     p.unmount = () => { ReactDOM.flushSync(() => root.unmount()); root = null; };
     p.snapshot = () => JSON.parse(document.querySelector('pre').textContent);
     p.flush = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   })();` });
+  await page.evaluate(() => window.__realtimeProbe.ready());
 });
 
 test.afterEach(async ({ page }) => {

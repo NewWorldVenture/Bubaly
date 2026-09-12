@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
@@ -33,7 +33,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const { success, error: toastError } = useToast();
   const meta = MODE_META[mode];
 
-  const { data: rows, loading } = useRealtimeQuery<Bill>({
+  const { data: rows, loading, error, stale, refresh } = useRealtimeQuery<Bill>({
     table: 'bills', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('bills').select('*').eq('family_id', familyId).order('due_date', { ascending: true }),
   });
@@ -108,14 +108,14 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       <PageHeader title={meta.title} description={meta.desc}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
 
-      {mode !== 'autopay' && visible.length > 0 && (
+      {!loading && !stale && !error && mode !== 'autopay' && visible.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <p className="text-xs text-muted">{mode === 'due' ? 'Outstanding' : 'Total unpaid'}</p>
           <p className="text-2xl font-black tabular-nums">{usd(totalDue)}</p>
         </div>
       )}
 
-      {loading ? <SkeletonList /> : visible.length === 0 ? (
+      {error ? <ErrorState message={error} onRetry={() => { void refresh(); }} /> : loading || stale ? <SkeletonList /> : visible.length === 0 ? (
         <EmptyState icon={meta.icon} title={mode === 'autopay' ? 'No Auto Pay bills' : mode === 'due' ? 'Nothing due' : 'No bills yet'}
           description={mode === 'autopay' ? 'Turn on Auto Pay for a bill to see it here.' : 'Add a bill to start tracking due dates.'}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />

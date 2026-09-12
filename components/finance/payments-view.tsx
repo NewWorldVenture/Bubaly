@@ -5,7 +5,7 @@ import { History, Search, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, fmtDueDate } from '@/lib/finance/hub';
@@ -18,7 +18,7 @@ export function PaymentsView() {
   const tr = useTranslations();
   const { familyId } = useApp();
 
-  const { data: rows, loading } = useRealtimeQuery<Txn>({
+  const { data: rows, loading, error, stale, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
@@ -66,7 +66,7 @@ export function PaymentsView() {
       <PageHeader title={tr('payments.paymentHistory')} description={tr('paymentsView.everyTransactionAcrossYourFamily')} />
 
       {/* This month at a glance */}
-      <div className="grid-stats">
+      {!loading && !stale && !error && <div className="grid-stats">
         {[
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
@@ -81,7 +81,7 @@ export function PaymentsView() {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-1">
@@ -97,7 +97,7 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {loading ? <SkeletonList /> : filtered.length === 0 ? (
+      {error ? <ErrorState message={error} onRetry={() => { void refresh(); }} /> : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">

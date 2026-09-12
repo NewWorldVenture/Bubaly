@@ -19,9 +19,8 @@
 // attempt retries.
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { isNative } from '@/lib/native/capacitor';
-import { clearAllCache } from '@/lib/offline/cache';
+import { getCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents } from '@/lib/auth/cache-session';
 
 /** Don't re-check more than this often; the triggers below can arrive in bursts. */
 const REVIVE_INTERVAL_MS = 30_000;
@@ -30,7 +29,6 @@ export function SessionKeeper({ userId }: { userId: string }) {
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = createClient();
     let disposed = false;
     let lastRevive = -Infinity;
     let authRevision = 0;
@@ -45,14 +43,15 @@ export function SessionKeeper({ userId }: { userId: string }) {
       lastRevive = now;
       const revision = authRevision;
       const read = ++lastRead;
-      void supabase.auth.getSession().then(({ data, error }) => {
+      void refreshCacheSession().then(() => {
+        const session = getCacheSessionSnapshot();
         // An auth event or a later read supersedes this snapshot. A failed
         // refresh says nothing about whether the saved session still exists.
-        if (disposed || revision !== authRevision || read !== lastRead || error) return;
+        if (disposed || revision !== authRevision || read !== lastRead || session.error
+          || (session.status !== 'ready' && session.status !== 'signed-out')) return;
         // Server POST sign-out clears cookies without broadcasting an auth
         // event to other tabs. Reconcile their rendered identity on return.
-        if ((data.session?.user.id ?? null) !== userId) {
-          clearAllCache();
+        if ((session.identity?.userId ?? null) !== userId) {
           router.refresh();
         }
       }).catch(() => { /* offline; the next lifecycle event retries */ });
@@ -60,20 +59,20 @@ export function SessionKeeper({ userId }: { userId: string }) {
 
     const onVisible = () => { if (document.visibilityState === 'visible') revive(); };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const unsubscribe = subscribeCacheAuthEvents((event, observedUserId) => {
       if (disposed) return;
-      authRevision += 1;
-      if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && session && session.user.id !== userId)) {
-        clearAllCache();
-      }
+      if (event !== 'INITIAL_SESSION' || observedUserId !== null) authRevision += 1;
       // Re-render the server tree against the session that now exists. On
       // SIGNED_OUT that means the route guards see no user and route to /login,
       // so the redirect stays in one place instead of being duplicated here.
       if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT' || event === 'USER_UPDATED'
-        || (event === 'SIGNED_IN' && session && session.user.id !== userId)) {
+        || ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && observedUserId && observedUserId !== userId)) {
         router.refresh();
       }
     });
+    // Reconcile a cookie-only account change at first mount too. This shares
+    // the store's bootstrap read and does not create a second SDK client.
+    revive();
 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', revive);
@@ -102,7 +101,7 @@ export function SessionKeeper({ userId }: { userId: string }) {
 
     return () => {
       disposed = true;
-      subscription.unsubscribe();
+      unsubscribe();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', revive);
       window.removeEventListener('online', revive);

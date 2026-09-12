@@ -39,7 +39,7 @@ function matches(row: PushFixtureRow, expression: string): boolean {
 }
 
 /** Stateful execution fixture: filters, multi-column ordering, limits, keysets and writes all apply. */
-export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>) {
+export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options: { maxRows?: number } = {}) {
   tables.app_settings ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();
@@ -56,7 +56,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>) {
       const attempt = (attempts.get(operationKey) ?? 0) + 1;
       attempts.set(operationKey, attempt);
       if (!(table in tables)) throw new Error(`Unexpected table ${table}`);
-      if (thrownFaults.has(operationKey)) throw new Error('Fixture connection failed');
+      if (thrownFaults.has(operationKey) || thrownFaults.has(`${operationKey}:${attempt}`)) throw new Error('Fixture connection failed');
       if (faults.has(operationKey) || faults.has(`${operationKey}:${attempt}`)) return { data: null, error: { message: 'Fixture database unavailable' } };
       if (emptyWrites.has(`${table}:${operation}`)) return { data: [], error: null };
       if (operation === 'upsert') {
@@ -73,7 +73,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>) {
             if (result) return order.ascending ? result : -result;
           }
           return 0;
-        }).slice(0, limit);
+        }).slice(0, operation === 'select' ? Math.min(limit, options.maxRows ?? Infinity) : limit);
       calls.push({ table, operation, count: rows.length, limit, filter: expression });
       if (operation === 'update') {
         for (const row of rows) { Object.assign(row, patch); if (table === 'notifications') stamps.push(String(row.id)); }
@@ -85,6 +85,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>) {
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
+      gt: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) > 0); return query; },
       lte: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) <= 0); return query; },
       or: (value: string) => { expression = value; filters.push(row => clauses(value).some(part => matches(row, part))); return query; },
       order: (key: string, options: { ascending: boolean }) => { orders.push({ key, ascending: options.ascending }); return query; },
