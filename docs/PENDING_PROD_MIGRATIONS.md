@@ -1,6 +1,9 @@
 # Production release status and historical feature inventory
 
-**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`):**
+**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
+**This baseline is stale — see "Migrations added since this document's stated
+baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
+it, three of which gate features already deployed in the app.**
 All four GitHub Production secrets exist and connectivity works. The secret
 names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
@@ -476,3 +479,105 @@ to a separately scoped, parent-owned procedure; the current release scope and
 verification are defined in `docs/PRODUCTION_FORWARD_RELEASE.md` and
 `.github/workflows/supabase-forward-release.yml`. Preview run `33987762363`
 passed; production application of the atomic `0240-0254` release remains pending.
+
+## Migrations added since this document's stated baseline (2026-09-12)
+
+The status line at the top of this file is dated **2026-09-05** against main
+`01881fb2`. **Thirty-one** migrations have landed since, `0255` through `0285`, and
+none of them appear anywhere above. Nothing here authorizes applying any of
+them; this section exists so the gap is visible rather than inferred from the
+absence of a row.
+
+The same caution as the rest of this document applies without exception: a
+missing ledger entry does not establish that the schema is absent, and a local
+verification is not production evidence. Production's ledger records only
+`0001-0003`.
+
+### Three of them gate features that are already merged and live in the app
+
+These shipped today (PRs #513 and #515) and their UI is deployed. Until the
+tables exist, each page renders but does nothing — which is the honest failure
+mode, not a silent one, because every read fails closed and says so.
+
+| Migration | What it creates | What stays inert without it |
+|---|---|---|
+| `0282_marketing_recurring_ads.sql` | `marketing_recurring_ads`, `marketing_recurring_ad_runs`; widens `marketing_social_posts.platform` from six platforms to the nine `lib/social/capabilities.ts` declares | Super Admin → Marketing → Social → Recurring, and the `/api/cron/marketing-social` run loop (it queries a table that is not there and returns a 500 the cron dispatcher logs) |
+| `0283_assistant_links.sql` | `assistant_links`, `assistant_link_events`; a column-level GRANT that withholds `token_hash` from `authenticated` | `/dashboard/assistants`, and both `/api/assistant` and `/api/assistant/alexa` — every request answers 401 because no token can resolve |
+| `0284_library_books_podcasts.sql` | `library_feeds`, `library_items`, `library_progress` | `/dashboard/library` — subscribing, streaming, saved items and per-person progress |
+
+Two details in these three are worth a reviewer's eye before they are applied,
+because both are unusual for this repository and neither is exercised by the
+CI migration replay in the way production would exercise it:
+
+- **`0283` uses a column-level GRANT**, not just RLS: `revoke select ... from
+  authenticated, anon` followed by `grant select (<named columns>)`. RLS is
+  row-level and cannot withhold a column, and `token_hash` must never be
+  readable by a family member even though it is a hash. Confirm PostgREST
+  behaves as expected against the live schema — a client selecting `*` on a
+  table with a partial column grant is the case to check.
+- **`0284`'s uniqueness index is expression-based**:
+  `(family_id, coalesce(feed_id::text, 'manual'), guid)`, so that hand-added
+  books (which have no `feed_id`) do not all collide on NULL. The feed refresh
+  upserts against it by name. ~~worth confirming on the live schema~~ —
+  **confirmed broken, and fixed by `0285`.** Postgres cannot infer an
+  `ON CONFLICT` column list from an expression index, so every feed ingest
+  failed with `42P10` at planning time. `0285` adds a stored generated column
+  and moves the index onto it; apply `0285` with `0284` (see below).
+
+### `0285` repairs five upserts that could never have run
+
+Reproduced by replaying all 300 migrations into a Postgres 16 and issuing the
+exact statement PostgREST emits: all five raised `42P10`, and a control upsert
+against a plain index succeeded.
+
+| Table | The `ON CONFLICT` target | Why no index could satisfy it | What was broken |
+|---|---|---|---|
+| `calendar_events` | `(feed_id, external_uid)` | `uniq_calendar_events_feed_uid` is **partial** | every ICS / Google feed sync |
+| `marketing_automation_runs` | `(workflow_id, subject_key)` | `uniq_mkt_runs_workflow_subject` is **partial** | automation run de-duplication |
+| `family_inbox_messages` | `(channel, provider_ref)` | `uq_inbox_provider_ref` is **partial** | contact-centre inbox de-duplication |
+| `library_items` | `(family_id, feed_id, guid)` | `uq_library_item_guid` is an **expression** index | every podcast feed ingest |
+| `subscriptions` | `(family_id)` | there was **no unique index on `family_id` at all** | every `customer.subscription.*` Stripe webhook |
+
+A partial unique index is inferable only when the statement repeats the index
+predicate, and PostgREST has no syntax to emit one — so a bare column list can
+never target it. For the first three the predicate was redundant anyway (a
+default unique index already treats NULLs as distinct), so `0285` replaces each
+with an equivalent total index: **the set of rows that conflict does not
+change**. Verified in replay — feed events still collapse to one row, manual
+events with a NULL `feed_id` still stay independent.
+
+**This is the second time.** `0195` (above) fixed exactly this failure on
+`dashboard_layouts` and its row already spells the rule out. The knowledge was
+in this document and enforced nowhere, so it recurred five times. It is now a
+check: `scripts/check-conflict-targets.mjs` runs against the real catalog in the
+CI Database job, after the replay, and `scripts/audit-supabase-queries.mjs`
+reports the same finding from the migration files on every pull request.
+
+Two notes for whoever applies it:
+
+- **`subscriptions` is attempted, not forced.** One row per family is an
+  invariant the app already relies on (`use-billing-subscription.ts` reads it
+  with `.maybeSingle()`, which errors on a second row), but a migration must not
+  delete rows from a billing table to make an index fit. If any family holds two
+  subscription rows the index is skipped and the migration raises a **warning**
+  naming the count — watch for it in the apply output. The application does not
+  depend on the index either way: the webhook now updates-then-inserts.
+- **`library_items` gains a column.** `feed_key text generated always as
+  (coalesce(feed_id::text, 'manual')) stored`. It is derived, never written by
+  the app, and PostgREST will not accept a value for it. Apply `0285` together
+  with `0284`, since the app now names `feed_key` as its conflict target.
+
+### The remaining twenty-seven
+
+`0255`-`0281` are listed here by number only, deliberately: this document's
+existing rows carry verification evidence, and writing rows without it would
+make the inventory look more complete than it is.
+
+```
+0255 0256 0257 0258 0259 0260 0261 0262 0263 0264 0265 0266 0267 0268 0269
+0270 0271 0272 0273 0274 0275 0276 0277 0278 0279 0280 0281
+```
+
+`0272`, `0273` and `0275` already have full entries in the historical inventory
+above. The others do not, and the honest summary is that this document stopped
+being a complete picture at `0254`.

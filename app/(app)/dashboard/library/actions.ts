@@ -71,8 +71,15 @@ async function ingestFeed(
 
   // Keyed on the publisher's own guid, so a refresh updates what it already has
   // instead of duplicating the whole back catalogue every time.
+  // `feed_key` (0285) is a stored generated column holding
+  // `coalesce(feed_id::text, 'manual')`. 0284 put that expression straight into
+  // the unique index, which reads correctly but cannot be inferred: an ON
+  // CONFLICT column list only ever matches a plain, non-partial unique index, so
+  // naming (family_id, feed_id, guid) raised 42P10 at planning time and every
+  // ingest failed on its first row. Naming the generated column instead keeps
+  // the same de-duplication and restores inference.
   const { error } = await supabase.from('library_items').upsert(rows, {
-    onConflict: 'family_id,feed_id,guid',
+    onConflict: 'family_id,feed_key,guid',
   } as never);
   if (error) {
     console.error('[library] item upsert failed', error);

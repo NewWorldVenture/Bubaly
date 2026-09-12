@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 // Locks in the founder growth-alert wiring in the Stripe webhook: a NEW paid
 // conversion and CHURN both fire super-admin notifications, and — critically —
-// the `customer.subscription.deleted` event is routed through upsertSubscription
+// the `customer.subscription.deleted` event is routed through persistSubscription
 // so a hard cancellation actually reaches the churn detector (prior paid+active
 // → canceled). The detection logic itself is unit-tested in billing-conversion.
 const route = readFileSync(
@@ -24,12 +24,12 @@ describe('Stripe growth-alert contract', () => {
     expect(route).toMatch(/else if \(isChurn\(priorSub/);
   });
 
-  it('routes the deletion event through upsertSubscription so hard-cancel churn fires', () => {
+  it('routes the deletion event through persistSubscription so hard-cancel churn fires', () => {
     expect(route).toContain("case 'customer.subscription.deleted'");
     // The three subscription events share one handler call.
     const deletedIdx = route.indexOf("case 'customer.subscription.deleted'");
-    const upsertIdx = route.indexOf('await upsertSubscription', deletedIdx);
-    expect(upsertIdx).toBeGreaterThan(deletedIdx);
+    const persistIdx = route.indexOf('await persistSubscription', deletedIdx);
+    expect(persistIdx).toBeGreaterThan(deletedIdx);
   });
 
   it('reads the prior subscription state before upserting (to diff transitions)', () => {
