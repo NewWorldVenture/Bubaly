@@ -252,4 +252,3 @@ test('a canceled form cannot submit its old fields after another form opens', as
   expect(state.writes).toEqual([]);
   await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Current review draft');
 });
-

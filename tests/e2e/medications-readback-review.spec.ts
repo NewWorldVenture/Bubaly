@@ -319,4 +319,3 @@ test('a rejected schedule write preserves the same opening for explicit retry', 
   expect(state.rows.medication_schedules[1].time_of_day).toBe('09:30');
   expect(state.writes.filter(write => write.table === 'medication_schedules')).toHaveLength(2);
 });
-
