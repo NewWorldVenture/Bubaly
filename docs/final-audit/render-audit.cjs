@@ -88,7 +88,7 @@ if (fs.existsSync(socialDeltaPath)) {
     ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
   ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
 }
-for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json', 'auth-signout-inventory.json', 'password-adoption-inventory.json', 'weekly-meal-inventory.json', 'guardian-policy-inventory.json', 'guardian-replay-inventory.json', 'child-readiness-inventory.json', 'guardian-sms-recovery-inventory.json', 'incoming-family-reply-inventory.json', 'contact-center-sms-reservation-inventory.json']) {
+for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json', 'auth-cookie-inventory.json', 'auth-signout-inventory.json', 'password-adoption-inventory.json', 'weekly-meal-inventory.json', 'guardian-policy-inventory.json', 'guardian-replay-inventory.json', 'child-readiness-inventory.json', 'guardian-sms-recovery-inventory.json', 'incoming-family-reply-inventory.json', 'contact-center-sms-reservation-inventory.json', 'contact-center-sms-status-inventory.json']) {
   if (!fs.existsSync(path.join(__dirname, 'discovery', inventory))) continue;
   const delta = read(`discovery/${inventory}`);
   for (const file of delta.files) {
@@ -110,6 +110,11 @@ for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inv
       if (!Object.values(records).some(record => record.area === 'DB-RPC' && record.key === fn.name)) add('DB-RPC', fn.name, fn.name, `${file.path}:${fn.line}`, evidence);
     }
   }
+}
+if (fs.existsSync(path.join(__dirname, 'discovery/contact-center-sms-status-inventory.json'))) {
+  add('CALLBACK', '/api/contact-center/sms/status', '/api/contact-center/sms/status', 'app/api/contact-center/sms/status/route.ts', {
+    notes: 'Signed provider progress for a held automatic SMS reply. See contact-center-sms-status-cycle.md; live provider verification remains separate.',
+  });
 }
 if (fs.existsSync(path.join(__dirname, 'discovery/auth-signout-inventory.json'))) {
   for (const [key, source, line, name] of [

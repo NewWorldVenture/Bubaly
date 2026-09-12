@@ -1,11 +1,11 @@
 # Final Production Audit
 
 ## Audit Status
-- Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T20:47:17.001Z
-- Total Audit Items: 13852
-- Not Started: 13787
-- In Progress: 61
+- Started: 2026-09-12T12:41:52.12Z
+- Last Updated: 2026-09-12T21:04:33.168Z
+- Total Audit Items: 13859
+- Not Started: 13791
+- In Progress: 64
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -24,13 +24,13 @@
 PRODUCTION READY: NO
 
 ## Critical Blockers
-- API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- API-387E2B30BCD7: Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
-- CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- CALLBACK-24807E48E6E6: Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 - CALLBACK-07F1FB3AED21: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DEPLOY-001: Hosted messaging acceptance, deployed session/provider configuration, real database/provider workflows, physical devices, startup approval limitation and second full regression remain open.
 - AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
@@ -67,7 +67,7 @@ PRODUCTION READY: NO
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
-- SMS-001: Signed provider delivery-status callback, provider delivery, controlled old-handler cutover, deployed PostgreSQL reservation and browser acceptance remain open.
+- SMS-001: New hosted delivery/browser acceptance, real provider delivery, controlled old-handler cutover and long fallback reply/body bounds remain open. See contact-center-sms-status-cycle.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
 - API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
@@ -8763,7 +8763,7 @@ PRODUCTION READY: NO
 | API-80142EB1C3FC | API | GET /api/concierge-calls/place | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-1B0FCD08C0B2 | API | POST /api/contact | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-0EB76703163C | API | POST /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-387E2B30BCD7 | API | POST /api/contact-center/sms | 🔄 IN PROGRESS | High | 34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery. | Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired. | 37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success. | See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished. |
+| API-387E2B30BCD7 | API | POST /api/contact-center/sms | 🔄 IN PROGRESS | High | 48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
 | API-97ED864085E2 | API | POST /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-B4E47347CDDF | API | POST /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-96040DFB5635 | API | GET /api/cron/admin-digest | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11305,7 +11305,7 @@ PRODUCTION READY: NO
 | JOB-65B62EEA3CA1 | JOB | /api/cron/ai-runs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | JOB-905AB0CFE100 | JOB | /api/cron/family-routines | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-145967CDCF24 | CALLBACK | /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | 🔄 IN PROGRESS | High | 34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery. | Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired. | 37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success. | See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished. |
+| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | 🔄 IN PROGRESS | High | 48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
 | CALLBACK-A55C76501924 | CALLBACK | /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-5653FF7DBBF5 | CALLBACK | /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-FD4E5305F4FF | CALLBACK | /api/google/calendar/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13613,7 +13613,7 @@ PRODUCTION READY: NO
 | SERVICE-A75CB6CAC8B3 | SERVICE | releaseGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-322C46B32414 | SUPPORT | tests/guardian-sms-intake-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-F988DE7EA482 | SUPPORT | tests/guardian-sms-intake.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
-| SMS-001 | SMS | Automatic SMS reply reservation and verified delivery status | 🔄 IN PROGRESS | High | Baseline fae35e90 signed callback reproduced two replies/two outbound rows. Frozen d5df624b passes 14,761 unit tests in 1,197 files; 70 helper, 42 reader/render and 48 signed callback cases cover reservation, replay, failure, ownership and safe display. | Frozen private candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; current ownership checks; deterministic verified projection and family-authorized safe status display. Provider-control suppression and independent urgent/planner recovery retained. | Frozen source d5df624b: 14,761 unit tests in 1,197 files PASS; production build generates 252 pages; strict post-build types, lint with four baseline warnings, localization and query audits PASS. New PostgreSQL/HTTP reservation case is discovered; hosted execution pending. See contact-center-sms-reservation-cycle.md. | No automatic retry after ambiguous emission; no database/HTTP transaction. No SQL, dependencies or shared navigation changed. |
+| SMS-001 | SMS | Automatic SMS reply reservation and verified delivery status | 🔄 IN PROGRESS | High | 85 installed-SDK delivery, 70 reservation, 53 signed status route, 55 signed ingress, 41 authorized reader, 14 actual React/page and 22 urgent-durability cases PASS. The full 14,919-unit suite passes after canonical synthetic-account and alias-fixture typing corrections. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
 | SUPPORT-5B00CA3C214D | SUPPORT | app/(auth)/auth/recovery/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
 | SERVICE-616ECD0B139E | SERVICE | prepareRecoveryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
 | SERVICE-C837852680A0 | SERVICE | consumeRecoveryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
@@ -13930,6 +13930,13 @@ PRODUCTION READY: NO
 | SUPPORT-1CC87D898C7B | SUPPORT | tests/contact-center-sms-reply-status.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-2C87AC076641 | SUPPORT | tests/contact-center-sms-reply.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-ABE163EE3BE6 | SUPPORT | tests/e2e/contact-center-sms-reservation.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-7C1612755C6E | SUPPORT | app/api/contact-center/sms/status/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate. |
+| API-14AB8722BB20 | API | POST /api/contact-center/sms/status | 🔄 IN PROGRESS | High | 85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing. | Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
+| SERVICE-7CAEBB72FF3F | SERVICE | recordSmsReplyDelivery | 🔄 IN PROGRESS | High | 85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing. | Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
+| SUPPORT-A8866A1C75F0 | SUPPORT | tests/contact-center-sms-delivery.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-805EBE44E61C | SUPPORT | tests/contact-center-sms-status.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-2BBF6B45C1AE | SUPPORT | tests/e2e/contact-center-sms-delivery.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate. |
+| CALLBACK-3B2997CB8A94 | CALLBACK | /api/contact-center/sms/status | 🔄 IN PROGRESS | High | 85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing. | Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened. | Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
 
 ## Inventory and evidence rules
 
@@ -14697,16 +14704,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 
 #### Fixes Applied
-Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.
+Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.
 
 #### Retest Results
-37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.
+Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.
 
 #### Evidence
-34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.
+48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14889,16 +14896,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 
 #### Fixes Applied
-Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.
+Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.
 
 #### Retest Results
-37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.
+Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.
 
 #### Evidence
-34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.
+48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -15785,16 +15792,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.
+Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 
 #### Fixes Applied
-Frozen private candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; current ownership checks; deterministic verified projection and family-authorized safe status display. Provider-control suppression and independent urgent/planner recovery retained.
+Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.
 
 #### Retest Results
-Frozen source d5df624b: 14,761 unit tests in 1,197 files PASS; production build generates 252 pages; strict post-build types, lint with four baseline warnings, localization and query audits PASS. New PostgreSQL/HTTP reservation case is discovered; hosted execution pending. See contact-center-sms-reservation-cycle.md.
+Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.
 
 #### Evidence
-Baseline fae35e90 signed callback reproduced two replies/two outbound rows. Frozen d5df624b passes 14,761 unit tests in 1,197 files; 70 helper, 42 reader/render and 48 signed callback cases cover reservation, replay, failure, ownership and safe display.
+85 installed-SDK delivery, 70 reservation, 53 signed status route, 55 signed ingress, 41 authorized reader, 14 actual React/page and 22 urgent-durability cases PASS. The full 14,919-unit suite passes after canonical synthetic-account and alias-fixture typing corrections.
 
 #### Final Status
 🔄 IN PROGRESS
@@ -19933,13 +19940,13 @@ Status: NOT STARTED — second regression follows individual verification; basel
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
-- API-387E2B30BCD7: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- API-387E2B30BCD7: Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
-- CALLBACK-24807E48E6E6: Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair.
+- CALLBACK-24807E48E6E6: Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.
 - CALLBACK-07F1FB3AED21: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DEPLOY-001: Hosted messaging acceptance, deployed session/provider configuration, real database/provider workflows, physical devices, startup approval limitation and second full regression remain open.
 - AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
@@ -19976,7 +19983,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
-- SMS-001: Signed provider delivery-status callback, provider delivery, controlled old-handler cutover, deployed PostgreSQL reservation and browser acceptance remain open.
+- SMS-001: New hosted delivery/browser acceptance, real provider delivery, controlled old-handler cutover and long fallback reply/body bounds remain open. See contact-center-sms-status-cycle.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
 - API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.

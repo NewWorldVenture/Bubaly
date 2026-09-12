@@ -1,5 +1,5 @@
 {
-  "started": "2026-09-12T12:41:52.120Z",
+  "started": "2026-09-12T12:41:52.12Z",
   "records": {
     "UI-ROUTE-0001": {
       "id": "UI-ROUTE-0001",
@@ -120404,11 +120404,11 @@
       "source": "app/api/contact-center/sms/route.ts",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.",
-      "fix": "Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.",
-      "retest": "37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.",
-      "notes": "See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished.",
-      "issue": "Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair."
+      "tests": "48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage.",
+      "fix": "Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved.",
+      "issue": "Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open."
     },
     "API-97ED864085E2": {
       "id": "API-97ED864085E2",
@@ -154321,11 +154321,11 @@
       "source": "app/api/contact-center/sms/route.ts",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "34 initial actual callback fixture cases including two deliberate defect characterizations. No live SMS/provider delivery.",
-      "fix": "Provider-handled STOP/START/HELP now bypass concierge/planner only after signature validation. Automatic reply replay remains unrepaired.",
-      "retest": "37 callback cases PASS including STOP/START/HELP suppression and forged control401; replay case deliberately records existing defect, not desired workflow success.",
-      "notes": "See docs/final-audit/contact-center-sms-reply-cycle.md. Signature/fixture transport and real provider delivery distinguished.",
-      "issue": "Actual signed middleware/route fixture: repeated handled SMS returns two TwiML replies/two outbound rows despite one inbound and one planner request; OptOutType STOP also prompted concierge reply before repair."
+      "tests": "48 signed middleware/route cases PASS on d5df624b, including desired single emission, concurrent replay, frozen candidate after planner failure, legacy hold, opt-out suppression and prototype-field signature coverage.",
+      "fix": "Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved.",
+      "issue": "Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open."
     },
     "CALLBACK-A55C76501924": {
       "id": "CALLBACK-A55C76501924",
@@ -184597,12 +184597,12 @@
       "source": "app/api/contact-center/sms/route.ts",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "Baseline fae35e90 signed callback reproduced two replies/two outbound rows. Frozen d5df624b passes 14,761 unit tests in 1,197 files; 70 helper, 42 reader/render and 48 signed callback cases cover reservation, replay, failure, ownership and safe display.",
-      "issue": "Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.",
-      "fix": "Frozen private candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; current ownership checks; deterministic verified projection and family-authorized safe status display. Provider-control suppression and independent urgent/planner recovery retained.",
-      "retest": "Frozen source d5df624b: 14,761 unit tests in 1,197 files PASS; production build generates 252 pages; strict post-build types, lint with four baseline warnings, localization and query audits PASS. New PostgreSQL/HTTP reservation case is discovered; hosted execution pending. See contact-center-sms-reservation-cycle.md.",
-      "notes": "No automatic retry after ambiguous emission; no database/HTTP transaction. No SQL, dependencies or shared navigation changed.",
-      "remaining": "Signed provider delivery-status callback, provider delivery, controlled old-handler cutover, deployed PostgreSQL reservation and browser acceptance remain open."
+      "tests": "85 installed-SDK delivery, 70 reservation, 53 signed status route, 55 signed ingress, 41 authorized reader, 14 actual React/page and 22 urgent-durability cases PASS. The full 14,919-unit suite passes after canonical synthetic-account and alias-fixture typing corrections.",
+      "issue": "Duplicate reply emission is repaired and passes real disposable HTTP/PostgreSQL verification. Signed delivery status is implemented and privately verified. Controlled characterization still finds overlong fallback replies and emoji-splitting summary/reply/body boundaries; real provider delivery and controlled cutover remain open.",
+      "fix": "Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md. Preceding reservation publication 5648447c passes all 1,063 hosted E2E cases with an identical checkout tree; its database, mobile, finance and Vercel checks pass. The five subsequent text-bound characterizations establish remaining defects, not feature success.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved.",
+      "remaining": "New hosted delivery/browser acceptance, real provider delivery, controlled old-handler cutover and long fallback reply/body bounds remain open. See contact-center-sms-status-cycle.md."
     },
     "SUPPORT-5B00CA3C214D": {
       "id": "SUPPORT-5B00CA3C214D",
@@ -188907,7 +188907,100 @@
       "fix": "None",
       "retest": "Pending",
       "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-7C1612755C6E": {
+      "id": "SUPPORT-7C1612755C6E",
+      "key": "app/api/contact-center/sms/status/route.ts",
+      "area": "SUPPORT",
+      "name": "app/api/contact-center/sms/status/route.ts",
+      "source": "app/api/contact-center/sms/status/route.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate."
+    },
+    "API-14AB8722BB20": {
+      "id": "API-14AB8722BB20",
+      "key": "/api/contact-center/sms/status:POST",
+      "area": "API",
+      "name": "POST /api/contact-center/sms/status",
+      "source": "app/api/contact-center/sms/status/route.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing.",
+      "fix": "Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved.",
+      "line": 19
+    },
+    "SERVICE-7CAEBB72FF3F": {
+      "id": "SERVICE-7CAEBB72FF3F",
+      "key": "lib/contact-center/sms-reply.ts:recordSmsReplyDelivery",
+      "area": "SERVICE",
+      "name": "recordSmsReplyDelivery",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing.",
+      "fix": "Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved.",
+      "line": 352
+    },
+    "SUPPORT-A8866A1C75F0": {
+      "id": "SUPPORT-A8866A1C75F0",
+      "key": "tests/contact-center-sms-delivery.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-sms-delivery.test.ts",
+      "source": "tests/contact-center-sms-delivery.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-805EBE44E61C": {
+      "id": "SUPPORT-805EBE44E61C",
+      "key": "tests/contact-center-sms-status.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-sms-status.test.ts",
+      "source": "tests/contact-center-sms-status.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-2BBF6B45C1AE": {
+      "id": "SUPPORT-2BBF6B45C1AE",
+      "key": "tests/e2e/contact-center-sms-delivery.spec.ts",
+      "area": "SUPPORT",
+      "name": "tests/e2e/contact-center-sms-delivery.spec.ts",
+      "source": "tests/e2e/contact-center-sms-delivery.spec.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-status-inventory.json. Full workflow verification remains separate."
+    },
+    "CALLBACK-3B2997CB8A94": {
+      "id": "CALLBACK-3B2997CB8A94",
+      "key": "/api/contact-center/sms/status",
+      "area": "CALLBACK",
+      "name": "/api/contact-center/sms/status",
+      "source": "app/api/contact-center/sms/status/route.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "85 installed-SDK delivery cases and 53 actual signed route cases PASS; 41 family-authorized reader and 14 React/page cases PASS. Baseline reservation 70 and updated signed ingress 55 cases remain passing.",
+      "fix": "Signed exact URL/query/form validation, saved emission account and token binding, immutable first provider SID, verified inbox effects, bounded revision CAS, monotonic terminal status and safe family-authorized display. No emission phase is reopened.",
+      "retest": "Final source 302c908b: 14,919 unit tests in 1,199 files PASS. Application 8417fba8 builds 252 pages; post-correction strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. New signed PostgreSQL/HTTP/browser delivery case is discovered; hosted execution pending. See contact-center-sms-status-cycle.md.",
+      "notes": "Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved."
     }
   },
-  "lastUpdated": "2026-09-12T20:47:17.001Z"
+  "lastUpdated": "2026-09-12T21:04:33.168Z"
 }
