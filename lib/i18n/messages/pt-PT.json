@@ -13443,5 +13443,13 @@
   "briefingView.available": "Disponível",
   "briefingView.oneEvent": "{count} evento",
   "briefingView.manyEvents": "{count} eventos",
-  "sync.googleAccessExpiredReconnect": "O acesso ao Google expirou. Volte a ligar o seu calendário para continuar a sincronizar."
+  "sync.googleAccessExpiredReconnect": "O acesso ao Google expirou. Volte a ligar o seu calendário para continuar a sincronizar.",
+  "displayGrid.saveFailed": "Não foi possível guardar este ecrã. Tente novamente.",
+  "displayGrid.dismissFailed": "Não foi possível dispensar a configuração. Tente novamente.",
+  "displayGrid.scheduleUnavailable": "A agenda de hoje não está disponível.",
+  "displayGrid.upcomingUnavailable": "Os próximos eventos não estão disponíveis.",
+  "displayGrid.calendarUnavailable": "Os indicadores de eventos do calendário não estão disponíveis.",
+  "displayGrid.remindersUnavailable": "Os lembretes não estão disponíveis.",
+  "displayGrid.timezoneFallback": "O fuso horário da família não está disponível. As horas são apresentadas em UTC.",
+  "displayGrid.dataUnavailable": "Alguns dados do ecrã não estão disponíveis. O ecrã tentará novamente de forma automática."
 }

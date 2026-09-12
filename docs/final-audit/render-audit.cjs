@@ -50,6 +50,25 @@ for (const r of ops.externalHostReferences) add('INTEGRATION', r.host, r.host, '
 for (const r of ops.integrations ?? []) add('PROVIDER', r.provider, r.purpose, r.sources.join(', '), { id: r.id });
 for (const r of [...ops.workflowFiles, ...ops.operationalScripts]) add('DEPLOY', r, r, r);
 for (const r of ops.seedFiles) add('SEED', r, r, r);
+// Incremental discovery includes our repairs and incoming owner commits. Keep
+// the original identity convention (file:function, route:METHOD) when adding
+// newly exported boundaries; inspection hashes are evidence, not passing tests.
+const incrementalPath = path.join(__dirname, 'discovery/incremental-inventory.json');
+if (fs.existsSync(incrementalPath)) {
+  const delta = read('discovery/incremental-inventory.json');
+  for (const surface of delta.newSurfaceCandidates) {
+    const source = surface.canonicalPath;
+    const evidence = { line: surface.line, notes: 'Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending.' };
+    if (surface.kind === 'http-method') add('API', surface.canonicalKey, `${surface.name} ${surface.canonicalKey.split(':')[0]}`, source, evidence);
+    else if (surface.kind === 'exported-function') add('SERVICE', `${source}:${surface.name}`, surface.name, source, evidence);
+    else if (surface.kind === 'source-file') add(source.startsWith('lib/') ? 'LIBRARY' : 'DEPLOY', source, source, source, evidence);
+    else if (surface.kind === 'test-file' || surface.kind === 'support-document') add('SUPPORT', source, source, source, evidence);
+    else throw new Error(`Unknown incremental audit surface: ${surface.kind}`);
+  }
+  for (const version of [delta.environmentDelta.worktree, delta.environmentDelta.incoming]) {
+    for (const name of version.addedNamesInChangedFiles) add('ENV', name, name, 'discovery/incremental-inventory.json');
+  }
+}
 // Every tracked file is also classified, including documentation, tests, assets,
 // scripts, dependency manifests and generated schema. Discovery is not verification.
 const mappedSources = new Set(Object.values(records).map(r => r.source));

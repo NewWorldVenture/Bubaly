@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T13:14:42.783Z
-- Total Audit Items: 13337
-- Not Started: 13317
-- In Progress: 17
+- Last Updated: 2026-09-12T13:27:43.466Z
+- Total Audit Items: 13389
+- Not Started: 13368
+- In Progress: 18
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -24,6 +24,7 @@
 PRODUCTION READY: NO
 
 ## Critical Blockers
+- AUTH-002: Local auth-transition purge, stale-response, failed-removal and native-listener defects repaired and verified. Persistent cache user/role partition, failed-purge browser restart, production session policy and live refresh/revocation/device restart remain unverified.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
@@ -37,8 +38,9 @@ PRODUCTION READY: NO
 - INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
-- UI-003: Display uses process-local day, omits event ends/overnight overlap, converts failed reads to All clear and retains previous display settings. Legacy reminders mismatch needs verification.
+- UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
 - DATA-002: Hook ownership/order/failure-completion defects repaired locally. User/role cache partition is caller-supplied and 22 direct consumers omit the error field; authenticated end-to-end isolation and consumer error presentation remain to verify.
+- PUSH-004: Shared sender optout/parental policy gap repaired and locally verified. Full live marketing delivery, audience pagination, campaign crash/replay and distributed device receipt guarantees remain open.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13287,11 +13289,11 @@ PRODUCTION READY: NO
 | DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Isolated npm ci PASS (547 packages); production dependency audit 0 advisories; clean baseline production build/generated types PASS; baseline lint passes with 4 existing hook warnings. Private baseline + public-read patch: production rebuild PASS and 104 selected Chromium tests PASS (3.6m). | None | Clean install, baseline build/types/lint and 104 selected public/mobile/overflow/accessibility/CSP/browser checks passed. Combined current-source regression remains pending; the earlier 425-test baseline browser attempt reached its bounded watchdog and is not counted as passed. |  |
 | TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Baseline c7b56eff: 1,121 Vitest files / 12,418 tests passed in 74.28s; real provider keys blank; log C:/Users/Daniel/AppData/Local/Temp/bubaly-final-audit-baseline-tests-20260912.log | None | Baseline only. Repeat applicable tests after fixes and final regression after workflow audits. | Baseline PASS. First combined run:12,573pass/1obsolete timeout-source-map failure; updated map to moved native sender, then4targeted suites/65assertions PASS. Final combined run pending. |
 | AUTH-001 | AUTH | Registration, verification, OAuth and recovery | ⬜ NOT STARTED | High | Pending | None | Pending |  |
-| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Current source session persistence trace and existing execution suites in progress; docs/final-audit/auth-persistence-cycle.md will record exact evidence. | None | Pending | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. |
+| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. | 46 actual Chromium checks PASS (32 shared-hook,12 auth-lifecycle,2 installed-SDK cookie tests),12 related suites436assertions PASS,6files scoped lint/diff PASS. Fresh cookie-only context retains session; local signout removes it. Full live provider/device workflow pending. | User explicitly requires persistence through normal use/restart until signout. Revoked or invalid sessions must still be rejected. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | INT-001 | INT | Contact Center authenticated provider callbacks and durable intake replay | 🔄 IN PROGRESS | High | docs/final-audit/contact-center-cycle.md | Exact four callback paths reach existing signature checks; persisted unhandled intake retries; bodyless 204; first urgency occurs before planner failure return. | 10 suites / 121 tests PASS; strict project types and scoped lint passed before final urgency tests. Production/deployed provider/database flow remains unverified; outbound durability tracked INT-002. |  |
 | PUSH-001 | PUSH | Notification push delivery, failure retention and acknowledgement | 🔄 IN PROGRESS | High | docs/final-audit/push-cycle.md; docs/final-audit/push-cursor-cycle.md; actual cron/provider-boundary and stateful cursor execution tests | Delivery/device/prune failures stay pending; required family/parental/user-preference reads fail before delivery; push_enabled respected; acknowledgement failures count as failures. Saved service-only global/family keyset cursors traverse and wrap pending due rows without starvation; cursor writes are verified before sending. Both cron handlers report unconfigured skipped delivery as unsuccessful. | 12 related suites / 121 tests, strict TypeScript, scoped lint and diff check PASS. Healthy row 201 is delivered on scan 2; microsecond ordering, tied timestamps, separate scope, wrap, deleted cursor and failed cursor writes exercised. Live provider/physical-device workflow pending. | Existing single pushed_at cannot guarantee per-device exactly-once delivery or prevent concurrent worker double-send. Schema-level investigation remains. |
-| PUSH-002 | PUSH | Native push through supported FCM HTTP v1 | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
+| PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
 | SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending |  |
@@ -13378,8 +13380,60 @@ PRODUCTION READY: NO
 | ENV-48AFE70D89E0 | ENV | APNS_ENVIRONMENT | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-FF9C62744FCD | SERVICE | nativePushConfigured | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-D6F2AF0CEBFB | SERVICE | sendNativePush | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-003 | UI | Family display calendar and availability correctness | 🔄 IN PROGRESS | High | Read-only actual seeded display page and Chromium hook probes;11existing suites/151tests PASS despite reproduced failures. | Pending | Pending | Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately. |
-| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. | 22 actual React/Chromium cases and 9 existing suites / 354 assertions PASS; scoped lint and diff check PASS. Full authenticated family-switch journey and caller presentation remain pending. | No SQL or global navigation scope. Full family/user authorization remains separate. |
+| UI-003 | UI | Family display calendar and availability correctness | 🔄 IN PROGRESS | High | docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md | Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales. | 10 server/helper/display/reminder suites164tests PASS;25 display React/Chromium cases PASS;6 clock/photo browsercases PASS;7 display/catalogue suites141assertions PASS; scopedlint/diff PASS. Combinedbuild/runtime gate next. | Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately. |
+| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. | 32 shared-hook actual React/Chromium cases pass within46-test auth/cache gate;12 related suites436assertions pass; scoped lint and diff PASS. Full authenticated/caller/role boundary verification remains open. | No SQL or global navigation scope. Full family/user authorization remains separate. |
+| PUSH-004 | PUSH | User and parental consent on every public push sender | 🔄 IN PROGRESS | High | docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures | Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts. | 13 related suites144tests PASS; scoped lint PASS. Denied preferences/child policy sendnothing; failed policyreadmarks campaignfailed; recovery/adult/zeroaudience casesverified; late policychunkfailure sendsnothing. | No schema changes or live provider sends. |
+| API-9173F41D99C0 | API | GET /api/sync/[provider]/status | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-2F04FE3C0839 | SUPPORT | docs/runbooks/google-oauth-production.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| LIBRARY-E4F55CEFC4E6 | LIBRARY | lib/display/calendar.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-CE7B98A63052 | SERVICE | displayTimezone | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-DD4CDC8F34CC | SERVICE | displayDayKey | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-3D627866833A | SERVICE | displayCalendarWindow | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-289E8C4C9211 | SERVICE | familyDisplayCalendar | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-FD4A387B8B65 | SERVICE | displayCalendarFilter | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-5D60A432D324 | SERVICE | eventOverlapsWindow | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-E356F21912A8 | SERVICE | displayEventDays | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-ED89A334A09F | SERVICE | displayReminderTime | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-45B474205F9D | SERVICE | googleClientId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-63A7D856688F | SERVICE | googleClientSecret | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-56A750128C14 | SERVICE | getCacheGeneration | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-03EED1DE68A3 | SERVICE | subscribeCacheInvalidation | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| LIBRARY-125722717D04 | LIBRARY | lib/server/native-push.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| DEPLOY-364FBD81871C | DEPLOY | scripts/lib/oauth-config-check.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-89BF1B7A622E | SERVICE | isBlankish | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-05795298C41E | SERVICE | hasEdgeWhitespace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-5D1CD354AEE7 | SERVICE | checkCredentials | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-10ECCC3E6DE1 | SERVICE | checkRedirectUris | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-BFA0923B8817 | SERVICE | checkAppUrl | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-DD4DA267F1D0 | SERVICE | checkScopes | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-AFE3043F9568 | SERVICE | checkOAuthConfig | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-E3D56A1ED393 | SERVICE | summarize | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| DEPLOY-8E3C4D466DF2 | DEPLOY | scripts/verify-oauth-config.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-9BBCDC139D97 | SUPPORT | tests/calendar-connect-outlook.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-97318DE46875 | SUPPORT | tests/contact-center-callback-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-104264503A45 | SUPPORT | tests/cron-dispatch-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-0729B8A77FCB | SUPPORT | tests/display-calendar.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-156252CE991A | SUPPORT | tests/display-page-calendar.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-77FBDAD6AFB2 | SUPPORT | tests/e2e/auth-lifecycle-boundary.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-1177446EFB72 | SUPPORT | tests/e2e/browser-session-storage.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-92C6D10C1C14 | SUPPORT | tests/e2e/display-clock.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-D55E4DE468A1 | SUPPORT | tests/e2e/display-ownership.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-91613E855CC0 | SUPPORT | tests/e2e/native-bootstrap.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-02FD32F09502 | SUPPORT | tests/e2e/realtime-query.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-E3A46979E223 | SUPPORT | tests/e2e/register-sw.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-18628D564A36 | SUPPORT | tests/helpers/push-dispatch-db.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-A2DE8140849F | SERVICE | notificationId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SERVICE-F1269BF1F02C | SERVICE | pushDispatchDb | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-D4F9A23B1337 | SUPPORT | tests/marketing-public-read-budget.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-8447BEB8A415 | SUPPORT | tests/native-push-provider.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-C525AFAA962C | SUPPORT | tests/oauth-config-check.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-02D020856D17 | SUPPORT | tests/push-cursor-fairness.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-C2FA6D9370AC | SUPPORT | tests/push-delivery-retry.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-CDA34FE22E3B | SUPPORT | tests/push-native-routing.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-B618B47C786C | SUPPORT | tests/resend-webhook-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-728055A9A2D7 | SUPPORT | tests/social-links-read-budget.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-77CD9ECD7610 | SUPPORT | tests/sync-provider-status-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| DEPLOY-29B86C9FE9E8 | DEPLOY | app/api/sync/[provider]/status/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 
 ## Inventory and evidence rules
 
@@ -13525,7 +13579,7 @@ Pending
 
 Status: 🔄 IN PROGRESS
 Severity: High
-Route(s), components, actions, tables and providers: Trace using linked discovery inventory; record exact exercised chain before passing.
+Route(s), components, actions, tables and providers: components/auth/session-keeper.tsx; lib/supabase/client.ts; shared/auth/refresh-fetch.ts; lib/offline/cache.ts; lib/hooks/use-realtime-query.ts
 
 #### Expected Behavior
 The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
@@ -13539,16 +13593,16 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-No complete workflow finding yet; investigation pending.
+Definitive sign-out/account replacement leaves prior-user offline rows, and late shared-hook responses can repopulate caches after purge. Native listener removal rejection causes unhandled promises.
 
 #### Fixes Applied
-None
+Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures.
 
 #### Retest Results
-Pending
+46 actual Chromium checks PASS (32 shared-hook,12 auth-lifecycle,2 installed-SDK cookie tests),12 related suites436assertions PASS,6files scoped lint/diff PASS. Fresh cookie-only context retains session; local signout removes it. Full live provider/device workflow pending.
 
 #### Evidence
-Current source session persistence trace and existing execution suites in progress; docs/final-audit/auth-persistence-cycle.md will record exact evidence.
+docs/final-audit/auth-persistence-cycle.md;15 existing suites222assertions; real React/Chromium auth-transition and native-listener lifecycle probes
 
 #### Final Status
 🔄 IN PROGRESS
@@ -13649,7 +13703,7 @@ docs/final-audit/push-cycle.md; docs/final-audit/push-cursor-cycle.md; actual cr
 #### Final Status
 🔄 IN PROGRESS
 
-### PUSH-002 — Native push through supported FCM HTTP v1
+### PUSH-002 — Native push through FCM HTTP v1 and APNs
 
 Status: 🔄 IN PROGRESS
 Severity: High
@@ -14310,13 +14364,13 @@ The complete supported workflow performs authorized actions, persists intended s
 Display uses process-local day, omits event ends/overnight overlap, converts failed reads to All clear and retains previous display settings. Legacy reminders mismatch needs verification.
 
 #### Fixes Applied
-Pending
+Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales.
 
 #### Retest Results
-Pending
+10 server/helper/display/reminder suites164tests PASS;25 display React/Chromium cases PASS;6 clock/photo browsercases PASS;7 display/catalogue suites141assertions PASS; scopedlint/diff PASS. Combinedbuild/runtime gate next.
 
 #### Evidence
-Read-only actual seeded display page and Chromium hook probes;11existing suites/151tests PASS despite reproduced failures.
+docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md
 
 #### Final Status
 🔄 IN PROGRESS
@@ -14342,13 +14396,45 @@ The complete supported workflow performs authorized actions, persists intended s
 Shared realtime query commits responses and cached rows without current-key/request generation checks.
 
 #### Fixes Applied
-Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state.
+Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion.
 
 #### Retest Results
-22 actual React/Chromium cases and 9 existing suites / 354 assertions PASS; scoped lint and diff check PASS. Full authenticated family-switch journey and caller presentation remain pending.
+32 shared-hook actual React/Chromium cases pass within46-test auth/cache gate;12 related suites436assertions pass; scoped lint and diff PASS. Full authenticated/caller/role boundary verification remains open.
 
 #### Evidence
 docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts
+
+#### Final Status
+🔄 IN PROGRESS
+
+### PUSH-004 — User and parental consent on every public push sender
+
+Status: 🔄 IN PROGRESS
+Severity: High
+Route(s), components, actions, tables and providers: lib/server/push.ts; app/(app)/admin/marketing/push/actions.ts
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Actual marketing-action execution sends to a child with push_enabled=false and parental child_channels.push=false, with zero policy reads. Restrictions exist only in queue dispatcher and are bypassed by direct public senders.
+
+#### Fixes Applied
+Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts.
+
+#### Retest Results
+13 related suites144tests PASS; scoped lint PASS. Denied preferences/child policy sendnothing; failed policyreadmarks campaignfailed; recovery/adult/zeroaudience casesverified; late policychunkfailure sendsnothing.
+
+#### Evidence
+docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures
 
 #### Final Status
 🔄 IN PROGRESS
@@ -18295,6 +18381,7 @@ Status: NOT STARTED — second regression follows individual verification; basel
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
+- AUTH-002: Local auth-transition purge, stale-response, failed-removal and native-listener defects repaired and verified. Persistent cache user/role partition, failed-purge browser restart, production session policy and live refresh/revocation/device restart remain unverified.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
@@ -18308,8 +18395,9 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - INT-002: Best-effort escalation has no durable retry marker; automatic replies can repeat on provider replay.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
-- UI-003: Display uses process-local day, omits event ends/overnight overlap, converts failed reads to All clear and retains previous display settings. Legacy reminders mismatch needs verification.
+- UI-003: Reproduced calendar,reminder,ownership,concurrent-write and time-display defects repaired locally. Combined integration regression,authenticated persistence acrossdevices andphysicalkiosk behavior remain unverified.
 - DATA-002: Hook ownership/order/failure-completion defects repaired locally. User/role cache partition is caller-supplied and 22 direct consumers omit the error field; authenticated end-to-end isolation and consumer error presentation remain to verify.
+- PUSH-004: Shared sender optout/parental policy gap repaired and locally verified. Full live marketing delivery, audience pagination, campaign crash/replay and distributed device receipt guarantees remain open.
 
 ## Production Readiness
 NO

@@ -11,11 +11,12 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 const ROTATE_MS = 20_000;
 
-export function PhotoFrame({ photos, idleMinutes, clock24, nextLine }: {
+export function PhotoFrame({ photos, idleMinutes, clock24, nextLine, timezone }: {
   photos: string[];
   idleMinutes: number;   // 0 = off
   clock24: boolean;
   nextLine: string | null;
+  timezone?: string;
 }) {
   const t = useTranslations();
   const [idle, setIdle] = useState(false);
@@ -69,7 +70,7 @@ export function PhotoFrame({ photos, idleMinutes, clock24, nextLine }: {
       )}
       <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/75 via-transparent to-black/30" />
       <div className="absolute bottom-10 left-10 z-20">
-        <AmbientClock clock24={clock24} seconds={false} />
+        <AmbientClock clock24={clock24} seconds={false} timezone={timezone} />
       </div>
       {nextLine && (
         <p className="absolute bottom-10 right-10 z-20 max-w-sm truncate rounded-2xl bg-black/40 px-4 py-2 text-right text-sm text-white/85 backdrop-blur-md">

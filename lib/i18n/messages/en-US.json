@@ -13443,5 +13443,13 @@
   "briefingView.available": "Available",
   "briefingView.oneEvent": "{count} event",
   "briefingView.manyEvents": "{count} events",
-  "sync.googleAccessExpiredReconnect": "Google access expired. Reconnect your calendar to keep syncing."
+  "sync.googleAccessExpiredReconnect": "Google access expired. Reconnect your calendar to keep syncing.",
+  "displayGrid.saveFailed": "Could not save this display. Please try again.",
+  "displayGrid.dismissFailed": "Could not dismiss setup. Please try again.",
+  "displayGrid.scheduleUnavailable": "Today's schedule is unavailable.",
+  "displayGrid.upcomingUnavailable": "Upcoming events are unavailable.",
+  "displayGrid.calendarUnavailable": "Calendar event markers are unavailable.",
+  "displayGrid.remindersUnavailable": "Reminders are unavailable.",
+  "displayGrid.timezoneFallback": "Family timezone is unavailable. Times are shown in UTC.",
+  "displayGrid.dataUnavailable": "Some display data is unavailable. The display will retry automatically."
 }

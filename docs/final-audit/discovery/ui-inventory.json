@@ -378937,6 +378937,21 @@
       },
       "result": "CONFIRMED_OPTIONAL_CONTENT_READ_STALL",
       "limitation": "Unreachable database fixture; no configured production database or complete marketing workflow verification."
+    },
+    {
+      "id": "UI-003",
+      "source": "components/display/display-grid.tsx",
+      "method": "Actual React/ReactDOM Chromium through DisplayShellClient; controllable upsert promises apply exact captured rows on completion.",
+      "baseline": {
+        "idleRefresh": "old layout retained",
+        "familyChange": "old editor retained",
+        "cancelAfterRefresh": "old setup dismissal retained",
+        "userChange": "old editor retained",
+        "outOfOrderDismiss": "newer chores row overwritten by older schedule row",
+        "cancelDuringSave": "UI schedule disagrees with saved chores"
+      },
+      "result": "CONFIRMED_DISPLAY_LOCAL_STATE_AND_WRITE_ORDER_FAILURES",
+      "limitation": "Controlled persistence fixture; no deployed database or complete authenticated kiosk journey."
     }
   ],
   "remediationUpdates": [
@@ -378977,6 +378992,14 @@
       "tests": "tests/marketing-public-read-budget.test.ts",
       "evidence": "docs/final-audit/public-navigation-cycle.md",
       "scope": "1500ms shared logical-read deadline; 12 actual SDK execution cases plus21 related regressions pass. Fixed probes SEO1565ms/pathAEO1576ms; rebuilt actual production navigation desktop1654ms/mobile1595ms with menu close. Fresh home7632ms and some RSC streams still pending; no whole-public-workflow claim."
+    },
+    {
+      "id": "UI-003",
+      "source": "components/display/display-grid.tsx",
+      "targetedStatus": "FIXED_AND_TARGETED_REACT_BROWSER_TESTS_PASS",
+      "tests": "tests/e2e/display-ownership.spec.ts",
+      "evidence": "docs/final-audit/display-state-cycle.md",
+      "scope": "25 actual React/Chromium tests:19ownership/write/refresh cases+6availability/timezone cases.7relatedunitfiles141PASS.8additivecopykeys in7basecatalogues. Root owns combined TypeScript/build; authenticated deployed kiosk/device/cross-client concurrency not claimed."
     }
   ]
 }

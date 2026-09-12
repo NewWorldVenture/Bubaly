@@ -1,21 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type SetStateAction } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { isMissingTableError } from '@/lib/supabase/errors';
-import { cacheKey, readCache, writeCache } from '@/lib/offline/cache';
+import { describeDbError } from '@/lib/supabase/errors';
+import { cacheKey, getCacheGeneration, readCache, subscribeCacheInvalidation, writeCache } from '@/lib/offline/cache';
 import { realtimeChannelFor } from '@/lib/realtime/published-tables';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+type QueryScope = { key: string; generation: number; active: boolean; request: number };
+const getServerCacheGeneration = () => 0;
+type QueryState<T> = {
+  scope: QueryScope;
+  data: T[];
+  loading: boolean;
+  error: string | null;
+  stale: boolean;
+  updatedAt: number | null;
+};
+
+function emptyState<T>(scope: QueryScope): QueryState<T> {
+  return { scope, data: [], loading: true, error: null, stale: false, updatedAt: null };
+}
 
 /**
  * Fetches a family-scoped list and keeps it live via Supabase Realtime.
  * Re-runs the fetcher whenever the watched table changes for this family.
  *
- * Offline-first reads (gap #13 v1): the last successful result is cached in
- * localStorage, hydrated on mount for instant paint, served when the network
- * is down (no scary error), and re-synced automatically on reconnect.
+ * Last successful rows can be hydrated from this query's cache. Cached/failed
+ * reads are marked stale; failures remain errors even when cached rows exist.
+ * The caller supplies any user/role/query distinctions through deps: family
+ * and table alone do not establish authorization or a user-specific cache.
  */
 export function useRealtimeQuery<T>({
   table,
@@ -28,54 +43,64 @@ export function useRealtimeQuery<T>({
   fetcher: Fetcher<T>;
   deps?: unknown[];
 }) {
-  const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
   const key = cacheKey(table, familyId, deps);
-  const hydratedRef = useRef<string | null>(null);
+  const generation = useSyncExternalStore(subscribeCacheInvalidation, getCacheGeneration, getServerCacheGeneration);
+  const scope = useMemo<QueryScope>(() => ({ key, generation, active: false, request: 0 }), [key, generation]);
+  const activeScope = useRef(scope);
+  activeScope.current = scope;
+  const fetcherRef = useRef({ scope, fetcher });
+  fetcherRef.current = { scope, fetcher };
+  const [state, setState] = useState<QueryState<T>>(() => emptyState(scope));
 
   const refresh = useCallback(async () => {
-    const supabase = createClient();
-    const { data: rows, error: err } = await fetcherRef.current(supabase);
-    if (err) {
-      // A not-yet-provisioned feature (pending migration) should look empty, not
-      // broken — degrade missing-table errors to an empty list instead of a
-      // scary error banner. Real errors still surface.
-      if (isMissingTableError(err)) {
-        setData([]);
-        setError(null);
-      } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        // Offline: keep showing the cached rows quietly; reconnect re-syncs.
-        setError(null);
-      } else {
-        setError(err.message);
-      }
-    } else {
-      setData(rows ?? []);
-      setError(null);
-      writeCache(key, rows ?? []);
+    // Old online/realtime callbacks must not pair a new fetcher with an old key.
+    if (!scope.active || activeScope.current !== scope || fetcherRef.current.scope !== scope || scope.generation !== getCacheGeneration()) return;
+    const fetchCurrent = fetcherRef.current.fetcher;
+    const request = ++scope.request;
+    const isCurrent = () => scope.active && activeScope.current === scope && scope.request === request
+      && scope.generation === getCacheGeneration();
+    try {
+      const { data: rows, error: err } = await fetchCurrent(createClient());
+      if (!isCurrent()) return;
+      if (err) throw err;
+      const data = rows ?? [];
+      const updatedAt = Date.now();
+      writeCache(scope.key, data);
+      setState(previous => isCurrent()
+        ? { scope, data, loading: false, error: null, stale: false, updatedAt }
+        : previous);
+    } catch (cause) {
+      if (!isCurrent()) return;
+      const error = describeDbError(cause, 'Could not load data. Please try again.');
+      setState(previous => isCurrent()
+        ? { ...(previous.scope === scope ? previous : emptyState<T>(scope)), loading: false, error, stale: true }
+        : previous);
     }
-    setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [scope]);
+
+  const setData = useCallback((update: SetStateAction<T[]>) => {
+    if (!scope.active || activeScope.current !== scope || scope.generation !== getCacheGeneration()) return;
+    // A caller's local mutation supersedes reads already in flight. Preserve
+    // functional-setter batching; do not persist an unverified local mutation.
+    scope.request += 1;
+    setState(previous => {
+      if (!scope.active || activeScope.current !== scope || scope.generation !== getCacheGeneration()) return previous;
+      const current = previous.scope === scope ? previous : emptyState<T>(scope);
+      const data = typeof update === 'function' ? update(current.data) : update;
+      if (scope.generation !== getCacheGeneration()) return previous;
+      return { ...current, data, loading: false, stale: true };
+    });
+  }, [scope]);
 
   useEffect(() => {
-    // Instant paint from the last-known rows (once per key).
-    if (hydratedRef.current !== key) {
-      hydratedRef.current = key;
-      const cached = readCache<T>(key);
-      if (cached && cached.rows.length > 0) {
-        setData(cached.rows);
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
-    }
+    scope.active = true;
+    const cached = readCache<T>(scope.key);
+    setState(cached
+      ? { scope, data: cached.rows, loading: false, error: null, stale: true, updatedAt: cached.savedAt }
+      : emptyState<T>(scope));
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refresh, key]);
+    return () => { scope.active = false; scope.request += 1; };
+  }, [refresh, scope]);
 
   // Re-sync the moment connectivity returns.
   useEffect(() => {
@@ -104,5 +129,8 @@ export function useRealtimeQuery<T>({
     return () => { void supabase.removeChannel(channel); };
   }, [table, familyId, refresh]);
 
-  return { data, loading, error, refresh, setData };
+  // Effects run after render. Mask an old owner's state on the first render
+  // of a new key, including an A -> B -> A switch before requests finish.
+  const visible = state.scope === scope ? state : emptyState<T>(scope);
+  return { data: visible.data, loading: visible.loading, error: visible.error, stale: visible.stale, updatedAt: visible.updatedAt, refresh, setData };
 }

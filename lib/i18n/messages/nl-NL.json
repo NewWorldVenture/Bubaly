@@ -13443,5 +13443,13 @@
   "briefingView.available": "Beschikbaar",
   "briefingView.oneEvent": "{count} afspraak",
   "briefingView.manyEvents": "{count} afspraken",
-  "sync.googleAccessExpiredReconnect": "De Google-toegang is verlopen. Koppel je agenda opnieuw om te blijven synchroniseren."
+  "sync.googleAccessExpiredReconnect": "De Google-toegang is verlopen. Koppel je agenda opnieuw om te blijven synchroniseren.",
+  "displayGrid.saveFailed": "Dit scherm kon niet worden opgeslagen. Probeer het opnieuw.",
+  "displayGrid.dismissFailed": "De instellingen konden niet worden gesloten. Probeer het opnieuw.",
+  "displayGrid.scheduleUnavailable": "De planning van vandaag is niet beschikbaar.",
+  "displayGrid.upcomingUnavailable": "Aankomende afspraken zijn niet beschikbaar.",
+  "displayGrid.calendarUnavailable": "Afspraakmarkeringen in de kalender zijn niet beschikbaar.",
+  "displayGrid.remindersUnavailable": "Herinneringen zijn niet beschikbaar.",
+  "displayGrid.timezoneFallback": "De tijdzone van het gezin is niet beschikbaar. Tijden worden weergegeven in UTC.",
+  "displayGrid.dataUnavailable": "Sommige schermgegevens zijn niet beschikbaar. Het scherm probeert het automatisch opnieuw."
 }

@@ -18,6 +18,8 @@
 // Dry run:    node scripts/cron-dispatch.mjs --dry-run --at 2026-09-05T03:05:00Z
 // Exports are pure so tests/cron-dispatch.test.ts can pin the matcher and the table.
 
+import { pathToFileURL } from 'node:url';
+
 /** Route → real cadence (5-field cron, UTC). Keep in sync with the comment block in vercel.json. */
 export const SCHEDULES = {
   '/api/cron/feedback-github-sync': '15 * * * *',
@@ -112,15 +114,40 @@ export function dueRoutes(now, schedules = SCHEDULES, tickMinutes = TICK_MINUTES
   return due;
 }
 
+/** Read only enough response bytes for a diagnostic, never an unbounded body. */
+async function responsePreview(response) {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let remaining = 4_096;
+  let text = '';
+  try {
+    while (remaining > 0) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      const bytes = chunk.value.subarray(0, remaining);
+      text += decoder.decode(bytes, { stream: true });
+      remaining -= bytes.byteLength;
+    }
+    return text + decoder.decode();
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+}
+
+function safeDiagnostic(value, secret) {
+  return String(value).split(secret).join('[redacted]').replace(/\s+/g, ' ').slice(0, 200);
+}
+
 async function callRoute(baseUrl, route, secret, fetchImpl = fetch) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120_000);
   try {
-    const res = await fetchImpl(`${baseUrl}${route}`, { headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'bubaly-cron-dispatch' }, signal: controller.signal });
-    const body = (await res.text()).replace(/\s+/g, ' ').slice(0, 200);
+    const res = await fetchImpl(`${baseUrl}${route}`, { headers: { Authorization: `Bearer ${secret}`, 'User-Agent': 'bubaly-cron-dispatch' }, signal: controller.signal, redirect: 'manual' });
+    const body = safeDiagnostic(await responsePreview(res), secret);
     return { route, status: res.status, ok: res.ok, body };
   } catch (error) {
-    return { route, status: 0, ok: false, body: error instanceof Error ? error.message : String(error) };
+    return { route, status: 0, ok: false, body: safeDiagnostic(error instanceof Error ? error.message : String(error), secret) };
   } finally {
     clearTimeout(timer);
   }
@@ -131,23 +158,49 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const atIndex = args.indexOf('--at');
   const now = atIndex >= 0 ? new Date(args[atIndex + 1]) : new Date();
-  if (Number.isNaN(now.getTime())) { console.error('Invalid --at timestamp'); process.exit(2); }
-  const only = args.includes('--route') ? args[args.indexOf('--route') + 1] : null;
+  if (Number.isNaN(now.getTime())) { console.error('Invalid --at timestamp'); process.exitCode = 2; return; }
+  const routeIndex = args.indexOf('--route');
+  const only = routeIndex >= 0 ? args[routeIndex + 1] : null;
+  if (routeIndex >= 0 && (!only || !Object.hasOwn(SCHEDULES, only))) {
+    console.error('Invalid --route: choose a registered /api/cron route from SCHEDULES.');
+    process.exitCode = 2;
+    return;
+  }
   const routes = only ? [only] : dueRoutes(now);
   console.log(`cron-dispatch at ${now.toISOString()} (window ${TICK_MINUTES} min): ${routes.length ? routes.join(', ') : 'nothing due'}`);
-  if (dryRun || routes.length === 0) return;
+  if (dryRun) return;
   const secret = process.env.CRON_SECRET;
-  const baseUrl = (process.env.CRON_BASE_URL || 'https://www.bubaly.com').replace(/\/$/, '');
-  if (!secret) { console.log('CRON_SECRET is not set — skipping (add it under Settings → Secrets → Actions).'); return; }
+  if (!secret?.trim()) {
+    console.error('CRON_SECRET is required for dispatch. Add the matching application secret under Settings → Secrets → Actions.');
+    process.exitCode = 1;
+    return;
+  }
+  if (/[\r\n]/.test(secret)) {
+    console.error('Invalid CRON_SECRET: configure a single-line value.');
+    process.exitCode = 2;
+    return;
+  }
+  let baseUrl;
+  try {
+    const url = new URL(process.env.CRON_BASE_URL?.trim() || 'https://www.bubaly.com');
+    const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if ((url.protocol !== 'https:' && !localHttp) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Invalid origin');
+    baseUrl = url.origin;
+  } catch {
+    console.error('Invalid CRON_BASE_URL: configure an HTTPS origin or HTTP loopback origin without credentials, path, query or fragment.');
+    process.exitCode = 2;
+    return;
+  }
+  if (routes.length === 0) return;
   const results = await Promise.all(routes.map((route) => callRoute(baseUrl, route, secret)));
   let failed = 0;
   for (const r of results) {
     console.log(`${r.ok ? 'OK  ' : 'FAIL'} ${r.status} ${r.route} ${r.body}`);
     if (!r.ok) failed += 1;
   }
-  if (failed) { console.error(`${failed} of ${results.length} cron route(s) failed.`); process.exit(1); }
+  if (failed) { console.error(`${failed} of ${results.length} cron route(s) failed.`); process.exitCode = 1; }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }

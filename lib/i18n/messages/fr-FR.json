@@ -13443,5 +13443,13 @@
   "briefingView.available": "Disponible",
   "briefingView.oneEvent": "{count} événement",
   "briefingView.manyEvents": "{count} événements",
-  "sync.googleAccessExpiredReconnect": "L'accès à Google a expiré. Reconnectez votre agenda pour continuer la synchronisation."
+  "sync.googleAccessExpiredReconnect": "L'accès à Google a expiré. Reconnectez votre agenda pour continuer la synchronisation.",
+  "displayGrid.saveFailed": "Impossible d’enregistrer cet affichage. Veuillez réessayer.",
+  "displayGrid.dismissFailed": "Impossible de masquer la configuration. Veuillez réessayer.",
+  "displayGrid.scheduleUnavailable": "Le programme du jour est indisponible.",
+  "displayGrid.upcomingUnavailable": "Les événements à venir sont indisponibles.",
+  "displayGrid.calendarUnavailable": "Les repères d’événements du calendrier sont indisponibles.",
+  "displayGrid.remindersUnavailable": "Les rappels sont indisponibles.",
+  "displayGrid.timezoneFallback": "Le fuseau horaire de la famille est indisponible. Les heures sont affichées en UTC.",
+  "displayGrid.dataUnavailable": "Certaines données de l’affichage sont indisponibles. L’affichage réessaiera automatiquement."
 }

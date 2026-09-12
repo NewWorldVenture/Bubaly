@@ -15,6 +15,7 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 function chain(result: { data: unknown; error: unknown }) {
   const c: Record<string, unknown> = {
     select: () => c, is: () => c, lte: () => c, eq: () => c, order: () => c, limit: () => c,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
     then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
   };
   return c;
@@ -37,7 +38,7 @@ describe('dispatchPendingPushes read boundary', () => {
     const supabase = fakeSupabase({ data: [], error: null });
     await expect(dispatchPendingPushes(supabase)).resolves.toEqual({
       notifications: 0,
-      result: { sent: 0, skipped: 0, failed: 0, pruned: 0 },
+      result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 },
     });
   });
 });

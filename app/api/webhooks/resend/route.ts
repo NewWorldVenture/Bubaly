@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey, isEventTrigger } from '@/lib/marketing/automation-triggers';
@@ -52,6 +53,20 @@ const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
   'email.complained': 'unsubscribes',
 };
 
+const eventSchema = z.object({
+  type: z.string().min(1),
+  data: z.object({
+    // Resend webhooks use a record; retain the array shape accepted by older
+    // callbacks/fixtures, which matches the outbound email API's tag format.
+    tags: z.union([z.record(z.string()), z.array(z.object({ name: z.string(), value: z.string() }))]).optional(),
+    to: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1))]).optional(),
+  }).passthrough().optional(),
+}).passthrough().refine((event) => {
+  if (event.type !== 'email.bounced' && event.type !== 'email.complained') return true;
+  const recipients = event.data?.to;
+  return typeof recipients === 'string' || (Array.isArray(recipients) && recipients.length > 0);
+}, 'A suppression event must identify at least one recipient.');
+
 export async function POST(req: NextRequest) {
   const tr = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, 256_000);
@@ -63,100 +78,128 @@ export async function POST(req: NextRequest) {
 
   const svixId = req.headers.get('svix-id')!;
 
-  let event: { type: string; data?: { tags?: { name: string; value: string }[]; to?: string | string[] } };
+  let payload: unknown;
   try {
-    event = JSON.parse(body);
+    payload = JSON.parse(body);
   } catch {
     return NextResponse.json({ error: tr('resend.badPayload') }, { status: 400 });
   }
+  const parsed = eventSchema.safeParse(payload);
+  if (!parsed.success) return NextResponse.json({ error: tr('resend.badPayload') }, { status: 400 });
+  const event = parsed.data;
 
   const supabase = createServiceClient();
+  const retry = () => NextResponse.json(
+    { error: tr('resend.webhookStorageUnavailable') },
+    { status: 503, headers: { 'Retry-After': '30' } },
+  );
   const { data: prior, error: priorError } = await supabase
     .from('resend_webhook_events')
     .select('status, received_at')
     .eq('svix_id', svixId)
     .maybeSingle();
-  if (priorError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
+  if (priorError) return retry();
 
   const priorAge = prior?.received_at ? Date.now() - new Date(prior.received_at).getTime() : 0;
-  if (prior?.status === 'processed' || (prior?.status === 'processing' && priorAge < 10 * 60_000)) {
+  if (prior?.status === 'processed') {
     return NextResponse.json({ received: true, duplicate: true });
   }
+  // A second delivery cannot know whether an active worker will finish. A 200
+  // here makes the provider abandon retries even if that worker has failed.
+  if (prior?.status === 'processing' && priorAge < 10 * 60_000) return retry();
+
+  // The existing receipt timestamp also identifies the claim owner. Advance it
+  // even for a retry in the same millisecond, so an older worker cannot release
+  // or finalize a newer claim. No additional database columns are required.
+  const previousReceivedAt = prior ? new Date(prior.received_at).getTime() : 0;
+  const receivedAt = new Date(Math.max(Date.now(), previousReceivedAt + 1)).toISOString();
 
   if (prior) {
-    const { error: claimError } = await supabase
+    const { data: claimed, error: claimError } = await supabase
       .from('resend_webhook_events')
-      .update({ status: 'processing', received_at: new Date().toISOString(), processed_at: null, error: null })
-      .eq('svix_id', svixId);
-    if (claimError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
+      .update({ status: 'processing', received_at: receivedAt, processed_at: null, error: null })
+      .eq('svix_id', svixId)
+      .eq('status', prior.status)
+      .eq('received_at', prior.received_at)
+      .select('svix_id').maybeSingle();
+    if (claimError || !claimed) return retry();
   } else {
     const { error: insertError } = await supabase.from('resend_webhook_events').insert({
       svix_id: svixId,
       event_type: event.type,
       status: 'processing',
+      received_at: receivedAt,
     });
-    if (insertError) {
-      if (insertError.code === '23505') return NextResponse.json({ received: true, duplicate: true });
-      return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-    }
+    // A unique conflict is another worker's claim, not proof of completion.
+    if (insertError) return retry();
   }
 
-  const field = FIELD[event.type];
-  if (!field) {
-    const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
-      .update({ status: 'processed', processed_at: new Date().toISOString() })
-      .eq('svix_id', svixId).select('svix_id').maybeSingle();
-    if (processedError || !processed) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-    return NextResponse.json({ received: true });
-  }
+  try {
+    const field = FIELD[event.type];
+    const tags = event.data?.tags;
+    const campaignId = Array.isArray(tags) ? tags.find((t) => t.name === 'campaign')?.value : tags?.campaign;
 
-  const campaignId = event.data?.tags?.find((t) => t.name === 'campaign')?.value;
-
-  if (campaignId) {
-    const { data: row, error: campaignReadError } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
-    if (campaignReadError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-    if (row) {
-      const current = (row as Record<string, number>)[field] ?? 0;
-      const { data: updated, error: counterError } = await supabase.from('marketing_email_campaigns')
-        .update({ [field]: current + 1 } as never).eq('id', campaignId).select('id').maybeSingle();
-      if (counterError || !updated) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-    }
-  }
-
-  // Bounces and complaints suppress the address from future sends.
-  if (event.type === 'email.bounced' || event.type === 'email.complained') {
-    const tos = Array.isArray(event.data?.to) ? event.data!.to : event.data?.to ? [event.data.to] : [];
-    const reason = event.type === 'email.bounced' ? 'bounce' : 'complaint';
-    for (const to of tos) {
-      const { error: suppressionError } = await supabase.from('marketing_suppressions')
-        .upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
-      if (suppressionError) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-    }
-  }
-
-  // Fire event-driven engagement workflows (email_opened / email_clicked). Dedup
-  // is per recipient per campaign per trigger, so repeated opens fire only once.
-  const trigger = EVENT_TRIGGER[event.type];
-  if (trigger && isEventTrigger(trigger)) {
-    const recipient = Array.isArray(event.data?.to) ? event.data?.to[0] : event.data?.to;
-    if (recipient) {
-      try {
-        await fireAutomationEvent(supabase, {
-          trigger,
-          email: String(recipient).toLowerCase(),
-          subjectKey: eventSubjectKey(trigger, [campaignId ?? 'none', String(recipient)]),
-          context: { campaignId: campaignId ?? null },
-        });
-      } catch {
-        /* non-fatal */
+    // Suppress first. This upsert is safe to repeat if a later counter or receipt
+    // write fails; a metrics failure must never prevent the safety-critical
+    // bounce/complaint suppression from being attempted.
+    if (event.type === 'email.bounced' || event.type === 'email.complained') {
+      const tos = Array.isArray(event.data?.to) ? event.data!.to : event.data?.to ? [event.data.to] : [];
+      const reason = event.type === 'email.bounced' ? 'bounce' : 'complaint';
+      for (const to of tos) {
+        const { error: suppressionError } = await supabase.from('marketing_suppressions')
+          .upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
+        if (suppressionError) throw new Error('Suppression persistence failed');
       }
     }
+
+    if (field && campaignId) {
+      const { data: row, error: campaignReadError } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
+      if (campaignReadError) throw new Error('Campaign lookup failed');
+      if (row) {
+        const current = (row as Record<string, number>)[field] ?? 0;
+        const { data: updated, error: counterError } = await supabase.from('marketing_email_campaigns')
+          .update({ [field]: current + 1 } as never).eq('id', campaignId).select('id').maybeSingle();
+        if (counterError || !updated) throw new Error('Counter persistence failed');
+      }
+    }
+
+    // Engagement workflows retain their existing best-effort contract. Their
+    // own durable workflow/subject key prevents repeated completed runs.
+    const trigger = EVENT_TRIGGER[event.type];
+    if (trigger && isEventTrigger(trigger)) {
+      const recipient = Array.isArray(event.data?.to) ? event.data?.to[0] : event.data?.to;
+      if (recipient) {
+        try {
+          await fireAutomationEvent(supabase, {
+            trigger,
+            email: String(recipient).toLowerCase(),
+            subjectKey: eventSubjectKey(trigger, [campaignId ?? 'none', String(recipient)]),
+            context: { campaignId: campaignId ?? null },
+          });
+        } catch {
+          console.error('[resend webhook] engagement automation failed');
+        }
+      }
+    }
+
+    const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
+      .update({ status: 'processed', processed_at: new Date().toISOString(), error: null })
+      .eq('svix_id', svixId).eq('status', 'processing').eq('received_at', receivedAt)
+      .select('svix_id').maybeSingle();
+    if (processedError || !processed) throw new Error('Webhook finalization failed');
+    return NextResponse.json({ received: true });
+  } catch {
+    // Release only our own unfinished claim. If this write also fails, a retry
+    // still receives 503 while the claim is active and can reclaim it when stale.
+    try {
+      const { data: released, error: releaseError } = await supabase.from('resend_webhook_events')
+        .update({ status: 'error', processed_at: null, error: 'Webhook processing failed' })
+        .eq('svix_id', svixId).eq('status', 'processing').eq('received_at', receivedAt)
+        .select('svix_id').maybeSingle();
+      if (releaseError || !released) console.error('[resend webhook] failed claim was not released');
+    } catch {
+      console.error('[resend webhook] failed claim was not released');
+    }
+    return retry();
   }
-
-  const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
-    .update({ status: 'processed', processed_at: new Date().toISOString(), error: null })
-    .eq('svix_id', svixId).select('svix_id').maybeSingle();
-  if (processedError || !processed) return NextResponse.json({ error: tr('resend.webhookStorageUnavailable') }, { status: 503 });
-
-  return NextResponse.json({ received: true });
 }

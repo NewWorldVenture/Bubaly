@@ -71,18 +71,9 @@ export async function POST(req: NextRequest) {
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
 
-  // M20: actionable texts reach the planner instead of stopping at the log —
-  // and only when this delivery was new, so a re-fired webhook is not a second
-  // run and a second row.
-  if (filed.inserted) {
-    await routeInboundToPlanner(admin, {
-      familyId, channel: 'sms', messageId: filed.messageId, body,
-      intent: result.intent, providerRef: filed.providerRef,
-    }).catch((error) => { console.error('[contact-center] sms planner routing threw', error); });
-  }
-
-  // Escalate genuine urgencies to the family's human fallback.
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+  // Urgency must reach the human before any planner/replay read can fail.
+  // Only the original insertion escalates, so a later retry cannot alert twice.
+  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent SMS escalation failed', error); }
     try {
       await admin.from('notifications').insert({
@@ -91,6 +82,35 @@ export async function POST(req: NextRequest) {
         related_type: 'contact_center',
       });
     } catch (error) { console.error('[contact-center] urgent notification write failed', error); }
+  }
+
+  // A saved inbox row may still need its first successful planner handoff.
+  // Re-read its family-scoped completion stamp on replay; intake keeps the
+  // original provider-ref idempotency key even if the stamp itself was lost.
+  let needsPlanning = filed.inserted;
+  if (!filed.messageId) return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+  if (!filed.inserted) {
+    try {
+      const saved = await settle(admin.from('family_inbox_messages').select('ai_handled')
+        .eq('id', filed.messageId).eq('family_id', familyId).maybeSingle());
+      if (saved.error || !saved.data || typeof saved.data.ai_handled !== 'boolean') throw saved.error ?? new Error('Handled state was unavailable');
+      needsPlanning = !saved.data.ai_handled;
+    } catch (error) {
+      console.error('[contact-center] SMS handled state read failed', error);
+      return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+    }
+  }
+  if (needsPlanning) {
+    try {
+      const outcome = await routeInboundToPlanner(admin, {
+        familyId, channel: 'sms', messageId: filed.messageId, body,
+        intent: result.intent, providerRef: filed.providerRef,
+      });
+      if (outcome.reason === 'no_scope' || outcome.reason === 'intake_failed') return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    } catch (error) {
+      console.error('[contact-center] sms planner routing threw', error);
+      return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    }
   }
 
   // Auto-reply unless the concierge is off or it's spam.

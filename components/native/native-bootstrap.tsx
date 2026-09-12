@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import type { PluginListenerHandle } from '@capacitor/core';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { isNative } from '@/lib/native/capacitor';
 
 /**
@@ -20,7 +22,21 @@ export function NativeBootstrap() {
 
   useEffect(() => {
     if (!isNative()) return;
-    let cleanup = () => {};
+    let disposed = false;
+    const handles = new Set<PluginListenerHandle>();
+    const remove = (handle: PluginListenerHandle) => { void handle.remove().catch(() => {}); };
+    const retain = (handle: PluginListenerHandle) => {
+      // The native listener can finish registering after React has unmounted.
+      // Its handle still needs removal, even though initialization has ended.
+      if (disposed) { remove(handle); return false; }
+      handles.add(handle);
+      return true;
+    };
+    const cleanup = () => {
+      disposed = true;
+      handles.forEach(remove);
+      handles.clear();
+    };
 
     (async () => {
       try {
@@ -29,38 +45,47 @@ export function NativeBootstrap() {
           import('@capacitor/splash-screen'),
           import('@capacitor/app'),
         ]);
+        if (disposed) return;
 
         const dark = !document.documentElement.classList.contains('light');
         await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }).catch(() => {});
+        if (disposed) return;
         await SplashScreen.hide().catch(() => {});
+        if (disposed) return;
 
         const backHandle = await App.addListener('backButton', ({ canGoBack }) => {
+          if (disposed) return;
           if (canGoBack) router.back();
           else App.exitApp().catch(() => {});
         });
+        if (!retain(backHandle)) return;
 
         // Deep links: open https://www.bubaly.com/<path> and supabase auth
         // callbacks inside the shell by routing to the path portion.
         const urlHandle = await App.addListener('appUrlOpen', ({ url }) => {
+          if (disposed) return;
           try {
             const parsed = new URL(url);
-            const target = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+            // A URL on the app host can still contain a //host pathname,
+            // which the router interprets as an external navigation. Validate
+            // the path before retaining opaque OAuth query/hash values.
+            const pathname = safeInternalRedirect(parsed.pathname, '');
+            if (!pathname) return;
+            const target = `${pathname}${parsed.search}${parsed.hash}`;
             if (target && target !== '/') router.push(target);
           } catch {
             /* ignore malformed deep links */
           }
         });
-
-        cleanup = () => {
-          backHandle.remove();
-          urlHandle.remove();
-        };
+        retain(urlHandle);
       } catch {
-        /* plugin not available — running as plain web */
+        // A partially initialized plugin must not leave the first listener
+        // active when registering the second one fails.
+        cleanup();
       }
     })();
 
-    return () => cleanup();
+    return cleanup;
   }, [router]);
 
   return null;

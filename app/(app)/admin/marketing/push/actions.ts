@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { sendPushToUsers } from '@/lib/server/push';
+import { sendPushToUsers, type PushResult } from '@/lib/server/push';
 import { selectPushRecipients, canSendPush } from '@/lib/marketing/push';
 
 function s(fd: FormData, k: string): string | null {
@@ -73,11 +73,11 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
 
   const recipients = selectPushRecipients(userIds, emailByUser, suppressed);
 
-  let result: { sent: number; skipped: number; failed: number; pruned: number } = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
+  let result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   try {
     result = recipients.length
       ? await sendPushToUsers(supabase, recipients, { title: campaign.title, body: campaign.body, url: campaign.url })
-      : { sent: 0, skipped: 0, failed: 0, pruned: 0 };
+      : { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   } catch (error) {
     await markFailedAndThrow(error);
   }
@@ -87,12 +87,13 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
     recipients: recipients.length,
     sent: result.sent,
     failed: result.failed,
-    skipped: result.skipped,
+    // Existing storage has one skipped column; the audit retains the reason.
+    skipped: result.skipped + result.withheld,
     sent_at: new Date().toISOString(),
   }).eq('id', id).eq('status', 'sending').select('id').maybeSingle();
   if (sentError || !sentCampaign) marketingActionFailure('record push campaign delivery', sentError ?? new Error('Push campaign claim was lost before delivery could be recorded.'));
 
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'send', resource: 'marketing_push_campaign', resourceId: id, metadata: { recipients: recipients.length, sent: result.sent } });
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'send', resource: 'marketing_push_campaign', resourceId: id, metadata: { recipients: recipients.length, sent: result.sent, withheld: result.withheld, deviceSkipped: result.skipped } });
   revalidatePath('/admin/marketing/push');
 }
 

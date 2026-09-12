@@ -29,12 +29,12 @@ export async function POST(req: NextRequest) {
     const url = `${BASE_URL}/api/contact-center/voice/transcription?familyId=${familyId}`;
     if (!validateTwilioSignature(sig, url, params)) return new NextResponse('Unauthorized', { status: 401 });
   }
-  if (!familyId) return new NextResponse('', { status: 204 });
+  if (!familyId) return new NextResponse(null, { status: 204 });
 
   const text = (params.TranscriptionText ?? '').slice(0, 4096);
   const from = params.From ?? null;
   const sid = params.RecordingSid ?? params.TranscriptionSid ?? null;
-  if (!text.trim()) return new NextResponse('', { status: 204 });
+  if (!text.trim()) return new NextResponse(null, { status: 204 });
 
   const admin = createServiceClient();
   const [channelResult, familyResult] = await Promise.all([
@@ -54,17 +54,9 @@ export async function POST(req: NextRequest) {
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
   });
 
-  // M20: a voicemail asking to reschedule is work, not an audio file. Twilio
-  // retries a transcription callback, so only a delivery that was actually new
-  // reaches the planner.
-  if (filed.inserted) {
-    await routeInboundToPlanner(admin, {
-      familyId, channel: 'voice', messageId: filed.messageId, body: text,
-      intent: result.intent, providerRef: filed.providerRef,
-    }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
-  }
-
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+  // Keep urgent escalation independent of planner availability. A retry keeps
+  // recovering the handoff below without repeating the original alert.
+  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
     try {
       await admin.from('notifications').insert({
@@ -75,5 +67,33 @@ export async function POST(req: NextRequest) {
     } catch (error) { console.error('[contact-center] urgent voicemail notification write failed', error); }
   }
 
-  return new NextResponse('', { status: 204 });
+  // Capture and planning can fail independently. Resume an unhandled saved
+  // voicemail on replay, retaining the provider-ref intake idempotency key.
+  let needsPlanning = filed.inserted;
+  if (!filed.messageId) return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+  if (!filed.inserted) {
+    try {
+      const saved = await settle(admin.from('family_inbox_messages').select('ai_handled')
+        .eq('id', filed.messageId).eq('family_id', familyId).maybeSingle());
+      if (saved.error || !saved.data || typeof saved.data.ai_handled !== 'boolean') throw saved.error ?? new Error('Handled state was unavailable');
+      needsPlanning = !saved.data.ai_handled;
+    } catch (error) {
+      console.error('[contact-center] voicemail handled state read failed', error);
+      return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+    }
+  }
+  if (needsPlanning) {
+    try {
+      const outcome = await routeInboundToPlanner(admin, {
+        familyId, channel: 'voice', messageId: filed.messageId, body: text,
+        intent: result.intent, providerRef: filed.providerRef,
+      });
+      if (outcome.reason === 'no_scope' || outcome.reason === 'intake_failed') return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    } catch (error) {
+      console.error('[contact-center] voicemail planner routing threw', error);
+      return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    }
+  }
+
+  return new NextResponse(null, { status: 204 });
 }

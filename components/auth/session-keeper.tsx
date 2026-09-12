@@ -21,6 +21,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { isNative } from '@/lib/native/capacitor';
+import { clearAllCache } from '@/lib/offline/cache';
 
 /** Don't re-check more than this often; the triggers below can arrive in bursts. */
 const REVIVE_INTERVAL_MS = 30_000;
@@ -50,7 +51,10 @@ export function SessionKeeper({ userId }: { userId: string }) {
         if (disposed || revision !== authRevision || read !== lastRead || error) return;
         // Server POST sign-out clears cookies without broadcasting an auth
         // event to other tabs. Reconcile their rendered identity on return.
-        if ((data.session?.user.id ?? null) !== userId) router.refresh();
+        if ((data.session?.user.id ?? null) !== userId) {
+          clearAllCache();
+          router.refresh();
+        }
       }).catch(() => { /* offline; the next lifecycle event retries */ });
     };
 
@@ -59,6 +63,9 @@ export function SessionKeeper({ userId }: { userId: string }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (disposed) return;
       authRevision += 1;
+      if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && session && session.user.id !== userId)) {
+        clearAllCache();
+      }
       // Re-render the server tree against the session that now exists. On
       // SIGNED_OUT that means the route guards see no user and route to /login,
       // so the redirect stays in one place instead of being duplicated here.
@@ -78,12 +85,17 @@ export function SessionKeeper({ userId }: { userId: string }) {
     // always fires there, and it is the moment the user is looking at the app
     // again expecting to still be signed in.
     let removeResume = () => {};
+    const removeListener = (handle: { remove: () => Promise<void> }) => {
+      try {
+        void handle.remove().catch(() => { /* native bridge may already be gone */ });
+      } catch { /* a suspended native bridge can throw synchronously */ }
+    };
     if (isNative()) {
       void import('@capacitor/app')
         .then(({ App }) => App.addListener('resume', revive))
         .then((handle) => {
-          if (disposed) void handle.remove();
-          else removeResume = () => { void handle.remove(); };
+          if (disposed) removeListener(handle);
+          else removeResume = () => removeListener(handle);
         })
         .catch(() => { /* plugin unavailable — web build */ });
     }

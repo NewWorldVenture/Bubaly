@@ -119,26 +119,26 @@ describe('tempFromFahrenheit', () => {
 describe('nowAndNext', () => {
   const base = '2026-07-14T';
   const events: TimedEvent[] = [
-    { id: 'a', title: 'Breakfast', starts_at: `${base}08:00:00` },
-    { id: 'b', title: 'Dentist', starts_at: `${base}10:00:00` },
-    { id: 'c', title: 'Piano', starts_at: `${base}13:00:00` },
+    { id: 'a', title: 'Breakfast', starts_at: `${base}08:00:00`, ends_at: `${base}08:30:00` },
+    { id: 'b', title: 'Dentist', starts_at: `${base}10:00:00`, ends_at: `${base}11:00:00` },
+    { id: 'c', title: 'Piano', starts_at: `${base}13:00:00`, ends_at: `${base}14:00:00` },
     { id: 'd', title: 'All-day fair', starts_at: `${base}00:00:00`, all_day: true },
   ];
-  it('finds the current (recent, within window) and next event', () => {
+  it('finds the current interval and next event', () => {
     const now = new Date(`${base}10:20:00`);
-    const { current, next } = nowAndNext(events, now, 90);
+    const { current, next } = nowAndNext(events, now);
     expect(current?.id).toBe('b'); // dentist started 20 min ago
     expect(next?.id).toBe('c');    // piano is up next
   });
-  it('drops a current event once it is outside the window', () => {
+  it('drops a current event after its end', () => {
     const now = new Date(`${base}12:00:00`);
-    const { current, next } = nowAndNext(events, now, 90);
+    const { current, next } = nowAndNext(events, now);
     expect(current).toBeNull();  // dentist was 2h ago
     expect(next?.id).toBe('c');
   });
   it('ignores all-day events as "current"', () => {
     const now = new Date(`${base}00:30:00`);
-    expect(nowAndNext(events, now, 90).current).toBeNull();
+    expect(nowAndNext(events, now).current).toBeNull();
   });
   it('next is null when nothing remains', () => {
     const now = new Date(`${base}23:00:00`);
@@ -148,9 +148,9 @@ describe('nowAndNext', () => {
 
 describe('countdownLabel', () => {
   const now = new Date('2026-07-14T10:00:00');
-  it('"Now" for in-progress / just-started', () => {
+  it('only labels the actual start Now, without inferring duration from a past start', () => {
     expect(countdownLabel('2026-07-14T10:00:00', now)).toBe('Now');
-    expect(countdownLabel('2026-07-14T09:30:00', now)).toBe('Now');
+    expect(countdownLabel('2026-07-14T09:30:00', now)).toMatch(/9:30/);
   });
   it('minutes for soon', () => {
     expect(countdownLabel('2026-07-14T10:25:00', now)).toBe('in 25 min');

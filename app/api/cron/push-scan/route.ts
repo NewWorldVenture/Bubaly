@@ -18,8 +18,8 @@ export const runtime = 'nodejs';
 // the next day — after it mattered. Running the push half every couple of hours
 // closes that gap while the daily run keeps owning email.
 //
-// Safe to overlap the daily cron: generation dedups permanently by related_id,
-// push is gated on pushed_at and email on sent_at, so nothing double-sends.
+// Generation deduplicates by related_id. Delivery uses pushed_at and sent_at;
+// overlapping workers or a partial delivery can retry already delivered devices.
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     console.error('Push dispatch failed:', e);
   }
 
-  const failed = generationFailures + pushDispatchFailures + pushed.result.failed;
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped;
   const ok = failed === 0;
   return NextResponse.json(
     { ok, families: families?.length ?? 0, created, pushed, failed },

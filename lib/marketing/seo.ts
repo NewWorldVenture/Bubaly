@@ -19,6 +19,9 @@ function anonClient() {
 
 export async function getSeoPage(path: string): Promise<{ title: string | null; description: string | null; canonical: string | null } | null> {
   try {
+    // Optional editorial overrides must not hold a public navigation open
+    // through the SDK's retry backoff. Both stores share one total budget.
+    const signal = AbortSignal.timeout(1500);
     const client = anonClient();
     // The platform registry is canonical for newly managed page families. The
     // legacy SEO table remains a compatibility fallback for routes that have not
@@ -29,6 +32,7 @@ export async function getSeoPage(path: string): Promise<{ title: string | null; 
       .eq('path', path)
       .eq('status', 'published')
       .is('deleted_at', null)
+      .abortSignal(signal)
       .maybeSingle();
     if (platform) {
       const seo = platform.seo && typeof platform.seo === 'object' && !Array.isArray(platform.seo)
@@ -40,11 +44,13 @@ export async function getSeoPage(path: string): Promise<{ title: string | null; 
         canonical: typeof seo.canonical === 'string' && seo.canonical.trim() ? seo.canonical : null,
       };
     }
+    signal.throwIfAborted();
     const { data } = await client
       .from('marketing_seo_pages')
       .select('title, meta_description, metadata, status')
       .eq('path', path)
       .eq('status', 'active')
+      .abortSignal(signal)
       .maybeSingle();
     if (!data) return null;
     const metadata = data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)

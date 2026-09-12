@@ -66,6 +66,15 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/webhooks',
   '/api/marketing/unsubscribe'];
 
+// Provider callbacks authenticate inside their handlers. Keep this list exact:
+// future Contact Center settings or data endpoints still require a user session.
+const PUBLIC_CONTACT_CALLBACKS = new Set([
+  '/api/contact-center/email',
+  '/api/contact-center/sms',
+  '/api/contact-center/voice',
+  '/api/contact-center/voice/transcription',
+]);
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
@@ -90,7 +99,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+  const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
+    || PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
   // handlers verify the token themselves (`authenticateAI` /

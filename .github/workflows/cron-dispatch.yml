@@ -10,7 +10,9 @@ name: Cron dispatch
 # Requirements (repository Settings):
 #   - Secret  CRON_SECRET     — the same value as the Vercel env var CRON_SECRET
 #   - Variable CRON_BASE_URL  — optional, defaults to https://www.bubaly.com
-# Without the secret the job logs "skipping" and exits 0.
+# Missing/blank CRON_SECRET fails the job before any dispatch. CLI --dry-run is
+# the explicit credential-free preview. Malformed base URLs or unregistered
+# manual routes also fail before credentials can be sent.
 #
 # Cost lever: the tick is every 5 minutes (~290 short runs/day). Change it to
 # '*/15 * * * *' to cut Actions minutes by two thirds; the only routes that
@@ -51,7 +53,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Call the routes that are due
+      - name: Validate configuration and dispatch due routes
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CRON_BASE_URL: ${{ vars.CRON_BASE_URL }}

@@ -17,6 +17,7 @@ import { AutoRefresh } from '@/components/display/auto-refresh';
 // from client modules. Guarded by tests/display-server-safety.test.ts.
 import { DEFAULT_TILES, resolveTiles, type Tile } from '@/lib/display/tiles';
 import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
+import { displayCalendarFilter, displayEventDays, displayReminderTime, eventOverlapsWindow, familyDisplayCalendar } from '@/lib/display/calendar';
 import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
@@ -27,9 +28,12 @@ export const dynamic = 'force-dynamic';
 type LoadedDisplay = { data: DisplayData; initialTiles: Tile[]; initialSettings: DisplaySettings };
 
 /** A complete, renderable DisplayData with no rows — the always-safe fallback. */
-function emptyDisplay(familyName: string, now: Date): DisplayData {
+function emptyDisplay(familyName: string, now: Date, timezone: unknown): DisplayData {
+  const calendar = familyDisplayCalendar(now, timezone);
   return {
     familyName,
+    timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
+    loadStatus: { events: 'error', upcoming: 'error', monthEvents: 'error', reminders: 'error' },
     members: [], events: [], upcoming: [], chores: [], meals: [],
     grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
     notes: [], featured: [], photos: [],
@@ -37,7 +41,7 @@ function emptyDisplay(familyName: string, now: Date): DisplayData {
     // load failed, and an unread ledger must render the tile's error state, not
     // a "0 things handled today" the screen cannot stand behind.
 
-    calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays: [] },
+    calendar: { year: calendar.year, month: calendar.month, today: calendar.today, eventDays: [] },
   };
 }
 
@@ -108,41 +112,41 @@ async function loadHandledToday(
 // This is an always-on kiosk surface: it must NEVER hard-crash into the error
 // boundary. Every read is best-effort — a single failing query (a table missing
 // on an un-migrated environment, an RLS edge, a transient outage) degrades that
-// one widget to empty rather than taking down the whole screen. All data loading
-// is wrapped so the page always renders, and query errors are logged for triage.
+// one widget to unavailable rather than taking down the whole screen. Calendar
+// and reminder reads carry independent status; errors must never imply free time.
 async function loadDisplay(
   supabase: Awaited<ReturnType<typeof createServer>>,
   familyId: string,
   familyName: string,
   now: Date,
+  timezone: unknown,
   untitledRun: string,
 ): Promise<LoadedDisplay> {
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
-  const todayDate = start.toISOString().slice(0, 10);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const calendar = familyDisplayCalendar(now, timezone);
+  const { start, end } = calendar.todayWindow;
+  const in14 = calendar.upcomingWindow.end;
+  const todayDate = calendar.dayKey;
 
   const results = await Promise.all([
     settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
-    settle(supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at')),
-    settle(supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lt('starts_at', in14.toISOString()).order('starts_at').limit(12)),
+    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
+      .eq('family_id', familyId).or(displayCalendarFilter(calendar.todayWindow)).order('starts_at')),
+    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
+      .eq('family_id', familyId).or(displayCalendarFilter(calendar.upcomingWindow)).order('starts_at').limit(12)),
     settle(supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
-      .lte('due_at', end.toISOString()).order('due_at')),
+      .lt('due_at', end.toISOString()).order('due_at')),
     settle(supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate)),
     settle(supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8)),
     settle(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
-    settle(supabase.from('reminders').select('id, title, remind_at').eq('family_id', familyId).eq('is_done', false)
-      .lte('remind_at', in14.toISOString()).order('remind_at').limit(10)),
+    settle(supabase.from('family_reminders').select('id, title, remind_at, status, snoozed_until')
+      .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
+      .lt('remind_at', in14.toISOString()).order('remind_at')),
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
       .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
-    settle(supabase.from('calendar_events').select('starts_at')
-      .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString())),
+    settle(supabase.from('calendar_events').select('starts_at, ends_at, all_day')
+      .eq('family_id', familyId).or(displayCalendarFilter(calendar.monthWindow))),
     settle(supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle()),
     settle(supabase.from('family_photos').select('url, thumbnail_url')
       .eq('family_id', familyId).not('url', 'is', null)
@@ -186,28 +190,34 @@ async function loadDisplay(
 
   // Birthdays in the next two weeks (month-day comparison, handles year wrap).
   const mmddToday = todayDate.slice(5);
-  const mmddEnd = in14.toISOString().slice(5, 10);
+  const mmddEnd = calendar.upcomingWindow.endDay.slice(5);
   const birthdays = (members ?? [])
     .filter((m) => {
       const mmdd = birthdayMonthDay(m.birthday);
       if (!mmdd) return false;
-      return mmddEnd >= mmddToday ? mmdd >= mmddToday && mmdd <= mmddEnd : mmdd >= mmddToday || mmdd <= mmddEnd;
+      return mmddEnd >= mmddToday ? mmdd >= mmddToday && mmdd < mmddEnd : mmdd >= mmddToday || mmdd < mmddEnd;
     })
     .map((m) => ({ name: m.display_name ?? 'Member', date: formatBirthday(birthdayMonthDay(m.birthday)!) }));
 
-  const eventDays = [...new Set((monthEvents ?? [])
-    .map((e) => new Date(e.starts_at).getDate())
-    .filter((d) => Number.isFinite(d)))];
+  const eventDays = displayEventDays(monthEvents ?? [], calendar.monthWindow, calendar.timezone);
+  const displayReminders = (reminders ?? []).map(row => ({ id: row.id, title: row.title, remind_at: displayReminderTime(row) }))
+    .filter((row): row is { id: string; title: string; remind_at: string } => !!row.remind_at && Date.parse(row.remind_at) < in14.getTime())
+    .sort((a, b) => a.remind_at.localeCompare(b.remind_at)).slice(0, 10);
 
   const data: DisplayData = {
     familyName,
+    timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
+    loadStatus: {
+      events: results[1].error ? 'error' : 'ok', upcoming: results[2].error ? 'error' : 'ok',
+      monthEvents: results[10].error ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
+    },
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
-    events: events ?? [],
-    upcoming: upcoming ?? [],
+    events: (events ?? []).filter(event => eventOverlapsWindow(event, calendar.todayWindow)),
+    upcoming: (upcoming ?? []).filter(event => eventOverlapsWindow(event, calendar.upcomingWindow)),
     chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
     meals: todaysMeals,
     grocery: { items: groceryItems ?? [], count: groceryCount ?? 0 },
-    reminders: reminders ?? [],
+    reminders: displayReminders,
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
     featured: (featuredRecipe ?? []).map((r) => ({ name: r.name, category: r.category, imageUrl: r.photo_url })),
@@ -217,7 +227,7 @@ async function loadDisplay(
       ...(photoRows ?? []).map((p) => p.url).filter((u): u is string => Boolean(u)),
       ...(featuredRecipe ?? []).map((r) => r.photo_url).filter((u): u is string => Boolean(u)),
     ].slice(0, 24),
-    calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
+    calendar: { year: calendar.year, month: calendar.month, today: calendar.today, eventDays },
     handled,
   };
 
@@ -301,7 +311,7 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now, t('displayHandled.untitledRun'));
+    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'));
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any
@@ -314,7 +324,7 @@ export default async function KitchenDisplayPage() {
     // than crashing into the app error boundary.
     console.error('[display] fatal load error, rendering empty display:', err);
     loaded = {
-      data: emptyDisplay(familyName, now),
+      data: emptyDisplay(familyName, now, ctx.active.family.timezone),
       initialTiles: DEFAULT_TILES,
       initialSettings: normalizeSettings(null),
     };

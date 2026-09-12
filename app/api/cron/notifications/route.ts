@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     console.error('Notification email delivery failed:', e);
   }
 
-  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + emailDeliveryFailures + emailed.failed;
+  const failed = generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped + emailDeliveryFailures + emailed.failed;
   const ok = failed === 0;
   return NextResponse.json(
     { ok, families: families?.length ?? 0, created: total, approvals, briefs, pushed, emailed: emailed.sent, emailFailures: emailed.failed, emailSkipped: emailed.skipped, failed },
