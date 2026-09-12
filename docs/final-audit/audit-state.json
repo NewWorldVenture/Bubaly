@@ -120901,10 +120901,10 @@
       "severity": "High",
       "tests": "Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.",
       "fix": "Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.",
-      "retest": "Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md.",
-      "notes": "Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "notes": "Guardian service-owned decision authority and autonomous recovery now pass hosted disposable PostgreSQL/HTTP checks.",
       "issue": "Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.",
-      "remaining": "AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open."
+      "remaining": "Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005."
     },
     "API-262DB8655008": {
       "id": "API-262DB8655008",
@@ -141929,11 +141929,11 @@
       "severity": "High",
       "tests": "Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.",
       "fix": "Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.",
-      "retest": "Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md.",
-      "notes": "Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "notes": "Guardian service-owned decision authority and autonomous recovery now pass hosted disposable PostgreSQL/HTTP checks.",
       "discoveryGroupId": "APIG-052",
       "issue": "Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.",
-      "remaining": "AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open."
+      "remaining": "Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005."
     },
     "FLOW-62484E22A6A5": {
       "id": "FLOW-62484E22A6A5",
@@ -154402,10 +154402,10 @@
       "severity": "High",
       "tests": "Source 237933c1 integrates application and unit files byte-identical to tested isolated eee4ec06. Full unit gate: 1,180 files / 14,151 PASS in42.35s. Focused Guardian groups: 84 policy/rule/caller cases and176 signed SMS/lease/security cases PASS, including four real-pipeline SMS integrations. See guardian-policy-read-checkpoint.md.",
       "fix": "Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.",
-      "retest": "Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md.",
-      "notes": "Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "notes": "Guardian service-owned decision authority and autonomous recovery now pass hosted disposable PostgreSQL/HTTP checks.",
       "issue": "Pre-fix contact/profile/rules read failures became ordinary decisions; policy/scam failure could lose inbound SMS before storage. Baselines reproduced and repaired in237933c1. Existing replay-authorship gap is separately tracked asAUTHZ-004.",
-      "remaining": "AUTHZ-004 decision authorship, autonomous recovery, real provider delivery and cross-table/payload atomicity remain open."
+      "remaining": "Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005."
     },
     "CALLBACK-F03F4B342194": {
       "id": "CALLBACK-F03F4B342194",
@@ -184597,11 +184597,12 @@
       "source": "app/api/contact-center/sms/route.ts",
       "status": "IN PROGRESS",
       "severity": "High",
-      "tests": "Actual callback characterization at f51bcd40 produces two TwiML replies and two outbound rows for one saved inbound SID. No delivery-status callback exists at baseline.",
+      "tests": "Baseline fae35e90 signed callback reproduced two replies/two outbound rows. Frozen d5df624b passes 14,761 unit tests in 1,197 files; 70 helper, 42 reader/render and 48 signed callback cases cover reservation, replay, failure, ownership and safe display.",
       "issue": "Callback retries can repeat concierge replies; local reply construction and timeline rows do not establish provider acceptance or handset delivery.",
-      "fix": "Implement a private immutable reply receipt and exact emission reservation, a signed provider status callback, and family-authorized safe status display. Preserve urgent delivery and planner retry independently.",
-      "retest": "Pending implementation and executing route, SDK, signature and browser regressions.",
-      "notes": "See contact-center-sms-reply-plan.md. No SQL, global navigation or live provider sends authorized for this cycle. Full provider delivery and durable intake queuing remain separate required work."
+      "fix": "Frozen private candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; current ownership checks; deterministic verified projection and family-authorized safe status display. Provider-control suppression and independent urgent/planner recovery retained.",
+      "retest": "Frozen source d5df624b: 14,761 unit tests in 1,197 files PASS; production build generates 252 pages; strict post-build types, lint with four baseline warnings, localization and query audits PASS. New PostgreSQL/HTTP reservation case is discovered; hosted execution pending. See contact-center-sms-reservation-cycle.md.",
+      "notes": "No automatic retry after ambiguous emission; no database/HTTP transaction. No SQL, dependencies or shared navigation changed.",
+      "remaining": "Signed provider delivery-status callback, provider delivery, controlled old-handler cutover, deployed PostgreSQL reservation and browser acceptance remain open."
     },
     "SUPPORT-5B00CA3C214D": {
       "id": "SUPPORT-5B00CA3C214D",
@@ -186435,9 +186436,9 @@
       "issue": "Authenticated family members can insert communications. A preinserted valid decided row matching a real signed callback can skip policy/scam screening when the event is claimable. The actor needs advance knowledge of the realSID and exactpayload/family/member and an unoccupiedSID. Existing uniqueSID and lack of authUPDATE/DELETE prevent replacing an already committed legitimate row. Initial insertion-race ID checks reject that attempt but do not bind authorship on laterretry.",
       "tests": "Two signed-route bypasses reproduced before repair. Hosted CI 34715644176 on the exact tree of publication 0b190659 passes all 1,061 scheduled browser cases, including three PostgreSQL and HTTP Guardian authority cases. See guardian-hosted-acceptance.md.",
       "fix": "Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.",
-      "retest": "Publication 0b190659 passes 14,442 units, a build of 251 pages, strict types, lint, locale/query gates and all 1,061 hosted browser cases. The SMS-002 recovery extension changes completion semantics and is undergoing separate source and hosted checks.",
-      "remaining": "Recovery extension verification is tracked under SMS-002. Existing Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations are non-atomic.",
-      "notes": "Hosted checkout 7f132c92 has the identical tree to 0b190659. The current recovery candidate retains authority checks but still awaits combined gates; no provider delivery or production policy claim."
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "remaining": "Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.",
+      "notes": "Four Guardian hosted cases pass including the completion/recovery extension. No production provider, policy configuration or scheduler claim."
     },
     "SUPPORT-91A56D6A297E": {
       "id": "SUPPORT-91A56D6A297E",
@@ -188345,10 +188346,10 @@
       "severity": "High",
       "expected": "A verified saved SMS resumes after temporary processing failures without needing another provider callback. Only exact service-owned receipts authorize recovery, and retries preserve the original household and decision without duplicate notification.",
       "issue": "Retained screening communications and captured or decided receipts have no autonomous consumer. When provider retries stop, required processing or notification can remain unfinished.",
-      "tests": "Actual SDK tests reproduce provider-stop recovery, destination removal, child/member authority boundaries, cancellation and concurrent notification writes. Sustained-arrival starvation reproduced before finite-sweep repair. Prior publication 0b190659 passes all 1,061 hosted browser cases, including Guardian authority; new recovery execution is pending.",
+      "tests": "Installed SDK recovery/fairness regressions PASS. Hosted real PostgreSQL/HTTP now verifies one signed failed intake followed by cron-only recovery, child receipt denial, untouched unreceipted content, idempotence and a clean continuation sweep.",
       "fix": "Shared signed-ingress and service-receipt processing; independent terminal verification; stable notification identity with quiet hours; bounded scheduled recovery with a finite sweep endpoint. Temporary destination removal preserves retained work. Cursor revisions prevent lost progress under competing workers.",
-      "retest": "Application source 966f08f3: 1,191 unit files and 14,598 tests pass in 41.93 seconds; production build generates 252 pages; strict types, lint, localization and query audits pass. Source 1bd04072 strengthens only the hosted fixture. Hosted recovery is pending.",
-      "remaining": "Autonomous processing and hosted verification; provider delivery and production scheduler configuration remain separate.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "remaining": "Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.",
       "notes": "See guardian-sms-recovery-cycle.md. Production scheduler and provider delivery remain unverified. No SQL, dependency or shared navigation changes."
     },
     "SUPPORT-0E0FDE18B6EB": {
@@ -188370,12 +188371,12 @@
       "area": "API",
       "name": "GET /api/cron/guardian-sms-recovery",
       "source": "app/api/cron/guardian-sms-recovery/route.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
-      "tests": "Pending",
-      "fix": "None",
-      "retest": "Pending",
-      "notes": "Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate.",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "Authorization, finite cursor fairness, retry failures and idempotence tested; actual cron-only recovery and clean sweep pass in hosted PostgreSQL/HTTP.",
+      "fix": "Bounded service-receipt consumer with revisioned finite-sweep cursor; no authority inferred from member communications.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "notes": "Production scheduler and cron-secret deployment remain unverified.",
       "line": 9
     },
     "JOB-7C2C80C9F161": {
@@ -188384,12 +188385,12 @@
       "area": "JOB",
       "name": "/api/cron/guardian-sms-recovery",
       "source": "app/api/cron/guardian-sms-recovery/route.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
-      "tests": "Pending",
-      "fix": "None",
-      "retest": "Pending",
-      "notes": "Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate."
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "Authorization, finite cursor fairness, retry failures and idempotence tested; actual cron-only recovery and clean sweep pass in hosted PostgreSQL/HTTP.",
+      "fix": "Bounded service-receipt consumer with revisioned finite-sweep cursor; no authority inferred from member communications.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
+      "notes": "Production scheduler and cron-secret deployment remain unverified."
     },
     "LIBRARY-085E4BBF3CE0": {
       "id": "LIBRARY-085E4BBF3CE0",
@@ -188647,7 +188648,7 @@
       "issue": "Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.",
       "tests": "Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures.",
       "fix": "Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved.",
-      "retest": "Focused gate and independent review PASS; full combined hosted build/regression pending. See incoming-family-reply-identity-cycle.md.",
+      "retest": "Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md.",
       "notes": "Provider delivery and sender-domain verification remain open. Database SDK uses intercepted HTTP and modeled LIKE; actual PostgreSQL identity workflow not established. Best-effort auto-reply has no durable emission receipt."
     },
     "SERVICE-B716F647333E": {
@@ -188702,7 +188703,211 @@
       "fix": "None",
       "retest": "Pending",
       "notes": "Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate."
+    },
+    "LIBRARY-F0E055BB4D37": {
+      "id": "LIBRARY-F0E055BB4D37",
+      "key": "lib/contact-center/sms-reply-status.ts",
+      "area": "LIBRARY",
+      "name": "lib/contact-center/sms-reply-status.ts",
+      "source": "lib/contact-center/sms-reply-status.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SERVICE-59D864A5ECA3": {
+      "id": "SERVICE-59D864A5ECA3",
+      "key": "lib/contact-center/sms-reply-status.ts:readSmsReplyStatuses",
+      "area": "SERVICE",
+      "name": "readSmsReplyStatuses",
+      "source": "lib/contact-center/sms-reply-status.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 62
+    },
+    "LIBRARY-6D75A91D859B": {
+      "id": "LIBRARY-6D75A91D859B",
+      "key": "lib/contact-center/sms-reply.ts",
+      "area": "LIBRARY",
+      "name": "lib/contact-center/sms-reply.ts",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SERVICE-7E7A8343706D": {
+      "id": "SERVICE-7E7A8343706D",
+      "key": "lib/contact-center/sms-reply.ts:smsReplyReceiptId",
+      "area": "SERVICE",
+      "name": "smsReplyReceiptId",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 63
+    },
+    "SERVICE-75FFA88DEC4A": {
+      "id": "SERVICE-75FFA88DEC4A",
+      "key": "lib/contact-center/sms-reply.ts:smsReplyOutboundId",
+      "area": "SERVICE",
+      "name": "smsReplyOutboundId",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 64
+    },
+    "SERVICE-0CE48F76F7B9": {
+      "id": "SERVICE-0CE48F76F7B9",
+      "key": "lib/contact-center/sms-reply.ts:smsReplyOutboundRef",
+      "area": "SERVICE",
+      "name": "smsReplyOutboundRef",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 65
+    },
+    "SERVICE-CFEA96036DA0": {
+      "id": "SERVICE-CFEA96036DA0",
+      "key": "lib/contact-center/sms-reply.ts:validateSmsReplyReceipt",
+      "area": "SERVICE",
+      "name": "validateSmsReplyReceipt",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 75
+    },
+    "SERVICE-8D18854C1FA6": {
+      "id": "SERVICE-8D18854C1FA6",
+      "key": "lib/contact-center/sms-reply.ts:readSmsReply",
+      "area": "SERVICE",
+      "name": "readSmsReply",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 132
+    },
+    "SERVICE-E20B1C0C21E0": {
+      "id": "SERVICE-E20B1C0C21E0",
+      "key": "lib/contact-center/sms-reply.ts:prepareSmsReply",
+      "area": "SERVICE",
+      "name": "prepareSmsReply",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 159
+    },
+    "SERVICE-FCEC4C48B45D": {
+      "id": "SERVICE-FCEC4C48B45D",
+      "key": "lib/contact-center/sms-reply.ts:attachSmsReply",
+      "area": "SERVICE",
+      "name": "attachSmsReply",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 222
+    },
+    "SERVICE-CEBCD095E1DD": {
+      "id": "SERVICE-CEBCD095E1DD",
+      "key": "lib/contact-center/sms-reply.ts:reserveSmsReply",
+      "area": "SERVICE",
+      "name": "reserveSmsReply",
+      "source": "lib/contact-center/sms-reply.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate.",
+      "line": 271
+    },
+    "SUPPORT-77C90065803C": {
+      "id": "SUPPORT-77C90065803C",
+      "key": "tests/contact-center-sms-reply-display.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-sms-reply-display.test.ts",
+      "source": "tests/contact-center-sms-reply-display.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-1CC87D898C7B": {
+      "id": "SUPPORT-1CC87D898C7B",
+      "key": "tests/contact-center-sms-reply-status.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-sms-reply-status.test.ts",
+      "source": "tests/contact-center-sms-reply-status.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-2C87AC076641": {
+      "id": "SUPPORT-2C87AC076641",
+      "key": "tests/contact-center-sms-reply.test.ts",
+      "area": "SUPPORT",
+      "name": "tests/contact-center-sms-reply.test.ts",
+      "source": "tests/contact-center-sms-reply.test.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
+    },
+    "SUPPORT-ABE163EE3BE6": {
+      "id": "SUPPORT-ABE163EE3BE6",
+      "key": "tests/e2e/contact-center-sms-reservation.spec.ts",
+      "area": "SUPPORT",
+      "name": "tests/e2e/contact-center-sms-reservation.spec.ts",
+      "source": "tests/e2e/contact-center-sms-reservation.spec.ts",
+      "status": "NOT STARTED",
+      "severity": "Unassessed",
+      "tests": "Pending",
+      "fix": "None",
+      "retest": "Pending",
+      "notes": "Source discovery only; exact committed hashes and baseline in discovery/contact-center-sms-reservation-inventory.json. Full workflow verification remains separate."
     }
   },
-  "lastUpdated": "2026-09-12T20:29:41.807Z"
+  "lastUpdated": "2026-09-12T20:47:17.001Z"
 }

@@ -19,3 +19,15 @@ Sanitized local proof: `C:/Users/Daniel/AppData/Local/Temp/bubaly-0b190659-hoste
 
 This checkpoint verifies the preceding application batch. The subsequent autonomous SMS recovery cycle changes the receipt lifecycle and shared processing, so its new source and hosted journey require their own checks. Production session policies, physical devices, provider delivery, unresolved authorization failures and the second comprehensive regression remain outside this acceptance. Production readiness remains NO.
 
+## Autonomous recovery acceptance at fae35e90
+
+Publication `fae35e90c0c7705a870f11d6666ee16424975411` passes [CI 34717274616](https://github.com/NewWorldVenture/Bubaly/actions/runs/34717274616), completed at `2026-09-12T20:43:31Z`. The actual tested checkout is `62d8a325bfcb5e805dc9c299fd03034a0eabd5e2`, a merge into `fdce273b`. Its tree `bb838fce7962c4037cc695d4dbf6cbb2758a2411` exactly equals the published tree.
+
+- Web job `103616659899`: 1,194 files and 14,636 unit tests pass; production build generates 252 pages; types, lint and query checks pass. Query coverage is 491 tables, 77 functions and 143 API routes.
+- E2E job `103616659963`: 1,062 scheduled tests and 1,062 passes in 6.5 minutes, with no failed, flaky or skipped summary. Authenticated and durable-session flags are enabled. Exact-tree discovery establishes all twelve focused cases: three Guardian authority cases, one autonomous recovery case, two child-readiness cases, five durable login cases and the complete meal/grocery case. No individual successful-case log lines are claimed.
+- Database job `103616659766`: 300 migrations replay without failure and all eleven boundary probes pass. Mobile job `103616659880` passes. [Finance run 34717274596](https://github.com/NewWorldVenture/Bubaly/actions/runs/34717274596) passes 66 assertions.
+- Vercel deployment `7FNY9gQT2ow5wJid4Csjw3WWwKZi` succeeds at `2026-09-12T20:32:41Z`. [Verified preview](https://bubaly-e5yu9w5dl-newworldventure.vercel.app/dashboard/meals).
+
+The new recovery case verifies retained signed intake after a policy failure, child denial of receipt creation, cron authorization, recovery without another provider callback, untouched unreceipted member content and repeated-sweep idempotence against real disposable PostgreSQL and HTTP. The final clean sweep also exercises the actual cursor continuation query. It does not verify a production scheduler or provider delivery.
+
+Sanitized checkout/count evidence: `C:/Users/Daniel/AppData/Local/Temp/bubaly-fae35e90-hosted-{web|e2e}-proof-20260912.log`. The separate Contact Center automatic-reply reservation source introduced after this publication requires new hosted acceptance.
