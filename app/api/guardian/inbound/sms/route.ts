@@ -3,6 +3,7 @@
 // Runs scam detection, logs the message, and notifies the family.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -21,12 +22,32 @@ const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROUTING_MODES = ['immediate_ring', 'immediate_ai_summary', 'ai_handle_first', 'voicemail_first', 'silent_handling', 'blocked'];
 const TRUST_LEVELS = ['immediate_family', 'close_family', 'trusted_friend', 'known_contact', 'unknown', 'suspected_spam', 'blocked'];
-const COMM_COLUMNS = 'id,family_id,member_id,comm_type,direction,from_number,to_number,body,from_name,contact_id,trust_level_at_time,routing_mode_used,scam_detected,scam_confidence,status,twilio_sms_sid';
+const COMM_COLUMNS = 'id,family_id,member_id,comm_type,direction,from_number,to_number,body,from_name,contact_id,trust_level_at_time,routing_mode_used,routing_rule_id,ai_decision_reason,scam_detected,scam_type,scam_confidence,status,twilio_sms_sid';
 type SavedSms = {
   id: string; family_id: string; member_id: string; comm_type: string; direction: string; from_number: string | null; to_number: string; body: string;
-  from_name: string | null; contact_id: string | null; trust_level_at_time: string; routing_mode_used: string; scam_detected: boolean; scam_confidence: number; status: string; twilio_sms_sid: string;
+  from_name: string | null; contact_id: string | null; trust_level_at_time: string | null; routing_mode_used: string | null;
+  routing_rule_id: string | null; ai_decision_reason: string | null; scam_detected: boolean; scam_type: string | null;
+  scam_confidence: number | null; status: string; twilio_sms_sid: string;
 };
 const validId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
+const PENDING_DECISION = {
+  status: 'screening', contact_id: null, from_name: null, trust_level_at_time: null, routing_mode_used: null,
+  routing_rule_id: null, ai_decision_reason: null, scam_detected: false, scam_type: null, scam_confidence: null,
+} as const;
+type SmsDecision = Pick<SavedSms, keyof typeof PENDING_DECISION>;
+const DECISION_COLUMNS = Object.keys(PENDING_DECISION) as Array<keyof SmsDecision>;
+const sameDecision = (row: SavedSms, decision: SmsDecision): boolean => DECISION_COLUMNS.every(key => row[key] === decision[key]);
+const pendingDecision = (row: SavedSms): boolean => sameDecision(row, PENDING_DECISION);
+const decided = (row: SavedSms): boolean => row.status !== 'screening'
+  && ['received', 'handled', 'escalated', 'blocked', 'missed', 'failed'].includes(row.status)
+  && typeof row.routing_mode_used === 'string' && ROUTING_MODES.includes(row.routing_mode_used)
+  && typeof row.trust_level_at_time === 'string' && TRUST_LEVELS.includes(row.trust_level_at_time)
+  && typeof row.ai_decision_reason === 'string'
+  && typeof row.scam_detected === 'boolean' && Number.isInteger(row.scam_confidence)
+  && row.scam_confidence !== null && row.scam_confidence >= 0 && row.scam_confidence <= 100
+  && (row.routing_rule_id === null || validId(row.routing_rule_id))
+  && (row.scam_type === null || typeof row.scam_type === 'string')
+  && (row.from_name === null || typeof row.from_name === 'string') && (row.contact_id === null || validId(row.contact_id));
 
 export async function POST(req: NextRequest) {
   const boundedForm = await readBoundedRequestFormData(req, MAX_TWILIO_BODY_BYTES);
@@ -70,6 +91,17 @@ export async function POST(req: NextRequest) {
   };
   const finish = async () => (await finishGuardianSms(supabase, claim.lease))
     ? new NextResponse('', { status: 200 }) : new NextResponse('Intake unavailable', { status: 503 });
+  // A read fence catches a replaced lease after slow policy/AI work. The later
+  // write is still a separate operation; this does not provide a transaction.
+  const stillOwnsLease = async (): Promise<boolean> => {
+    const current = await supabase.from('guardian_callback_events')
+      .select('event_id,callback_type,status,error,processed_at', { count: 'exact' })
+      .eq('event_id', smsSid).limit(2).abortSignal(deadline()).retry(false);
+    if (current.error || !Array.isArray(current.data) || current.data.length !== 1 || current.count !== 1) return false;
+    const row = current.data[0];
+    return row?.event_id === smsSid && row.callback_type === 'inbound_sms' && row.status === 'processing'
+      && row.error === `sms-lease:${claim.lease.token}` && row.processed_at === null;
+  };
 
   try {
     // Find which family member this number belongs to
@@ -97,15 +129,26 @@ export async function POST(req: NextRequest) {
       const row = result.data[0] as unknown as SavedSms;
       if (!validId(row.id) || row.family_id !== familyId || row.member_id !== memberId || row.to_number !== to || row.from_number !== from
         || row.body !== body || row.twilio_sms_sid !== smsSid || row.comm_type !== 'sms_inbound' || row.direction !== 'inbound'
-        || !ROUTING_MODES.includes(row.routing_mode_used) || !TRUST_LEVELS.includes(row.trust_level_at_time)
-        || typeof row.scam_detected !== 'boolean' || !Number.isInteger(row.scam_confidence) || row.scam_confidence < 0 || row.scam_confidence > 100
-        || !['received', 'screening', 'handled', 'escalated', 'blocked', 'missed', 'failed'].includes(row.status)
-        || (row.from_name !== null && typeof row.from_name !== 'string') || (row.contact_id !== null && !validId(row.contact_id))) throw new Error('Communication identity unavailable');
+        || (!pendingDecision(row) && !decided(row))) throw new Error('Communication identity unavailable');
       return row;
     };
     let comm = await readSaved();
 
     if (!comm) {
+      // Retain the exact inbound message before any required policy or AI work.
+      // The existing nullable decision fields distinguish intake from a decision.
+      const intakeId = randomUUID();
+      try {
+        await gFrom('guardian_communications').insert({
+          id: intakeId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
+          from_number: from, to_number: to, body, twilio_sms_sid: smsSid, ...PENDING_DECISION,
+        }).select('id').abortSignal(deadline()).retry(false);
+      } catch { /* Reconcile a lost insert response through the unique provider SID. */ }
+      comm = await readSaved();
+      if (!comm || comm.id !== intakeId || !pendingDecision(comm)) return fail();
+    }
+
+    if (pendingDecision(comm)) {
       // Run decision pipeline
       const decision = await runDecisionPipeline(supabase, {
         callerPhone: from,
@@ -126,31 +169,28 @@ export async function POST(req: NextRequest) {
       // an integer. Flooring preserves the existing >=80 blocking boundary.
       const confidence = Math.floor(scamResult.confidence);
 
-      // Create communication record
+      const decisionFields: SmsDecision = {
+        contact_id: decision.contactId, from_name: decision.contactName, trust_level_at_time: decision.trustLevel,
+        routing_mode_used: decision.routingMode, routing_rule_id: decision.ruleId, ai_decision_reason: decision.reason,
+        scam_detected: scamResult.isScam, scam_type: scamResult.scamType, scam_confidence: confidence,
+        status: scamResult.isScam && confidence >= 80 ? 'blocked' : 'received',
+      };
+      const intakeId = comm.id;
+      if (!await stillOwnsLease()) return fail();
       try {
-        await gFrom('guardian_communications').insert({
-          family_id: familyId,
-          member_id: memberId,
-          contact_id: decision.contactId,
-          comm_type: 'sms_inbound',
-          direction: 'inbound',
-          from_number: from,
-          to_number: to,
-          from_name: decision.contactName,
-          body,
-          trust_level_at_time: decision.trustLevel,
-          routing_mode_used: decision.routingMode,
-          routing_rule_id: decision.ruleId,
-          ai_decision_reason: decision.reason,
-          scam_detected: scamResult.isScam,
-          scam_type: scamResult.scamType,
-          scam_confidence: confidence,
-          twilio_sms_sid: smsSid,
-          status: scamResult.isScam && confidence >= 80 ? 'blocked' : 'received',
-        }).select('id').abortSignal(deadline()).retry(false);
-      } catch { /* A lost write response is reconciled by the existing unique provider SID. */ }
+        let update = gFrom('guardian_communications').update(decisionFields)
+          .eq('id', intakeId).eq('family_id', familyId).eq('member_id', memberId).eq('twilio_sms_sid', smsSid)
+          .eq('comm_type', 'sms_inbound').eq('direction', 'inbound').eq('to_number', to)
+          .eq('status', 'screening').eq('scam_detected', false)
+          .is('contact_id', null).is('from_name', null).is('trust_level_at_time', null).is('routing_mode_used', null)
+          .is('routing_rule_id', null).is('ai_decision_reason', null).is('scam_type', null).is('scam_confidence', null);
+        update = from === null ? update.is('from_number', null) : update.eq('from_number', from);
+        await update.select('id').abortSignal(deadline()).retry(false);
+      } catch { /* Reconcile a lost decision response without overwriting another decision. */ }
+      // SMS bodies are retained unchanged by this path. Verify the exact body
+      // again without placing private, potentially long text in the PATCH URL.
       comm = await readSaved();
-      if (!comm) return fail();
+      if (!comm || comm.id !== intakeId || !decided(comm) || !sameDecision(comm, decisionFields)) return fail();
     }
 
     // Update contact last contact timestamp
@@ -163,7 +203,7 @@ export async function POST(req: NextRequest) {
     }
 
     // For blocked/spam — silently discard (don't auto-reply)
-    if (comm.status === 'blocked' || comm.routing_mode_used === 'blocked' || (comm.scam_detected && comm.scam_confidence >= 80)) {
+    if (comm.status === 'blocked' || comm.routing_mode_used === 'blocked' || (comm.scam_detected && comm.scam_confidence !== null && comm.scam_confidence >= 80)) {
       return finish();
     }
 
@@ -180,6 +220,7 @@ export async function POST(req: NextRequest) {
     // which is marked urgent and still lands immediately.
     const scope = await systemScopeForFamily(supabase, familyId);
     if (!scope) return fail();
+    if (!await stillOwnsLease()) return fail();
     const notified = await notify(scope, {
       recipients: 'family',
       type: 'system',

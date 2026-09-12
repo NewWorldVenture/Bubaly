@@ -19,12 +19,16 @@ const NOTIFICATION = '44444444-4444-4444-8444-444444444444';
 const SID = `SM${'a'.repeat(32)}`;
 type Row = Record<string, unknown>;
 type Call = { table: string; method: string; body: Row | Row[] | null; url: URL; signal?: AbortSignal | null };
-let calls: Call[] = [], failure: 'claim' | 'profile' | 'communication' | 'saved-read' | 'finish' | 'release' | 'notification-read' | 'scope' | null = null;
+let calls: Call[] = [], failure: 'claim' | 'profile' | 'communication' | 'decision' | 'saved-read' | 'lease-read' | 'finish' | 'release' | 'notification-read' | 'scope' | null = null;
 let event: Row | null = null;
 let communication: Row | null = null;
 let profiles: Row[], notifications: Row[], quietHours: Row | null;
+let policyFailure: 'contact' | 'profile' | 'rules' | null = null;
 let lostCommunication = false, nullCommunicationReceipt = false, lostNotification = false, profileCount: number | null | undefined;
-let held: 'profile' | 'communication' | null = null;
+let lostDecision = false, nullDecisionReceipt = false, emptyDecisionReceipt = false, failDecisionRead = false;
+let beforeDecisionUpdate: (() => void) | undefined;
+let beforeCommunicationRead: (() => void) | undefined;
+let held: 'profile' | 'communication' | 'decision' | null = null;
 function matches(row: Row, url: URL): boolean {
   for (const [key, value] of url.searchParams) {
     if (value.startsWith('eq.') && String(row[key]) !== value.slice(3)) return false;
@@ -44,8 +48,14 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('Live transport prohibited in fixture'); }));
   calls = []; event = null; communication = null; failure = null;
-  profiles = [{ id: MEMBER, family_id: FAMILY, member_id: MEMBER, guardian_phone: '+15555550100', is_active: true }];
+  profiles = [{ id: MEMBER, family_id: FAMILY, member_id: MEMBER, guardian_phone: '+15555550100', is_active: true,
+    ai_persona_name: 'Synthetic Guardian', ai_greeting_template: null, current_context: 'normal', voicemail_greeting: null, context_overrides: {},
+    default_mode_immediate: 'immediate_ring', default_mode_close: 'immediate_ring', default_mode_trusted: 'immediate_ai_summary',
+    default_mode_known: 'ai_handle_first', default_mode_unknown: 'voicemail_first', default_mode_suspected_spam: 'silent_handling', default_mode_blocked: 'blocked' }];
+  policyFailure = null;
   notifications = []; quietHours = null; lostCommunication = false; nullCommunicationReceipt = false; lostNotification = false; profileCount = undefined;
+  lostDecision = false; nullDecisionReceipt = false; emptyDecisionReceipt = false; failDecisionRead = false;
+  beforeDecisionUpdate = undefined; beforeCommunicationRead = undefined;
   held = null;
   seam.factory.mockImplementation(() => seam.client);
   seam.pipeline.mockResolvedValue({ contactId: null, contactName: null, trustLevel: 'known_contact', routingMode: 'ai_handle_first', ruleId: null, reason: 'Synthetic permitted message' });
@@ -59,7 +69,9 @@ beforeEach(() => {
       const method = init.method ?? 'GET';
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Row : null;
       calls.push({ table, method, body, url, signal: init.signal });
-      if ((held === 'profile' && table === 'guardian_member_profiles') || (held === 'communication' && table === 'guardian_communications' && method === 'POST')) {
+      if ((held === 'profile' && table === 'guardian_member_profiles')
+        || (held === 'communication' && table === 'guardian_communications' && method === 'POST')
+        || (held === 'decision' && table === 'guardian_communications' && method === 'PATCH')) {
         return new Promise((_resolve, reject) => {
           const abort = () => reject(init.signal?.reason);
           if (init.signal?.aborted) abort(); else init.signal?.addEventListener('abort', abort, { once: true });
@@ -73,6 +85,7 @@ beforeEach(() => {
         return selected([event], url, init, 201);
       }
       if (table === 'guardian_callback_events' && method === 'GET') {
+        if (failure === 'lease-read') return error();
         return selected(event && matches(event, url) ? [event] : [], url, init);
       }
       if (table === 'guardian_callback_events' && method === 'PATCH') {
@@ -82,21 +95,34 @@ beforeEach(() => {
         return selected(matched ? [matched] : [], url, init);
       }
       if (table === 'guardian_member_profiles' && method === 'GET') {
-        if (failure === 'profile') return error();
+        if (failure === 'profile' || (policyFailure === 'profile' && url.searchParams.has('member_id'))) return error();
         const found = profiles.filter(row => matches(row, url));
         return selected(found, url, init, 200, profileCount === undefined ? found.length : profileCount);
       }
+      if (table === 'guardian_contacts' && method === 'GET') return policyFailure === 'contact' ? error() : selected([], url, init);
+      if (table === 'guardian_routing_rules' && method === 'GET') return policyFailure === 'rules' ? error() : selected([], url, init);
       if (table === 'guardian_communications' && method === 'GET') {
+        beforeCommunicationRead?.();
         if (failure === 'saved-read') return error();
         return selected(communication && matches(communication, url) ? [communication] : [], url, init);
       }
       if (table === 'guardian_communications' && method === 'POST') {
         if (failure === 'communication') return error();
         if (communication) return Response.json({ code: '23505', message: 'Synthetic unique SMS SID' }, { status: 409 });
-        communication = { ...body, id: COMM };
+        communication = { ...body, id: body?.id ?? COMM };
         if (lostCommunication) throw new Error('Synthetic lost response after committed message');
         if (nullCommunicationReceipt) return Response.json(null, { status: 201 });
-        return selected([{ id: COMM }], url, init, 201);
+        return selected([{ id: communication.id }], url, init, 201);
+      }
+      if (table === 'guardian_communications' && method === 'PATCH') {
+        beforeDecisionUpdate?.();
+        if (failure === 'decision') return error();
+        const matched = communication && matches(communication, url) ? communication : null;
+        if (matched && !emptyDecisionReceipt) Object.assign(matched, body);
+        if (failDecisionRead) failure = 'saved-read';
+        if (lostDecision) throw new Error('Synthetic lost response after committed decision');
+        if (nullDecisionReceipt) return Response.json(null);
+        return selected(matched && !emptyDecisionReceipt ? [{ id: matched.id }] : [], url, init);
       }
       if (table === 'families' && method === 'GET') return failure === 'scope' ? error() : selected([{ id: FAMILY, timezone: 'UTC' }], url, init);
       if (table === 'family_ai_settings' && method === 'GET') return selected(quietHours ? [quietHours] : [], url, init);
@@ -125,8 +151,194 @@ async function useRealNotifications() {
   seam.notify.mockImplementation((await vi.importActual<typeof import('@/lib/services/notifications')>('@/lib/services/notifications')).notify);
   seam.scope.mockImplementation((await vi.importActual<typeof import('@/lib/services/scope')>('@/lib/services/scope')).systemScopeForFamily);
 }
+async function useRealPipeline() {
+  const screening = vi.spyOn(await import('@/lib/guardian/scam'), 'detectScamFromText');
+  seam.pipeline.mockImplementation((await vi.importActual<typeof import('@/lib/guardian/pipeline')>('@/lib/guardian/pipeline')).runDecisionPipeline);
+  return screening;
+}
+
+describe('signed SMS retention with the actual decision pipeline and installed policy SDK', () => {
+  it.each(['contact', 'profile', 'rules'] as const)('retains pending intake after an actual %s policy read fails, then classifies once on recovery', async stage => {
+    const screening = await useRealPipeline();
+    policyFailure = stage;
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ family_id: FAMILY, member_id: MEMBER, body: 'Dentist appointment tomorrow', twilio_sms_sid: SID,
+      status: 'screening', contact_id: null, from_name: null, trust_level_at_time: null, routing_mode_used: null,
+      routing_rule_id: null, ai_decision_reason: null, scam_detected: false, scam_type: null, scam_confidence: null });
+    expect(event?.status).toBe('error');
+    expect(screening).not.toHaveBeenCalled(); expect(seam.scam).not.toHaveBeenCalled(); expect(seam.notify).not.toHaveBeenCalled();
+    await expect(seam.pipeline.mock.results[0].value).rejects.toMatchObject({ name: 'GuardianPolicyUnavailableError', stage });
+    const retainedId = communication?.id;
+    const policyReads = calls.filter(call => call.method === 'GET' && (['guardian_contacts', 'guardian_routing_rules'].includes(call.table)
+      || call.table === 'guardian_member_profiles' && call.url.searchParams.has('member_id')));
+    expect(policyReads).toHaveLength(3);
+    expect(policyReads.every(call => call.url.searchParams.get('family_id') === `eq.${FAMILY}` && call.signal instanceof AbortSignal)).toBe(true);
+    expect(calls.findIndex(call => call.table === 'guardian_communications' && call.method === 'POST')).toBeLessThan(calls.indexOf(policyReads[0]));
+
+    policyFailure = null;
+    expect((await deliver()).status).toBe(200);
+    expect(communication).toMatchObject({ id: retainedId, status: 'received', trust_level_at_time: 'unknown', routing_mode_used: 'voicemail_first' });
+    expect(event?.status).toBe('processed');
+    expect(screening).toHaveBeenCalledOnce(); expect(seam.scam).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+    expect(seam.pipeline).toHaveBeenCalledTimes(2);
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'PATCH')).toHaveLength(1);
+    expect((await deliver()).status).toBe(200);
+    expect(seam.pipeline).toHaveBeenCalledTimes(2); expect(screening).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+  });
+  it('treats verified absent contact and rules as healthy and applies the actual member default', async () => {
+    const screening = await useRealPipeline();
+    expect((await deliver()).status).toBe(200);
+    expect(communication).toMatchObject({ status: 'received', contact_id: null, trust_level_at_time: 'unknown', routing_rule_id: null, routing_mode_used: 'voicemail_first' });
+    expect(screening).toHaveBeenCalledOnce(); expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.scam).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+    for (const table of ['guardian_contacts', 'guardian_routing_rules']) {
+      const read = calls.filter(call => call.table === table && call.method === 'GET');
+      expect(read).toHaveLength(1); expect(read[0].url.searchParams.get('family_id')).toBe(`eq.${FAMILY}`);
+    }
+    expect(event?.status).toBe('processed');
+  });
+});
 
 describe('actual signed Guardian SMS route through installed PostgREST SDK', () => {
+  it.each(['pipeline', 'scam'] as const)('retains neutral screening intake before a %s outage and classifies it on retry', async stage => {
+    const target = stage === 'pipeline' ? seam.pipeline : seam.scam;
+    target.mockRejectedValueOnce(new Error('Synthetic policy dependency unavailable'));
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ family_id: FAMILY, member_id: MEMBER, body: 'Dentist appointment tomorrow', twilio_sms_sid: SID,
+      status: 'screening', contact_id: null, from_name: null, trust_level_at_time: null, routing_mode_used: null,
+      routing_rule_id: null, ai_decision_reason: null, scam_detected: false, scam_type: null, scam_confidence: null });
+    expect(event?.status).toBe('error'); expect(seam.notify).not.toHaveBeenCalled();
+    expect((await deliver()).status).toBe(200);
+    expect(communication).toMatchObject({ status: 'received', routing_mode_used: 'ai_handle_first' });
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
+    expect(target).toHaveBeenCalledTimes(2); expect(seam.notify).toHaveBeenCalledOnce();
+  });
+  it('does not classify a message that required retention storage could not save', async () => {
+    failure = 'communication';
+    expect((await deliver()).status).toBe(503);
+    expect(seam.pipeline).not.toHaveBeenCalled(); expect(seam.scam).not.toHaveBeenCalled();
+  });
+  it('starts policy work only after the exact owned neutral message has been read back', async () => {
+    seam.pipeline.mockImplementation(async () => {
+      expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null, ai_decision_reason: null, scam_confidence: null });
+      const retained = calls.filter(call => call.table === 'guardian_communications');
+      expect(retained.map(call => call.method)).toEqual(['GET', 'POST', 'GET']);
+      expect(retained[1].body).toMatchObject({ id: communication?.id, body: 'Dentist appointment tomorrow', twilio_sms_sid: SID });
+      return { contactId: null, contactName: null, trustLevel: 'known_contact', routingMode: 'ai_handle_first', ruleId: null, reason: 'Synthetic permitted message' };
+    });
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce();
+  });
+  it.each(['id', 'body', 'family_id', 'member_id', 'from_number', 'to_number', 'status', 'ai_decision_reason'])('refuses a changed retained %s before classification', async field => {
+    beforeCommunicationRead = () => { if (communication) communication[field] = field === 'id' ? COMM : 'changed after insert'; };
+    expect((await deliver()).status).toBe(503);
+    expect(seam.pipeline).not.toHaveBeenCalled(); expect(seam.scam).not.toHaveBeenCalled(); expect(seam.notify).not.toHaveBeenCalled();
+    expect(event?.status).toBe('error');
+  });
+  it('retains a saved neutral message when the insert readback fails and recovers it on retry', async () => {
+    beforeCommunicationRead = () => { if (communication) failure = 'saved-read'; };
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null }); expect(seam.pipeline).not.toHaveBeenCalled();
+    beforeCommunicationRead = undefined; failure = null;
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce();
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
+  });
+  it.each(['error', 'empty'] as const)('retains screening after an uncommitted decision %s and recomputes on retry', async mode => {
+    if (mode === 'error') failure = 'decision'; else emptyDecisionReceipt = true;
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null, ai_decision_reason: null });
+    expect(seam.notify).not.toHaveBeenCalled(); expect(event?.status).toBe('error');
+    failure = null; emptyDecisionReceipt = false;
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledTimes(2); expect(seam.scam).toHaveBeenCalledTimes(2);
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
+  });
+  it.each(['lost-response', 'null-receipt'] as const)('reconciles a committed decision %s by exact durable decision readback', async mode => {
+    lostDecision = mode === 'lost-response'; nullDecisionReceipt = mode === 'null-receipt';
+    expect((await deliver()).status).toBe(200); expect(seam.notify).toHaveBeenCalledOnce();
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'PATCH')).toHaveLength(1);
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+  });
+  it('does not notify an unconfirmed committed decision and reuses it after read recovery', async () => {
+    failDecisionRead = true;
+    expect((await deliver()).status).toBe(503); expect(communication).toMatchObject({ status: 'received' });
+    expect(seam.notify).not.toHaveBeenCalled(); expect(event?.status).toBe('error');
+    failDecisionRead = false; failure = null;
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.scam).toHaveBeenCalledOnce();
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'PATCH')).toHaveLength(1);
+  });
+  it.each(['contact_id', 'from_name', 'trust_level_at_time', 'routing_mode_used', 'routing_rule_id', 'ai_decision_reason', 'scam_detected', 'scam_type', 'scam_confidence', 'status', 'from_number', 'to_number', 'family_id', 'member_id', 'id', 'twilio_sms_sid'])('does not overwrite %s changed while classification was pending', async field => {
+    const changed = field === 'scam_detected' ? true : field === 'scam_confidence' ? 91 : field === 'status' ? 'handled' : field.endsWith('_id') || field === 'id' ? COMM : 'other worker value';
+    beforeDecisionUpdate = () => { if (communication) communication[field] = changed; };
+    expect((await deliver()).status).toBe(503); expect(communication?.[field]).toBe(changed);
+    expect(communication?.routing_mode_used).toBe(field === 'routing_mode_used' ? changed : null);
+    expect(seam.notify).not.toHaveBeenCalled(); expect(event?.status).toBe('error');
+  });
+  it('suppresses notification if an external body change breaks exact post-decision readback', async () => {
+    beforeDecisionUpdate = () => { if (communication) communication.body = 'Changed outside the intake path'; };
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ body: 'Changed outside the intake path', status: 'received' });
+    expect(seam.notify).not.toHaveBeenCalled(); expect(event?.status).toBe('error');
+  });
+  it('retains and classifies an allowed long Unicode message without placing its body in request URLs', async () => {
+    const body = '家庭🙂'.repeat(1024);
+    expect(body).toHaveLength(4096);
+    expect((await deliver(true, { Body: body })).status).toBe(200);
+    expect(communication).toMatchObject({ body, status: 'received' });
+    expect(seam.scam).toHaveBeenCalledWith(body, '+15555550200', `Family ID: ${FAMILY}`);
+    expect(calls.every(call => !call.url.searchParams.has('body') && !decodeURIComponent(call.url.href).includes('家庭'))).toBe(true);
+    expect(Math.max(...calls.map(call => call.url.href.length))).toBeLessThan(2000);
+  });
+  it('does not write a decision after its lease was replaced during AI work', async () => {
+    seam.scam.mockImplementation(async () => {
+      if (event) event.error = `sms-lease:${NOTIFICATION}`;
+      return { isScam: false, scamType: null, confidence: 0 };
+    });
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null });
+    expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'PATCH')).toHaveLength(0);
+    expect(event).toMatchObject({ status: 'processing', error: `sms-lease:${NOTIFICATION}` }); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it('does not notify after its lease was replaced while resolving notification scope', async () => {
+    seam.scope.mockImplementation(async () => {
+      if (event) event.error = `sms-lease:${NOTIFICATION}`;
+      return { familyId: FAMILY };
+    });
+    expect((await deliver()).status).toBe(503); expect(communication).toMatchObject({ status: 'received' });
+    expect(event).toMatchObject({ status: 'processing', error: `sms-lease:${NOTIFICATION}` }); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it.each(['decision', 'notification'] as const)('does not proceed past an unavailable current-lease read before %s', async phase => {
+    if (phase === 'decision') failure = 'lease-read';
+    else seam.scope.mockImplementation(async () => { failure = 'lease-read'; return { familyId: FAMILY }; });
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ status: phase === 'decision' ? 'screening' : 'received' });
+    expect(event?.status).toBe('error'); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it.each(['routing_rule_id', 'ai_decision_reason', 'scam_type', 'scam_detected', 'scam_confidence', 'routing_mode_used', 'trust_level_at_time', 'status', 'contact_id', 'from_name'])('does not accept a different valid %s decision as its own write receipt', async field => {
+    const changed: Record<string, unknown> = { routing_rule_id: COMM, ai_decision_reason: 'Other decision', scam_type: 'phishing', scam_detected: true,
+      scam_confidence: 91, routing_mode_used: 'silent_handling', trust_level_at_time: 'trusted_friend', status: 'handled', contact_id: COMM, from_name: 'Other contact' };
+    beforeCommunicationRead = () => {
+      if (communication?.status === 'received') communication[field] = changed[field];
+    };
+    expect((await deliver()).status).toBe(503); expect(seam.notify).not.toHaveBeenCalled(); expect(event?.status).toBe('error');
+    expect(communication?.[field]).toBe(changed[field]);
+  });
+  it('does not replace a competing complete decision and replays that verified decision on a later attempt', async () => {
+    beforeDecisionUpdate = () => { if (communication) Object.assign(communication, { status: 'blocked', trust_level_at_time: 'blocked', routing_mode_used: 'blocked',
+      ai_decision_reason: 'Other confirmed screening', scam_confidence: 0 }); };
+    expect((await deliver()).status).toBe(503); expect(seam.notify).not.toHaveBeenCalled();
+    expect(communication).toMatchObject({ status: 'blocked', ai_decision_reason: 'Other confirmed screening' });
+    beforeDecisionUpdate = undefined;
+    expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).not.toHaveBeenCalled();
+    expect(event?.status).toBe('processed');
+  });
+  it('retains pending intake without releasing another worker lease after a policy exception', async () => {
+    seam.pipeline.mockImplementation(async () => {
+      if (event) event.error = `sms-lease:${NOTIFICATION}`;
+      throw new Error('Synthetic required policy failure');
+    });
+    expect((await deliver()).status).toBe(503);
+    expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null });
+    expect(event).toMatchObject({ status: 'processing', error: `sms-lease:${NOTIFICATION}` }); expect(seam.notify).not.toHaveBeenCalled();
+  });
   it.each(['claim', 'profile', 'communication'] as const)('does not acknowledge the inbound message after required %s storage fails', async stage => {
     failure = stage;
     const response = await deliver();
@@ -136,9 +348,9 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
   });
   it('acknowledges one healthy saved message and sends its exact related receipt', async () => {
     expect((await deliver()).status).toBe(200);
-    expect(communication).toMatchObject({ id: COMM, family_id: FAMILY, member_id: MEMBER, twilio_sms_sid: SID, direction: 'inbound' });
+    expect(communication).toMatchObject({ id: expect.any(String), family_id: FAMILY, member_id: MEMBER, twilio_sms_sid: SID, direction: 'inbound' });
     expect(event?.status).toBe('processed');
-    expect(seam.notify).toHaveBeenCalledExactlyOnceWith({ familyId: FAMILY }, expect.objectContaining({ relatedId: COMM, relatedType: 'guardian_communications' }));
+    expect(seam.notify).toHaveBeenCalledExactlyOnceWith({ familyId: FAMILY }, expect.objectContaining({ relatedId: communication?.id, relatedType: 'guardian_communications' }));
     expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
   });
   it('rejects an invalid production signature before creating any database client', async () => {
@@ -148,7 +360,7 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
   it.each(['claim', 'profile', 'communication'] as const)('recovers a required %s failure on retry without losing the message', async stage => {
     failure = stage; expect((await deliver()).status).toBe(503);
     failure = null; expect((await deliver()).status).toBe(200);
-    expect(communication).toMatchObject({ id: COMM, twilio_sms_sid: SID });
+    expect(communication).toMatchObject({ id: expect.any(String), twilio_sms_sid: SID });
     expect(event?.status).toBe('processed'); expect(seam.notify).toHaveBeenCalledOnce();
   });
   it('acknowledges a confirmed processed duplicate without rerunning classifiers or notification', async () => {
@@ -187,13 +399,13 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     expect((await deliver()).status).toBe(200);
     expect(seam.notify).toHaveBeenCalledOnce();
     expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
-    expect(seam.notify.mock.calls[0][1]).toMatchObject({ relatedId: COMM, once: true });
+    expect(seam.notify.mock.calls[0][1]).toMatchObject({ relatedId: communication?.id, once: true });
   });
-  it.each(['family_id', 'member_id', 'to_number', 'from_number', 'body', 'id', 'routing_mode_used', 'scam_confidence'])('rejects conflicting saved communication %s before replay notification', async field => {
+  it.each(['family_id', 'member_id', 'to_number', 'from_number', 'body', 'id', 'routing_mode_used', 'scam_confidence', 'routing_rule_id', 'ai_decision_reason', 'scam_type'])('rejects conflicting saved communication %s before replay notification', async field => {
     seam.notify.mockResolvedValue({ ok: false, error: 'Synthetic notification outage' });
     expect((await deliver()).status).toBe(503); expect(communication).not.toBeNull();
     const altered = communication as unknown as Row;
-    altered[field] = field === 'scam_confidence' ? 80.5 : 'mismatched';
+    altered[field] = field === 'scam_confidence' ? 80.5 : ['ai_decision_reason', 'scam_type'].includes(field) ? 17 : 'mismatched';
     seam.notify.mockClear();
     expect((await deliver()).status).toBe(503); expect(seam.notify).not.toHaveBeenCalled();
     expect(seam.pipeline).toHaveBeenCalledOnce();
@@ -205,9 +417,9 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     expect(communication).toMatchObject({ scam_confidence: Math.floor(confidence), status: confidence >= 80 ? 'blocked' : 'received' });
     expect(seam.notify).toHaveBeenCalledTimes(confidence >= 80 ? 0 : 1);
   });
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 101, '80'])('does not persist invalid classifier confidence %s', async confidence => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 101, '80'])('retains pending intake without persisting invalid classifier confidence %s', async confidence => {
     seam.scam.mockResolvedValue({ isScam: false, scamType: null, confidence });
-    expect((await deliver()).status).toBe(503); expect(communication).toBeNull(); expect(seam.notify).not.toHaveBeenCalled();
+    expect((await deliver()).status).toBe(503); expect(communication).toMatchObject({ status: 'screening', scam_confidence: null }); expect(seam.notify).not.toHaveBeenCalled();
   });
   it.each(['pipeline', 'scam', 'scope', 'notification'])('contains a thrown %s prerequisite and releases the exact lease for retry', async stage => {
     const target = stage === 'pipeline' ? seam.pipeline : stage === 'scam' ? seam.scam : stage === 'scope' ? seam.scope : seam.notify;
@@ -220,7 +432,7 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
   ])('does not acknowledge a malformed notification success summary %j', async data => {
     seam.notify.mockResolvedValue({ ok: true, data });
     expect((await deliver()).status).toBe(503); expect(event?.status).toBe('error');
-    expect(communication).toMatchObject({ id: COMM });
+    expect(communication).toMatchObject({ id: expect.any(String) });
   });
   it('requires an exact owned finish receipt even after notification succeeds', async () => {
     failure = 'finish';
@@ -256,13 +468,13 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     expect((await deliver()).status).toBe(200);
     expect(calls.filter(call => ['guardian_member_profiles', 'guardian_communications'].includes(call.table)).every(call => call.signal instanceof AbortSignal)).toBe(true);
   });
-  it.each(['profile', 'communication'] as const)('aborts a held required %s request without automatic SDK retry or false acknowledgement', async stage => {
+  it.each(['profile', 'communication', 'decision'] as const)('aborts a held required %s request without automatic SDK retry or false acknowledgement', async stage => {
     held = stage;
     const timeout = AbortSignal.timeout.bind(AbortSignal);
     const requested = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => timeout(ms === 5000 ? 10 : ms));
     expect((await deliver()).status).toBe(503);
     expect(requested).toHaveBeenCalledWith(5000);
-    const attempted = calls.filter(call => stage === 'profile' ? call.table === 'guardian_member_profiles' : call.table === 'guardian_communications' && call.method === 'POST');
+    const attempted = calls.filter(call => stage === 'profile' ? call.table === 'guardian_member_profiles' : call.table === 'guardian_communications' && call.method === (stage === 'decision' ? 'PATCH' : 'POST'));
     expect(attempted).toHaveLength(1); expect(attempted[0].signal?.aborted).toBe(true);
     expect(event?.status).toBe('error'); expect(seam.notify).not.toHaveBeenCalled();
   });
@@ -282,7 +494,7 @@ describe('actual scope and notification service integration over installed Postg
   });
   it.each(['scope', 'notification-read'] as const)('does not acknowledge an actual required %s read failure and recovers from saved communication', async stage => {
     await useRealNotifications(); failure = stage;
-    expect((await deliver()).status).toBe(503); expect(notifications).toEqual([]); expect(communication).toMatchObject({ id: COMM });
+    expect((await deliver()).status).toBe(503); expect(notifications).toEqual([]); expect(communication).toMatchObject({ id: expect.any(String) });
     failure = null;
     expect((await deliver()).status).toBe(200); expect(notifications).toHaveLength(1); expect(seam.pipeline).toHaveBeenCalledOnce();
   });
@@ -292,6 +504,6 @@ describe('actual scope and notification service integration over installed Postg
     quietHours = { family_id: FAMILY, quiet_hours_start: 22, quiet_hours_end: 7 };
     expect((await deliver()).status).toBe(200);
     expect(notifications).toHaveLength(1); expect(notifications[0].send_at).toBe('2026-09-13T07:00:00.000Z');
-    expect(notifications[0].related_id).toBe(COMM);
+    expect(notifications[0].related_id).toBe(communication?.id);
   });
 });

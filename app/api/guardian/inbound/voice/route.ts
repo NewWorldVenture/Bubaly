@@ -85,13 +85,18 @@ export async function POST(req: NextRequest) {
   const callerName = await lookupCallerName(from ?? '').catch(() => null);
 
   // Run the decision pipeline
-  const decision = await runDecisionPipeline(supabase, {
-    callerPhone: from,
-    callerName,
-    familyId,
-    memberId,
-    callSid,
-  });
+  let decision: Awaited<ReturnType<typeof runDecisionPipeline>>;
+  try {
+    decision = await runDecisionPipeline(supabase, {
+      callerPhone: from,
+      callerName,
+      familyId,
+      memberId,
+      callSid,
+    });
+  } catch {
+    return new NextResponse('Guardian routing unavailable', { status: 503 });
+  }
 
   // Create communication record
   const { data: comm } = await gFrom('guardian_communications').insert({
