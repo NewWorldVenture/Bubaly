@@ -47,7 +47,25 @@ async function resolveAddresses(host: string, signal: AbortSignal): Promise<Addr
   } finally { signal.removeEventListener('abort', cancel); }
 }
 
-type Options = { signal?: AbortSignal; resolve?: typeof resolveAddresses; request?: typeof httpsRequest; timeoutMs?: number };
+/**
+ * What fetchPublicDocument will accept. Named and exported so a test can pin
+ * it: this list is a security boundary, and widening it by accident is the way
+ * a document fetcher quietly becomes a general-purpose proxy.
+ */
+export const DOCUMENT_MEDIA_TYPES = [
+  'application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain',
+] as const;
+
+/** What a feed fetch accepts instead. Text only — nothing here is executed. */
+export const FEED_MEDIA_TYPES = [
+  'application/rss+xml', 'application/atom+xml', 'application/xml', 'text/xml', 'text/plain',
+] as const;
+
+type Options = {
+  signal?: AbortSignal; resolve?: typeof resolveAddresses; request?: typeof httpsRequest; timeoutMs?: number;
+  /** Media types this call will take. Defaults to DOCUMENT_MEDIA_TYPES. */
+  accept?: readonly string[];
+};
 type Hop = { redirect: string } | { document: DocumentInput };
 
 function looksLikeHtml(bytes: Uint8Array): boolean {
@@ -60,7 +78,7 @@ function looksLikeHtml(bytes: Uint8Array): boolean {
   return /^(?:<!doctype\s+html|<(?:html|head|body|script|form)\b)/i.test(text);
 }
 
-function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof httpsRequest): Promise<Hop> {
+function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof httpsRequest, accept: readonly string[]): Promise<Hop> {
   return new Promise((resolve, reject) => {
     // Per-request agent: no pooled connection or environment proxy may bypass this lookup.
     // Node HTTPS forwards lookup to net.connect and retains the URL hostname for Host/TLS.
@@ -85,7 +103,7 @@ function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof
       const contentType = response.headers['content-type']?.toLowerCase() ?? '';
       const mediaType = contentType.split(';')[0].trim();
       const charsets = contentType.split(';').slice(1).map((part) => part.trim()).filter((part) => /^charset\b/.test(part));
-      if (!['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain'].includes(mediaType)
+      if (!accept.includes(mediaType)
         || (mediaType === 'text/plain' && charsets.some((part) => !/^charset\s*=\s*(?:"(?:utf-8|us-ascii)"|utf-8|us-ascii)$/.test(part)))
         || (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity')) return fail(new PublicDocumentError('unsupported'));
       const declared = response.headers['content-length'];
@@ -104,8 +122,15 @@ function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof
         let name = 'document';
         try { name = decodeURIComponent(url.pathname.split('/').pop() || name).slice(0, 255); } catch { /* A filename is metadata, never a destination. */ }
         const document = { name, mediaType, bytes: new Uint8Array(Buffer.concat(chunks)) };
-        // MIME and bytes must agree. HTML disguised as text/plain is still a web page.
-        if (!documentType(document) || (mediaType === 'text/plain' && looksLikeHtml(document.bytes))) reject(new PublicDocumentError('unsupported'));
+        // MIME and bytes must agree. HTML disguised as text/plain is still a web
+        // page. A feed is markup by definition, so it is sniffed for a leading
+        // '<' instead of run through documentType, which only knows documents —
+        // the check is not skipped for feeds, it is the right check for them.
+        const isFeed = accept !== DOCUMENT_MEDIA_TYPES;
+        const wellFormed = isFeed
+          ? new TextDecoder().decode(document.bytes.subarray(0, 512)).trimStart().startsWith('<')
+          : Boolean(documentType(document)) && !(mediaType === 'text/plain' && looksLikeHtml(document.bytes));
+        if (!wellFormed) reject(new PublicDocumentError('unsupported'));
         else resolve({ document });
       });
     });
@@ -131,7 +156,7 @@ export async function fetchPublicDocument(raw: string, options: Options = {}): P
       const addresses = await (options.resolve ?? resolveAddresses)(url.hostname, signal);
       signal.throwIfAborted();
       if (!addresses.length || addresses.some(({ address, family }) => isIP(address) !== family || !isPublicDocumentAddress(address))) throw new PublicDocumentError('blocked');
-      const result = await readHop(url, addresses[0], signal, options.request ?? httpsRequest);
+      const result = await readHop(url, addresses[0], signal, options.request ?? httpsRequest, options.accept ?? DOCUMENT_MEDIA_TYPES);
       if ('document' in result) return { ...result.document, url: normalized };
       current = new URL(result.redirect, url).href;
     }
@@ -140,4 +165,21 @@ export async function fetchPublicDocument(raw: string, options: Options = {}): P
     if (error instanceof PublicDocumentError) throw error;
     throw new PublicDocumentError('unavailable', true);
   }
+}
+
+/**
+ * A podcast or book feed, fetched through the same guard a document gets.
+ *
+ * Subscribing to a feed means a URL a USER chose is fetched by our server,
+ * which is the textbook server-side request forgery setup: without this, a feed
+ * URL of http://169.254.169.254/ asks the cloud provider's metadata service for
+ * credentials on the attacker's behalf. Everything that makes fetchPublicDocument
+ * safe applies unchanged — the blocked-subnet list, DNS resolution pinned to the
+ * address actually connected to, https only, a redirect budget, a size cap and
+ * one deadline across the lot. The only difference is which media types come
+ * back, and that a feed is verified as markup rather than as a document.
+ */
+export async function fetchPublicFeed(raw: string, options: Omit<Options, 'accept'> = {}): Promise<{ url: string; text: string }> {
+  const result = await fetchPublicDocument(raw, { ...options, accept: FEED_MEDIA_TYPES });
+  return { url: result.url, text: new TextDecoder().decode(result.bytes) };
 }
