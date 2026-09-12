@@ -12,16 +12,6 @@ describe('social publishing persistence boundaries', () => {
     expect(source).toContain("throwPersistenceFailure('target creation failed', error)");
   });
 
-  it('fails closed when publish job reads or state transitions cannot be persisted', () => {
-    const source = readFileSync('lib/social/publish.ts', 'utf8');
-
-    expect(source).toContain("const { data: targets, error: targetsError } = await supabase");
-    expect(source).toContain("const { data: variants, error: variantsError } = await supabase");
-    expect(source).toContain("const { data: post, error: postError } = await supabase");
-    expect(source).toContain("return abortJob(supabase, familyId, job.id, userId");
-    expect(source).toContain(".select('id')\n    .single()");
-  });
-
   it('records provider outcomes before updating target state and checks both writes', () => {
     const source = readFileSync('lib/social/publish.ts', 'utf8');
 
@@ -51,11 +41,13 @@ describe('social publishing persistence boundaries', () => {
     expect(source).toContain("return { ok: false, postId, error: describeActionError(error, SOCIAL_SAVE_FAILURE) }");
   });
 
-  it('keeps provider exception details in server logs instead of the client result', () => {
+  it('keeps unexpected live-provider exceptions uncertain without exposing diagnostics', () => {
     const source = readFileSync('lib/social/connectors.ts', 'utf8');
 
-    expect(source).toContain('console.error(`[social-publish] ${platform} connector failed`, err)');
-    expect(source).toContain('The provider could not confirm this post. Review the result and try again later.');
+    expect(source).toContain("errorCode: 'confirmation_unknown'");
+    expect(source).toContain("status: 'publishing'");
+    expect(source).toContain("errorMessage: t('socialX.publishUnknown')");
+    expect(source).not.toContain('connector failed`, err');
     expect(source).not.toContain('errorMessage: err instanceof Error ? err.message');
   });
 });

@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Algunos datos de la pantalla no están disponibles. La pantalla volverá a intentarlo automáticamente.",
   "auth.cacheSessionUnavailable": "Tu sesión no está disponible temporalmente. Inténtalo de nuevo.",
   "auth.cacheSessionChanged": "Tu sesión ha cambiado. Espera mientras se actualiza la aplicación.",
-  "auth.cacheFamilyMismatch": "Esta familia no coincide con el contexto actual de tu cuenta."
+  "auth.cacheFamilyMismatch": "Esta familia no coincide con el contexto actual de tu cuenta.",
+  "socialX.setupRequired": "La conexión con X no está configurada. Contacta con tu administrador.",
+  "socialX.connectionFailed": "No se ha podido conectar con X. Vuelve a Cuentas sociales y empieza de nuevo.",
+  "socialX.callbackInvalid": "Esta autorización de X ha caducado o no coincide con tu cuenta actual. Empieza de nuevo desde Cuentas sociales.",
+  "socialX.permissionDenied": "No tienes permiso para utilizar esta cuenta social.",
+  "socialX.reconnectRequired": "Vuelve a conectar esta cuenta de X antes de publicar.",
+  "socialX.storageUnavailable": "No se ha podido verificar o guardar la cuenta social. Inténtalo de nuevo más tarde.",
+  "socialX.unsupportedContent": "Actualmente, X admite publicaciones de texto y enlaces sin archivos multimedia adjuntos.",
+  "socialX.invalidContent": "Introduce una publicación válida de X de hasta 280 caracteres y un enlace válido cuando sea necesario.",
+  "socialX.publishRejected": "X ha rechazado esta publicación. Revisa la cuenta y el contenido antes de volver a intentarlo.",
+  "socialX.publishUnknown": "Es posible que X haya aceptado esta publicación. Compruébalo en X antes de volver a publicar.",
+  "socialStudio.reviewPost": "Revisar publicación",
+  "socialStudio.reviewRequired": "Este intento de publicación requiere revisión. Abre la publicación existente antes de volver a publicar.",
+  "socialStudio.savedPost": "Esta publicación se ha guardado. Ábrela para revisar su estado.",
+  "socialStudio.requestUnconfirmed": "No se ha podido confirmar el resultado. Revisa tus publicaciones antes de volver a intentarlo.",
+  "socialStudio.reviewPosts": "Revisar publicaciones",
+  "socialPost.awaitingConfirmation": "La publicación está pendiente de confirmación. Compruébalo en la plataforma antes de volver a publicar.",
+  "socialPost.retryAttempted": "Se ha intentado publicar. Revisa los resultados a continuación."
 }

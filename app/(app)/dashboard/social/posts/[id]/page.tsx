@@ -25,7 +25,10 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const { post, variants, targets, results } = await getPost(ctx.active.familyId, id);
   if (!post) notFound();
 
-  const canRetry = targets.some((t) => t.status === 'failed' || t.status === 'pending');
+  const awaitingConfirmation = post.status === 'publishing' || targets.some((t) => t.status === 'publishing');
+  const canRetry = !awaitingConfirmation
+    && ['draft', 'scheduled', 'failed', 'partially_published'].includes(post.status)
+    && targets.some((t) => t.status === 'failed' || t.status === 'pending');
 
   return (
     <div className="space-y-4">
@@ -41,6 +44,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
           </Badge>
         </div>
         <p className="whitespace-pre-wrap text-sm text-muted">{post.body}</p>
+        {awaitingConfirmation && <p role="status" className="mt-2 text-sm text-warning">{tr('socialPost.awaitingConfirmation')}</p>}
         {post.link && <a href={post.link} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-text underline" target="_blank" rel="noreferrer">{post.link} <ExternalLink className="h-3 w-3" /></a>}
         {post.scheduled_for && <p className="mt-2 text-xs text-muted">{tr('dashboardSocialPosts.scheduledFor')} {new Date(post.scheduled_for).toLocaleString()}</p>}
       </Card>
@@ -96,7 +100,10 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
               <div key={r.id} className="flex items-center gap-2 border-b border-border/50 pb-1.5">
                 <PlatformDot platform={r.platform as SocialPlatform} />
                 <Badge tone={TARGET_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
-                <span className="text-xs text-muted">{r.error_code ? `${r.error_code}: ${r.error_message}` : (r.permalink_url ?? 'confirmed')}</span>
+                <span className="text-xs text-muted">{r.status === 'publishing'
+                  ? (r.error_message || tr('socialPost.awaitingConfirmation'))
+                  : r.error_code ? `${r.error_code}: ${r.error_message ?? ''}`
+                  : r.error_message || r.permalink_url || (r.status === 'published' && r.provider_object_id ? 'confirmed' : '—')}</span>
                 <span className="ml-auto text-xs text-muted">{new Date(r.attempted_at).toLocaleString()}</span>
               </div>
             ))}

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -15,6 +16,8 @@ import {
 import { isSocialRole } from '@/lib/social/roles';
 import { createTargets, runPublishNow } from '@/lib/social/publish';
 import type { PublishOutcome } from '@/lib/social/publish';
+import { beginXAuthorization, X_COOKIE, xCookieOptions } from '@/lib/social/x-oauth';
+import { clearXTokens, XBoundaryError } from '@/lib/social/account-tokens';
 
 type SocialSupabase = Awaited<ReturnType<typeof createServer>>;
 const SOCIAL_SAVE_FAILURE = 'Social publishing could not be saved completely. Review the post status before retrying.';
@@ -34,10 +37,8 @@ async function familyId() {
 }
 
 /**
- * Begin connecting an account. OAuth app credentials are NOT wired in this
- * environment, so we honestly record the intent without ever marking it
- * 'connected': 'requires_setup' when credentials are missing, 'pending' when
- * present but the OAuth redirect handler isn't implemented yet.
+ * X starts a bound OAuth authorization. Other providers record setup intent
+ * until their live OAuth implementation exists; credentials alone never connect.
  */
 export async function connectAccountAction(formData: FormData) {
   const tr = await getTranslations();
@@ -45,6 +46,17 @@ export async function connectAccountAction(formData: FormData) {
   if (!isPlatform(platform)) return { ok: false, error: tr('actions.unknownPlatform') };
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'connect_accounts');
+
+  if (platform === 'x') {
+    try {
+      const flow = await beginXAuthorization({ familyId: fid, userId });
+      (await cookies()).set(X_COOKIE, flow.cookie, xCookieOptions(flow.redirectUri));
+      revalidatePath('/dashboard/social/accounts');
+      return { ok: true, requiresSetup: false, authorizationUrl: flow.authorizationUrl };
+    } catch (error) {
+      return { ok: false, error: tr(error instanceof XBoundaryError ? error.key : 'socialX.connectionFailed') };
+    }
+  }
 
   const supabase = await createServer();
   const configured = isProviderConfigured(platform);
@@ -74,6 +86,12 @@ export async function disconnectAccountAction(accountId: string) {
   await requireSocialPermission(fid, 'connect_accounts');
   if (!accountId.trim()) return { ok: false, error: tr('actions.chooseAnAccountToDisconnect') };
   const supabase = await createServer();
+  const account = await supabase.from('social_accounts').select('platform').eq('id', accountId).eq('family_id', fid).single();
+  if (account.error || !account.data) return { ok: false, error: tr('actions.couldNotDisconnectThatAccount') };
+  if (account.data.platform === 'x') {
+    try { await clearXTokens({ familyId: fid, userId }, accountId); }
+    catch { return { ok: false, error: tr('actions.couldNotDisconnectThatAccount') }; }
+  }
   const { data, error } = await supabase
     .from('social_accounts')
     .update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: userId })
@@ -208,7 +226,10 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   } catch (error) {
     if (postId && !publishStarted) await cleanupPost(supabase, fid, postId);
     console.error('[social-action] create post failed', error);
-    return { ok: false, error: describeActionError(error, SOCIAL_SAVE_FAILURE) };
+    return {
+      ok: false, error: describeActionError(error, SOCIAL_SAVE_FAILURE),
+      ...(postId && publishStarted ? { postId, action: 'publish' as const } : {}),
+    };
   }
 }
 

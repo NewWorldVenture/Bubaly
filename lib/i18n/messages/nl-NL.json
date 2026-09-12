@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Sommige schermgegevens zijn niet beschikbaar. Het scherm probeert het automatisch opnieuw.",
   "auth.cacheSessionUnavailable": "Uw sessie is tijdelijk niet beschikbaar. Probeer het opnieuw.",
   "auth.cacheSessionChanged": "Uw sessie is gewijzigd. Even geduld terwijl de app wordt bijgewerkt.",
-  "auth.cacheFamilyMismatch": "Dit gezin komt niet overeen met de huidige context van uw account."
+  "auth.cacheFamilyMismatch": "Dit gezin komt niet overeen met de huidige context van uw account.",
+  "socialX.setupRequired": "De verbinding met X is niet ingesteld. Neem contact op met je beheerder.",
+  "socialX.connectionFailed": "De verbinding met X is mislukt. Ga terug naar Sociale accounts en begin opnieuw.",
+  "socialX.callbackInvalid": "Deze X-autorisatie is verlopen of komt niet overeen met je huidige account. Begin opnieuw vanuit Sociale accounts.",
+  "socialX.permissionDenied": "Je hebt geen toestemming om dit sociale account te gebruiken.",
+  "socialX.reconnectRequired": "Verbind dit X-account opnieuw voordat je publiceert.",
+  "socialX.storageUnavailable": "Het sociale account kon niet worden gecontroleerd of opgeslagen. Probeer het later opnieuw.",
+  "socialX.unsupportedContent": "X ondersteunt momenteel tekst- en linkberichten zonder bijgevoegde media.",
+  "socialX.invalidContent": "Voer een geldig X-bericht van maximaal 280 tekens in en een geldige link als die vereist is.",
+  "socialX.publishRejected": "X heeft dit bericht geweigerd. Controleer het account en de inhoud voordat je het opnieuw probeert.",
+  "socialX.publishUnknown": "X heeft dit bericht mogelijk geaccepteerd. Controleer X voordat je opnieuw publiceert.",
+  "socialStudio.reviewPost": "Bericht controleren",
+  "socialStudio.reviewRequired": "Deze publicatiepoging moet worden gecontroleerd. Open het bestaande bericht voordat je opnieuw publiceert.",
+  "socialStudio.savedPost": "Dit bericht is opgeslagen. Open het om de status te controleren.",
+  "socialStudio.requestUnconfirmed": "Het resultaat kon niet worden bevestigd. Controleer je berichten voordat je het opnieuw probeert.",
+  "socialStudio.reviewPosts": "Berichten controleren",
+  "socialPost.awaitingConfirmation": "De publicatie wacht op bevestiging. Controleer het platform voordat je opnieuw publiceert.",
+  "socialPost.retryAttempted": "Publicatie geprobeerd. Controleer de resultaten hieronder."
 }

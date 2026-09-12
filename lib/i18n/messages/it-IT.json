@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Alcuni dati della schermata non sono disponibili. La schermata riproverà automaticamente.",
   "auth.cacheSessionUnavailable": "La sessione è temporaneamente non disponibile. Riprova.",
   "auth.cacheSessionChanged": "La sessione è cambiata. Attendi mentre l’app viene aggiornata.",
-  "auth.cacheFamilyMismatch": "Questa famiglia non corrisponde al contesto attuale del tuo account."
+  "auth.cacheFamilyMismatch": "Questa famiglia non corrisponde al contesto attuale del tuo account.",
+  "socialX.setupRequired": "La connessione a X non è configurata. Contatta l’amministratore.",
+  "socialX.connectionFailed": "Non è stato possibile connettersi a X. Torna agli account social e ricomincia.",
+  "socialX.callbackInvalid": "Questa autorizzazione di X è scaduta o non corrisponde al tuo account attuale. Ricomincia dagli account social.",
+  "socialX.permissionDenied": "Non hai il permesso di utilizzare questo account social.",
+  "socialX.reconnectRequired": "Ricollega questo account X prima di pubblicare.",
+  "socialX.storageUnavailable": "Non è stato possibile verificare o salvare l’account social. Riprova più tardi.",
+  "socialX.unsupportedContent": "Al momento X supporta post di testo e link senza contenuti multimediali allegati.",
+  "socialX.invalidContent": "Inserisci un post X valido di massimo 280 caratteri e un link valido quando richiesto.",
+  "socialX.publishRejected": "X ha rifiutato questo post. Controlla l’account e il contenuto prima di riprovare.",
+  "socialX.publishUnknown": "X potrebbe aver accettato questo post. Controlla su X prima di pubblicare di nuovo.",
+  "socialStudio.reviewPost": "Controlla il post",
+  "socialStudio.reviewRequired": "Questo tentativo di pubblicazione richiede una verifica. Apri il post esistente prima di pubblicare di nuovo.",
+  "socialStudio.savedPost": "Questo post è stato salvato. Aprilo per verificarne lo stato.",
+  "socialStudio.requestUnconfirmed": "Non è stato possibile confermare il risultato. Controlla i tuoi post prima di riprovare.",
+  "socialStudio.reviewPosts": "Controlla i post",
+  "socialPost.awaitingConfirmation": "La pubblicazione è in attesa di conferma. Controlla sulla piattaforma prima di pubblicare di nuovo.",
+  "socialPost.retryAttempted": "Pubblicazione tentata. Controlla i risultati qui sotto."
 }

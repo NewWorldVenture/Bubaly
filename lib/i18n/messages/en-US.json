@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Some display data is unavailable. The display will retry automatically.",
   "auth.cacheSessionUnavailable": "Your session is temporarily unavailable. Please try again.",
   "auth.cacheSessionChanged": "Your session changed. Please wait while the app updates.",
-  "auth.cacheFamilyMismatch": "This family does not match your current account context."
+  "auth.cacheFamilyMismatch": "This family does not match your current account context.",
+  "socialX.setupRequired": "X connection is not configured. Contact your administrator.",
+  "socialX.connectionFailed": "X could not be connected. Return to Social Accounts and start again.",
+  "socialX.callbackInvalid": "This X authorization expired or does not match your current account. Start again from Social Accounts.",
+  "socialX.permissionDenied": "You do not have permission to use this social account.",
+  "socialX.reconnectRequired": "Reconnect this X account before publishing.",
+  "socialX.storageUnavailable": "The social account could not be verified or saved. Try again later.",
+  "socialX.unsupportedContent": "X currently supports text and link posts without attached media.",
+  "socialX.invalidContent": "Enter a valid X post of up to 280 characters and a valid link when required.",
+  "socialX.publishRejected": "X rejected this post. Review the account and content before retrying.",
+  "socialX.publishUnknown": "X may have accepted this post. Check X before posting again.",
+  "socialStudio.reviewPost": "Review post",
+  "socialStudio.reviewRequired": "This publish attempt needs review. Open the existing post before publishing again.",
+  "socialStudio.savedPost": "This post has been saved. Open it to review its status.",
+  "socialStudio.requestUnconfirmed": "The result could not be confirmed. Review your posts before trying again.",
+  "socialStudio.reviewPosts": "Review posts",
+  "socialPost.awaitingConfirmation": "Publication is awaiting confirmation. Review the provider before posting again.",
+  "socialPost.retryAttempted": "Publish attempted. Review the results below."
 }

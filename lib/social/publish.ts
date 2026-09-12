@@ -6,7 +6,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { getConnector } from './connectors';
+import { getConnector, type ConnectorPublishOutput } from './connectors';
 import { derivePostStatus, type TargetStatus } from './content';
 import type { SocialPlatform } from './capabilities';
 
@@ -51,7 +51,7 @@ async function abortJob(
 
 export type PublishOutcome = {
   postId: string;
-  jobId: string;
+  jobId: string | null;
   status: string;
   targets: Array<{
     targetId: string;
@@ -99,10 +99,66 @@ export async function createTargets(
   return rows.length;
 }
 
+type Target = Database['public']['Tables']['social_post_targets']['Row'];
+type Json = Database['public']['Tables']['social_posts']['Row']['metadata'];
+
+function metadataObject(value: Json): Record<string, Json | undefined> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+/** Read to an empty page, including when the API applies a smaller row cap. */
+async function readTargets(supabase: Client, familyId: string, postId: string): Promise<Target[]> {
+  const all: Target[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 2001; page += 1) {
+    let query = supabase.from('social_post_targets').select('*')
+      .eq('post_id', postId).eq('family_id', familyId)
+      .order('id', { ascending: true }).limit(200);
+    if (cursor) query = query.gt('id', cursor);
+    const { data: targets, error: targetsError } = await query;
+    if (targetsError || !targets) throwPersistenceFailure('publish-target lookup failed', targetsError);
+    if (!targets.length) return all;
+    if (all.length + targets.length > 2000) {
+      throwPersistenceFailure('publish-target limit exceeded', new Error('Too many targets'));
+    }
+    const next = targets[targets.length - 1].id;
+    if (cursor && next <= cursor) throwPersistenceFailure('publish-target cursor did not advance', null);
+    all.push(...targets);
+    cursor = next;
+  }
+  throwPersistenceFailure('publish-target page limit exceeded', null);
+}
+
+function uncertainResult(): ConnectorPublishOutput {
+  return {
+    ok: false, status: 'publishing', errorCode: 'confirmation_unknown',
+    errorMessage: 'The provider could not confirm this post. Review the result before posting again.',
+  };
+}
+
+function confirmedResult(result: ConnectorPublishOutput): ConnectorPublishOutput {
+  if (result.ok === true && result.status === 'published'
+    && typeof result.providerObjectId === 'string' && result.providerObjectId.trim()) return result;
+  if (result.ok === false && !result.providerObjectId
+    && (result.status === 'failed' || result.status === 'skipped')) return result;
+  if (result.ok === false && result.status === 'publishing'
+    && result.errorCode === 'confirmation_unknown') return result;
+  // An exception or an inconsistent receipt may follow provider acceptance.
+  // It must never become a failed target that an ordinary retry will resend.
+  return uncertainResult();
+}
+
+function savedOutcomes(targets: Target[]): PublishOutcome['targets'] {
+  return targets.map((target) => ({
+    targetId: target.id, platform: target.platform, status: target.status,
+    permalinkUrl: target.permalink_url, errorCode: null, errorMessage: target.error,
+  }));
+}
+
 /**
- * Execute publishing for a post NOW: run each pending target through its
- * connector, persist results, and update statuses. Returns the per-target
- * outcomes so the UI can show honest success/failure per platform.
+ * Publish under an exclusive post claim and a conditional claim for each target.
+ * A crashed or unconfirmed send stays publishing for review; there is no lease
+ * expiry that could send the same external post again.
  */
 export async function runPublishNow(
   supabase: Client,
@@ -110,205 +166,167 @@ export async function runPublishNow(
   postId: string,
   userId: string | null,
 ): Promise<PublishOutcome> {
-  // Create the job row (RLS requires publish/schedule permission).
+  const { data: post, error: postError } = await supabase
+    .from('social_posts')
+    .select('*').eq('id', postId).eq('family_id', familyId)
+    .is('deleted_at', null).single();
+  if (postError || !post) throwPersistenceFailure('post lookup failed', postError);
+  const targets = await readTargets(supabase, familyId, postId);
+  const eligible = targets.filter((target) => target.status === 'pending' || target.status === 'failed');
+  // No state writes on an already completed/in-flight post or an empty retry.
+  // In particular, this cannot replace a prior published timestamp with null.
+  if (post.status === 'publishing' || post.status === 'published' || !eligible.length
+    || targets.some((target) => target.status === 'publishing')) {
+    const observedStatus = post.status === 'publishing' ? 'publishing'
+      : targets.length ? derivePostStatus(targets.map((target) => target.status)) : post.status;
+    return { postId, jobId: null, status: observedStatus, targets: savedOutcomes(targets) };
+  }
+  if (!['draft', 'scheduled', 'failed', 'partially_published'].includes(post.status)) {
+    throw new Error('This post is not available for publishing.');
+  }
+
+  const variantByPlatform = new Map<SocialPlatform, string>();
+  let variantCursor: string | null = null;
+  for (let page = 0; ; page += 1) {
+    if (page > 100) throwPersistenceFailure('post-variant limit exceeded', null);
+    let query = supabase.from('social_post_variants').select('id, platform, body')
+      .eq('post_id', postId).eq('family_id', familyId)
+      .order('id', { ascending: true }).limit(100);
+    if (variantCursor) query = query.gt('id', variantCursor);
+    const { data: variants, error: variantsError } = await query;
+    if (variantsError || !variants) throwPersistenceFailure('post-variant lookup failed', variantsError);
+    if (!variants.length) break;
+    for (const variant of variants) {
+      if (variantByPlatform.has(variant.platform)) throwPersistenceFailure('ambiguous post variants', null);
+      variantByPlatform.set(variant.platform, variant.body);
+    }
+    const next = variants[variants.length - 1].id;
+    if (variantCursor && next <= variantCursor) throwPersistenceFailure('post-variant cursor did not advance', null);
+    variantCursor = next;
+  }
+  // Resolve required accounts before taking a claim or contacting any provider.
+  const providerAccounts = new Map<string, string | null>();
+  const accountCounts = new Map<string, number>();
+  for (const target of targets) {
+    if (target.account_id) accountCounts.set(target.account_id, (accountCounts.get(target.account_id) ?? 0) + 1);
+  }
+  for (const target of eligible) {
+    if (!target.account_id) throwPersistenceFailure('missing target account', null);
+    if (target.provider_object_id || accountCounts.get(target.account_id) !== 1) {
+      throwPersistenceFailure('duplicate or previously confirmed target requires review', null);
+    }
+    const { data: account, error: accountError } = await supabase
+      .from('social_accounts').select('provider_account_id, platform')
+      .eq('id', target.account_id).eq('family_id', familyId)
+      .is('deleted_at', null).maybeSingle();
+    if (accountError || !account || account.platform !== target.platform) {
+      throwPersistenceFailure('publish account lookup failed', accountError);
+    }
+    providerAccounts.set(target.id, account.provider_account_id);
+  }
+
   const { data: job, error: jobErr } = await supabase
     .from('social_publish_jobs')
     .insert({
-      post_id: postId,
-      family_id: familyId,
-      status: 'running',
-      scheduled_for: new Date().toISOString(),
-      attempts: 1,
-      created_by: userId,
-    })
-    .select('id')
-    .single();
-  if (jobErr || !job) {
-    throwPersistenceFailure('publish-job creation failed', jobErr ?? new Error('Missing publish job row'));
-  }
-
+      post_id: postId, family_id: familyId, status: 'running',
+      scheduled_for: new Date().toISOString(), attempts: 1, created_by: userId,
+    }).select('id').single();
+  if (jobErr || !job) throwPersistenceFailure('publish-job creation failed', jobErr);
+  const claim = { publish_job_id: job.id };
   const { data: publishingPost, error: publishingPostError } = await supabase
     .from('social_posts')
-    .update({ status: 'publishing', updated_by: userId })
-    .eq('id', postId)
-    .eq('family_id', familyId)
-    .select('id')
-    .single();
+    .update({ status: 'publishing', metadata: { ...metadataObject(post.metadata), ...claim }, updated_by: userId })
+    .eq('id', postId).eq('family_id', familyId).is('deleted_at', null)
+    .eq('status', post.status).eq('updated_at', post.updated_at)
+    .select('id').maybeSingle();
   if (publishingPostError || !publishingPost) {
-    return abortJob(supabase, familyId, job.id, userId, 'post publishing-state update failed', publishingPostError ?? new Error('Missing post row'));
+    return abortJob(supabase, familyId, job.id, userId, 'post publishing claim unavailable', publishingPostError);
   }
 
-  const { data: targets, error: targetsError } = await supabase
-    .from('social_post_targets')
-    .select('id, platform, account_id')
-    .eq('post_id', postId)
-    .eq('family_id', familyId)
-    .in('status', ['pending', 'failed']);
-  if (targetsError) {
-    return abortJob(supabase, familyId, job.id, userId, 'publish-target lookup failed', targetsError);
-  }
-
-  const { data: variants, error: variantsError } = await supabase
-    .from('social_post_variants')
-    .select('platform, body')
-    .eq('post_id', postId)
-    .eq('family_id', familyId);
-  if (variantsError) {
-    return abortJob(supabase, familyId, job.id, userId, 'post-variant lookup failed', variantsError);
-  }
-
-  const { data: post, error: postError } = await supabase
-    .from('social_posts')
-    .select('body, link')
-    .eq('id', postId)
-    .eq('family_id', familyId)
-    .single();
-  if (postError || !post) {
-    return abortJob(supabase, familyId, job.id, userId, 'post lookup failed', postError ?? new Error('Missing post row'));
-  }
-  if ((targets ?? []).length === 0) {
-    return abortJob(
-      supabase,
-      familyId,
-      job.id,
-      userId,
-      'publish invoked without pending targets',
-      new Error('No pending social targets'),
-      'No pending social accounts are available for this post.',
-    );
-  }
-
-  const variantByPlatform = new Map((variants ?? []).map((v) => [v.platform, v.body]));
   const outcomes: PublishOutcome['targets'] = [];
-  const finalStatuses: TargetStatus[] = [];
-
-  for (const target of targets ?? []) {
-    const platform = target.platform as SocialPlatform;
-    let providerAccountId: string | null = null;
-    if (target.account_id) {
-      const { data: acct, error: accountError } = await supabase
-        .from('social_accounts')
-        .select('provider_account_id')
-        .eq('id', target.account_id)
-        .eq('family_id', familyId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (accountError || !acct) {
-        return abortJob(supabase, familyId, job.id, userId, 'publish account lookup failed', accountError ?? new Error('Missing social account'));
+  try {
+    for (const target of eligible) {
+      const { data: publishingTarget, error: publishingTargetError } = await supabase
+        .from('social_post_targets')
+        .update({ status: 'publishing', metadata: { ...metadataObject(target.metadata), ...claim }, updated_by: userId })
+        .eq('id', target.id).eq('post_id', postId).eq('family_id', familyId)
+        .eq('status', target.status).eq('updated_at', target.updated_at)
+        .select('id').maybeSingle();
+      if (publishingTargetError || !publishingTarget) {
+        throwPersistenceFailure('target publishing claim unavailable', publishingTargetError);
       }
-      providerAccountId = acct?.provider_account_id ?? null;
-    }
 
-    const { data: publishingTarget, error: publishingTargetError } = await supabase
-      .from('social_post_targets')
-      .update({ status: 'publishing', updated_by: userId })
-      .eq('id', target.id)
-      .eq('family_id', familyId)
-      .select('id')
-      .single();
-    if (publishingTargetError || !publishingTarget) {
-      return abortJob(supabase, familyId, job.id, userId, 'target publishing-state update failed', publishingTargetError ?? new Error('Missing target row'));
-    }
+      let result: ConnectorPublishOutput;
+      try {
+        result = confirmedResult(await getConnector(target.platform).publish({
+          platform: target.platform, familyId, accountId: target.account_id ?? undefined,
+          userId: userId ?? undefined, kind: post.kind,
+          providerAccountId: providerAccounts.get(target.id) ?? null,
+          body: variantByPlatform.get(target.platform) ?? post.body,
+          link: post.link ?? null, mediaUrls: [],
+        }));
+      } catch {
+        result = uncertainResult();
+      }
 
-    const connector = getConnector(platform);
-    let result;
-    try {
-      result = await connector.publish({
-        platform,
-        providerAccountId,
-        body: variantByPlatform.get(platform) ?? post.body,
-        link: post.link ?? null,
-        mediaUrls: [],
-      });
-    } catch (error) {
-      return abortJob(supabase, familyId, job.id, userId, 'connector publish threw', error, 'The provider publish failed. Review the post before retrying.');
-    }
-
-    finalStatuses.push(result.status);
-
-    const { error: resultError } = await supabase.from('social_publish_results').insert({
-      job_id: job.id,
-      target_id: target.id,
-      post_id: postId,
-      family_id: familyId,
-      account_id: target.account_id,
-      platform,
-      status: result.status,
-      provider_object_id: result.providerObjectId ?? null,
-      permalink_url: result.permalinkUrl ?? null,
-      error_code: result.errorCode ?? null,
-      error_message: result.errorMessage ?? null,
-      raw_response: (result.raw ?? {}) as Database['public']['Tables']['social_publish_results']['Insert']['raw_response'],
-      created_by: userId,
-    });
-    if (resultError) {
-      return abortJob(supabase, familyId, job.id, userId, 'publish-result persistence failed', resultError);
-    }
-
-    const { data: savedTarget, error: targetError } = await supabase
-      .from('social_post_targets')
-      .update({
-        status: result.status,
+      // A confirmed provider receipt is durable before the target is completed.
+      const { error: resultError } = await supabase.from('social_publish_results').insert({
+        job_id: job.id, target_id: target.id, post_id: postId, family_id: familyId,
+        account_id: target.account_id, platform: target.platform, status: result.status,
         provider_object_id: result.providerObjectId ?? null,
-        permalink_url: result.permalinkUrl ?? null,
-        error: result.errorMessage ?? null,
-        published_at: result.ok ? new Date().toISOString() : null,
-        updated_by: userId,
-      })
-      .eq('id', target.id)
-      .eq('family_id', familyId)
-      .select('id')
-      .single();
-    if (targetError || !savedTarget) {
-      return abortJob(supabase, familyId, job.id, userId, 'target outcome persistence failed', targetError ?? new Error('Missing target row'));
+        permalink_url: result.permalinkUrl ?? null, error_code: result.errorCode ?? null,
+        error_message: result.errorMessage ?? null, raw_response: (result.raw ?? {}) as Json,
+        created_by: userId,
+      });
+      if (resultError) throwPersistenceFailure('publish-result persistence failed', resultError);
+      const { data: savedTarget, error: targetError } = await supabase
+        .from('social_post_targets')
+        .update({
+          status: result.status, provider_object_id: result.providerObjectId ?? null,
+          permalink_url: result.permalinkUrl ?? null, error: result.errorMessage ?? null,
+          published_at: result.ok ? new Date().toISOString() : null, updated_by: userId,
+        }).eq('id', target.id).eq('post_id', postId).eq('family_id', familyId)
+        .eq('status', 'publishing').contains('metadata', claim)
+        .select('id').single();
+      if (targetError || !savedTarget) throwPersistenceFailure('target outcome persistence failed', targetError);
+      outcomes.push({
+        targetId: target.id, platform: target.platform, status: result.status,
+        permalinkUrl: result.permalinkUrl ?? null,
+        errorCode: result.errorCode ?? null, errorMessage: result.errorMessage ?? null,
+      });
     }
 
-    outcomes.push({
-      targetId: target.id,
-      platform,
-      status: result.status,
-      permalinkUrl: result.permalinkUrl ?? null,
-      errorCode: result.errorCode ?? null,
-      errorMessage: result.errorMessage ?? null,
+    // Include successes from earlier attempts. This attempt alone is not the
+    // state of a post that already reached one or more platforms.
+    const persisted = await readTargets(supabase, familyId, postId);
+    const postStatus = derivePostStatus(persisted.map((target) => target.status));
+    const firstPublishedAt = persisted.filter((target) => target.status === 'published' && target.published_at)
+      .map((target) => target.published_at!).sort()[0] ?? null;
+    const { data: savedPost, error: finalPostError } = await supabase
+      .from('social_posts')
+      .update({
+        status: postStatus, published_at: post.published_at ?? firstPublishedAt, updated_by: userId,
+      }).eq('id', postId).eq('family_id', familyId).is('deleted_at', null)
+      .eq('status', 'publishing').contains('metadata', claim)
+      .select('id').single();
+    if (finalPostError || !savedPost) throwPersistenceFailure('final post status persistence failed', finalPostError);
+
+    const unknown = outcomes.some((outcome) => outcome.status === 'publishing');
+    const { data: savedJob, error: finalJobError } = await supabase
+      .from('social_publish_jobs')
+      .update({
+        status: unknown ? 'running' : outcomes.some((outcome) => outcome.status === 'published') ? 'succeeded' : 'failed',
+        last_error: unknown ? uncertainResult().errorMessage : null, updated_by: userId,
+      }).eq('id', job.id).eq('family_id', familyId).select('id').single();
+    if (finalJobError || !savedJob) throwPersistenceFailure('final job status persistence failed', finalJobError);
+    const { error: usageError } = await supabase.from('social_usage_events').insert({
+      family_id: familyId, user_id: userId, kind: 'publish', quantity: outcomes.length, unit: 'targets',
     });
+    if (usageError) console.error('[social-publish] usage event persistence failed', usageError);
+    return { postId, jobId: job.id, status: postStatus, targets: outcomes };
+  } catch (error) {
+    // Keep post/target claims: an interrupted operation may have reached the
+    // provider. Only explicit confirmed outcomes can release that target.
+    return abortJob(supabase, familyId, job.id, userId, 'publish interrupted', error);
   }
-
-  const postStatus = derivePostStatus(finalStatuses);
-  const { data: savedPost, error: finalPostError } = await supabase
-    .from('social_posts')
-    .update({
-      status: postStatus,
-      published_at: postStatus === 'published' || postStatus === 'partially_published' ? new Date().toISOString() : null,
-      updated_by: userId,
-    })
-    .eq('id', postId)
-    .eq('family_id', familyId)
-    .select('id')
-    .single();
-  if (finalPostError || !savedPost) {
-    return abortJob(supabase, familyId, job.id, userId, 'final post status persistence failed', finalPostError ?? new Error('Missing post row'));
-  }
-
-  const jobStatus = finalStatuses.some((s) => s === 'published') ? 'succeeded' : 'failed';
-  const { data: savedJob, error: finalJobError } = await supabase
-    .from('social_publish_jobs')
-    .update({ status: jobStatus, updated_by: userId })
-    .eq('id', job.id)
-    .eq('family_id', familyId)
-    .select('id')
-    .single();
-  if (finalJobError || !savedJob) {
-    return abortJob(supabase, familyId, job.id, userId, 'final job status persistence failed', finalJobError ?? new Error('Missing job row'));
-  }
-
-  const { error: usageError } = await supabase.from('social_usage_events').insert({
-    family_id: familyId,
-    user_id: userId,
-    kind: 'publish',
-    quantity: outcomes.length,
-    unit: 'targets',
-  });
-  if (usageError) console.error('[social-publish] usage event persistence failed', usageError);
-
-  return { postId, jobId: job.id, status: postStatus, targets: outcomes };
 }

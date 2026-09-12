@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Sparkles, Save, CalendarClock, Send, Loader2, AlertTriangle, CheckCircle2,
@@ -28,8 +29,11 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatform[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [scheduledFor, setScheduledFor] = useState('');
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const submission = useRef<'idle' | 'pending' | 'review'>('idle');
   const [result, setResult] = useState<CreatePostResult | null>(null);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const locked = pending || Boolean(result?.postId) || unconfirmed;
 
   // AI panel
   const [aiKind, setAiKind] = useState<AiGenerationKind>('caption');
@@ -80,7 +84,12 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
     }
   }
 
-  function submit(intent: 'draft' | 'schedule' | 'publish') {
+  async function submit(intent: 'draft' | 'schedule' | 'publish') {
+    // A second create uses a new post ID and cannot share the server's existing
+    // publish claim. Keep this guard synchronous, including queued callbacks.
+    if (submission.current !== 'idle') return;
+    submission.current = 'pending';
+    setPending(true);
     setResult(null);
     const fd = new FormData();
     fd.set('intent', intent);
@@ -91,11 +100,19 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
     fd.set('scheduled_for', scheduledFor);
     selectedPlatforms.forEach((p) => fd.append('platforms', p));
     selectedAccounts.forEach((a) => fd.append('account_ids', a));
-    startTransition(async () => {
+    try {
       const r = await createPostAction(fd);
+      submission.current = r.postId ? 'review' : 'idle';
       setResult(r);
       if (r.ok && intent === 'draft' && r.postId) router.push(`/dashboard/social/posts/${r.postId}`);
-    });
+    } catch {
+      // A lost action response may follow a durable create or provider send.
+      // Preserve the draft, but require review instead of creating it again.
+      submission.current = 'review';
+      setUnconfirmed(true);
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -192,8 +209,8 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           <Card>
             {result.ok ? (
               <div className="space-y-2">
-                <p className="flex items-center gap-2 text-sm font-medium text-success">
-                  <CheckCircle2 className="h-4 w-4" />
+                <p className={`flex items-center gap-2 text-sm font-medium ${result.outcome?.status === 'publishing' ? 'text-warning' : 'text-success'}`}>
+                  {result.outcome?.status === 'publishing' ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
                   {result.action === 'publish' ? 'Publish attempted' : result.action === 'schedule' ? 'Scheduled' : 'Draft saved'}
                 </p>
                 {result.outcome && (
@@ -218,6 +235,18 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
                 <AlertTriangle className="h-4 w-4" /> {result.error}
               </p>
             )}
+            {result.postId && (
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="text-muted">{tr(result.action === 'publish' || !result.ok ? 'socialStudio.reviewRequired' : 'socialStudio.savedPost')}</p>
+                <Link href={`/dashboard/social/posts/${result.postId}`} className="text-brand-text underline">{tr('socialStudio.reviewPost')}</Link>
+              </div>
+            )}
+          </Card>
+        )}
+        {unconfirmed && (
+          <Card>
+            <p role="alert" className="text-sm text-warning">{tr('socialStudio.requestUnconfirmed')}</p>
+            <Link href="/dashboard/social/posts" className="mt-2 inline-block text-sm text-brand-text underline">{tr('socialStudio.reviewPosts')}</Link>
           </Card>
         )}
       </div>
@@ -303,13 +332,13 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
             className="mb-3 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm"
           />
           <div className="space-y-2">
-            <button type="button" disabled={pending} onClick={() => submit('draft')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-elevated disabled:opacity-60">
+            <button type="button" disabled={locked} onClick={() => submit('draft')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-elevated disabled:opacity-60">
               <Save className="h-4 w-4" /> {tr('studio.saveDraft')}
             </button>
-            <button type="button" disabled={pending || !scheduledFor} onClick={() => submit('schedule')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-elevated text-sm font-medium hover:bg-elevated/70 disabled:opacity-50">
+            <button type="button" disabled={locked || !scheduledFor} onClick={() => submit('schedule')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-elevated text-sm font-medium hover:bg-elevated/70 disabled:opacity-50">
               <CalendarClock className="h-4 w-4" /> {tr('studio.schedule')}
             </button>
-            <button type="button" disabled={pending || hasErrors || selectedAccounts.length === 0} onClick={() => submit('publish')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-medium text-brand-fg shadow-glow disabled:opacity-50">
+            <button type="button" disabled={locked || hasErrors || selectedAccounts.length === 0} onClick={() => submit('publish')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-medium text-brand-fg shadow-glow disabled:opacity-50">
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {tr('studio.publishNow')}
             </button>
             {hasErrors && <p className="text-center text-[11px] text-danger">{tr('studio.resolveValidationErrorsToPublish')}</p>}

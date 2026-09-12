@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Gift, Plus, Pencil, Trash2, Coins, Trophy, Check, X, Clock,
   Sparkles, History,
@@ -47,18 +47,24 @@ export function RewardsModule() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blankReward);
-  const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const pendingWrite = useRef(false);
+  const mounted = useRef(true);
+  const saving = busy === 'catalog';
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
-  const { data: rewards, loading, error } = useRealtimeQuery<Reward>({
+  const { data: rewards, loading, error, stale, refresh: refreshRewards } = useRealtimeQuery<Reward>({
     table: 'rewards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('rewards').select('*').eq('family_id', familyId).order('cost_points'),
   });
-  const { data: assignments } = useRealtimeQuery<Assignment>({
+  const { data: assignments, loading: assignmentsLoading, error: assignmentsError, stale: assignmentsStale, refresh: refreshAssignments } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved'),
   });
-  const { data: redemptions } = useRealtimeQuery<Redemption>({
+  const { data: redemptions, loading: redemptionsLoading, error: redemptionsError, stale: redemptionsStale, refresh: refreshRedemptions } = useRealtimeQuery<Redemption>({
     table: 'reward_redemptions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reward_redemptions').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -77,66 +83,92 @@ export function RewardsModule() {
   const history = useMemo(() => (redemptions ?? []).filter((r) => r.status !== 'requested').slice(0, 12), [redemptions]);
 
   const sortedBalances = useMemo(() => [...balances].sort((a, b) => b.available - a.available), [balances]);
+  const readError = error || assignmentsError || redemptionsError;
+  const verified = !readError && !loading && !assignmentsLoading && !redemptionsLoading
+    && !stale && !assignmentsStale && !redemptionsStale;
+  // A queued callback must use the current read status and ledger, including
+  // after a failed refresh has removed its original button from the screen.
+  const current = useRef({ verified, rewards, redemptions, balanceByMember });
+  current.current = { verified, rewards, redemptions, balanceByMember };
+  const canWrite = () => mounted.current && current.current.verified && !pendingWrite.current;
+  const refreshLedger = async () => { await Promise.all([refreshAssignments(), refreshRedemptions()]); };
+  const retry = () => { void Promise.all([refreshRewards(), refreshAssignments(), refreshRedemptions()]); };
+
+  async function mutate(id: string, write: () => PromiseLike<{ error: unknown }>, refresh: () => Promise<void>, message: string, complete?: () => void) {
+    if (!canWrite()) return;
+    pendingWrite.current = true;
+    setBusy(id);
+    try {
+      const { error: err } = await write();
+      if (err) throw err;
+      if (!mounted.current) return;
+      // Rewards and redemptions are not published through Realtime. Keep
+      // conflicting actions disabled until their required reads have settled.
+      await refresh();
+      if (!mounted.current) return;
+      success(message);
+      complete?.();
+    } catch (err) {
+      if (mounted.current) toastError(describeDbError(err));
+    } finally {
+      pendingWrite.current = false;
+      if (mounted.current) setBusy(null);
+    }
+  }
 
   // ── Reward CRUD ───────────────────────────────────────────
-  function openNew() { setForm(blankReward); setModalOpen(true); }
-  function openEdit(r: Reward) { setForm({ id: r.id, title: r.title, description: r.description ?? '', cost_points: r.cost_points }); setModalOpen(true); }
+  function openNew() { if (!canManage || !canWrite()) return; setForm(blankReward); setModalOpen(true); }
+  function openEdit(r: Reward) { if (!canManage || !canWrite()) return; setForm({ id: r.id, title: r.title, description: r.description ?? '', cost_points: r.cost_points }); setModalOpen(true); }
+  function closeModal() { if (!pendingWrite.current) setModalOpen(false); }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (!canManage || !canWrite()) return;
     if (!form.title.trim()) { toastError(t('rewardsModule.titleIsRequired')); return; }
     if (form.cost_points < 0) { toastError(t('rewardsModule.costMustBe0Or')); return; }
-    setSaving(true);
-    const sb = createClient();
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
-    const { error: err } = form.id
-      ? await sb.from('rewards').update(fields).eq('id', form.id)
-      : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId });
-    setSaving(false);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(form.id ? 'Reward updated' : 'Reward added');
-    setModalOpen(false);
+    await mutate('catalog', () => form.id
+      ? createClient().from('rewards').update(fields).eq('id', form.id)
+      : createClient().from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }),
+    refreshRewards, form.id ? 'Reward updated' : 'Reward added', () => setModalOpen(false));
   }
 
   async function remove(r: Reward) {
+    if (!canManage || !canWrite()) return;
     if (!confirm(`Delete the reward "${r.title}"?`)) return;
-    const sb = createClient();
-    const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('rewardsModule.rewardDeleted'));
+    await mutate(r.id, () => createClient().from('rewards').delete().eq('id', r.id), refreshRewards, t('rewardsModule.rewardDeleted'));
   }
 
   // ── Redemption flow ───────────────────────────────────────
   async function requestReward(r: Reward, forMemberId: string) {
-    setBusy(r.id);
-    const sb = createClient();
-    const { error: err } = await sb.from('reward_redemptions').insert({
-      family_id: familyId, reward_id: r.id, member_id: forMemberId,
-      reward_title: r.title, cost_points: r.cost_points,
+    if (!canWrite() || (!canManage && forMemberId !== selfMember?.id)) return;
+    const reward = current.current.rewards.find(row => row.id === r.id);
+    if (!reward || !canAfford(current.current.balanceByMember.get(forMemberId), reward.cost_points)) return;
+    await mutate(reward.id, () => createClient().from('reward_redemptions').insert({
+      family_id: familyId, reward_id: reward.id, member_id: forMemberId,
+      reward_title: reward.title, cost_points: reward.cost_points,
       // A manager redeeming for themselves can approve instantly; otherwise it
       // enters the approval queue.
       status: canManage && forMemberId === selfMember?.id ? 'approved' : 'requested',
       decided_by: canManage && forMemberId === selfMember?.id ? selfMember?.id ?? null : null,
       decided_at: canManage && forMemberId === selfMember?.id ? new Date().toISOString() : null,
-    });
-    setBusy(null);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(canManage && forMemberId === selfMember?.id ? 'Reward redeemed' : 'Redemption requested');
+    }), refreshLedger, canManage && forMemberId === selfMember?.id ? 'Reward redeemed' : 'Redemption requested');
   }
 
   async function decide(red: Redemption, status: RedemptionStatus) {
-    setBusy(red.id);
-    const sb = createClient();
-    const { error: err } = await sb.from('reward_redemptions').update({
+    if (!canManage || !canWrite()) return;
+    const redemption = current.current.redemptions.find(row => row.id === red.id);
+    if (!redemption) return;
+    if (status === 'fulfilled' ? redemption.status !== 'approved'
+      : redemption.status !== 'requested' || (status !== 'approved' && status !== 'rejected')) return;
+    if (status === 'approved' && !canAfford(current.current.balanceByMember.get(redemption.member_id), redemption.cost_points)) return;
+    await mutate(redemption.id, () => createClient().from('reward_redemptions').update({
       status, decided_by: selfMember?.id ?? null, decided_at: new Date().toISOString(),
-    }).eq('id', red.id);
-    setBusy(null);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
+    }).eq('id', redemption.id), refreshLedger, status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 
-  if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rewards'} />;
+  if (readError) return <ErrorState message={readError} onRetry={retry} />;
+  if (!verified) return <SkeletonList count={5} />;
 
   return (
     <div>
@@ -146,7 +178,7 @@ export function RewardsModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="rewards" iconOnly />
-            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>}
+            {canManage && <Button onClick={openNew} disabled={busy !== null} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>}
           </div>
         }
       />
@@ -200,11 +232,11 @@ export function RewardsModule() {
                       {red.cost_points} {t('rewards.pts')} {affordable ? `${bal?.available} available` : <span className="text-rose-400">{t('rewards.notEnoughPoints')}{bal?.available ?? 0})</span>}
                     </div>
                   </div>
-                  <button onClick={() => decide(red, 'approved')} disabled={busy === red.id || !affordable}
+                  <button onClick={() => decide(red, 'approved')} disabled={busy !== null || !affordable}
                     className="inline-flex h-8 px-3 items-center justify-center gap-1 rounded-lg border border-emerald-500/50 text-emerald-300 text-xs font-medium hover:bg-emerald-500/10 disabled:opacity-40">
                     <Check className="h-3.5 w-3.5" /> {t('rewards.approve')}
                   </button>
-                  <button onClick={() => decide(red, 'rejected')} disabled={busy === red.id}
+                  <button onClick={() => decide(red, 'rejected')} disabled={busy !== null}
                     className="inline-flex h-8 px-3 items-center justify-center gap-1 rounded-lg border border-rose-500/50 text-rose-300 text-xs font-medium hover:bg-rose-500/10 disabled:opacity-40">
                     <X className="h-3.5 w-3.5" /> {t('rewards.reject')}
                   </button>
@@ -222,7 +254,7 @@ export function RewardsModule() {
       {(rewards ?? []).length === 0 ? (
         <EmptyState icon={Gift} title={t('rewards.noRewardsYet')}
           description={canManage ? 'Add rewards kids can redeem with the points they earn from chores.' : 'No rewards have been added yet.'}
-          action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>} />
+          action={canManage && <Button onClick={openNew} disabled={busy !== null} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {(rewards ?? []).map((r) => {
@@ -235,8 +267,8 @@ export function RewardsModule() {
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(r)} aria-label={t('rewards.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => remove(r)} aria-label={t('rewards.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => openEdit(r)} disabled={busy !== null} aria-label={t('rewards.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => remove(r)} disabled={busy !== null} aria-label={t('rewards.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
                 </div>
@@ -247,12 +279,12 @@ export function RewardsModule() {
                 </div>
                 <div className="mt-3">
                   {selfMember && (selfMember.role === 'child' || selfMember.role === 'teen') ? (
-                    <Button onClick={() => requestReward(r, selfMember.id)} disabled={busy === r.id || !affordableForSelf}
+                    <Button onClick={() => requestReward(r, selfMember.id)} disabled={busy !== null || !affordableForSelf}
                       variant={affordableForSelf ? 'primary' : 'outline'} className="w-full gap-1.5">
                       <Sparkles className="h-4 w-4" /> {affordableForSelf ? 'Redeem' : 'Not enough points'}
                     </Button>
                   ) : canManage ? (
-                    <RedeemForMember reward={r} onRedeem={requestReward} members={members} balanceByMember={balanceByMember} busy={busy === r.id} />
+                    <RedeemForMember reward={r} onRedeem={requestReward} members={members} balanceByMember={balanceByMember} busy={busy !== null} />
                   ) : null}
                 </div>
               </div>
@@ -277,7 +309,7 @@ export function RewardsModule() {
                   {REDEMPTION_STATUS_LABELS[red.status]}
                 </span>
                 {canManage && red.status === 'approved' && (
-                  <button onClick={() => decide(red, 'fulfilled')} disabled={busy === red.id}
+                  <button onClick={() => decide(red, 'fulfilled')} disabled={busy !== null}
                     className="text-xs font-medium text-blue-300 hover:underline">{t('rewards.markFulfilled')}</button>
                 )}
               </div>
@@ -287,19 +319,19 @@ export function RewardsModule() {
       )}
 
       {/* Reward modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit reward' : 'Add reward'}>
+      <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit reward' : 'Add reward'}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('rewards.reward')} required>
-            {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rewards.eGMovieNightPick')} autoFocus />}
+            {(id) => <Input id={id} value={form.title} disabled={saving} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rewards.eGMovieNightPick')} autoFocus />}
           </Field>
           <Field label={t('rewards.description')}>
-            {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('rewards.whatDoesThisRewardInclude')} />}
+            {(id) => <Textarea id={id} value={form.description} disabled={saving} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t('rewards.whatDoesThisRewardInclude')} />}
           </Field>
           <Field label={t('rewards.costPoints')} required>
-            {(id) => <Input id={id} type="number" min={0} step={5} value={form.cost_points} onChange={(e) => setForm((f) => ({ ...f, cost_points: Number(e.target.value) }))} />}
+            {(id) => <Input id={id} type="number" min={0} step={5} value={form.cost_points} disabled={saving} onChange={(e) => setForm((f) => ({ ...f, cost_points: Number(e.target.value) }))} />}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>{t('rewards.cancel')}</Button>
+            <Button type="button" variant="outline" disabled={saving} onClick={closeModal}>{t('rewards.cancel')}</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Add reward'}</Button>
           </div>
         </form>

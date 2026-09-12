@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Einige Anzeigedaten sind nicht verfügbar. Die Anzeige versucht es automatisch erneut.",
   "auth.cacheSessionUnavailable": "Ihre Sitzung ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.",
   "auth.cacheSessionChanged": "Ihre Sitzung hat sich geändert. Bitte warten Sie, während die App aktualisiert wird.",
-  "auth.cacheFamilyMismatch": "Diese Familie stimmt nicht mit Ihrem aktuellen Kontokontext überein."
+  "auth.cacheFamilyMismatch": "Diese Familie stimmt nicht mit Ihrem aktuellen Kontokontext überein.",
+  "socialX.setupRequired": "Die Verbindung zu X ist nicht konfiguriert. Wenden Sie sich an Ihre Administration.",
+  "socialX.connectionFailed": "Die Verbindung zu X konnte nicht hergestellt werden. Kehren Sie zu den Social-Media-Konten zurück und beginnen Sie erneut.",
+  "socialX.callbackInvalid": "Diese X-Autorisierung ist abgelaufen oder stimmt nicht mit Ihrem aktuellen Konto überein. Beginnen Sie bei den Social-Media-Konten erneut.",
+  "socialX.permissionDenied": "Sie haben keine Berechtigung, dieses Social-Media-Konto zu verwenden.",
+  "socialX.reconnectRequired": "Verbinden Sie dieses X-Konto vor dem Veröffentlichen erneut.",
+  "socialX.storageUnavailable": "Das Social-Media-Konto konnte nicht überprüft oder gespeichert werden. Versuchen Sie es später erneut.",
+  "socialX.unsupportedContent": "X unterstützt derzeit Text- und Linkbeiträge ohne angehängte Medien.",
+  "socialX.invalidContent": "Geben Sie einen gültigen X-Beitrag mit bis zu 280 Zeichen und bei Bedarf einen gültigen Link ein.",
+  "socialX.publishRejected": "X hat diesen Beitrag abgelehnt. Überprüfen Sie das Konto und den Inhalt, bevor Sie es erneut versuchen.",
+  "socialX.publishUnknown": "X hat diesen Beitrag möglicherweise angenommen. Überprüfen Sie X, bevor Sie erneut veröffentlichen.",
+  "socialStudio.reviewPost": "Beitrag überprüfen",
+  "socialStudio.reviewRequired": "Dieser Veröffentlichungsversuch muss überprüft werden. Öffnen Sie den vorhandenen Beitrag, bevor Sie erneut veröffentlichen.",
+  "socialStudio.savedPost": "Dieser Beitrag wurde gespeichert. Öffnen Sie ihn, um seinen Status zu überprüfen.",
+  "socialStudio.requestUnconfirmed": "Das Ergebnis konnte nicht bestätigt werden. Überprüfen Sie Ihre Beiträge, bevor Sie es erneut versuchen.",
+  "socialStudio.reviewPosts": "Beiträge überprüfen",
+  "socialPost.awaitingConfirmation": "Die Bestätigung der Veröffentlichung steht noch aus. Überprüfen Sie die Plattform, bevor Sie erneut veröffentlichen.",
+  "socialPost.retryAttempted": "Die Veröffentlichung wurde versucht. Überprüfen Sie die Ergebnisse unten."
 }

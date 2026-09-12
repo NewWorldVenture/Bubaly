@@ -13458,5 +13458,22 @@
   "displayGrid.dataUnavailable": "Certaines données de l’affichage sont indisponibles. L’affichage réessaiera automatiquement.",
   "auth.cacheSessionUnavailable": "Votre session est temporairement indisponible. Veuillez réessayer.",
   "auth.cacheSessionChanged": "Votre session a changé. Veuillez patienter pendant la mise à jour de l’application.",
-  "auth.cacheFamilyMismatch": "Cette famille ne correspond pas au contexte actuel de votre compte."
+  "auth.cacheFamilyMismatch": "Cette famille ne correspond pas au contexte actuel de votre compte.",
+  "socialX.setupRequired": "La connexion à X n’est pas configurée. Contactez votre administrateur.",
+  "socialX.connectionFailed": "La connexion à X a échoué. Revenez aux comptes sociaux et recommencez.",
+  "socialX.callbackInvalid": "Cette autorisation X a expiré ou ne correspond pas à votre compte actuel. Recommencez depuis les comptes sociaux.",
+  "socialX.permissionDenied": "Vous n’avez pas l’autorisation d’utiliser ce compte social.",
+  "socialX.reconnectRequired": "Reconnectez ce compte X avant de publier.",
+  "socialX.storageUnavailable": "Le compte social n’a pas pu être vérifié ou enregistré. Réessayez plus tard.",
+  "socialX.unsupportedContent": "X prend actuellement en charge les publications de texte et de liens sans média joint.",
+  "socialX.invalidContent": "Saisissez une publication X valide de 280 caractères maximum et un lien valide si nécessaire.",
+  "socialX.publishRejected": "X a refusé cette publication. Vérifiez le compte et le contenu avant de réessayer.",
+  "socialX.publishUnknown": "X a peut-être accepté cette publication. Vérifiez sur X avant de publier à nouveau.",
+  "socialStudio.reviewPost": "Vérifier la publication",
+  "socialStudio.reviewRequired": "Cette tentative de publication doit être vérifiée. Ouvrez la publication existante avant de publier à nouveau.",
+  "socialStudio.savedPost": "Cette publication a été enregistrée. Ouvrez-la pour vérifier son statut.",
+  "socialStudio.requestUnconfirmed": "Le résultat n’a pas pu être confirmé. Vérifiez vos publications avant de réessayer.",
+  "socialStudio.reviewPosts": "Vérifier les publications",
+  "socialPost.awaitingConfirmation": "La publication est en attente de confirmation. Vérifiez sur la plateforme avant de publier à nouveau.",
+  "socialPost.retryAttempted": "Une publication a été tentée. Vérifiez les résultats ci-dessous."
 }
