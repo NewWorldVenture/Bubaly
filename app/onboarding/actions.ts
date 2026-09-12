@@ -3,20 +3,18 @@
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { logAudit } from '@/lib/server/audit';
-import { sendEmail } from '@/lib/server/email';
-import { APP_URL } from '@/lib/email';
-import { completeProfileOnboardingSchema, createFamilySchema, familyDetailsSchema, finalizeOnboardingSchema, inviteMemberActionSchema, inviteSchema, localMemberActionSchema, onboardingProfileSchema, previewCalendarImportSchema } from '@/lib/validation';
+import { familyDetailsSchema, finalizeOnboardingSchema, previewCalendarImportSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
-import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
 import { buildAppLockConfig } from '@/lib/security/app-lock';
-import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
+import { cleanGoals, cleanReferralSource, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
 import { recordOnboardingProgress, getOnboardingProgress } from '@/lib/server/onboarding-progress';
 import { sendReactEmail } from '@/lib/email';
 import { WelcomeEmail } from '@/lib/emails/welcome';
+import { InviteEmail } from '@/lib/emails/invite';
 import * as React from 'react';
 import { computeCompleteness } from '@/lib/onboarding/completeness';
 import { parseIcsResult, toBriefEvents, demoBriefEvents, type IcsImportDisclosure } from '@/lib/onboarding/ics';
@@ -160,91 +158,6 @@ export async function previewCalendarImportAction(input: {
 }
 
 /**
- * Step 1 of onboarding: capture the account holder's contact details
- * (first/last name, phone, email) into their profile. Email is editable but
- * defaults to the signed-in address. Idempotent — safe to re-run if the user
- * goes back a step.
- */
-export async function saveOnboardingProfileAction(input: {
-  firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string;
-}): Promise<Result> {
-  const t = await getTranslations();
-  const parsed = onboardingProfileSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
-
-  const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
-
-  const { firstName, lastName, phone, email, avatarUrl } = parsed.data;
-  const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email, avatarUrl: avatarUrl || null });
-  if (!res.ok) return onboardingFailure('profile save', res.error, 'Could not save your profile.');
-
-  await logAudit(supabase, {
-    familyId: null, actorId: auth.user.id, action: 'update', resource: 'profiles', resourceId: auth.user.id,
-    metadata: { onboarding: true },
-  });
-
-  return { ok: true };
-}
-
-/** Creates a family, makes the caller its parent (via DB trigger), sets it active. */
-export async function createFamilyAction(input: { name: string; timezone: string }): Promise<Result<{ familyId: string }>> {
-  const t = await getTranslations();
-  const parsed = createFamilySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-
-  const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
-
-  const { data: family, error } = await supabase
-    .from('families')
-    .insert({ name: parsed.data.name, timezone: parsed.data.timezone, created_by: auth.user.id })
-    .select()
-    .single();
-  if (error || !family) return error
-    ? onboardingFailure('family creation', error, t('actions.couldNotCreateFamily'))
-    : { ok: false, error: t('actions.couldNotCreateFamily') };
-
-  // Add the creator as a parent member of the new family. Prefer the name they
-  // gave in the onboarding profile step, then signup metadata, then email.
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('display_name, full_name')
-    .eq('id', auth.user.id)
-    .maybeSingle();
-  const displayName = profile?.display_name
-    ?? profile?.full_name
-    ?? auth.user.user_metadata?.full_name
-    ?? auth.user.email?.split('@')[0]
-    ?? 'Parent';
-  const { error: memberError } = await supabase.from('family_members').insert({
-    family_id: family.id,
-    user_id: auth.user.id,
-    role: 'parent',
-    display_name: displayName,
-    is_active: true,
-  });
-  if (memberError) return onboardingFailure('parent membership creation', memberError, 'Could not add you to the new family.');
-
-  // Make this the active family for the creator.
-  const { error: preferencesError } = await supabase.from('user_preferences').upsert(
-    { user_id: auth.user.id, active_family_id: family.id },
-    { onConflict: 'user_id' },
-  );
-  if (preferencesError) return onboardingFailure('active family selection', preferencesError, 'Could not select the new family.');
-
-  await logAudit(supabase, {
-    familyId: family.id, actorId: auth.user.id,
-    action: 'create', resource: 'families', resourceId: family.id,
-    metadata: { name: family.name },
-  });
-
-  return { ok: true, data: { familyId: family.id } };
-}
-
-/**
  * Captures the "About your family" step: household makeup, goals, and how they
  * heard about Bubaly. Upserts one `family_onboarding` row, stamps it complete,
  * and fires the `onboarding_completed` marketing automation (best-effort). RLS
@@ -327,141 +240,6 @@ export async function saveFamilyDetailsAction(input: {
 }
 
 /**
- * The lightweight onboarding journey from the product mockups (post sign-in):
- * "Create your profile" (avatar, name, age, color) → "Create a PIN" → done.
- * One atomic write: saves the profile, auto-provisions the family space (so the
- * user lands straight on the dashboard — no separate setup wizard, no loop),
- * stores the member's color, and persists age + a hashed PIN + an
- * `onboardingComplete` flag in the core `user_preferences.notification_prefs`
- * jsonb (no migration). Idempotent.
- */
-export async function completeProfileOnboardingAction(input: {
-  firstName: string; age?: number | string | null; avatarUrl?: string; color?: string; pin?: string;
-}): Promise<Result<{ familyId: string }>> {
-  const t = await getTranslations();
-  const parsed = completeProfileOnboardingSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid profile details' };
-  const { firstName, age: inputAge, avatarUrl, color, pin } = parsed.data;
-
-  const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
-
-  // 1. Save the profile (name + optional avatar). Sets profiles.full_name so the
-  //    family trigger names the parent member correctly when we provision next.
-  const profileRes = await saveUserProfile(auth.user.id, {
-    firstName, lastName: '', phone: '', avatarUrl: avatarUrl || null,
-  });
-  if (!profileRes.ok) return onboardingFailure('profile save', profileRes.error, 'Could not save your profile.');
-
-  // 2. Ensure the family space exists (creates parent member + trial sub).
-  const ok = await ensureActiveFamily(supabase, auth.user);
-  if (!ok) return { ok: false, error: t('actions.couldNotFinishSettingUp') };
-
-  // Steps 3–4 write the member colour and the PIN/age/flag. RLS writes have
-  // proven unreliable in this environment (see saveUserProfile + ensure-family),
-  // so persist these through the service-role client too — scoped strictly to the
-  // already-authenticated user — so the colour and (critically) the PIN actually
-  // save instead of silently no-op'ing under RLS.
-  const admin = createServiceClient();
-
-  // 3. Resolve the active family + apply the chosen colour to this member.
-  const { data: membership, error: membershipError } = await admin
-    .from('family_members')
-    .select('family_id')
-    .eq('user_id', auth.user.id)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle();
-  if (membershipError) return onboardingFailure('membership lookup', membershipError, t('actions.couldNotFinishSettingUp2'));
-  const familyId = membership?.family_id ?? '';
-  if (!familyId) return { ok: false, error: t('actions.couldNotFinishSettingUp2') };
-  if (color) {
-    const { error: colorErr } = await admin.from('family_members')
-      .update({ color }).eq('user_id', auth.user.id).eq('family_id', familyId);
-    if (colorErr) return onboardingFailure('member colour update', colorErr, 'Could not save your profile colour.');
-  }
-
-  // 4. Persist age + seeded App Lock + completion flag (merge — never clobber prefs).
-  //    The onboarding PIN seeds the App Lock config (same salted-SHA-256 scheme the
-  //    Settings card uses) but is stored DISABLED: App Lock stays off until the user
-  //    flips it on in Settings — at which point they don't have to re-enter the PIN.
-  //    Service-role client so it persists reliably under this env's flaky RLS writes.
-  const { data: prefRow, error: prefReadError } = await admin
-    .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
-  if (prefReadError) return onboardingFailure('profile preferences lookup', prefReadError, 'Could not finish setting up your profile.');
-  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
-  const age = normalizeAge(inputAge);
-  if (age !== null) merged.age = age;
-  if (pin && isValidPin(pin)) {
-    merged.appLock = { ...(await buildAppLockConfig(pin)), enabled: false };
-  }
-  const { error: prefErr } = await admin.from('user_preferences').upsert(
-    { user_id: auth.user.id, notification_prefs: merged as never },
-    { onConflict: 'user_id' },
-  );
-  if (prefErr) return onboardingFailure('profile preferences save', prefErr, 'Could not finish setting up your profile.');
-
-  await logAudit(supabase, {
-    familyId: familyId || null, actorId: auth.user.id,
-    action: 'update', resource: 'profiles', resourceId: auth.user.id,
-    metadata: { onboarding: 'profile_complete' },
-  });
-
-  // 5. Feed the marketing engine: create/enrich the account holder's CRM contact
-  //    and fire the welcome ("onboarding_completed") automation. The signed-in
-  //    user is the family's parent/admin (ensureActiveFamily provisions the
-  //    `parent` member), so the contact is stamped as such. Best-effort — never
-  //    blocks the user finishing onboarding.
-  await recordOnboardingProgress(admin, {
-    userId: auth.user.id,
-    familyId: familyId || null,
-    source: 'wizard',
-    status: 'completed',
-    stepsCompleted: ['profile', 'pin'],
-    hasPin: !!(pin && isValidPin(pin)),
-    completeness: computeCompleteness({
-      hasName: firstName.length > 0, hasFamily: true, hasQuestionnaire: false,
-      hasGoals: false, valueEngaged: false, memberCount: 0,
-      hasPin: !!(pin && isValidPin(pin)), source: 'wizard', status: 'completed',
-    }).score,
-  });
-
-  // Branded welcome email (best-effort; previously never sent from any path).
-  try {
-    if (auth.user.email) {
-      await sendReactEmail({
-        to: auth.user.email,
-        subject: 'Welcome to Bubaly 🎉',
-        react: React.createElement(WelcomeEmail, { name: firstName || 'there' }),
-      });
-    }
-  } catch (e) {
-    console.error('[onboarding] welcome email failed', e);
-  }
-
-  try {
-    const email = auth.user.email ?? null;
-    await upsertOnboardingContact(admin, {
-      userId: auth.user.id, email, firstName, familyId: familyId || null,
-      source: 'profile_onboarding',
-      attributes: { role: 'parent', ...(age !== null ? { age } : {}) },
-    });
-    await fireAutomationEvent(admin, {
-      trigger: 'onboarding_completed',
-      email, name: firstName,
-      subjectKey: eventSubjectKey('onboarding_completed', [familyId || auth.user.id]),
-      context: { familyId: familyId || null, source: 'profile_onboarding' },
-    });
-  } catch (e) {
-    console.error('[onboarding] marketing wiring failed', e);
-  }
-
-  return { ok: true, data: { familyId } };
-}
-
-/**
  * Reset onboarding for the signed-in account: mark the durable lifecycle row as
  * `reset` and clear the `onboardingComplete` flag in preferences, so the app can
  * route the user back through the setup questionnaire (their EXISTING family is
@@ -503,71 +281,24 @@ export async function resetOnboardingAction(): Promise<Result> {
   return { ok: true };
 }
 
-/** Adds a managed member with no login (e.g. a young child). */
-export async function addLocalMemberAction(input: {
-  familyId: string; displayName: string; role: 'child' | 'teen' | 'adult'; color?: string;
-}): Promise<Result> {
-  const t = await getTranslations();
-  const parsed = localMemberActionSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid member details' };
-  const { familyId, displayName: name, role, color } = parsed.data;
-
-  const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
-
-  const { error } = await supabase.from('family_members').insert({
-    family_id: familyId,
-    role,
-    display_name: name,
-    color: color ?? null,
-  });
-  if (error) return onboardingFailure('managed member creation', error, 'Could not add that family member.');
-
-  await logAudit(supabase, {
-    familyId, actorId: auth.user.id,
-    action: 'create', resource: 'family_members', metadata: { display_name: name, role },
-  });
-  return { ok: true };
-}
-
-/** Creates an invite row and emails a join link. */
-export async function inviteMemberAction(input: {
-  familyId: string; email: string; role: 'adult' | 'teen' | 'caregiver' | 'guest';
-}): Promise<Result> {
-  const t = await getTranslations();
-  const parsedInput = inviteMemberActionSchema.safeParse(input);
-  if (!parsedInput.success) return { ok: false, error: parsedInput.error.issues[0]?.message ?? 'Invalid invite' };
-  const parsed = inviteSchema.safeParse(parsedInput.data);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid invite' };
-
-  const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false, error: t('actions.notSignedIn') };
-
-  const { data: invite, error } = await supabase
-    .from('invites')
-    .insert({ family_id: parsedInput.data.familyId, email: parsed.data.email, role: parsed.data.role, invited_by: auth.user.id })
-    .select('token')
-    .single();
-  if (error || !invite) return error
-    ? onboardingFailure('invite creation', error, t('actions.couldNotCreateInvite'))
-    : { ok: false, error: t('actions.couldNotCreateInvite') };
-
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
-  const link = `${origin}/join?token=${invite.token}`;
-  await sendEmail({
-    to: parsed.data.email,
-    subject: 'You’re invited to a family on Bubaly',
-    html: `<p>{t('actions.youVeBeenInvitedTo')}</p><p><a href="${link}">{t('actions.acceptYourInvite')}</a></p>`,
-  });
-
-  await logAudit(supabase, {
-    familyId: parsedInput.data.familyId, actorId: auth.user.id,
-    action: 'create', resource: 'invites', metadata: { email: parsed.data.email, role: parsed.data.role },
-  });
-  return { ok: true };
-}
+// REMOVED: saveOnboardingProfileAction, createFamilyAction,
+// completeProfileOnboardingAction, addLocalMemberAction, inviteMemberAction.
+//
+// They were the step-by-step onboarding this file replaced, and nothing had
+// imported them since. In a 'use server' module that is not dead code: every
+// export is a callable endpoint with its own action id, so five per-step
+// writers stayed reachable long after the UI stopped using them —
+// contradicting finalizeOnboardingAction's stated guarantee that abandoning
+// the wizard writes NOTHING.
+//
+// Each had also rotted where nobody could see it:
+//   • createFamilyAction did insert(families).select().single() on the USER
+//     client — the RLS read-back race this repo documents at length in
+//     lib/server/ensure-family.ts, so it could only ever half-work.
+//   • inviteMemberAction carried the same uninterpolated `{t('key')}` email
+//     body fixed below in the wizard's own invite step.
+// The schemas they validated against stay in lib/validation.ts; those are
+// pure, tested, and still used elsewhere.
 
 /**
  * Finalize onboarding: collects everything in-memory across all wizard steps,
@@ -790,7 +521,8 @@ export async function finalizeOnboardingAction(input: {
   // 6. Create invites and send email join links. A keyed upsert returns a row
   // only when this request created it; existing rows are reused without
   // sending a duplicate email on replay.
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
+  // Who the invite is from, for the email's subject and body.
+  const inviterName = profile.firstName.trim() || DEFAULT_OWNER_DISPLAY_NAME;
   for (const [index, m] of members.entries()) {
     if (m.kind !== 'invite') continue;
     const { data: invite, error: inviteErr } = await admin
@@ -825,11 +557,23 @@ export async function finalizeOnboardingAction(input: {
       token = existingInvite.token;
     }
     if (!invite) continue;
-    const link = `${origin}/join?token=${token}`;
-    await sendEmail({
+    // The branded template every other invite in the product already uses
+    // (app/api/email/invite). This site used to build its own two-line HTML
+    // string, and an i18n sweep left the calls UNINTERPOLATED inside it:
+    //
+    //   html: `<p>{t('actions.youVeBeenInvitedTo')}</p>...`
+    //
+    // `{t('key')}` is JSX syntax. Inside a template literal it is just text, so
+    // the first email a new family's spouse ever received read, in full,
+    // "{t('actions.youVeBeenInvitedTo')}" — with the accept link labelled
+    // "{t('actions.acceptYourInvite')}". It typechecked, it sent, and the keys
+    // existed in all eleven catalogues, so the i18n gate passed too.
+    await sendReactEmail({
       to: m.email,
-      subject: 'You’re invited to a family on Bubaly',
-      html: `<p>{t('actions.youVeBeenInvitedTo')}</p><p><a href="${link}">{t('actions.acceptYourInvite')}</a></p>`,
+      subject: `${inviterName} invited you to join ${family.name} on Bubaly`,
+      react: React.createElement(InviteEmail, {
+        familyName: family.name, inviterName, token, role: m.role,
+      }),
     });
   }
 

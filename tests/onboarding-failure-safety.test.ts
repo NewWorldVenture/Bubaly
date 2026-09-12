@@ -36,12 +36,23 @@ describe('onboarding failure safety', () => {
     expect(source).not.toMatch(/return profileRes;/);
   });
 
-  it('fails closed on profile onboarding reads and scopes member updates to the resolved family', () => {
+  it('fails closed on onboarding reads and scopes member writes to the resolved family', () => {
+    // These three properties used to be asserted against
+    // completeProfileOnboardingAction, which had no caller anywhere in the app
+    // and was removed. The properties themselves still matter — they are what
+    // keeps a failed read from being mistaken for "this account has no family"
+    // — so they are asserted here against finalizeOnboardingAction, the action
+    // the wizard actually runs, rather than deleted along with their old home.
     const source = readFileSync('app/onboarding/actions.ts', 'utf8');
-    expect(source).toContain('membershipError');
-    expect(source).toContain("onboardingFailure('membership lookup', membershipError");
+    expect(source).toContain('membershipLookupError');
+    expect(source).toContain("onboardingFailure('membership lookup', membershipLookupError");
     expect(source).toContain('prefReadError');
-    expect(source).toContain(".update({ color }).eq('user_id', auth.user.id).eq('family_id', familyId)");
+    expect(source).toContain("onboardingFailure('onboarding preferences read', prefReadError");
+    // The member write is scoped by the upsert's conflict target rather than a
+    // pair of .eq() filters: (family_id, user_id) is the key, so it cannot
+    // touch a row in another household even if familyId were wrong.
+    expect(source).toContain("{ onConflict: 'family_id,user_id' }");
+    expect(source).toMatch(/family_id: familyId,\n\s*user_id: auth\.user\.id,/);
   });
 
   it('does not acknowledge compatibility provisioning after subscription state failures', () => {
