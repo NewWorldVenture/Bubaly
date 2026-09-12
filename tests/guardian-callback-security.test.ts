@@ -29,11 +29,12 @@ describe('Guardian callback replay and input boundaries', () => {
 
   it.each(callbackRoutes)('claims %s before downstream side effects', (relativePath) => {
     const source = readFileSync(resolve(root, relativePath), 'utf8');
-    expect(source).toContain('claimGuardianCallback');
+    const sms = relativePath === 'app/api/guardian/inbound/sms/route.ts';
+    expect(source).toContain(sms ? 'claimGuardianSms' : 'claimGuardianCallback');
     expect(source).toContain('readBoundedRequestFormData');
-    expect(source).toContain('markGuardianCallbackProcessed');
+    expect(source).toContain(sms ? 'finishGuardianSms' : 'markGuardianCallbackProcessed');
 
-    const claimIndex = source.indexOf('await claimGuardianCallback');
+    const claimIndex = source.indexOf(sms ? 'await claimGuardianSms' : 'await claimGuardianCallback');
     expect(claimIndex).toBeGreaterThanOrEqual(0);
     const sideEffectIndexes = [
       source.indexOf('runDecisionPipeline('),

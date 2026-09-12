@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Advanced Opt-Out has already answered these control messages. Do not
+  // send a second concierge reply or turn an opt-out into a planning request.
+  if (['STOP', 'START', 'HELP'].includes(params.OptOutType ?? '')) return xml('');
+
   const from = params.From ?? null;
   const to = params.To ?? '';
   const body = (params.Body ?? '').slice(0, 4096);

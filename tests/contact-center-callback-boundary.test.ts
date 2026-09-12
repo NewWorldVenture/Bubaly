@@ -231,3 +231,32 @@ describe('voicemail empty acknowledgements', () => {
     expect(mocks.concierge).not.toHaveBeenCalled();
   });
 });
+
+describe('SMS auto-reply gap characterization (not delivery verification)', () => {
+  it('currently returns another auto-reply and outbound row for an already handled callback', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const first = await deliver(SMS);
+    const replay = await deliver(SMS);
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(await first.text()).toContain('<Message>Thank you</Message>');
+    expect(await replay.text()).toContain('<Message>Thank you</Message>');
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(2);
+    expect(mocks.submit).toHaveBeenCalledOnce();
+  });
+
+  it.each(['STOP', 'START', 'HELP'])('leaves provider-handled %s controls out of concierge and planner work', async control => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const response = await deliver(SMS, { Body: control, OptOutType: control });
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain('<Message>');
+    expect(mocks.concierge).not.toHaveBeenCalled();
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+  it('still rejects a forged opt-out callback before acknowledging it', async () => {
+    expect((await deliver(SMS, { Body: 'STOP', OptOutType: 'STOP' }, false)).status).toBe(401);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+});
