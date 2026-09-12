@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Bereits vorrätige Zutaten überspringen",
   "mealsPlanner.libraryReadbackFailed": "Ihre Mahlzeit wurde gespeichert, aber die Sammlung konnte nicht neu geladen werden. Laden Sie Ihre Mahlzeiten erneut.",
   "mealsPlanner.planReadbackFailed": "Ihr Plan wurde gespeichert, aber die Woche konnte nicht neu geladen werden. Laden Sie die Woche erneut.",
-  "mealsPlanner.autoSaved": "{count} Mahlzeiten für die Woche gespeichert."
+  "mealsPlanner.autoSaved": "{count} Mahlzeiten für die Woche gespeichert.",
+  "contactSmsReply.prepared": "Antwort vorbereitet",
+  "contactSmsReply.preparedDetail": "Die Zustellung wurde nicht bestätigt.",
+  "contactSmsReply.confirmationUnknown": "Antwortbestätigung unbekannt",
+  "contactSmsReply.confirmationUnknownDetail": "Wir können nicht bestätigen, ob diese Antwort die empfangende Person erreicht hat. Sie wird nicht automatisch erneut verschickt.",
+  "contactSmsReply.suppressed": "Antwort unterdrückt",
+  "contactSmsReply.suppressedDetail": "Auf diese Nachricht erfolgt keine automatische Antwort.",
+  "contactSmsReply.legacyUnknown": "Status der früheren Antwort unbekannt",
+  "contactSmsReply.legacyUnknownDetail": "Für diese frühere Nachricht liegt kein verifizierter Antwortnachweis vor. Die Antwort wird nicht automatisch erneut verschickt.",
+  "contactSmsReply.unavailable": "Antwortstatus nicht verfügbar",
+  "contactSmsReply.unavailableDetail": "Der Antwortstatus konnte nicht überprüft werden. Laden Sie diese Seite erneut, um ihn noch einmal zu prüfen."
 }

@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Ingrediënten in de voorraadkast overslaan",
   "mealsPlanner.libraryReadbackFailed": "Je maaltijd is opgeslagen, maar de verzameling kon niet opnieuw worden geladen. Laad je maaltijden opnieuw.",
   "mealsPlanner.planReadbackFailed": "Je planning is opgeslagen, maar de week kon niet opnieuw worden geladen. Laad de week opnieuw.",
-  "mealsPlanner.autoSaved": "{count} maaltijden opgeslagen voor de week."
+  "mealsPlanner.autoSaved": "{count} maaltijden opgeslagen voor de week.",
+  "contactSmsReply.prepared": "Antwoord voorbereid",
+  "contactSmsReply.preparedDetail": "De bezorging is niet bevestigd.",
+  "contactSmsReply.confirmationUnknown": "Bevestiging van antwoord onbekend",
+  "contactSmsReply.confirmationUnknownDetail": "We kunnen niet bevestigen of dit antwoord de ontvanger heeft bereikt. Het wordt niet automatisch herhaald.",
+  "contactSmsReply.suppressed": "Antwoord uitgeschakeld",
+  "contactSmsReply.suppressedDetail": "Er wordt geen automatisch antwoord op dit bericht gegeven.",
+  "contactSmsReply.legacyUnknown": "Status van eerder antwoord onbekend",
+  "contactSmsReply.legacyUnknownDetail": "Voor dit eerdere bericht is geen geverifieerd antwoord vastgelegd. Het wordt niet automatisch herhaald.",
+  "contactSmsReply.unavailable": "Antwoordstatus niet beschikbaar",
+  "contactSmsReply.unavailableDetail": "We konden de antwoordstatus niet controleren. Laad deze pagina opnieuw om het nogmaals te proberen."
 }

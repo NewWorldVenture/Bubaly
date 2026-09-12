@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Escludi gli ingredienti già in dispensa",
   "mealsPlanner.libraryReadbackFailed": "Il pasto è stato salvato, ma non è stato possibile ricaricare la raccolta. Ricarica i pasti.",
   "mealsPlanner.planReadbackFailed": "Il piano è stato salvato, ma non è stato possibile ricaricare la settimana. Ricarica la settimana.",
-  "mealsPlanner.autoSaved": "{count} pasti salvati per la settimana."
+  "mealsPlanner.autoSaved": "{count} pasti salvati per la settimana.",
+  "contactSmsReply.prepared": "Risposta preparata",
+  "contactSmsReply.preparedDetail": "La consegna non è stata confermata.",
+  "contactSmsReply.confirmationUnknown": "Conferma della risposta sconosciuta",
+  "contactSmsReply.confirmationUnknownDetail": "Non possiamo confermare se questa risposta sia arrivata al destinatario. Non verrà ripetuta automaticamente.",
+  "contactSmsReply.suppressed": "Risposta disattivata",
+  "contactSmsReply.suppressedDetail": "Non verrà inviata una risposta automatica per questo messaggio.",
+  "contactSmsReply.legacyUnknown": "Stato della risposta precedente sconosciuto",
+  "contactSmsReply.legacyUnknownDetail": "Questo messaggio precedente non ha un riscontro verificato della risposta. Non verrà ripetuta automaticamente.",
+  "contactSmsReply.unavailable": "Stato della risposta non disponibile",
+  "contactSmsReply.unavailableDetail": "Non è stato possibile verificare lo stato della risposta. Ricarica questa pagina per riprovare."
 }

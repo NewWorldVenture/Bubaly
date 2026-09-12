@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ getUser: vi.fn(), admin: vi.fn(), submit: vi.f
 vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth: { getUser: mocks.getUser } }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mocks.admin }));
 vi.mock('@/lib/ai/runs/intake', () => ({ submitRequest: mocks.submit }));
-vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en' } }) }));
 vi.mock('@/lib/guardian/twilio', async original => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), sendSms: mocks.sendSms,
   isTwilioConfigured: () => true,
   sendSmsWithReceipt: async (to: string, body: string) => { await mocks.sendSms(to, body); return { kind: 'accepted', messageSid: `SM${'1'.repeat(32)}`, providerStatus: 'queued' }; },
@@ -15,16 +15,17 @@ vi.mock('@/lib/guardian/twilio', async original => ({ ...await original<typeof i
 vi.mock('@/lib/contact-center/concierge', () => ({ runConcierge: mocks.concierge }));
 
 const ORIGIN = 'https://bubaly.example';
-const FAMILY = 'family-ours';
+const FAMILY = '11111111-1111-4111-8111-111111111111';
 const TOKEN = 'contact-center-test-token';
 const SMS = '/api/contact-center/sms';
+const SMS_SID = `SM${'2'.repeat(32)}`;
 const VOICEMAIL = `/api/contact-center/voice/transcription?familyId=${FAMILY}`;
 let db: ReturnType<typeof createInMemorySupabase>;
 
 function twilioRequest(path: string, fields: Record<string, string> = {}, valid = true) {
   const params = {
     To: '+15555550100', From: '+15555550200', Body: 'Please schedule a visit',
-    MessageSid: 'SM_test_delivery', RecordingSid: 'RE_test_delivery', TranscriptionText: 'Please schedule a visit',
+    MessageSid: SMS_SID, RecordingSid: 'RE_test_delivery', TranscriptionText: 'Please schedule a visit',
     ...fields,
   };
   const url = `${ORIGIN}${path}`;
@@ -56,7 +57,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
-    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } } });
+    defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new', occurred_at: '2026-09-12T00:00:00.000Z' } } });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ id: 'channel-ours', family_id: FAMILY, phone_number: '+15555550100', email_local: 'ours', ai_concierge_enabled: false }]);
   mocks.admin.mockReturnValue(db);
@@ -190,7 +191,7 @@ describe.each([{ path: SMS, status: 200, channel: 'sms' }, { path: VOICEMAIL, st
   });
 
   it('fails closed when the deduplicated message belongs to another family', async () => {
-    db.seed('family_inbox_messages', [{ id: 'foreign-message', family_id: 'family-other', channel, provider_ref: channel === 'sms' ? 'SM_test_delivery' : 'RE_test_delivery', ai_handled: false }]);
+    db.seed('family_inbox_messages', [{ id: 'foreign-message', family_id: 'family-other', channel, provider_ref: channel === 'sms' ? SMS_SID : 'RE_test_delivery', ai_handled: false }]);
     expect((await deliver(path)).status).toBe(503);
     expect(mocks.submit).not.toHaveBeenCalled();
     expect(db.table('family_inbox_messages')[0].ai_handled).toBe(false);
@@ -232,18 +233,123 @@ describe('voicemail empty acknowledgements', () => {
   });
 });
 
-describe('SMS auto-reply gap characterization (not delivery verification)', () => {
-  it('currently returns another auto-reply and outbound row for an already handled callback', async () => {
+describe('SMS automatic reply reservation (not provider delivery verification)', () => {
+  it('returns only the first automatic reply and keeps one outbound row across callback replay', async () => {
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const first = await deliver(SMS);
     const replay = await deliver(SMS);
     expect(first.status).toBe(200);
     expect(replay.status).toBe(200);
     expect(await first.text()).toContain('<Message>Thank you</Message>');
-    expect(await replay.text()).toContain('<Message>Thank you</Message>');
+    expect(await replay.text()).not.toContain('<Message>');
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
-    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(2);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(1);
     expect(mocks.submit).toHaveBeenCalledOnce();
+    expect(mocks.concierge).toHaveBeenCalledOnce();
+  });
+
+  it('uses the first saved candidate after planning fails instead of classifying the replay again', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    mocks.submit.mockResolvedValueOnce({ ok: false, error: 'Planner unavailable', retryable: true });
+    const failed = await deliver(SMS);
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain('<Message>');
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
+    mocks.concierge.mockResolvedValue({ intent: 'spam', summary: 'Changed classification', reply: 'Changed reply', aiUsed: false });
+    const retry = await deliver(SMS);
+    expect(retry.status).toBe(200);
+    expect(await retry.text()).toContain('<Message>Thank you</Message>');
+    expect(mocks.concierge).toHaveBeenCalledOnce();
+    expect(db.table('ai_requests')).toHaveLength(1);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')[0].ai_intent).toBe('appointment');
+  });
+
+  it('permits only one reply when signed callbacks overlap', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const responses = await Promise.all([deliver(SMS), deliver(SMS)]);
+    const bodies = await Promise.all(responses.map(response => response.text()));
+    expect(bodies.filter(body => body.includes('<Message>'))).toHaveLength(1);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(1);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
+    const replay = await deliver(SMS);
+    expect(replay.status).toBe(200);
+    expect(await replay.text()).not.toContain('<Message>');
+  });
+
+  it('suppresses a prepared reply when the concierge is disabled during planner processing', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const server = await import('@/lib/contact-center/server');
+    vi.spyOn(server, 'routeInboundToPlanner').mockImplementationOnce(async () => {
+      db.table('family_contact_channels')[0].ai_concierge_enabled = false;
+      return { routed: false, requestId: null, runId: null, paperworkItemId: null, reason: 'not_actionable' };
+    });
+    const response = await deliver(SMS);
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain('<Message>');
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    expect(await (await deliver(SMS)).text()).not.toContain('<Message>');
+    expect(mocks.concierge).toHaveBeenCalledOnce();
+  });
+
+  it('does not infer an unsent reply from a legacy inbound message without a receipt', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    db.seed('family_inbox_messages', [{ id: '99999999-9999-4999-8999-999999999999', family_id: FAMILY, channel: 'sms', direction: 'inbound',
+      from_addr: '+15555550200', to_addr: '+15555550100', subject: null, body: 'Please schedule a visit',
+      provider_ref: SMS_SID, ai_handled: true, ai_summary: 'Saved visit', ai_intent: 'appointment', status: 'read' }]);
+    const response = await deliver(SMS);
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain('<Message>');
+    expect(mocks.concierge).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+    expect(db.table('family_inbox_messages')[0].status).toBe('read');
+  });
+
+  it.each(['', 'not-a-provider-sid'])('retains intake without creating a reply occasion for SID %s', async sid => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    const response = await deliver(SMS, { MessageSid: sid });
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain('<Message>');
+    expect(db.table('family_inbox_messages')).toHaveLength(1);
+    expect(db.table('family_inbox_messages')[0].direction).toBe('inbound');
+    expect(db.table('ai_tool_calls').filter(row => row.tool_name === 'contact_center.sms_reply')).toHaveLength(0);
+  });
+
+  it('rejects conflicting signed SID aliases before household access', async () => {
+    expect((await deliver(SMS, { SmsSid: `SM${'3'.repeat(32)}` })).status).toBe(400);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate form fields before household access', async () => {
+    const req = twilioRequest(SMS);
+    const body = await req.text();
+    const ambiguous = new NextRequest(req.url, { method: 'POST', headers: req.headers, body: `${body}&Body=another-message` });
+    expect((await (await import('@/app/api/contact-center/sms/route')).POST(ambiguous)).status).toBe(400);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['&__proto__=first', 401],
+    ['&__proto__=first&__proto__=second', 400],
+  ])('preserves prototype-named fields in signature and duplicate checks: %s', async (suffix, status) => {
+    const req = twilioRequest(SMS);
+    const body = await req.text();
+    const ambiguous = new NextRequest(req.url, { method: 'POST', headers: req.headers, body: body + suffix });
+    expect((await (await import('@/app/api/contact-center/sms/route')).POST(ambiguous)).status).toBe(status);
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+
+  it('uses the saved urgent acknowledgement without repeating the fallback notification', async () => {
+    db.table('family_contact_channels')[0].ai_concierge_enabled = true;
+    db.table('family_contact_channels')[0].forward_to_phone = '+15555550300';
+    mocks.concierge.mockResolvedValue({ intent: 'urgent', summary: 'Urgent help', reply: 'Unsupported delivery claim', aiUsed: false });
+    const first = await deliver(SMS);
+    expect(first.status).toBe(200);
+    expect(await first.text()).toContain('<Message>contactUrgent.replySaved</Message>');
+    expect(await (await deliver(SMS)).text()).not.toContain('<Message>');
+    expect(mocks.sendSms).toHaveBeenCalledOnce();
+    expect(db.table('notifications')).toHaveLength(1);
   });
 
   it.each(['STOP', 'START', 'HELP'])('leaves provider-handled %s controls out of concierge and planner work', async control => {

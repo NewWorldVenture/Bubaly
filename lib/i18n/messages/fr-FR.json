@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Ignorer les ingrédients déjà dans le garde-manger",
   "mealsPlanner.libraryReadbackFailed": "Votre repas a été enregistré, mais la collection n’a pas pu être rechargée. Rechargez vos repas.",
   "mealsPlanner.planReadbackFailed": "Votre planning a été enregistré, mais la semaine n’a pas pu être rechargée. Rechargez la semaine.",
-  "mealsPlanner.autoSaved": "{count} repas enregistrés pour la semaine."
+  "mealsPlanner.autoSaved": "{count} repas enregistrés pour la semaine.",
+  "contactSmsReply.prepared": "Réponse préparée",
+  "contactSmsReply.preparedDetail": "La réception n’a pas été confirmée.",
+  "contactSmsReply.confirmationUnknown": "Confirmation de réponse inconnue",
+  "contactSmsReply.confirmationUnknownDetail": "Nous ne pouvons pas confirmer si cette réponse est parvenue au destinataire. Elle ne sera pas répétée automatiquement.",
+  "contactSmsReply.suppressed": "Réponse désactivée",
+  "contactSmsReply.suppressedDetail": "Aucune réponse automatique ne sera émise pour ce message.",
+  "contactSmsReply.legacyUnknown": "État de la réponse précédente inconnu",
+  "contactSmsReply.legacyUnknownDetail": "Ce message antérieur ne dispose d’aucune preuve de réponse vérifiée. Elle ne sera pas répétée automatiquement.",
+  "contactSmsReply.unavailable": "État de la réponse indisponible",
+  "contactSmsReply.unavailableDetail": "Nous n’avons pas pu vérifier l’état de la réponse. Rechargez cette page pour réessayer."
 }

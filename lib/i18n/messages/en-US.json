@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Skip ingredients already in pantry",
   "mealsPlanner.libraryReadbackFailed": "Your meal was saved, but the library couldn’t reload. Retry loading your meals.",
   "mealsPlanner.planReadbackFailed": "Your plan was saved, but the week couldn’t reload. Retry loading the week.",
-  "mealsPlanner.autoSaved": "{count} meals saved for the week."
+  "mealsPlanner.autoSaved": "{count} meals saved for the week.",
+  "contactSmsReply.prepared": "Reply prepared",
+  "contactSmsReply.preparedDetail": "Delivery has not been confirmed.",
+  "contactSmsReply.confirmationUnknown": "Reply confirmation unknown",
+  "contactSmsReply.confirmationUnknownDetail": "We cannot confirm whether this reply reached the recipient. It will not be repeated automatically.",
+  "contactSmsReply.suppressed": "Reply suppressed",
+  "contactSmsReply.suppressedDetail": "No automatic reply will be issued for this message.",
+  "contactSmsReply.legacyUnknown": "Previous reply status unknown",
+  "contactSmsReply.legacyUnknownDetail": "This earlier message has no verified reply record. It will not be repeated automatically.",
+  "contactSmsReply.unavailable": "Reply status unavailable",
+  "contactSmsReply.unavailableDetail": "We could not verify the reply status. Reload this page to check again."
 }

@@ -13596,5 +13596,15 @@
   "mealsPlanner.skipPantry": "Omitir los ingredientes que ya están en la despensa",
   "mealsPlanner.libraryReadbackFailed": "Tu comida se ha guardado, pero no se ha podido recargar la colección. Vuelve a cargar tus comidas.",
   "mealsPlanner.planReadbackFailed": "Tu plan se ha guardado, pero no se ha podido recargar la semana. Vuelve a cargarla.",
-  "mealsPlanner.autoSaved": "Se han guardado {count} comidas para la semana."
+  "mealsPlanner.autoSaved": "Se han guardado {count} comidas para la semana.",
+  "contactSmsReply.prepared": "Respuesta preparada",
+  "contactSmsReply.preparedDetail": "La entrega no se ha confirmado.",
+  "contactSmsReply.confirmationUnknown": "Confirmación de respuesta desconocida",
+  "contactSmsReply.confirmationUnknownDetail": "No podemos confirmar si esta respuesta llegó a su destinatario. No se repetirá automáticamente.",
+  "contactSmsReply.suppressed": "Respuesta suprimida",
+  "contactSmsReply.suppressedDetail": "No se emitirá una respuesta automática para este mensaje.",
+  "contactSmsReply.legacyUnknown": "Estado de la respuesta anterior desconocido",
+  "contactSmsReply.legacyUnknownDetail": "Este mensaje anterior no tiene un registro de respuesta verificado. No se repetirá automáticamente.",
+  "contactSmsReply.unavailable": "Estado de respuesta no disponible",
+  "contactSmsReply.unavailableDetail": "No hemos podido verificar el estado de la respuesta. Vuelve a cargar esta página para comprobarlo."
 }
