@@ -5,7 +5,9 @@ import { request as nativeRequest, type RequestOptions } from 'node:https';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import type { LookupFunction } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchPublicDocument, isPublicDocumentAddress } from '@/lib/server/public-document-fetch';
+import {
+  fetchPublicDocument, fetchPublicFeed, isPublicDocumentAddress, DOCUMENT_MEDIA_TYPES,
+} from '@/lib/server/public-document-fetch';
 import { MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
 import { canonicalDocumentUrl, documentLinkCandidates } from '@/lib/capture/document-link';
 
@@ -142,5 +144,70 @@ describe('explicit public document transport', () => {
     const dns = async (_host: string, signal: AbortSignal) => new Promise<typeof publicAddress[]>((_done, reject) => signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }));
     await expect(fetchPublicDocument('https://docs.school.org/a', { resolve: dns, timeoutMs: 15 })).rejects.toMatchObject({ retryable: true });
     await expect(fetchPublicDocument('https://docs.school.org/a', { resolve, request: server([{ hang: true }]).request, timeoutMs: 15 })).rejects.toMatchObject({ retryable: true });
+  });
+});
+
+describe('the feed path cannot weaken the document path', () => {
+  // lib/server/public-document-fetch.ts gained an `accept` list so podcast and
+  // book feeds could reuse this guard instead of a second, weaker one. These
+  // pin the boundary that change created.
+  const html = Buffer.from('<!doctype html><html><body>not a document</body></html>');
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]); // PK.. — a zip
+  const feed = Buffer.from('<?xml version="1.0"?><rss version="2.0"><channel><title>Show</title></channel></rss>');
+
+  it('still rejects HTML wearing a text/plain content-type', async () => {
+    await expect(fetchPublicDocument('https://docs.school.org/a', {
+      resolve, request: server([{ headers: { 'content-type': 'text/plain; charset=utf-8' }, body: html }]).request,
+    })).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+
+  it('still rejects an archive whatever it claims to be', async () => {
+    await expect(fetchPublicDocument('https://docs.school.org/a', {
+      resolve, request: server([{ headers: { 'content-type': 'text/plain; charset=utf-8' }, body: zip }]).request,
+    })).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+
+  it('verifies as a DOCUMENT even when handed a copy of the document media types', async () => {
+    // The hazard this replaced: the first version decided feed-vs-document with
+    // `accept !== DOCUMENT_MEDIA_TYPES` — reference identity. A caller passing
+    // a copy of the same list, which is the natural thing to write, would have
+    // silently skipped documentType()'s magic-byte check AND the HTML sniff,
+    // leaving verification as "starts with '<'". HTML starts with '<'.
+    const copy = [...DOCUMENT_MEDIA_TYPES];
+    expect(copy).toEqual([...DOCUMENT_MEDIA_TYPES]);
+    expect(copy).not.toBe(DOCUMENT_MEDIA_TYPES);
+    await expect(fetchPublicDocument('https://docs.school.org/a', {
+      resolve, accept: copy,
+      request: server([{ headers: { 'content-type': 'text/plain; charset=utf-8' }, body: html }]).request,
+    })).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+
+  it('refuses a feed media type on the document path', async () => {
+    await expect(fetchPublicDocument('https://docs.school.org/a', {
+      resolve, request: server([{ headers: { 'content-type': 'application/rss+xml' }, body: feed }]).request,
+    })).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+
+  it('reads a real feed through fetchPublicFeed', async () => {
+    const result = await fetchPublicFeed('https://docs.school.org/feed.xml', {
+      resolve, request: server([{ headers: { 'content-type': 'application/rss+xml' }, body: feed }]).request,
+    });
+    expect(result.text).toContain('<title>Show</title>');
+    expect(result.url).toBe('https://docs.school.org/feed.xml');
+  });
+
+  it('refuses a feed that is not markup at all', async () => {
+    await expect(fetchPublicFeed('https://docs.school.org/feed.xml', {
+      resolve, request: server([{ headers: { 'content-type': 'application/xml' }, body: Buffer.from('nope') }]).request,
+    })).rejects.toMatchObject({ reason: 'unsupported' });
+  });
+
+  it('gives a feed the same address guard a document gets', async () => {
+    // The whole reason feeds reuse this file rather than fetching for
+    // themselves: a feed URL is chosen by a user.
+    const privateDns = vi.fn(async () => [{ address: '169.254.169.254', family: 4 as const }]);
+    await expect(fetchPublicFeed('https://metadata.school.org/feed.xml', {
+      resolve: privateDns, request: server([]).request,
+    })).rejects.toMatchObject({ reason: 'blocked' });
   });
 });
