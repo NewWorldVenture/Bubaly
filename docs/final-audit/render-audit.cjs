@@ -88,12 +88,13 @@ if (fs.existsSync(socialDeltaPath)) {
     ['social-x-callback-recovery', 'app/api/social/x/callback/route.ts', 24, 'Return to Social Accounts after failed X authorization'],
   ]) add('CONTROL', key, name, source, { line, notes: 'New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate.' });
 }
-for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json']) {
+for (const inventory of ['care-delivery-inventory.json', 'capture-scheduling-inventory.json', 'text-messaging-inventory.json', 'auth-session-inventory.json']) {
   if (!fs.existsSync(path.join(__dirname, 'discovery', inventory))) continue;
   const delta = read(`discovery/${inventory}`);
   for (const file of delta.files) {
     const evidence = { notes: `Source discovery only; exact committed hashes and baseline in discovery/${inventory}. Full workflow verification remains separate.` };
     if (file.isNew) add(file.path.startsWith('lib/') ? 'LIBRARY' : 'SUPPORT', file.path, file.path, file.path, evidence);
+    if (file.isNew && file.pageRoute) add('ROUTE', file.path, file.pageRoute, file.path, evidence);
     for (const fn of file.addedExportedFunctions) {
       if (file.apiRoute && file.httpMethods.includes(fn.name)) add('API', `${file.apiRoute}:${fn.name}`, `${fn.name} ${file.apiRoute}`, file.path, { ...evidence, line: fn.line });
       else if (file.kind === 'production-source') add('SERVICE', `${file.path}:${fn.name}`, fn.name, file.path, { ...evidence, line: fn.line });
