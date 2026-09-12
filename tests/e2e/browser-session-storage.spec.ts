@@ -21,8 +21,7 @@ function collect(filename: string): string {
     const name = match[1];
     if (name === '@supabase/supabase-js') { item.imports[name] = 'sdk'; continue; }
     let target: string;
-    if (name === '@supabase/ssr') target = path.join(path.dirname(require.resolve(name)), 'createBrowserClient.js');
-    else if (name.startsWith('@/')) target = path.resolve(name.slice(2)) + '.ts';
+    if (name.startsWith('@/')) target = path.resolve(name.slice(2)) + '.ts';
     else if (name.startsWith('.') && /\.ts$/.test(id)) target = path.resolve(path.dirname(id), name) + '.ts';
     else target = require.resolve(name, { paths: [path.dirname(id)] });
     item.imports[name] = collect(target);

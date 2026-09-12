@@ -14,13 +14,14 @@
 //    was suspended for hours, and it has nothing bound to coming back online.
 //    Both are exactly when a returning user expects to still be signed in.
 //
-// A session ends here only when Supabase says it ended. Nothing on this path
-// clears a session, so a failed refresh leaves the user signed in and the next
-// attempt retries.
+// Auth events and successful reads of the current cookies establish whether a
+// session ended. Nothing on this path clears credentials, so a failed refresh
+// leaves the user signed in and the next attempt retries.
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { isNative } from '@/lib/native/capacitor';
 import { getCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents } from '@/lib/auth/cache-session';
+import { subscribeSessionStorageChanges } from '@/lib/auth/session-change';
 
 /** Don't re-check more than this often; the triggers below can arrive in bursts. */
 const REVIVE_INTERVAL_MS = 30_000;
@@ -37,9 +38,9 @@ export function SessionKeeper({ userId }: { userId: string }) {
     // `getSession()` reads the stored session and refreshes it when the access
     // token has expired, so this is "make sure we're still current" — never a
     // sign-out, even when it fails.
-    const revive = () => {
+    const reconcile = (explicitChange = false) => {
       const now = Date.now();
-      if (disposed || now - lastRevive < REVIVE_INTERVAL_MS) return;
+      if (disposed || (!explicitChange && now - lastRevive < REVIVE_INTERVAL_MS)) return;
       lastRevive = now;
       const revision = authRevision;
       const read = ++lastRead;
@@ -56,6 +57,7 @@ export function SessionKeeper({ userId }: { userId: string }) {
         }
       }).catch(() => { /* offline; the next lifecycle event retries */ });
     };
+    const revive = () => reconcile();
 
     const onVisible = () => { if (document.visibilityState === 'visible') revive(); };
 
@@ -70,6 +72,9 @@ export function SessionKeeper({ userId }: { userId: string }) {
         router.refresh();
       }
     });
+    // Cookie changes are explicit user actions, so they bypass foreground
+    // throttling and share the store's newly invalidated session read.
+    const stopStorageChanges = subscribeSessionStorageChanges(() => reconcile(true));
     // Reconcile a cookie-only account change at first mount too. This shares
     // the store's bootstrap read and does not create a second SDK client.
     revive();
@@ -102,6 +107,7 @@ export function SessionKeeper({ userId }: { userId: string }) {
     return () => {
       disposed = true;
       unsubscribe();
+      stopStorageChanges();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', revive);
       window.removeEventListener('online', revive);

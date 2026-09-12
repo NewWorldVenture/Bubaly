@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "A sua palavra-passe foi atualizada. Já pode utilizá-la para iniciar sessão.",
   "authRecovery.requestAnother": "Pedir uma nova ligação de recuperação",
   "authRecovery.forgotPassword": "Esqueceu-se da palavra-passe?",
-  "sms.draftsOnly": "Pode guardar rascunhos de SMS aqui. O envio de campanhas ainda não está disponível."
+  "sms.draftsOnly": "Pode guardar rascunhos de SMS aqui. O envio de campanhas ainda não está disponível.",
+  "signOutButton.sessionChanged": "A sua sessão mudou enquanto este controlo estava aberto. Verifique a sessão atual antes de terminar sessão.",
+  "signOutButton.sessionUnavailable": "Não foi possível verificar a sua sessão. Verifique-a e tente terminar sessão novamente.",
+  "signOutButton.sessionReviewed": "A sessão atual foi verificada. Selecione novamente Terminar sessão para confirmar.",
+  "signOutButton.reviewSession": "Verificar sessão",
+  "signOutButton.javascriptRequired": "Ative o JavaScript para concluir o fim de sessão neste dispositivo."
 }

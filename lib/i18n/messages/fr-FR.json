@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "Votre mot de passe a été modifié. Vous pouvez maintenant l’utiliser pour vous connecter.",
   "authRecovery.requestAnother": "Demander un nouveau lien de récupération",
   "authRecovery.forgotPassword": "Mot de passe oublié ?",
-  "sms.draftsOnly": "Vous pouvez enregistrer des brouillons de SMS ici. L’envoi de campagnes n’est pas encore disponible."
+  "sms.draftsOnly": "Vous pouvez enregistrer des brouillons de SMS ici. L’envoi de campagnes n’est pas encore disponible.",
+  "signOutButton.sessionChanged": "Votre connexion a changé pendant que cette commande était ouverte. Vérifiez la session actuelle avant de vous déconnecter.",
+  "signOutButton.sessionUnavailable": "Votre session n’a pas pu être vérifiée. Vérifiez-la, puis réessayez de vous déconnecter.",
+  "signOutButton.sessionReviewed": "La session actuelle a été vérifiée. Sélectionnez à nouveau « Se déconnecter » pour confirmer.",
+  "signOutButton.reviewSession": "Vérifier la session",
+  "signOutButton.javascriptRequired": "Activez JavaScript pour terminer la déconnexion sur cet appareil."
 }

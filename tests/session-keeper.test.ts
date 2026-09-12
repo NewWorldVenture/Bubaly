@@ -1,6 +1,7 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionKeeper } from '@/components/auth/session-keeper';
+import { notifySessionStorageChanged } from '@/lib/auth/session-change';
 
 type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
 type SessionResult = { data: { session: Session | null }; error: Error | null };
@@ -45,6 +46,7 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }));
 vi.mock('@/lib/native/capacitor', () => ({ isNative: mocks.isNative }));
+vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnapshot: () => null }));
 vi.mock('@capacitor/app', () => ({ App: { addListener: mocks.addListener } }));
 
 function session(userId: string): Session {
@@ -108,6 +110,51 @@ afterEach(() => {
 });
 
 describe('SessionKeeper identity reconciliation', () => {
+  it('reconciles an explicit cookie removal inside the ordinary focus throttle', async () => {
+    render(); await settle();
+    mocks.getSession.mockResolvedValue(result(null));
+    windowTarget.dispatchEvent(new Event('focus'));
+    await settle(); expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one forced reread and ignores an older bootstrap after explicit cookie change', async () => {
+    const old = deferred<SessionResult>();
+    mocks.getSession.mockReturnValueOnce(old.promise).mockResolvedValue(result(null));
+    render(); await settle();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    old.resolve(result('user-a')); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('a delayed logout signal keeps a newer server identity and current login', async () => {
+    mocks.getSession.mockResolvedValue(result('user-b'));
+    render('user-b'); await settle();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('a newer login supersedes an explicit-change reread without an extra refresh', async () => {
+    render(); await settle(); const held = deferred<SessionResult>();
+    mocks.getSession.mockReturnValueOnce(held.promise);
+    notifySessionStorageChanged(); await settle();
+    emit('SIGNED_IN', 'user-b');
+    held.resolve(result(null)); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not restart a read when a storage-change signal arrives after unmount', async () => {
+    render(); await settle(); unmount();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
   it('keeps the current server tree when the saved session still belongs to its user', async () => {
     render();
     windowTarget.dispatchEvent(new Event('focus'));

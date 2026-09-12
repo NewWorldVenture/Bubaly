@@ -81,6 +81,9 @@ export async function middleware(req: NextRequest) {
   // This exact public path exposes only the artifact's revision. Do not refresh
   // sessions or interpret OAuth query parameters for this read-only response.
   if (path === '/api/build-info') return NextResponse.next({ request: req });
+  // Logout replies must never carry stale authentication cookie mutations.
+  // The browser performs its own guarded local deletion after explicit intent.
+  if (path === '/auth/signout' || path === '/auth/signout/complete') return NextResponse.next({ request: req });
   const recoveryPage = path === '/auth/recovery'
     || (path === '/login' && req.nextUrl.searchParams.get('reset') === '1');
 

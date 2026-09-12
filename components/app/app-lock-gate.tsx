@@ -11,6 +11,7 @@ import { verifyPin, unlockKey } from '@/lib/security/app-lock';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 
 export function AppLockGate({
   enabled, salt, hash, userId, children,
@@ -156,11 +157,11 @@ export function AppLockGate({
         </div>
 
         {/* The escape hatch — can never trap a forgotten PIN. */}
-        <form action="/auth/signout" method="post" className="mt-9">
-          <button type="submit" className="flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-fg">
+        <SignOutForm className="mt-9">
+          {({ signingOut }) => <button type="submit" disabled={signingOut} className="flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-fg">
             <LogOut className="h-3.5 w-3.5" /> {tr('appLockGate.forgotPinSignOut')}
-          </button>
-        </form>
+          </button>}
+        </SignOutForm>
       </div>
     </div>
   );

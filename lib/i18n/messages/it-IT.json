@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "La password è stata aggiornata. Ora puoi usarla per accedere.",
   "authRecovery.requestAnother": "Richiedi un nuovo link di recupero",
   "authRecovery.forgotPassword": "Hai dimenticato la password?",
-  "sms.draftsOnly": "Qui puoi salvare bozze di SMS. L’invio delle campagne non è ancora disponibile."
+  "sms.draftsOnly": "Qui puoi salvare bozze di SMS. L’invio delle campagne non è ancora disponibile.",
+  "signOutButton.sessionChanged": "Il tuo accesso è cambiato mentre questo controllo era aperto. Verifica la sessione attuale prima di uscire.",
+  "signOutButton.sessionUnavailable": "Non è stato possibile verificare la sessione. Verificala e prova di nuovo a uscire.",
+  "signOutButton.sessionReviewed": "Sessione attuale verificata. Seleziona di nuovo Esci per confermare.",
+  "signOutButton.reviewSession": "Verifica sessione",
+  "signOutButton.javascriptRequired": "Attiva JavaScript per completare la disconnessione su questo dispositivo."
 }

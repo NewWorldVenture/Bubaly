@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "Your password was updated. You can now sign in with it.",
   "authRecovery.requestAnother": "Request a new recovery link",
   "authRecovery.forgotPassword": "Forgot your password?",
-  "sms.draftsOnly": "You can save SMS drafts here. Campaign sending is not available yet."
+  "sms.draftsOnly": "You can save SMS drafts here. Campaign sending is not available yet.",
+  "signOutButton.sessionChanged": "Your sign-in changed while this control was open. Review the current session before signing out.",
+  "signOutButton.sessionUnavailable": "Your session could not be checked. Review it and try signing out again.",
+  "signOutButton.sessionReviewed": "Current session checked. Select sign out again to confirm.",
+  "signOutButton.reviewSession": "Review session",
+  "signOutButton.javascriptRequired": "Enable JavaScript to finish signing out on this device."
 }

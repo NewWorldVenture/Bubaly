@@ -12,7 +12,7 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
   'components/modules/habits-module.tsx', 'lib/hooks/use-realtime-query.ts',
-  'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
+  'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
@@ -140,7 +140,8 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
       user: { id: userId, aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' } };
     db.auth.getSession = async () => ({ data: { session }, error: null });
     db.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
-    const mocks = { react: React, 'react-dom': ReactDOM,
+    const mocks = {
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/components/app/app-context': { useApp: app }, '@/lib/supabase/client': { createClient: () => db },
       '@/components/ui/toast': { useToast: () => ({ success: message => p.toasts.push({ kind: 'success', message }), error: message => p.toasts.push({ kind: 'error', message }) }) },

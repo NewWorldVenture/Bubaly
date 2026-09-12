@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "Je wachtwoord is bijgewerkt. Je kunt er nu mee inloggen.",
   "authRecovery.requestAnother": "Nieuwe herstellink aanvragen",
   "authRecovery.forgotPassword": "Wachtwoord vergeten?",
-  "sms.draftsOnly": "Je kunt hier sms-concepten opslaan. Campagnes verzenden is nog niet beschikbaar."
+  "sms.draftsOnly": "Je kunt hier sms-concepten opslaan. Campagnes verzenden is nog niet beschikbaar.",
+  "signOutButton.sessionChanged": "Je aanmelding is gewijzigd terwijl deze optie openstond. Controleer de huidige sessie voordat je je afmeldt.",
+  "signOutButton.sessionUnavailable": "Je sessie kon niet worden gecontroleerd. Controleer deze en probeer je opnieuw af te melden.",
+  "signOutButton.sessionReviewed": "Huidige sessie gecontroleerd. Kies opnieuw Afmelden om te bevestigen.",
+  "signOutButton.reviewSession": "Sessie controleren",
+  "signOutButton.javascriptRequired": "Schakel JavaScript in om het afmelden op dit apparaat te voltooien."
 }

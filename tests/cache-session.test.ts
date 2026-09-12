@@ -2,10 +2,12 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheSessionIdentity, getCacheSessionSnapshot, getServerCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents, subscribeCacheSession } from '@/lib/auth/cache-session';
 import { getCacheGeneration } from '@/lib/offline/cache';
+import { notifySessionStorageChanged } from '@/lib/auth/session-change';
 
 type Reply = { data: { session: Session | null }; error: Error | null };
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn<() => Promise<Reply>>(), unsubscribe: vi.fn(),
+  cookieSnapshot: vi.fn(), setRealtimeAuth: vi.fn(),
   callbacks: [] as Array<(event: AuthChangeEvent, session: Session | null) => void>,
 }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
@@ -13,7 +15,8 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
   onAuthStateChange: (callback: (event: AuthChangeEvent, session: Session | null) => void) => {
     mocks.callbacks.push(callback); return { data: { subscription: { unsubscribe: mocks.unsubscribe } } };
   },
-} }) }));
+}, realtime: { setAuth: mocks.setRealtimeAuth } }) }));
+vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnapshot: mocks.cookieSnapshot }));
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -34,9 +37,12 @@ function emit(event: AuthChangeEvent, value: Session | null) { mocks.callbacks.a
 beforeEach(() => {
   vi.clearAllMocks(); mocks.callbacks = [];
   mocks.getSession.mockReset().mockResolvedValue(reply(session()));
-  vi.stubGlobal('window', {}); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(0);
+  mocks.cookieSnapshot.mockReset().mockReturnValue(null);
+  mocks.setRealtimeAuth.mockReset().mockResolvedValue(undefined);
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-public-anon');
+  vi.stubGlobal('window', new EventTarget()); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(0);
 });
-afterEach(() => { disposers.splice(0).forEach(stop => stop()); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { disposers.splice(0).forEach(stop => stop()); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe('cache session identity', () => {
   it('extracts only stable user/session UUIDs, without persisting rotating credentials', () => {
@@ -128,6 +134,139 @@ describe('shared session observer', () => {
     connect(); await settle(); vi.setSystemTime(30_000); await refreshCacheSession();
     old.resolve(reply(session())); await settle();
     expect(getCacheSessionSnapshot().identity).toEqual({ userId: B, sessionId: S2 });
+  });
+  it('an explicit storage change supersedes a just-started read and its stale initial event', async () => {
+    const old = deferred<Reply>();
+    mocks.getSession.mockReturnValueOnce(old.promise).mockResolvedValue(reply(null));
+    connect(); await settle();
+    notifySessionStorageChanged();
+    emit('INITIAL_SESSION', session());
+    await refreshCacheSession();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
+    old.resolve(reply(session())); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
+  });
+  it('a delayed signal rereads a newer login without purging it or emitting an auth event', async () => {
+    connect(); await settle(); emit('SIGNED_IN', session(B, S2));
+    mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    const before = getCacheSessionSnapshot(), generation = getCacheGeneration();
+    const events = vi.fn(); disposers.push(subscribeCacheAuthEvents(events));
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toBe(before);
+    expect(getCacheGeneration()).toBe(generation);
+    expect(events).not.toHaveBeenCalled();
+  });
+  it('a later SDK login supersedes an explicit-change read that returns empty', async () => {
+    connect(); await settle(); const held = deferred<Reply>();
+    mocks.getSession.mockReturnValueOnce(held.promise);
+    notifySessionStorageChanged(); await settle();
+    emit('SIGNED_IN', session(B, S2)); const generation = getCacheGeneration();
+    held.resolve(reply(null)); await settle();
+    expect(getCacheSessionSnapshot().identity).toEqual({ userId: B, sessionId: S2 });
+    expect(getCacheGeneration()).toBe(generation);
+  });
+  it('a forced read bypasses coalescing even without a cross-tab message', async () => {
+    const held = deferred<Reply>();
+    mocks.getSession.mockReturnValueOnce(held.promise).mockResolvedValue(reply(session(B, S2)));
+    connect(); await settle(); await refreshCacheSession({ force: true });
+    held.resolve(reply(session())); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot().identity).toEqual({ userId: B, sessionId: S2 });
+  });
+  it('an unavailable reread after a change notification does not manufacture sign-out', async () => {
+    connect(); await settle(); const generation = getCacheGeneration();
+    mocks.getSession.mockRejectedValueOnce(new Error('storage unavailable'));
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A }, error: expect.any(String) });
+    expect(getCacheGeneration()).toBe(generation);
+  });
+  it('a confirmed empty reread downgrades realtime using the explicit public key', async () => {
+    connect(); await settle(); mocks.getSession.mockResolvedValue(reply(null));
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(mocks.setRealtimeAuth).toHaveBeenCalledExactlyOnceWith('synthetic-public-anon');
+  });
+  it('a new cookie session appearing after an empty read prevents stale realtime downgrade', async () => {
+    connect(); await settle(); mocks.getSession.mockResolvedValue(reply(null));
+    const generation = getCacheGeneration();
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: session(B, S2).access_token });
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(mocks.setRealtimeAuth).not.toHaveBeenCalled();
+    expect(getCacheGeneration()).toBe(generation);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A }, error: expect.any(String) });
+    expect(mocks.getSession).toHaveBeenCalledTimes(3); // Bootstrap plus at most two conflicting reads.
+  });
+  it('one bounded reread observes B after an empty receipt without purging B cache', async () => {
+    mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    connect(); await settle(); const generation = getCacheGeneration();
+    mocks.getSession.mockResolvedValueOnce(reply(null)).mockResolvedValue(reply(session(B, S2)));
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: session(B, S2).access_token });
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B }, error: null });
+    expect(mocks.getSession).toHaveBeenCalledTimes(3);
+    expect(getCacheGeneration()).toBe(generation);
+    expect(mocks.setRealtimeAuth).toHaveBeenCalledExactlyOnceWith(session(B, S2).access_token);
+  });
+  it('malformed present cookies do not turn a null receipt into confirmed sign-out', async () => {
+    connect(); await settle(); const generation = getCacheGeneration();
+    mocks.getSession.mockResolvedValue(reply(null));
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: null, userId: null, sessionId: null });
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A }, error: expect.any(String) });
+    expect(getCacheGeneration()).toBe(generation);
+    expect(mocks.setRealtimeAuth).not.toHaveBeenCalled();
+    mocks.getSession.mockRejectedValue(new Error('network unavailable'));
+    await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+  });
+  it('an agreeing B receipt updates peer realtime using the exact currently stored token', async () => {
+    const value = session(B, S2);
+    mocks.getSession.mockResolvedValue(reply(value));
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: value.access_token });
+    connect(); await settle();
+    expect(mocks.setRealtimeAuth).toHaveBeenCalledExactlyOnceWith(value.access_token);
+  });
+  it('a nonempty receipt cannot overwrite realtime when current cookie token disagrees', async () => {
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: session(B, S2).access_token });
+    connect(); await settle();
+    expect(mocks.setRealtimeAuth).not.toHaveBeenCalled();
+  });
+  it('a stale SIGNED_OUT event with B cookies cannot purge B or reach auth listeners', async () => {
+    const value = session(B, S2);
+    mocks.getSession.mockResolvedValue(reply(value));
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: value.access_token });
+    connect(); await settle(); const generation = getCacheGeneration();
+    const events = vi.fn(); disposers.push(subscribeCacheAuthEvents(events));
+    emit('SIGNED_OUT', null);
+    expect(mocks.getSession).toHaveBeenCalledTimes(1); // Never acquire the SDK lock inside its callback.
+    await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(getCacheGeneration()).toBe(generation);
+    expect(events).not.toHaveBeenCalled();
+  });
+  it('a repeated stale event from the queued read does not recursively schedule SDK reads', async () => {
+    const value = session(B, S2);
+    mocks.getSession.mockResolvedValue(reply(value));
+    mocks.cookieSnapshot.mockReturnValue({ accessToken: value.access_token });
+    connect(); await settle(); const generation = getCacheGeneration();
+    mocks.getSession.mockImplementation(async () => { emit('SIGNED_OUT', null); return reply(null); });
+    emit('SIGNED_OUT', null); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(getCacheGeneration()).toBe(generation);
+  });
+  it('a denied cookie read cannot downgrade realtime', async () => {
+    connect(); await settle(); mocks.getSession.mockResolvedValue(reply(null));
+    mocks.cookieSnapshot.mockImplementation(() => { throw new Error('cookies denied'); });
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(mocks.setRealtimeAuth).not.toHaveBeenCalled();
+  });
+  it('a realtime transport failure does not undo confirmed local sign-out', async () => {
+    connect(); await settle(); mocks.getSession.mockResolvedValue(reply(null));
+    mocks.setRealtimeAuth.mockRejectedValue(new Error('socket closed'));
+    notifySessionStorageChanged(); await refreshCacheSession();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
   });
   it('malformed new credentials retire established identity but retain the observed user for server agreement', async () => {
     connect(); await settle(); emit('SIGNED_IN', session(B, 'invalid'));

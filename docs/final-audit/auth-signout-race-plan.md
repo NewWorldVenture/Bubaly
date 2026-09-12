@@ -1,5 +1,7 @@
 # Delayed sign-out response: open repair
 
+Implementation update: the repository now contains the guarded local logout, token-specific transport, cross-tab reconciliation, renewal fence and cookie-free compatibility POST described in `auth-signout-cycle.md`. The original plan below is retained as the discovery record. Full source/hosted gates and remaining boundaries must be checked before complete workflow sign-off.
+
 AUTH-L06 remains IN PROGRESS. An actual route/SDK/Chromium probe held account A's `/auth/signout` response, signed in B, then released A's response. Its fixed-name `Set-Cookie` deletions removed B's credentials. Cache reconciliation eventually retired B's data, but could not recover those credentials. Replacing the route with ordinary SDK `signOut()` alone does not fix this: the installed SDK awaits provider revocation before unconditional local removal.
 
 The next bounded implementation must capture the intended account and project cookie state, perform guarded local deletion before any provider await, verify deletion and prevent late revocation results from clearing or navigating a newer login. Provider revocation can use the public `AuthAdminApi` export from `@supabase/supabase-js`: instantiate only the admin transport with the provider auth URL and public API key, then call `signOut(capturedAccessToken, scope)`. The method accepts the session's JWT; no service-role credential, cookie storage, refresh timer or session client is required. Use a bounded, cookie-free request; keep credentials in memory. Default scope remains local.

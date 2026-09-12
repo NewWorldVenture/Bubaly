@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { reopenAccountAction } from '@/app/(app)/account/actions';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 
 export function AccountClosedGate() {
   const t = useTranslations();
@@ -41,11 +42,9 @@ export function AccountClosedGate() {
         <Button onClick={reopen} disabled={busy} aria-busy={busy} className="mt-6 w-full gap-1.5">
           <RotateCcw className="h-4 w-4" /> {busy ? 'Reopening…' : 'Reopen my account'}
         </Button>
-        {/* POST, because /auth/signout only accepts POST — as a link this was a
-            405 and the gate had no working way to sign out. */}
-        <form action="/auth/signout" method="post" className="mt-4">
-          <button type="submit" className="text-sm text-muted hover:text-fg">{t('accountClosedGate.logOut')}</button>
-        </form>
+        <SignOutForm className="mt-4">
+          {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-sm text-muted hover:text-fg">{t('accountClosedGate.logOut')}</button>}
+        </SignOutForm>
       </div>
     </div>
   );

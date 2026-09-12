@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "Tu contraseña se ha actualizado. Ya puedes iniciar sesión con ella.",
   "authRecovery.requestAnother": "Solicitar un nuevo enlace de recuperación",
   "authRecovery.forgotPassword": "¿Has olvidado tu contraseña?",
-  "sms.draftsOnly": "Puedes guardar borradores de SMS aquí. El envío de campañas aún no está disponible."
+  "sms.draftsOnly": "Puedes guardar borradores de SMS aquí. El envío de campañas aún no está disponible.",
+  "signOutButton.sessionChanged": "Tu sesión ha cambiado mientras este control estaba abierto. Revisa la sesión actual antes de cerrar sesión.",
+  "signOutButton.sessionUnavailable": "No se ha podido comprobar tu sesión. Revísala e intenta cerrar sesión de nuevo.",
+  "signOutButton.sessionReviewed": "Sesión actual comprobada. Selecciona cerrar sesión de nuevo para confirmar.",
+  "signOutButton.reviewSession": "Revisar sesión",
+  "signOutButton.javascriptRequired": "Activa JavaScript para terminar de cerrar sesión en este dispositivo."
 }

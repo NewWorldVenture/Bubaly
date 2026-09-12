@@ -133,11 +133,17 @@ test.describe('durable browser session against disposable GoTrue', () => {
         });
       } catch { throw new Error('Durable-session E2E sign-out request failed.'); }
       expect(response.status()).toBe(303);
-      expect(new URL(response.headers().location, origin).pathname).toBe('/login');
-      expect(authCookies(await context.cookies(), name).every((cookie) => cookie.value === ''), 'Explicit sign-out must clear this session').toBe(true);
+      const completion = new URL(response.headers().location, origin);
+      expect(completion.pathname).toBe('/auth/signout/complete');
+      // The POST revokes the submitted token but sends no auth-cookie deletion
+      // that could erase a later login. Its matched browser continuation clears.
+      expect(response.headers()['set-cookie'] ?? '').not.toContain(`${name}=`);
       await response.dispose();
       const page = await context.newPage();
       try {
+        await page.goto(completion.href, { waitUntil: 'domcontentloaded' });
+        await expect(page).toHaveURL(/\/login(?:\?|$)/);
+        expect(authCookies(await context.cookies(), name).every((cookie) => cookie.value === ''), 'Explicit sign-out must clear this session').toBe(true);
         await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
         await expect(page).toHaveURL(/\/login(?:\?|$)/);
       } finally { await page.close(); }

@@ -10,7 +10,7 @@ const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/pack
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sources = Object.fromEntries([
   'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
-  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
+  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
@@ -89,7 +89,8 @@ test.beforeEach(async ({ page }) => {
     const cacheMessages = { 'auth.cacheSessionUnavailable': 'Your session is temporarily unavailable. Please try again.',
       'auth.cacheSessionChanged': 'Your session changed. Please wait while the app updates.',
       'auth.cacheFamilyMismatch': 'This family does not match your current account context.' };
-    const mocks = { react: window.React, '@/lib/supabase/client': { createClient: () => db },
+    const mocks = {
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: window.React, '@/lib/supabase/client': { createClient: () => db },
       '@/components/i18n/locale-provider': { useTranslations: () => key => cacheMessages[key] ?? key } };
     const modules = {};
     function load(id) {

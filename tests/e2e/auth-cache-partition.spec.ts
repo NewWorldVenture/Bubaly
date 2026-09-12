@@ -30,8 +30,7 @@ function collect(filename: string): string {
     const name = match[1];
     if (name === 'react' || name === '@supabase/supabase-js') { item.imports[name] = name; continue; }
     let target: string;
-    if (name === '@supabase/ssr') target = path.join(path.dirname(require.resolve(name)), 'createBrowserClient.js');
-    else if (name.startsWith('@/')) target = path.resolve(name.slice(2));
+    if (name.startsWith('@/')) target = path.resolve(name.slice(2));
     else if (name.startsWith('.') && /\.tsx?$/.test(id)) target = path.resolve(path.dirname(id), name);
     else target = require.resolve(name, { paths: [path.dirname(id)] });
     item.imports[name] = collect(target);
@@ -39,7 +38,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries([
-  'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
+  'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts', 'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
   'components/app/app-context.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
 ].map(file => [file, collect(file)]));
 const origin = 'https://auth-cache-partition-fixture.invalid';

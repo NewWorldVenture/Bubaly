@@ -12,7 +12,7 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
-  'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
+  'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
@@ -133,7 +133,8 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
       user: { id: userId, aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' } };
     db.auth.getSession = async () => ({ data: { session }, error: null });
     db.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
-    const mocks = { react: React, 'react-dom': ReactDOM,
+    const mocks = {
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/supabase/client': { createClient: () => { if (p.throwClient) { p.throwClient = false; throw new Error('Fixture client construction failure'); } return db; } },
       '@capacitor/core': { Capacitor: { isNativePlatform: () => false } },

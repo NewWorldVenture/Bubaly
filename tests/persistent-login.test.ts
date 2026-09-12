@@ -231,14 +231,16 @@ describe('sign-out is the only thing that ends a session', () => {
   it('ends this device only, so the phone stays signed in', () => {
     // supabase-js defaults to `global`, which revokes every refresh token the
     // user holds anywhere — the exact surprise logout this work removes.
-    expect(signout).toContain("auth.signOut({ scope })");
+    expect(signout).toContain('prepareSignOutBridge(scope)');
     expect(signout).toContain("return 'local'");
     expect(signout).toContain("form.get('scope') === 'global' ? 'global' : 'local'");
   });
 
-  it('expires the auth cookies on the response itself', () => {
-    expect(signout).toContain('isAuthCookieName(cookie.name)');
-    expect(signout).toContain("res.cookies.set(cookie.name, '', { path: '/', maxAge: 0 })");
+  it('leaves local deletion to the browser so a delayed response cannot clear another login', () => {
+    // Actual POST/cookie/provider execution is covered by signout-bridge.test.
+    expect(signout).toContain('res.cookies.set(SIGNOUT_BRIDGE_COOKIE');
+    expect(signout).not.toContain('isAuthCookieName');
+    expect(signout).not.toContain('createServer(');
   });
 
   it('is reachable — the route is POST-only, so nothing may link to it', () => {

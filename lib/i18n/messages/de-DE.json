@@ -13554,5 +13554,10 @@
   "authRecovery.updated": "Ihr Passwort wurde geändert. Sie können sich jetzt damit anmelden.",
   "authRecovery.requestAnother": "Neuen Wiederherstellungslink anfordern",
   "authRecovery.forgotPassword": "Passwort vergessen?",
-  "sms.draftsOnly": "Sie können hier SMS-Entwürfe speichern. Der Versand von Kampagnen ist noch nicht verfügbar."
+  "sms.draftsOnly": "Sie können hier SMS-Entwürfe speichern. Der Versand von Kampagnen ist noch nicht verfügbar.",
+  "signOutButton.sessionChanged": "Ihre Anmeldung hat sich geändert, während dieses Steuerelement geöffnet war. Prüfen Sie die aktuelle Sitzung, bevor Sie sich abmelden.",
+  "signOutButton.sessionUnavailable": "Ihre Sitzung konnte nicht geprüft werden. Prüfen Sie sie und versuchen Sie erneut, sich abzumelden.",
+  "signOutButton.sessionReviewed": "Die aktuelle Sitzung wurde geprüft. Wählen Sie erneut „Abmelden“, um zu bestätigen.",
+  "signOutButton.reviewSession": "Sitzung prüfen",
+  "signOutButton.javascriptRequired": "Aktivieren Sie JavaScript, um die Abmeldung auf diesem Gerät abzuschließen."
 }

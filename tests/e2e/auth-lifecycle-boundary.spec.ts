@@ -8,9 +8,9 @@ import { expect, test, type Page } from '@playwright/test';
 const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sources = Object.fromEntries([
-  'components/auth/session-keeper.tsx', 'components/auth/sign-out-button.tsx',
+  'components/auth/session-keeper.tsx', 'components/auth/sign-out-button.tsx', 'components/auth/sign-out-form.tsx',
   'lib/offline/cache.ts', 'lib/hooks/use-realtime-query.ts',
-  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts',
+  'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
@@ -25,6 +25,7 @@ type Probe = {
   release: () => void; seed: () => void; cached: () => unknown;
   completeRead: () => void; storedUser: (user: string | null, error?: boolean) => void;
   offline: () => void; settle: () => Promise<void>;
+  notify: () => void;
 };
 declare global { interface Window { __authLifecycle: Probe } }
 async function settle(page: Page) { await page.evaluate(() => window.__authLifecycle.settle()); }
@@ -51,10 +52,22 @@ test.beforeEach(async ({ page }) => {
         onAuthStateChange: handler => { callback = handler; return { data: { subscription: { unsubscribe() {} } } }; } },
       channel: () => ({ on() { return this; }, subscribe() { return this; } }), removeChannel: async () => {},
     };
-    const router = { refresh: () => { p.refreshes += 1; } };
+    const router = { refresh: () => { p.refreshes += 1; }, replace: () => {} };
     const mocks = {
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => currentUser ? { accessToken: sessionFor(currentUser).access_token } : null },
       react: React, 'next/navigation': { useRouter: () => router },
       '@/lib/supabase/client': { createClient: () => db },
+      '@/lib/auth/browser-signout': {
+        captureSignOutIntent: () => ({ user: currentUser }),
+        isBrowserSignedOut: () => currentUser === null,
+        signOutBrowserSession: intent => {
+          if (intent.user !== currentUser) return { status: 'session-changed' };
+          currentUser = null;
+          load('@/lib/offline/cache').clearAllCache();
+          load('@/lib/auth/session-change').notifySessionStorageChanged();
+          return { status: 'signed-out' };
+        },
+      },
       '@/lib/native/capacitor': { isNative: () => p.native },
       '@capacitor/app': { App: { addListener: () => {
         const handle = { remove: () => { p.removals += 1; if (p.removalThrows) throw new Error('Fixture native cleanup failed'); return p.removalFails ? Promise.reject(new Error('Fixture native cleanup failed')) : Promise.resolve(); } };
@@ -87,6 +100,7 @@ test.beforeEach(async ({ page }) => {
     p.offline = () => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
     p.emit = (event, user) => { currentUser = user; callback(event, sessionFor(user)); };
     p.storedUser = (user, error = false) => { currentUser = user; sessionError = error; };
+    p.notify = () => load('@/lib/auth/session-change').notifySessionStorageChanged();
     p.release = () => release();
     p.completeRead = () => completeReads[0]();
     p.settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -168,6 +182,23 @@ test('transient failed foreground refresh retains cached data and existing ident
   await settle(page);
   expect(await page.evaluate(() => window.__authLifecycle.refreshes)).toBe(0);
   expect(await page.evaluate(() => window.__authLifecycle.cached())).not.toBeNull();
+});
+
+test('explicit cookie removal reconciles the mounted tree without waiting for focus throttling', async ({ page }) => {
+  await page.evaluate(() => { const p = window.__authLifecycle; p.seed(); p.mount('user-a'); });
+  await settle(page);
+  await page.evaluate(() => { const p = window.__authLifecycle; p.storedUser(null); p.notify(); });
+  await settle(page);
+  expect(await page.evaluate(() => window.__authLifecycle.refreshes)).toBe(1);
+  expect(await page.evaluate(() => window.__authLifecycle.cached())).toBeNull();
+});
+
+test('a delayed change notification rereads a newer login and leaves its mounted tree current', async ({ page }) => {
+  await page.evaluate(() => { const p = window.__authLifecycle; p.storedUser('user-b'); p.mount('user-b'); });
+  await settle(page);
+  await page.evaluate(() => window.__authLifecycle.notify());
+  await settle(page);
+  expect(await page.evaluate(() => window.__authLifecycle.refreshes)).toBe(0);
 });
 
 test('an auth-ending cache purge fences an already pending previous-user query', async ({ page }) => {
