@@ -44,3 +44,16 @@ Publication `5648447cff4352d6f3dde6a5460a0eb0983dbc5c` passes [CI 34718134835](h
 The new reservation case proves one reply for repeated and concurrent signed requests, one deterministic outbound projection, preservation of archive state, and child denial of private receipt insertion against disposable PostgreSQL and real HTTP. It does not exercise real SMS delivery. The subsequent signed delivery-status source requires its own hosted acceptance.
 
 Sanitized proof: `C:/Users/Daniel/AppData/Local/Temp/bubaly-5648447c-hosted-{web|e2e}-proof-20260912.log`. Production settings, live providers, physical devices, unresolved authorization defects and the second complete regression remain outside this checkpoint.
+
+## Signed delivery-status acceptance at 0d68bdbb
+
+Publication `0d68bdbbd35e9d0a90d497f96fcbffd2f0e80df4` passes [CI 34718960420](https://github.com/NewWorldVenture/Bubaly/actions/runs/34718960420), completed at `2026-09-12T21:21:03Z`. The tested checkout is `75e04ed023802d057959fc2077c2335848cd8625`, merging this head into `fdce273b`. Its tree `becff049bea39fc7b1afac65b30ec36f7dc5b216` exactly equals the published tree.
+
+- Web job `103621167852`: 14,919 unit tests in 1,199 files pass; production build generates 252 pages; strict types, lint and query audit pass. Query coverage is 491 tables, 77 functions and 144 API routes.
+- E2E job `103621167842`: 1,064 scheduled tests and 1,064 passes in 8.0 minutes, with no failed, flaky or skipped summary. Authenticated and durable-session flags are both enabled. Exact-source discovery includes fourteen focused cases: signed delivery status, single-reply reservation, three Guardian receipt cases, one autonomous recovery case, five durable-login cases, two child-readiness cases and the complete meal/grocery journey. Matching scheduled/passed totals and source discovery establish inclusion; individual successful-case lines are not emitted by the reporter.
+- Database job `103621167887`: 300 migrations replay with zero failures and all eleven boundary probes pass. Mobile job `103621167719` passes. [Finance run 34718960412](https://github.com/NewWorldVenture/Bubaly/actions/runs/34718960412) passes 66 assertions.
+- Vercel deployment `8kRnh5PMiiu2gYRePqvjxrwaVzbo` succeeds. GitHub deployment `6414386939` binds this head to its successful status at `2026-09-12T21:07:34Z` and the [verified immutable preview](https://bubaly-1ayhfg8au-newworldventure.vercel.app/dashboard/meals).
+
+The new case verifies signed synthetic progress through real disposable PostgreSQL and the authenticated phone-width inbox, including terminal replay, forged identities, concurrent sent/failed observations, private-data absence, browser console/network checks and horizontal overflow. It does not exercise a real SMS provider or handset.
+
+Sanitized proof: `C:/Users/Daniel/AppData/Local/Temp/bubaly-0d68bdbb-hosted-{web|e2e}-proof-20260912.log`. The subsequent Unicode/length application `a61804db` requires new hosted acceptance. Production settings, provider delivery, controlled cutover, physical devices, unresolved authorization failures and the second comprehensive regression remain open.
