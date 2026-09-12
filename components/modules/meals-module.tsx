@@ -154,9 +154,12 @@ export function MealsModule() {
   });
   const plansRef = useRef(plans);
   plansRef.current = plans;
-  const readSlot = (slot: PlanSlot) => plansRef.current.some(plan => plan.id === slot.id && plan.plan_date === slot.date
-    && plan.meal_type === slot.mealType && plan.meal_id === slot.mealId && plan.meal?.name === slot.name
-    && JSON.stringify(readIngredients(plan.meal?.ingredients ?? null)) === JSON.stringify(slot.ingredients));
+  const readSlot = (slot: PlanSlot) => {
+    const matches = plansRef.current.filter(plan => plan.plan_date === slot.date && plan.meal_type === slot.mealType);
+    const plan = matches[0];
+    return matches.length === 1 && plan.id === slot.id && plan.meal_id === slot.mealId && plan.meal?.name === slot.name
+      && JSON.stringify(readIngredients(plan.meal?.ingredients ?? null)) === JSON.stringify(slot.ingredients);
+  };
 
   const { data: recipes, loading: recipesLoading, error: recipesError, refresh: refreshRecipes } = useRealtimeQuery<Recipe>({
     table: 'family_recipes', familyId, deps: [familyId],
