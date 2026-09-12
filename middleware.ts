@@ -60,16 +60,6 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/cron',
   '/api/concierge-calls',
   '/api/guardian',
-  // The Family Contact Center's four inbound webhooks. Omitted when the rest of
-  // this group was added, which made every one of them unreachable: middleware
-  // answered the provider's POST with a 307 to /login, so the route — and its
-  // own authentication — never ran at all. Inbound email, SMS, voice and
-  // transcription therefore could not work however the numbers and MX were
-  // configured, and the failure looked like a provider problem rather than a
-  // routing one. Each authenticates itself exactly as this comment requires:
-  // /email demands CONTACT_CENTER_INBOUND_SECRET and is fail-closed in
-  // production, the other three verify the x-twilio-signature and answer 401.
-  '/api/contact-center',
   '/api/email/welcome',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
@@ -83,6 +73,13 @@ const PUBLIC_CONTACT_CALLBACKS = new Set([
   '/api/contact-center/sms',
   '/api/contact-center/voice',
   '/api/contact-center/voice/transcription',
+]);
+
+// These POST handlers authorize their presented assistant-link token before
+// accessing family data. Descendants and other methods still need a session.
+const PUBLIC_ASSISTANT_CALLBACKS = new Set([
+  '/api/assistant',
+  '/api/assistant/alexa',
 ]);
 
 export async function middleware(req: NextRequest) {
@@ -127,6 +124,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
+    || (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
     || PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
