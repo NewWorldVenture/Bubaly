@@ -7,6 +7,14 @@ export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_CALENDAR_URL = 'https://www.googleapis.com/calendar/v3';
 
+/** The read-only calendar client's credentials, trimmed at the single point of use. */
+export function googleClientId(): string {
+  return process.env.GOOGLE_CLIENT_ID?.trim() || '';
+}
+export function googleClientSecret(): string {
+  return process.env.GOOGLE_CLIENT_SECRET?.trim() || '';
+}
+
 /**
  * The `redirect_uri` for the Calendar OAuth flow.
  *
@@ -42,7 +50,7 @@ export function getGoogleOAuthUrl(state: string, origin: string): string {
   // `process.env.GOOGLE_CLIENT_ID!` used to reach Google as the string
   // "undefined" and come back as the same opaque Error 400 as a bad
   // redirect_uri. Failing here names the missing variable instead.
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientId = googleClientId();
   if (!clientId) {
     throw new Error(
       'GOOGLE_CLIENT_ID is not set, so the consent request would be rejected as Error 400: invalid_request.',
@@ -72,8 +80,10 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      // Trimmed: pasted into a hosting dashboard, a trailing newline rides along
+      // and Google answers `invalid_client`, which names nothing.
+      client_id: googleClientId(),
+      client_secret: googleClientSecret(),
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
@@ -118,8 +128,8 @@ export async function refreshGoogleToken(refreshToken: string): Promise<GoogleTo
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: googleClientId(),
+      client_secret: googleClientSecret(),
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),

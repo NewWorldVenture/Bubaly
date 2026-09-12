@@ -24,11 +24,21 @@ const DEFAULT_SCOPES =
 
 // Credentials + config. A dedicated sync client (GOOGLE_SYNC_*) is preferred;
 // falls back to the legacy GOOGLE_* pair so a single-client setup still works.
+// `?.trim() ||`, not `??`. Two reasons, both of which bit in production:
+//
+//  1. THE FALLBACK ABOVE NEVER FIRED. `.env.example` ships GOOGLE_SYNC_CLIENT_ID=
+//     blank, and `??` treats "" as a present value, so the documented "falls back
+//     to the legacy GOOGLE_* pair" did not happen — isGoogleSyncConfigured()
+//     returned false and /api/sync/google/auth answered `?error=not_configured`
+//     with a perfectly good GOOGLE_CLIENT_ID sitting right there.
+//  2. THESE ARE PASTED BY HAND into a hosting dashboard. A trailing newline or
+//     space rides along and Google rejects the exchange as `invalid_client` —
+//     an error that names nothing and looks like a wrong secret.
 export function googleSyncClientId(): string {
-  return process.env.GOOGLE_SYNC_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID ?? '';
+  return process.env.GOOGLE_SYNC_CLIENT_ID?.trim() || process.env.GOOGLE_CLIENT_ID?.trim() || '';
 }
 export function googleSyncClientSecret(): string {
-  return process.env.GOOGLE_SYNC_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? '';
+  return process.env.GOOGLE_SYNC_CLIENT_SECRET?.trim() || process.env.GOOGLE_CLIENT_SECRET?.trim() || '';
 }
 export function isGoogleSyncConfigured(): boolean {
   return !!(googleSyncClientId() && googleSyncClientSecret());
@@ -50,7 +60,7 @@ export function googleSyncScopes(): string {
     process.env.GOOGLE_SYNC_CALENDAR_SCOPES,
     process.env.GOOGLE_SYNC_CALENDAR_READONLY_SCOPE,
     process.env.GOOGLE_SYNC_TASKS_SCOPES,
-  ].filter(Boolean).join(' ').trim();
+  ].map((scope) => scope?.trim()).filter(Boolean).join(' ').trim();
   return `${configured || DEFAULT_SCOPES} openid email`.trim();
 }
 

@@ -7,9 +7,15 @@ import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
 
 // Starts the app-level Google OAuth flow for two-way sync (calendar + tasks,
 // offline access). Distinct from Supabase login: this obtains a persistent
-// refresh token stored encrypted in sync_tokens. The redirect URI is derived
-// from the request origin so it stays consistent through the token exchange —
-// register exactly "<origin>/api/sync/google/callback" in the Google console.
+// refresh token stored encrypted in sync_tokens.
+//
+// The redirect URI comes from googleSyncRedirectUri(), which prefers the
+// configured GOOGLE_SYNC_REDIRECT_URI and only falls back to deriving
+// "<origin>/api/sync/google/callback" from the request. The callback leg calls
+// the SAME helper, which is what keeps the two halves byte-identical — Google
+// compares them and answers a mismatch with Error 400. Register whichever value
+// this resolves to in the Google console. See
+// docs/runbooks/google-oauth-production.md.
 export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('onboarding') === '1') return startOnboardingCalendarOAuth(req, 'google');
   await requireUserContext();
