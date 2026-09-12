@@ -1830,7 +1830,7 @@ begin
       (g.i % 4)                                                 as cf,
       (20 + (g.i * 7) % 120)                                    as saved
   ) d
-  on conflict (family_id, as_of_date) do update
+  on conflict (family_id, as_of_date, kind) do update
     set is_sparse = excluded.is_sparse, readiness_pct = excluded.readiness_pct,
         week_count = excluded.week_count, conflict_count = excluded.conflict_count,
         dinner_count = excluded.dinner_count, time_saved_minutes = excluded.time_saved_minutes,

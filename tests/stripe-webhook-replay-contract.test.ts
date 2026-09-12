@@ -35,7 +35,7 @@ describe('Stripe webhook replay contract', () => {
   });
 
   it('claims before subscription and money side effects', () => {
-    expect(stripeRoute.indexOf('await recordEvent')).toBeLessThan(stripeRoute.indexOf('await upsertSubscription'));
+    expect(stripeRoute.indexOf('await recordEvent')).toBeLessThan(stripeRoute.indexOf('await persistSubscription'));
     expect(moneyRoute.indexOf('await recordEvent')).toBeLessThan(moneyRoute.indexOf('await handleTransactionCreated'));
   });
 

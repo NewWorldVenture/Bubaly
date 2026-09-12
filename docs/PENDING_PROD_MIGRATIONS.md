@@ -2,7 +2,7 @@
 
 **Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
 **This baseline is stale — see "Migrations added since this document's stated
-baseline" at the end for the thirty migrations (`0255`-`0284`) that landed after
+baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
 it, three of which gate features already deployed in the app.**
 All four GitHub Production secrets exist and connectivity works. The secret
 names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
@@ -483,7 +483,7 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Thirty** migrations have landed since, `0255` through `0284`, and
+`01881fb2`. **Thirty-one** migrations have landed since, `0255` through `0285`, and
 none of them appear anywhere above. Nothing here authorizes applying any of
 them; this section exists so the gap is visible rather than inferred from the
 absence of a row.
@@ -518,9 +518,54 @@ CI migration replay in the way production would exercise it:
 - **`0284`'s uniqueness index is expression-based**:
   `(family_id, coalesce(feed_id::text, 'manual'), guid)`, so that hand-added
   books (which have no `feed_id`) do not all collide on NULL. The feed refresh
-  upserts against it by name. An `onConflict` target that does not match a real
-  constraint fails at runtime rather than at deploy, so this is worth confirming
-  on the live schema rather than only in replay.
+  upserts against it by name. ~~worth confirming on the live schema~~ —
+  **confirmed broken, and fixed by `0285`.** Postgres cannot infer an
+  `ON CONFLICT` column list from an expression index, so every feed ingest
+  failed with `42P10` at planning time. `0285` adds a stored generated column
+  and moves the index onto it; apply `0285` with `0284` (see below).
+
+### `0285` repairs five upserts that could never have run
+
+Reproduced by replaying all 300 migrations into a Postgres 16 and issuing the
+exact statement PostgREST emits: all five raised `42P10`, and a control upsert
+against a plain index succeeded.
+
+| Table | The `ON CONFLICT` target | Why no index could satisfy it | What was broken |
+|---|---|---|---|
+| `calendar_events` | `(feed_id, external_uid)` | `uniq_calendar_events_feed_uid` is **partial** | every ICS / Google feed sync |
+| `marketing_automation_runs` | `(workflow_id, subject_key)` | `uniq_mkt_runs_workflow_subject` is **partial** | automation run de-duplication |
+| `family_inbox_messages` | `(channel, provider_ref)` | `uq_inbox_provider_ref` is **partial** | contact-centre inbox de-duplication |
+| `library_items` | `(family_id, feed_id, guid)` | `uq_library_item_guid` is an **expression** index | every podcast feed ingest |
+| `subscriptions` | `(family_id)` | there was **no unique index on `family_id` at all** | every `customer.subscription.*` Stripe webhook |
+
+A partial unique index is inferable only when the statement repeats the index
+predicate, and PostgREST has no syntax to emit one — so a bare column list can
+never target it. For the first three the predicate was redundant anyway (a
+default unique index already treats NULLs as distinct), so `0285` replaces each
+with an equivalent total index: **the set of rows that conflict does not
+change**. Verified in replay — feed events still collapse to one row, manual
+events with a NULL `feed_id` still stay independent.
+
+**This is the second time.** `0195` (above) fixed exactly this failure on
+`dashboard_layouts` and its row already spells the rule out. The knowledge was
+in this document and enforced nowhere, so it recurred five times. It is now a
+check: `scripts/check-conflict-targets.mjs` runs against the real catalog in the
+CI Database job, after the replay, and `scripts/audit-supabase-queries.mjs`
+reports the same finding from the migration files on every pull request.
+
+Two notes for whoever applies it:
+
+- **`subscriptions` is attempted, not forced.** One row per family is an
+  invariant the app already relies on (`use-billing-subscription.ts` reads it
+  with `.maybeSingle()`, which errors on a second row), but a migration must not
+  delete rows from a billing table to make an index fit. If any family holds two
+  subscription rows the index is skipped and the migration raises a **warning**
+  naming the count — watch for it in the apply output. The application does not
+  depend on the index either way: the webhook now updates-then-inserts.
+- **`library_items` gains a column.** `feed_key text generated always as
+  (coalesce(feed_id::text, 'manual')) stored`. It is derived, never written by
+  the app, and PostgREST will not accept a value for it. Apply `0285` together
+  with `0284`, since the app now names `feed_key` as its conflict target.
 
 ### The remaining twenty-seven
 

@@ -20,6 +20,22 @@
 //      user-scoped client. RLS with no policy is a deny-all: those reads return
 //      zero rows forever, and `maybeSingle()` reports that as "nothing is
 //      configured" rather than as an error, so nothing is logged.
+//   6. An `.upsert(rows, { onConflict })` whose target no unique index can
+//      satisfy. Postgres resolves an ON CONFLICT column list by INDEX
+//      INFERENCE, which matches only a unique index over exactly those columns
+//      that is neither an expression index nor partial. Nothing else is a
+//      candidate — not a partial index over the same columns, not an expression
+//      index that computes one of them. When none matches, the statement fails
+//      at PLANNING time (`42P10`), so it fails on the first row of an empty
+//      table, every time, forever. Five of these were live when this check was
+//      written; each read perfectly well on its own, and so did the migration
+//      that created the index. Only the pair was wrong.
+//
+//      The same check runs over `supabase/SEED_ALL.sql`, whose errors the
+//      bootstrap deliberately swallows. It does NOT run over the DML inside the
+//      migrations themselves: that already has a stronger proof, since CI
+//      replays every migration and a failing ON CONFLICT aborts the replay. SQL
+//      inside FUNCTION BODIES is checked by neither, and is the known gap here.
 //
 // Usage: node scripts/audit-supabase-queries.mjs   (exit 1 on any finding)
 
@@ -97,12 +113,79 @@ function splitTopLevel(body) {
   return parts;
 }
 
+/**
+ * Is this index key a bare column, as opposed to an expression?
+ *
+ * Only a bare column can take part in inference. `coalesce(feed_id::text,
+ * 'manual')` cannot, however sensible it is as a uniqueness rule — and 0284
+ * shipped exactly that, which is how `library_items` came to have a unique
+ * index that no upsert could name.
+ */
+function isPlainIndexKey(key) {
+  const bare = key
+    .trim()
+    .replace(/\s+(asc|desc)$/i, '')
+    .replace(/\s+nulls\s+(first|last)$/i, '')
+    .replace(/^"|"$/g, '')
+    .trim();
+  return /^[a-z_][a-z0-9_]*$/i.test(bare);
+}
+
+const indexKeyName = (key) => key
+  .trim()
+  .replace(/\s+(asc|desc)$/i, '')
+  .replace(/\s+nulls\s+(first|last)$/i, '')
+  .replace(/^"|"$/g, '')
+  .trim()
+  .toLowerCase();
+
+const sortedKeys = (keys) => keys.map(indexKeyName).sort().join(',');
+
+/**
+ * Can `ON CONFLICT (target)` be inferred from one of `indexes`?
+ *
+ * Exported because the interesting cases are the ones a reader would get wrong:
+ * `NULLS NOT DISTINCT` is inferable (it is not a predicate), a partial index is
+ * not, and an expression index is not even when its columns look right.
+ */
+export function conflictTargetVerdict(target, indexes) {
+  const want = sortedKeys(String(target).split(','));
+  if (indexes.some((index) => !index.partial && !index.expression && sortedKeys(index.keys) === want)) {
+    return { ok: true };
+  }
+  const sameColumns = indexes.filter((index) => sortedKeys(index.keys) === want);
+  if (sameColumns.some((index) => index.partial)) {
+    return { ok: false, reason: `only a PARTIAL unique index covers those columns (${sameColumns.filter((i) => i.partial).map((i) => i.name).join(', ')}); a partial index is inferable only when the statement repeats its predicate, which PostgREST cannot emit` };
+  }
+  if (sameColumns.some((index) => index.expression)) {
+    return { ok: false, reason: `only an EXPRESSION unique index covers those columns (${sameColumns.filter((i) => i.expression).map((i) => i.name).join(', ')})` };
+  }
+  const expressionNear = indexes.filter((index) => index.expression);
+  if (expressionNear.length > 0) {
+    return { ok: false, reason: `no plain unique index on those columns; the nearest is the expression index ${expressionNear.map((i) => `${i.name}(${i.keys.join(', ')})`).join(', ')}` };
+  }
+  return { ok: false, reason: `no unique index on those columns at all (present: ${indexes.map((i) => `${i.name}(${i.keys.join(', ')})`).join('; ') || 'none'})` };
+}
+
 /** Read the whole migration set into a table -> columns map plus RLS facts. */
 export function readSchema(directory = MIGRATIONS_DIR) {
   const columns = new Map();
   const views = new Set();
   const withPolicy = new Set();
   const functions = new Set();
+  // Keyed by index name so a later `drop index` removes exactly the one it
+  // names. Constraint- and column-level uniques get a synthetic key, since
+  // Postgres names those itself and nothing ever drops them here.
+  const indexes = new Map();
+  let synthetic = 0;
+  const recordIndex = (name, table, keys, { partial = false } = {}) => {
+    const trimmed = keys.map((key) => key.trim()).filter(Boolean);
+    if (trimmed.length === 0) return;
+    indexes.set(name, {
+      name, table: table.toLowerCase(), keys: trimmed, partial,
+      expression: !trimmed.every(isPlainIndexKey),
+    });
+  };
 
   for (const file of readdirSync(directory).filter((name) => name.endsWith('.sql')).sort()) {
     const sql = stripSql(readFileSync(join(directory, file), 'utf8'));
@@ -120,8 +203,22 @@ export function readSchema(directory = MIGRATIONS_DIR) {
       }
       const cols = columns.get(table) ?? new Set();
       for (const part of splitTopLevel(sql.slice(createTable.lastIndex, index - 1))) {
-        const first = part.trim().split(/\s+/)[0]?.replace(/"/g, '').toLowerCase();
+        const text = part.trim();
+        const first = text.split(/\s+/)[0]?.replace(/"/g, '').toLowerCase();
         if (first && !CONSTRAINT_WORDS.has(first) && /^[a-z0-9_]+$/.test(first)) cols.add(first);
+
+        // Table-level UNIQUE / PRIMARY KEY, named or not.
+        const tableLevel = /^(?:constraint\s+"?([a-z0-9_]+)"?\s+)?(?:unique|primary\s+key)\s*\(([^)]*)\)/i.exec(text);
+        if (tableLevel) {
+          synthetic += 1;
+          recordIndex(tableLevel[1] ?? `${table}_unique_${synthetic}`, table, tableLevel[2].split(','));
+          continue;
+        }
+        // Column-level `col type ... unique` / `... primary key`.
+        if (first && !CONSTRAINT_WORDS.has(first) && /\b(unique|primary\s+key)\b/i.test(text.slice(first.length))) {
+          synthetic += 1;
+          recordIndex(`${table}_${first}_unique_${synthetic}`, table, [first]);
+        }
       }
       columns.set(table, cols);
     }
@@ -147,9 +244,54 @@ export function readSchema(directory = MIGRATIONS_DIR) {
 
     const createFunction = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?"?([a-z0-9_]+)"?/gi;
     while ((match = createFunction.exec(sql))) functions.add(match[1].toLowerCase());
+
+    // CREATE UNIQUE INDEX. The key list is balance-scanned rather than matched,
+    // because an expression key contains its own parentheses. Everything from
+    // the closing paren to the semicolon decides `partial`: a WHERE clause makes
+    // it partial, while NULLS NOT DISTINCT and an INCLUDE list do not.
+    const createUnique = /create\s+unique\s+index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?"?([a-z0-9_]+)"?\s+on\s+(?:"?([a-z0-9_]+)"?\s*\.\s*)?"?([a-z0-9_]+)"?\s*(?:using\s+[a-z0-9_]+\s*)?\(/gi;
+    while ((match = createUnique.exec(sql))) {
+      const [, name, schemaName, table] = match;
+      // storage.buckets and friends are the platform's, not ours.
+      if (schemaName && schemaName.toLowerCase() !== 'public') continue;
+      let cursor = createUnique.lastIndex;
+      let depth = 1;
+      while (cursor < sql.length && depth > 0) {
+        if (sql[cursor] === '(') depth += 1;
+        else if (sql[cursor] === ')') depth -= 1;
+        cursor += 1;
+      }
+      const body = sql.slice(createUnique.lastIndex, cursor - 1);
+      const semicolon = sql.indexOf(';', cursor);
+      const tail = sql.slice(cursor, semicolon === -1 ? sql.length : semicolon);
+      recordIndex(name.toLowerCase(), table, splitTopLevel(body), { partial: /\bwhere\b/i.test(tail) });
+    }
+
+    const addUnique = /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z0-9_]+)"?\s+add\s+constraint\s+"?([a-z0-9_]+)"?\s+unique\s*\(([^)]*)\)/gi;
+    while ((match = addUnique.exec(sql))) recordIndex(match[2].toLowerCase(), match[1], match[3].split(','));
+
+    const dropIndex = /drop\s+index\s+(?:concurrently\s+)?(?:if\s+exists\s+)?(?:public\.)?"?([a-z0-9_]+)"?/gi;
+    while ((match = dropIndex.exec(sql))) indexes.delete(match[1].toLowerCase());
+
+    // A UNIQUE declared as a table constraint is dropped by name as a
+    // CONSTRAINT, not as an index. Only the literal form is visible here: 0261
+    // drops home_briefs' old `(family_id, as_of_date)` unique through
+    // `execute format(...)`, and no static reader can follow that. This is the
+    // reason `scripts/check-conflict-targets.mjs` exists and runs against the
+    // real catalog in CI — a parser that cannot see a drop believes an index is
+    // still there, which is the direction that MISSES a defect.
+    const dropConstraint = /alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?(?:public\.)?"?[a-z0-9_]+"?\s+drop\s+constraint\s+(?:if\s+exists\s+)?"?([a-z0-9_]+)"?/gi;
+    while ((match = dropConstraint.exec(sql))) indexes.delete(match[1].toLowerCase());
   }
 
-  return { columns, views, withPolicy, functions };
+  const uniqueIndexes = new Map();
+  for (const index of indexes.values()) {
+    const list = uniqueIndexes.get(index.table) ?? [];
+    list.push(index);
+    uniqueIndexes.set(index.table, list);
+  }
+
+  return { columns, views, withPolicy, functions, uniqueIndexes };
 }
 
 /** Every API route path that exists under app/api. */
@@ -298,6 +440,61 @@ function payloadKeys(args) {
   return keys;
 }
 
+/**
+ * Every `onConflict` target in the app, plus the ones in SEED_ALL.sql.
+ *
+ * Exported so the static audit and the catalog-backed check in
+ * `scripts/check-conflict-targets.mjs` scan for call sites ONE way and differ
+ * only in where they get their index facts.
+ */
+export function collectConflictTargets() {
+  const sites = [];
+
+  for (const file of listSourceFiles()) {
+    const src = readFileSync(file, 'utf8');
+    const rel = relative(ROOT, file).split(sep).join('/');
+    const lineAt = (index) => src.slice(0, index).split('\n').length;
+    // The closing paren belongs in the match: readChain starts where this ends,
+    // and it stops at the first character that is not `.`. Leaving the `)`
+    // behind made this find nothing at all, silently — which reads exactly like
+    // a clean bill of health.
+    const fromCall = /\.from\(\s*'([a-z0-9_]+)'\s*\)/g;
+    let match;
+    while ((match = fromCall.exec(src))) {
+      const table = match[1].toLowerCase();
+      for (const { method, args } of readChain(src, match.index + match[0].length)) {
+        if (method !== 'upsert') continue;
+        const target = /onConflict:\s*['"`]([^'"`]+)['"`]/.exec(args);
+        if (target) sites.push({ file: rel, line: lineAt(match.index), table, target: target[1] });
+      }
+    }
+  }
+
+  // SEED_ALL runs against the FINAL schema and its errors are swallowed by
+  // pg-bootstrap.sh on purpose, so a broken conflict target there is silent.
+  // The migrations' own DML is deliberately NOT scanned: CI replays every
+  // migration in order and a bad ON CONFLICT aborts the replay, which is a
+  // stronger proof than this one. SQL inside function bodies has neither.
+  const seedPath = join(ROOT, 'supabase', 'SEED_ALL.sql');
+  const seed = stripSql(readFileSync(seedPath, 'utf8'));
+  const inserts = [...seed.matchAll(/\binsert\s+into\s+(?:(?:public)\.)?"?([a-z0-9_]+)"?(?!\s*\.)/gi)]
+    .map((m) => ({ at: m.index, table: m[1].toLowerCase() }));
+  for (const match of seed.matchAll(/\bon\s+conflict\s*\(([^)]*)\)/gi)) {
+    const keys = match[1].split(',').map((key) => key.trim());
+    if (keys.some((key) => /[()]/.test(key))) continue;
+    const owner = inserts.filter((insert) => insert.at < match.index).pop();
+    if (!owner) continue;
+    sites.push({
+      file: 'supabase/SEED_ALL.sql',
+      line: seed.slice(0, match.index).split('\n').length,
+      table: owner.table,
+      target: keys.join(','),
+    });
+  }
+
+  return sites;
+}
+
 export function auditSupabaseQueries() {
   const schema = readSchema();
   const routes = readApiRoutes();
@@ -396,6 +593,18 @@ export function auditSupabaseQueries() {
     }
   }
 
+  for (const site of collectConflictTargets()) {
+    if (!schema.columns.has(site.table)) continue;   // already reported as missing-table
+    const verdict = conflictTargetVerdict(site.target, schema.uniqueIndexes.get(site.table) ?? []);
+    if (!verdict.ok) {
+      findings.push({
+        kind: 'uninferable-conflict-target',
+        file: site.file, line: site.line,
+        detail: `${site.table} ON CONFLICT (${site.target}) — ${verdict.reason}`,
+      });
+    }
+  }
+
   // Deny-all tables: RLS is on for every table (0118 enables it across the
   // schema), the generic family sweep skips anything without `family_id`, and a
   // table with no policy at all answers the user client with zero rows.
@@ -420,6 +629,7 @@ const LABELS = {
   'missing-function': 'rpc function does not exist',
   'missing-route': 'no API route handles this fetch',
   'deny-all-table': 'RLS enabled with no policy — user-client reads return zero rows',
+  'uninferable-conflict-target': 'ON CONFLICT target no unique index can satisfy — fails with 42P10 at planning time',
 };
 
 function runCli() {

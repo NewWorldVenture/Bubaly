@@ -1179,7 +1179,12 @@ export interface Database {
       subscriptions: T<
         { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number } & Stamps,
         { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; cancel_at_period_end?: boolean; seats?: number },
-        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number }>
+        // `billing_customer_id` is updatable, `family_id` is not. A family's trial
+        // row is created at signup with no Stripe customer behind it, so the link
+        // has to be attachable later — the subscription webhook is where that
+        // happens. Which family owns the row is a different question, and stays
+        // closed, like every other family-scoped Update in this file.
+        Partial<{ billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number }>
       >;
       // ── Financial ──────────────────────────────────────────
       financial_accounts: T<
