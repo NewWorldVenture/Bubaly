@@ -2,10 +2,10 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.120Z
-- Last Updated: 2026-09-12T18:32:30.246Z
-- Total Audit Items: 13617
-- Not Started: 13571
-- In Progress: 43
+- Last Updated: 2026-09-12T18:38:00.345Z
+- Total Audit Items: 13618
+- Not Started: 13568
+- In Progress: 47
 - Passed: 1
 - Fixed + Passed: 0
 - Blocked: 0
@@ -10346,8 +10346,8 @@ PRODUCTION READY: NO
 | FLOW-B5B471C61BB0 | FLOW | goals | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-BBDEFA2950F4 | FLOW | google | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-EEF93E1D1448 | FLOW | graph | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| FLOW-121DB83BE141 | FLOW | groceries | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| FLOW-7AA5EB472A55 | FLOW | grocery | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| FLOW-121DB83BE141 | FLOW | groceries | 🔄 IN PROGRESS | High | Pending | None | Pending | Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration. |
+| FLOW-7AA5EB472A55 | FLOW | grocery | 🔄 IN PROGRESS | High | Pending | None | Pending | Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration. |
 | FLOW-DDE6E8974B46 | FLOW | guardian | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-62484E22A6A5 | FLOW | health | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-4EA140588150 | FLOW | home | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10362,7 +10362,7 @@ PRODUCTION READY: NO
 | FLOW-0A7AACAE9B43 | FLOW | lp | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-E2A530E251D3 | FLOW | marketing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-DFD76B3ECBEF | FLOW | marketplace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| FLOW-F146172C0036 | FLOW | meals | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| FLOW-F146172C0036 | FLOW | meals | 🔄 IN PROGRESS | High | Pending | None | Pending | Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration. |
 | FLOW-C064FBCA9D9D | FLOW | memory | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-F5CCCFB73751 | FLOW | messages | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | FLOW-3BC801A33EA8 | FLOW | migrate | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13686,6 +13686,7 @@ PRODUCTION READY: NO
 | SUPPORT-C30241E58095 | SUPPORT | tests/e2e/password-login-boundaries.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-AF285E96F2C7 | SUPPORT | tests/e2e/password-session-ownership.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-63EAA3373812 | SUPPORT | tests/password-middleware.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
+| MEAL-001 | MEAL | Choose seven dinners and build a grocery list from persisted ingredients | 🔄 IN PROGRESS | High | Planned in weekly-meal-planning-cycle.md | In progress | Pending | Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration. |
 
 ## Inventory and evidence rules
 
@@ -17078,7 +17079,7 @@ Pending
 
 ### FLOW-121DB83BE141 — groceries
 
-Status: ⬜ NOT STARTED
+Status: 🔄 IN PROGRESS
 Severity: Unassessed
 Source chain: lib/services/groceries/index.ts
 API routes: None discovered directly
@@ -17107,11 +17108,11 @@ Pending
 Pending
 
 #### Final Status
-⬜ NOT STARTED
+🔄 IN PROGRESS
 
 ### FLOW-7AA5EB472A55 — grocery
 
-Status: ⬜ NOT STARTED
+Status: 🔄 IN PROGRESS
 Severity: Unassessed
 Source chain: app/(app)/dashboard/grocery/actions.ts
 API routes: None discovered directly
@@ -17140,7 +17141,7 @@ Pending
 Pending
 
 #### Final Status
-⬜ NOT STARTED
+🔄 IN PROGRESS
 
 ### FLOW-DDE6E8974B46 — guardian
 
@@ -17606,7 +17607,7 @@ Pending
 
 ### FLOW-F146172C0036 — meals
 
-Status: ⬜ NOT STARTED
+Status: 🔄 IN PROGRESS
 Severity: Unassessed
 Source chain: app/(app)/dashboard/meals/actions.ts, lib/services/meals/index.ts
 API routes: None discovered directly
@@ -17635,7 +17636,7 @@ Pending
 Pending
 
 #### Final Status
-⬜ NOT STARTED
+🔄 IN PROGRESS
 
 ### FLOW-C064FBCA9D9D — memory
 

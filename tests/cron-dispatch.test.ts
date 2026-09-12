@@ -48,7 +48,7 @@ describe('vercel.json ↔ dispatcher table', () => {
       '/api/cron/ai-runs',
       '/api/cron/autopilot-scan', '/api/cron/checkout-abandoned', '/api/cron/close-auctions', '/api/cron/contact-center-urgent', '/api/cron/family-routines',
       '/api/cron/feedback-github-sync',
-      '/api/cron/journey-recovery', '/api/cron/marketing', '/api/cron/marketing-providers', '/api/cron/model-refresh', '/api/cron/provider-sync', '/api/cron/push-scan',
+      '/api/cron/journey-recovery', '/api/cron/marketing', '/api/cron/marketing-providers', '/api/cron/marketing-social', '/api/cron/model-refresh', '/api/cron/provider-sync', '/api/cron/push-scan',
       '/api/cron/social-publish',
     ]);
     for (const path of slowed) expect(runsAtMostDaily(SCHEDULES[path as keyof typeof SCHEDULES]), path).toBe(false);

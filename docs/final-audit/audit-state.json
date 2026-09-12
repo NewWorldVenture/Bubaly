@@ -141894,12 +141894,12 @@
       "area": "FLOW",
       "name": "groceries",
       "source": "lib/services/groceries/index.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
+      "status": "IN PROGRESS",
+      "severity": "High",
       "tests": "Pending",
       "fix": "None",
       "retest": "Pending",
-      "notes": "",
+      "notes": "Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration.",
       "discoveryGroupId": "APIG-050"
     },
     "FLOW-7AA5EB472A55": {
@@ -141908,12 +141908,12 @@
       "area": "FLOW",
       "name": "grocery",
       "source": "app/(app)/dashboard/grocery/actions.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
+      "status": "IN PROGRESS",
+      "severity": "High",
       "tests": "Pending",
       "fix": "None",
       "retest": "Pending",
-      "notes": "",
+      "notes": "Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration.",
       "discoveryGroupId": "APIG-051"
     },
     "FLOW-DDE6E8974B46": {
@@ -142118,12 +142118,12 @@
       "area": "FLOW",
       "name": "meals",
       "source": "app/(app)/dashboard/meals/actions.ts, lib/services/meals/index.ts",
-      "status": "NOT STARTED",
-      "severity": "Unassessed",
+      "status": "IN PROGRESS",
+      "severity": "High",
       "tests": "Pending",
       "fix": "None",
       "retest": "Pending",
-      "notes": "",
+      "notes": "Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration.",
       "discoveryGroupId": "APIG-066"
     },
     "FLOW-C064FBCA9D9D": {
@@ -185685,7 +185685,20 @@
       "fix": "None",
       "retest": "Pending",
       "notes": "Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate."
+    },
+    "MEAL-001": {
+      "id": "MEAL-001",
+      "key": "weekly-meal-planning",
+      "area": "MEAL",
+      "name": "Choose seven dinners and build a grocery list from persisted ingredients",
+      "source": "components/modules/meals-module.tsx; app/(app)/dashboard/meals/actions.ts; lib/services/meals/index.ts; lib/services/groceries/index.ts",
+      "status": "IN PROGRESS",
+      "severity": "High",
+      "tests": "Planned in weekly-meal-planning-cycle.md",
+      "fix": "In progress",
+      "retest": "Pending",
+      "notes": "Weekly meal planning is being simplified and verified; see docs/final-audit/weekly-meal-planning-cycle.md for discovery, intended workflow, test plan and upstream integration."
     }
   },
-  "lastUpdated": "2026-09-12T18:32:30.246Z"
+  "lastUpdated": "2026-09-12T18:38:00.345Z"
 }

@@ -65,6 +65,10 @@
       "schedule": "15 7 * * *"
     },
     {
+      "path": "/api/cron/marketing-social",
+      "schedule": "45 6 * * *"
+    },
+    {
       "path": "/api/cron/model-refresh",
       "schedule": "0 4 * * *"
     },

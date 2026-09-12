@@ -48,6 +48,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ['/admin/marketing/sms', 'SMS'],
       ['/admin/marketing/push', 'Push'],
       ['/admin/marketing/social', 'Social'],
+      ['/admin/marketing/social/recurring', 'Recurring'],
       ['/admin/marketing/ads', 'Ads'],
       ['/admin/marketing/automation', 'Automation'],
       ['/admin/marketing/experiments', 'A/B Testing'],
