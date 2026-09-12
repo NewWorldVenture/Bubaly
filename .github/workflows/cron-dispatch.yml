@@ -16,7 +16,7 @@ name: Cron dispatch
 #
 # Cost lever: the tick is every 5 minutes (~290 short runs/day). Change it to
 # '*/15 * * * *' to cut Actions minutes by two thirds; the only routes that
-# lose precision are the two five-minute ones (marketing, close-auctions).
+# lose precision are those registered with a five-minute cadence in SCHEDULES.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:

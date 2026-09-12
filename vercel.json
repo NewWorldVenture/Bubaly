@@ -53,6 +53,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/guardian-sms-recovery",
+      "schedule": "10 2 * * *"
+    },
+    {
       "path": "/api/cron/journey-recovery",
       "schedule": "0 15 * * *"
     },

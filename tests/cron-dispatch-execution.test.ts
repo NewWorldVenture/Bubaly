@@ -7,6 +7,7 @@ const SECRET = 'unit-test-cron-secret-do-not-log';
 const AT = ['--at', '2026-09-12T12:05:00Z'];
 const FIXED_TICK_ROUTES = [
   '/api/cron/ai-runs', '/api/cron/close-auctions', '/api/cron/contact-center-urgent',
+  '/api/cron/guardian-sms-recovery',
   '/api/cron/marketing', '/api/cron/social-publish',
 ];
 const SINGLE = [...AT, '--route', '/api/cron/notifications'];
@@ -52,7 +53,7 @@ describe('cron dispatcher CLI configuration and dispatch', () => {
     expect(result.output).not.toContain(SECRET);
   });
 
-  it('dispatches all five routes due at the fixed five-minute tick, once each', () => {
+  it('dispatches all routes due at the fixed five-minute tick, once each', () => {
     const result = cli(AT);
     expect(result.status).toBe(0);
     const calls = result.output.split('\n').filter(line => line.startsWith('TEST_DISPATCH ')).map(line => JSON.parse(line.slice('TEST_DISPATCH '.length)).url);
@@ -121,7 +122,7 @@ describe('cron dispatcher CLI configuration and dispatch', () => {
     expect(result.status).toBe(1);
     const calls = result.output.split('\n').filter(line => line.startsWith('TEST_ATTEMPT ')).map(line => line.slice('TEST_ATTEMPT '.length).trim());
     expect(calls.sort()).toEqual(FIXED_TICK_ROUTES.map(route => `https://cron.invalid${route}`));
-    expect(result.output).toContain('1 of 5 cron route(s) failed');
+    expect(result.output).toContain(`1 of ${FIXED_TICK_ROUTES.length} cron route(s) failed`);
   });
 
   it('cancels an oversized response after reading a bounded preview', () => {

@@ -2,13 +2,13 @@ import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { guardianSmsNotificationId } from '@/lib/guardian/sms-receipt';
 
 const seam = vi.hoisted(() => ({ client: undefined as unknown as SupabaseClient, factory: vi.fn(), pipeline: vi.fn(), scam: vi.fn(), notify: vi.fn(), scope: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.factory }));
 vi.mock('@/lib/guardian/pipeline', () => ({ runDecisionPipeline: seam.pipeline }));
 vi.mock('@/lib/guardian/scam-ai', () => ({ detectScamWithAI: seam.scam }));
-vi.mock('@/lib/services/notifications', () => ({ notify: seam.notify }));
-vi.mock('@/lib/services/scope', async original => ({ ...await original<typeof import('@/lib/services/scope')>(), systemScopeForFamily: seam.scope }));
+vi.mock('@/lib/guardian/sms-notification', () => ({ notifyGuardianSms: seam.notify, guardianSmsScope: seam.scope }));
 
 const ORIGIN = 'https://guardian-fixture.invalid';
 const TOKEN = 'synthetic-signature-token';
@@ -23,6 +23,8 @@ let calls: Call[] = [], failure: 'claim' | 'profile' | 'communication' | 'decisi
 let event: Row | null = null;
 let communication: Row | null = null;
 let profiles: Row[], notifications: Row[], quietHours: Row | null;
+let members: Row[];
+let beforeNotificationInsert: (() => Promise<void>) | undefined;
 let policyFailure: 'contact' | 'profile' | 'rules' | null = null;
 let receipts: Row[] = [];
 let lostReceiptWrite = false;
@@ -64,13 +66,21 @@ beforeEach(() => {
   policyFailure = null;
   receipts = []; lostReceiptWrite = false; beforeReceiptRead = undefined; beforeReceiptWrite = undefined;
   notifications = []; quietHours = null; lostCommunication = false; nullCommunicationReceipt = false; lostNotification = false; profileCount = undefined;
+  members = [{ id: MEMBER, family_id: FAMILY, is_active: true }]; beforeNotificationInsert = undefined;
   lostDecision = false; nullDecisionReceipt = false; emptyDecisionReceipt = false; failDecisionRead = false;
   beforeDecisionUpdate = undefined; beforeCommunicationRead = undefined;
   held = null;
   seam.factory.mockImplementation(() => seam.client);
   seam.pipeline.mockResolvedValue({ contactId: null, contactName: null, trustLevel: 'known_contact', routingMode: 'ai_handle_first', ruleId: null, reason: 'Synthetic permitted message' });
   seam.scam.mockResolvedValue({ isScam: false, scamType: null, confidence: 0 });
-  seam.scope.mockResolvedValue({ familyId: FAMILY }); seam.notify.mockResolvedValue({ ok: true, data: { created: 1, ids: [NOTIFICATION], duplicates: 0, deferred: 0, skippedMemberIds: [] } });
+  seam.scope.mockResolvedValue({ familyId: FAMILY });
+  seam.notify.mockImplementation(async (_scope, input, options) => {
+    const id = guardianSmsNotificationId(options.receiptId);
+    if (!notifications.some(row => row.id === id)) notifications.push({ id, family_id: FAMILY, user_id: null,
+      type: input.type, title: input.title, body: input.body?.trim() || null, related_type: input.relatedType, related_id: input.relatedId,
+      send_at: new Date().toISOString(), is_read: false, sent_at: null, pushed_at: null });
+    return { ok: true, data: { created: 1, ids: [id], duplicates: 0, deferred: 0, skippedMemberIds: [] } };
+  });
   seam.client = createClient('https://guardian-db-fixture.invalid', 'synthetic-service-key', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (raw, init = {}) => {
@@ -132,6 +142,7 @@ beforeEach(() => {
         return selected(found, url, init, 200, profileCount === undefined ? found.length : profileCount);
       }
       if (table === 'guardian_contacts' && method === 'GET') return policyFailure === 'contact' ? error() : selected([], url, init);
+      if (table === 'family_members' && method === 'GET') return selected(members.filter(row => matches(row, url)), url, init);
       if (table === 'guardian_routing_rules' && method === 'GET') return policyFailure === 'rules' ? error() : selected([], url, init);
       if (table === 'guardian_communications' && method === 'GET') {
         beforeCommunicationRead?.();
@@ -160,7 +171,9 @@ beforeEach(() => {
       if (table === 'family_ai_settings' && method === 'GET') return selected(quietHours ? [quietHours] : [], url, init);
       if (table === 'notifications' && method === 'GET') return failure === 'notification-read' ? error() : selected(notifications.filter(row => matches(row, url)), url, init);
       if (table === 'notifications' && method === 'POST') {
-        const rows = (Array.isArray(body) ? body : [body]).map(row => ({ ...row, id: NOTIFICATION, is_read: false, sent_at: null, pushed_at: null }));
+        await beforeNotificationInsert?.();
+        const rows = (Array.isArray(body) ? body : [body]).map(row => ({ ...row, id: row?.id ?? NOTIFICATION, is_read: false, sent_at: null, pushed_at: null }));
+        if (rows.some(row => notifications.some(saved => saved.id === row.id))) return Response.json({ code: '23505', message: 'Synthetic unique notification ID' }, { status: 409 });
         notifications.push(...rows);
         if (lostNotification) throw new Error('Synthetic lost response after committed notification');
         return selected(rows, url, init, 201);
@@ -180,8 +193,9 @@ async function deliver(valid = true, overrides: Record<string, string> = {}, dup
     body: new TextEncoder().encode(encoded.toString()) }));
 }
 async function useRealNotifications() {
-  seam.notify.mockImplementation((await vi.importActual<typeof import('@/lib/services/notifications')>('@/lib/services/notifications')).notify);
-  seam.scope.mockImplementation((await vi.importActual<typeof import('@/lib/services/scope')>('@/lib/services/scope')).systemScopeForFamily);
+  const actual = await vi.importActual<typeof import('@/lib/guardian/sms-notification')>('@/lib/guardian/sms-notification');
+  seam.notify.mockImplementation(actual.notifyGuardianSms);
+  seam.scope.mockImplementation(actual.guardianSmsScope);
 }
 async function useRealPipeline() {
   const screening = vi.spyOn(await import('@/lib/guardian/scam'), 'detectScamFromText');
@@ -253,7 +267,7 @@ describe('signed SMS rejects communication rows as screening authorship', () => 
       expect(communication).toMatchObject({ status: 'screening', routing_mode_used: null });
     };
     expect((await deliver()).status).toBe(200);
-    expect(calls.filter(call => call.table === 'ai_tool_calls' && call.method === 'PATCH')).toHaveLength(1);
+    expect(calls.filter(call => call.table === 'ai_tool_calls' && call.method === 'PATCH')).toHaveLength(2);
   });
   it('retains neutral intake without screening when service capture cannot be saved, then retries', async () => {
     failure = 'receipt-write';
@@ -314,7 +328,7 @@ describe('signed SMS rejects communication rows as screening authorship', () => 
   it('reconciles lost capture and decision-save responses through the actual trusted ledger', async () => {
     lostReceiptWrite = true;
     expect((await deliver()).status).toBe(200); expect(receipts).toHaveLength(1);
-    expect(receipts[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'decided' } });
+    expect(receipts[0]).toMatchObject({ state: 'succeeded', outputs: { phase: 'completed' } });
     expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
   });
   it('uses the trusted saved decision after a lost decision readback without another classifier run', async () => {
@@ -323,7 +337,7 @@ describe('signed SMS rejects communication rows as screening authorship', () => 
     expect(receipts[0]).toMatchObject({ state: 'succeeded' }); expect(seam.notify).not.toHaveBeenCalled();
     beforeReceiptRead = undefined; failure = null;
     expect((await deliver()).status).toBe(200); expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.scam).toHaveBeenCalledOnce();
-    expect(calls.filter(call => call.table === 'ai_tool_calls' && call.method === 'PATCH')).toHaveLength(1);
+    expect(calls.filter(call => call.table === 'ai_tool_calls' && call.method === 'PATCH')).toHaveLength(2);
   });
   it('recovers a missing communication using its previously captured trusted pointer', async () => {
     seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
@@ -506,7 +520,7 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     expect(body).toHaveLength(4096);
     expect((await deliver(true, { Body: body })).status).toBe(200);
     expect(communication).toMatchObject({ body, status: 'received' });
-    expect(seam.scam).toHaveBeenCalledWith(body, '+15555550200', `Family ID: ${FAMILY}`);
+    expect(seam.scam).toHaveBeenCalledWith(body, '+15555550200', `Family ID: ${FAMILY}`, expect.any(AbortSignal));
     expect(calls.every(call => !call.url.searchParams.has('body') && !decodeURIComponent(call.url.href).includes('家庭'))).toBe(true);
     expect(Math.max(...calls.map(call => call.url.href.length))).toBeLessThan(2000);
   });
@@ -532,7 +546,8 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     if (phase === 'decision') failure = 'lease-read';
     else seam.scope.mockImplementation(async () => { failure = 'lease-read'; return { familyId: FAMILY }; });
     expect((await deliver()).status).toBe(503);
-    expect(communication).toMatchObject({ status: phase === 'decision' ? 'screening' : 'received' });
+    if (phase === 'decision') expect(communication).toBeNull();
+    else expect(communication).toMatchObject({ status: 'received' });
     expect(event?.status).toBe('error'); expect(seam.notify).not.toHaveBeenCalled();
   });
   it.each(['routing_rule_id', 'ai_decision_reason', 'scam_type', 'scam_detected', 'scam_confidence', 'routing_mode_used', 'trust_level_at_time', 'status', 'contact_id', 'from_name'])('does not accept a different valid %s decision as its own write receipt', async field => {
@@ -574,7 +589,8 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
     expect((await deliver()).status).toBe(200);
     expect(communication).toMatchObject({ id: expect.any(String), family_id: FAMILY, member_id: MEMBER, twilio_sms_sid: SID, direction: 'inbound' });
     expect(event?.status).toBe('processed');
-    expect(seam.notify).toHaveBeenCalledExactlyOnceWith({ familyId: FAMILY }, expect.objectContaining({ relatedId: communication?.id, relatedType: 'guardian_communications' }));
+    expect(seam.notify).toHaveBeenCalledExactlyOnceWith({ familyId: FAMILY }, expect.objectContaining({ relatedId: communication?.id, relatedType: 'guardian_communications' }),
+      expect.objectContaining({ receiptId: receipts[0].id, signal: expect.any(AbortSignal), beforeWrite: expect.any(Function) }));
     expect(calls.filter(call => call.table === 'guardian_communications' && call.method === 'POST')).toHaveLength(1);
   });
   it('rejects an invalid production signature before creating any database client', async () => {
@@ -707,7 +723,7 @@ describe('actual signed Guardian SMS route through installed PostgREST SDK', () 
 describe('actual scope and notification service integration over installed PostgREST', () => {
   it('saves one notification, retains read/delivery markers and does not recreate it on sequential retry', async () => {
     await useRealNotifications(); lostNotification = true;
-    expect((await deliver()).status).toBe(503); expect(notifications).toHaveLength(1); expect(event?.status).toBe('error');
+    expect((await deliver()).status).toBe(200); expect(notifications).toHaveLength(1); expect(event?.status).toBe('processed');
     notifications[0].is_read = true; notifications[0].sent_at = '2026-09-12T10:00:00Z'; notifications[0].pushed_at = '2026-09-12T10:00:01Z';
     const saved = { ...notifications[0] };
     lostNotification = false;
@@ -729,5 +745,144 @@ describe('actual scope and notification service integration over installed Postg
     expect((await deliver()).status).toBe(200);
     expect(notifications).toHaveLength(1); expect(notifications[0].send_at).toBe('2026-09-13T07:00:00.000Z');
     expect(notifications[0].related_id).toBe(communication?.id);
+  });
+});
+
+async function resume(id = String(receipts[0]?.id ?? COMM), signal?: AbortSignal) {
+  return (await import('@/lib/guardian/sms-processing')).resumeGuardianSms(seam.client as never, id, { signal });
+}
+describe('shared Guardian SMS recovery through the installed PostgREST SDK', () => {
+  it('recovers retained intake after provider callbacks stop, using actual policy and notification reads', async () => {
+    await useRealNotifications(); await useRealPipeline(); policyFailure = 'rules';
+    expect((await deliver()).status).toBe(503);
+    expect(receipts[0].outputs).toMatchObject({ phase: 'captured' });
+    const id = communication?.id;
+    policyFailure = null;
+    expect(await resume()).toBe('completed');
+    expect(communication).toMatchObject({ id, status: 'received', routing_mode_used: 'voicemail_first' });
+    expect(receipts[0].outputs).toMatchObject({ phase: 'completed', completedAt: expect.any(String) });
+    expect(event?.status).toBe('processed'); expect(notifications).toHaveLength(1);
+    expect(seam.factory).toHaveBeenCalledOnce(); // only the original HTTP ingress
+    const saved = structuredClone({ communication, notifications, receipts });
+    expect(await resume()).toBe('completed');
+    expect({ communication, notifications, receipts }).toEqual(saved);
+    expect(seam.scam).toHaveBeenCalledOnce();
+  });
+  it('never promotes a member-authored communication without a trusted receipt', async () => {
+    communication = forgedCommunication(); const before = { ...communication };
+    expect(await resume(COMM)).toBe('unavailable');
+    expect(communication).toEqual(before); expect(event).toBeNull(); expect(receipts).toEqual([]);
+    expect(calls.every(call => call.table === 'ai_tool_calls' && call.method === 'GET')).toBe(true);
+    expect(seam.pipeline).not.toHaveBeenCalled(); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it('keeps a temporarily unmapped signed retry recoverable when its original destination returns', async () => {
+    seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
+    expect((await deliver()).status).toBe(503);
+    const prior = profiles; profiles = [];
+    expect((await deliver()).status).toBe(503); expect(event?.status).toBe('error');
+    expect(receipts[0].outputs).toMatchObject({ phase: 'captured' });
+    profiles = prior;
+    expect(await resume()).toBe('completed'); expect(notifications).toHaveLength(1);
+  });
+  it.each(['other-family', 'other-member', 'inactive-profile', 'missing-member', 'inactive-member', 'duplicate-profile'])('refuses changed recovery destination %s', async change => {
+    seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
+    expect((await deliver()).status).toBe(503);
+    if (change === 'other-family') profiles[0].family_id = COMM;
+    if (change === 'other-member') profiles[0].member_id = COMM;
+    if (change === 'inactive-profile') profiles[0].is_active = false;
+    if (change === 'missing-member') members = [];
+    if (change === 'inactive-member') members[0].is_active = false;
+    if (change === 'duplicate-profile') profiles.push({ ...profiles[0], id: COMM });
+    expect(await resume()).toBe('unavailable'); expect(event?.status).toBe('error');
+    expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it('stops after destination reassignment during classification', async () => {
+    seam.scam.mockImplementation(async () => {
+      profiles[0].family_id = COMM;
+      return { isScam: false, scamType: null, confidence: 0 };
+    });
+    expect((await deliver()).status).toBe(503);
+    expect(communication?.status).toBe('screening'); expect(receipts[0].outputs).toMatchObject({ phase: 'captured' });
+    expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it.each(['actor', 'payload', 'decision', 'pointer'])('refuses tampered recovery receipt %s before claiming work', async change => {
+    seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
+    expect((await deliver()).status).toBe(503);
+    if (change === 'actor') receipts[0].actor_kind = 'member';
+    if (change === 'payload') (receipts[0].inputs as Row).body = 123;
+    if (change === 'decision') (receipts[0].outputs as Row).decision = forgedCommunication();
+    if (change === 'pointer') receipts[0].resource_id = COMM;
+    const before = { ...event }; calls = [];
+    expect(await resume()).toBe('unavailable'); expect(event).toEqual(before);
+    expect(calls.every(call => call.table === 'ai_tool_calls' && call.method === 'GET')).toBe(true);
+    expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it('reconciles processed decision completion without rerunning notification or AI', async () => {
+    beforeReceiptWrite = () => { if (event?.status === 'processed') failure = 'receipt-write'; };
+    expect((await deliver()).status).toBe(503);
+    expect(event?.status).toBe('processed'); expect(receipts[0].outputs).toMatchObject({ phase: 'decided' });
+    beforeReceiptWrite = undefined; failure = null;
+    expect(await resume()).toBe('completed');
+    expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+    expect(receipts[0].outputs).toMatchObject({ phase: 'completed' });
+  });
+  it('never recreates a missing notification when a processed callback only needs completion reconciliation', async () => {
+    beforeReceiptWrite = () => { if (event?.status === 'processed') failure = 'receipt-write'; };
+    expect((await deliver()).status).toBe(503);
+    beforeReceiptWrite = undefined; failure = null; notifications = [];
+    expect(await resume()).toBe('unavailable');
+    expect(notifications).toEqual([]); expect(seam.notify).toHaveBeenCalledOnce();
+    expect(receipts[0].outputs).toMatchObject({ phase: 'decided' });
+  });
+  it('reclaims a completed receipt callback without repeating any effect', async () => {
+    expect((await deliver()).status).toBe(200);
+    const before = structuredClone({ receipts, communication, notifications });
+    Object.assign(event!, { status: 'error', processed_at: null, error: null });
+    expect(await resume()).toBe('completed');
+    expect({ receipts, communication, notifications }).toEqual(before);
+    expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).toHaveBeenCalledOnce();
+    expect(event?.status).toBe('processed');
+  });
+  it('keeps one stable notification when a stale worker resumes after a replacement worker completes', async () => {
+    await useRealNotifications();
+    let release!: () => void, entered!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    beforeNotificationInsert = async () => { beforeNotificationInsert = undefined; entered(); await held; };
+    const old = deliver(); await started;
+    event!.received_at = '2000-01-01T00:00:00Z';
+    expect(await resume()).toBe('completed');
+    release(); expect((await old).status).toBe(503);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].id).toBe(guardianSmsNotificationId(String(receipts[0].id)));
+    expect(receipts[0].outputs).toMatchObject({ phase: 'completed' }); expect(event?.status).toBe('processed');
+    expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.scam).toHaveBeenCalledOnce();
+  });
+  it('returns busy for an active shared lease without changing its receipt or doing work', async () => {
+    seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
+    expect((await deliver()).status).toBe(503);
+    Object.assign(event!, { status: 'processing', received_at: new Date().toISOString(), error: `sms-lease:${COMM}` });
+    const before = structuredClone({ receipts, communication, event });
+    expect(await resume()).toBe('busy'); expect({ receipts, communication, event }).toEqual(before);
+    expect(seam.pipeline).toHaveBeenCalledOnce(); expect(seam.notify).not.toHaveBeenCalled();
+  });
+  it('does no recovery work for a pre-aborted caller', async () => {
+    const controller = new AbortController(); controller.abort();
+    expect(await resume(COMM, controller.signal)).toBe('unavailable'); expect(calls).toEqual([]);
+  });
+  it('stops late continuation when a classifier ignores caller cancellation', async () => {
+    seam.pipeline.mockRejectedValueOnce(new Error('Synthetic policy outage'));
+    expect((await deliver()).status).toBe(503);
+    let release!: () => void, entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    seam.pipeline.mockImplementation(() => new Promise(resolve => {
+      release = () => resolve({ contactId: null, contactName: null, trustLevel: 'unknown', routingMode: 'ai_handle_first', ruleId: null, reason: 'Late policy' });
+      entered();
+    }));
+    const controller = new AbortController(), pending = resume(undefined, controller.signal);
+    await started; controller.abort(); expect(await pending).toBe('unavailable');
+    const count = calls.length; release(); await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(count); expect(seam.scam).not.toHaveBeenCalled(); expect(seam.notify).not.toHaveBeenCalled();
+    expect(communication?.status).toBe('screening');
   });
 });

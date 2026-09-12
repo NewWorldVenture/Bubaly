@@ -225,7 +225,8 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
         });
         expect(Number.isFinite(Date.parse(receipt.finished_at ?? ''))).toBe(true);
         expect(receipt.outputs).toEqual({
-          version: 1, revision: expect.stringMatching(/^[0-9a-f-]{36}$/i), phase: 'decided',
+          version: 1, revision: expect.stringMatching(/^[0-9a-f-]{36}$/i), phase: 'completed',
+          completedAt: expect.any(String),
           decision: {
             status: decision.status, contact_id: decision.contact_id, from_name: decision.from_name,
             trust_level_at_time: decision.trust_level_at_time, routing_mode_used: decision.routing_mode_used,

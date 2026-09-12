@@ -48,6 +48,7 @@ const ALLOWED: Record<string, string> = {
   'app/api/guardian/escalate/route.ts': 'a guardian escalation is the alert a family must get at 3am',
   'app/api/guardian/screen/route.ts': 'the emergency branch of call screening',
   'lib/contact-center/urgent-delivery.ts': 'strict urgent-only durable receipts; deterministic notification primary key prevents duplicate alerts and preserves delivery/read markers on recovery',
+  'lib/guardian/sms-notification.ts': 'routine SMS recovery preserves family-local quiet hours; a deterministic receipt ID and exact relation readback prevent overlapping lease owners from duplicating a notification or resetting delivery/read markers',
 
   // NO DEBT LEFT. This last one still writes its own batch, and that is now a
   // justified exemption rather than something owed: 150 rows through notify()
@@ -82,7 +83,6 @@ describe('a notification that can wake a house goes through notify()', () => {
     // Named individually rather than counted, because "fewer than before" is
     // not a property — these specific three fired on every screened message.
     for (const file of [
-      'app/api/guardian/inbound/sms/route.ts',
       'app/api/guardian/inbound/whatsapp/route.ts',
       'app/api/guardian/status/voicemail/route.ts',
     ]) {
@@ -94,6 +94,13 @@ describe('a notification that can wake a house goes through notify()', () => {
       // worse than not checking it at all.
       expect(src).toContain('systemScopeForFamily(');
     }
+    const smsRoute = readFileSync('app/api/guardian/inbound/sms/route.ts', 'utf8');
+    expect(smsRoute).not.toMatch(/from\('notifications'\)/);
+    expect(smsRoute).toContain('await receiveGuardianSms(');
+    const smsProcessor = readFileSync('lib/guardian/sms-processing.ts', 'utf8');
+    expect(smsProcessor).not.toMatch(/from\('notifications'\)/);
+    expect(smsProcessor).toContain('notifyGuardianSms(scope, {');
+    expect(smsProcessor).toContain('guardianSmsScope(client, input.familyId');
   });
 
   it('none of the converted three marks itself urgent', () => {
@@ -101,6 +108,8 @@ describe('a notification that can wake a house goes through notify()', () => {
     // these ever needs `urgent`, that is a product decision, not a default.
     for (const file of [
       'app/api/guardian/inbound/sms/route.ts',
+      'lib/guardian/sms-processing.ts',
+      'lib/guardian/sms-notification.ts',
       'app/api/guardian/inbound/whatsapp/route.ts',
       'app/api/guardian/status/voicemail/route.ts',
     ]) {

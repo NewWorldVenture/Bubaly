@@ -283,6 +283,8 @@ jobs:
           # Signed Guardian ingress against the disposable server only. A token
           # alone cannot configure outbound Twilio; the fixture refuses real keys.
           TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          # Authenticates only the disposable server's recovery job.
+          CRON_SECRET: ci-only-guardian-recovery-fixture
           ANTHROPIC_API_KEY: ''
           OPENAI_API_KEY: ''
           NEXT_PUBLIC_SITE_URL: http://localhost:3107
