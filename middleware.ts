@@ -60,6 +60,16 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/cron',
   '/api/concierge-calls',
   '/api/guardian',
+  // The Family Contact Center's four inbound webhooks. Omitted when the rest of
+  // this group was added, which made every one of them unreachable: middleware
+  // answered the provider's POST with a 307 to /login, so the route — and its
+  // own authentication — never ran at all. Inbound email, SMS, voice and
+  // transcription therefore could not work however the numbers and MX were
+  // configured, and the failure looked like a provider problem rather than a
+  // routing one. Each authenticates itself exactly as this comment requires:
+  // /email demands CONTACT_CENTER_INBOUND_SECRET and is fail-closed in
+  // production, the other three verify the x-twilio-signature and answer 401.
+  '/api/contact-center',
   '/api/email/welcome',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
