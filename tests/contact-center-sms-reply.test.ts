@@ -270,9 +270,10 @@ describe('SMS automatic reply authority with installed PostgREST', () => {
     await unavailable(readSmsReply(f.client, BINDING));
   });
 
-  it.each(['\u0000', '\u000b', '\ud800', '\ufffe'])('does not commit invalid XML reply %j', async reply => {
-    const f = fixture(); await unavailable(prepareSmsReply(f.client, BINDING, async () => ({ ...CANDIDATE, reply })));
-    expect(f.state.tables.ai_tool_calls).toEqual([]);
+  it.each(['\u0000', '\u000b', '\ud800', '\ufffe'])('repairs newly generated XML-invalid reply %j before freezing it', async reply => {
+    const f = fixture(), receipt = await prepareSmsReply(f.client, BINDING, async () => ({ ...CANDIDATE, reply }));
+    expect(receipt.candidate.reply).toBe('\ufffd');
+    expect(validateSmsReplyReceipt(raw(f))).toEqual(receipt);
   });
 
   it.each([null, 2])('rejects missing or cap-hidden count %s', async count => {

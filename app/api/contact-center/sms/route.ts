@@ -13,6 +13,7 @@ import { resolveFamilyByNumberResult, getOrCreateChannelResult, routeInboundToPl
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { autoReplyText } from '@/lib/contact-center/routing';
+import { safeContactText } from '@/lib/contact-center/text';
 import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
 
 export const runtime = 'nodejs';
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   const from = params.From ?? null;
   const to = params.To ?? '';
-  const body = (params.Body ?? '').slice(0, 4096);
+  const body = safeContactText(params.Body ?? '', 4096);
   const sid = params.MessageSid || params.SmsSid || null;
 
   const admin = createServiceClient();
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
       }
       replyReceipt = await prepareSmsReply(admin, { familyId, channelId: channel.family_id, smsSid: sid, from, to, body }, async signal => {
         signal.throwIfAborted();
-        const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
+        const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
         signal.throwIfAborted();
         const { locale } = await getLocaleContext();
         const suppression = channel.ai_concierge_enabled === false ? 'disabled'

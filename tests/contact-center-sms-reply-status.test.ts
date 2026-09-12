@@ -131,6 +131,17 @@ describe('family-authorized SMS reply display through the installed PostgREST cl
     expect(await readSmsReplyStatuses(displayed())).toEqual({ [INBOUND]: 'legacy_unknown' });
   });
 
+  it.each([998, 999])('keeps legacy null-summary evidence valid with an emoji after %i units', async prefixLength => {
+    const { state, receipt, displayed } = fixture('legacy_unknown');
+    const inputs = receipt.inputs as { binding: { body: string }; candidate: { summary: string }; fingerprint: string };
+    inputs.binding.body = `${'a'.repeat(prefixLength)}😀 tail`;
+    state.inbox[0].body = inputs.binding.body;
+    state.inbox[0].ai_summary = null; state.inbox[0].ai_intent = null;
+    inputs.candidate.summary = 'a'.repeat(prefixLength) + (prefixLength === 998 ? '😀' : '');
+    inputs.fingerprint = hash(JSON.stringify({ binding: inputs.binding, candidate: inputs.candidate }));
+    expect(await readSmsReplyStatuses(displayed())).toEqual({ [INBOUND]: 'legacy_unknown' });
+  });
+
   it('does not read service data if family authorization fails', async () => {
     const { displayed, state } = fixture(); mocks.context.mockRejectedValue(new Error('Authorization fixture denied'));
     await expect(readSmsReplyStatuses(displayed())).rejects.toThrow('Authorization fixture denied');

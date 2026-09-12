@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { InboundIntent } from './routing';
+import { safeContactText, safeSmsReplyText } from './text';
 
 type Admin = SupabaseClient<Database>;
 type Options = { signal?: AbortSignal };
@@ -41,7 +42,7 @@ const inputsSchema = z.object({ version: z.literal(1), policyVersion: z.literal(
 const outputsSchema = z.object({
   version: z.literal(1), revision: uuid, phase: z.enum(['queued', 'emission_reserved', 'suppressed', 'legacy_unknown']),
   inboundId: uuid.nullable(), outboundId: uuid.nullable(), emissionToken: uuid.nullable(), emissionReservedAt: timestamp.nullable(),
-  reason: z.enum(['disabled', 'spam', 'unsupported_recipient', 'reassigned', 'legacy']).nullable(),
+  reason: z.enum(['disabled', 'spam', 'unsupported_recipient', 'reassigned', 'legacy', 'unsupported_content']).nullable(),
   emissionAccountSid: accountSid.optional(), delivery: deliverySchema.optional(),
 }).strict();
 type Inputs = z.infer<typeof inputsSchema>;
@@ -108,6 +109,8 @@ export function validateSmsReplyReceipt(raw: unknown): SmsReplyReceipt {
       || outputs.emissionAccountSid !== undefined || outputs.delivery !== undefined) return unavailable();
     if (outputs.phase === 'queued' && (!inputs.candidate.reply || inputs.candidate.suppression !== null || outputs.reason !== null)) return unavailable();
     if (outputs.phase === 'suppressed' && (!outputs.reason || outputs.reason === 'legacy')) return unavailable();
+    if (outputs.reason === 'unsupported_content' && (!outputs.inboundId || inputs.candidate.suppression !== null
+      || !inputs.candidate.reply || inputs.candidate.reply.length < 1600)) return unavailable();
     if (outputs.phase === 'legacy_unknown' && (outputs.reason !== 'legacy' || !outputs.inboundId || inputs.candidate.reply !== null || inputs.candidate.suppression !== null)) return unavailable();
     if (inputs.candidate.suppression !== null && (outputs.phase !== 'suppressed' || outputs.reason !== inputs.candidate.suppression || inputs.candidate.reply !== null)) return unavailable();
     if (inputs.candidate.intent === 'spam' && outputs.phase !== 'legacy_unknown' && (outputs.phase !== 'suppressed' || outputs.reason !== 'spam')) return unavailable();
@@ -184,10 +187,13 @@ export function prepareSmsReply(admin: Admin, binding: SmsReplyBinding,
     const legacy = await inbound(admin, binding, signal);
     let candidate: SmsReplyCandidate;
     if (legacy) {
-      candidate = candidateSchema.parse({ summary: legacy.ai_summary ?? binding.body.slice(0, 1000), intent: legacy.ai_intent ?? 'other',
+      candidate = candidateSchema.parse({ summary: legacy.ai_summary ?? safeContactText(binding.body, 1000), intent: legacy.ai_intent ?? 'other',
         reply: null, locale: 'und', suppression: null });
     } else {
-      candidate = candidateSchema.parse(await bounded(signal, current => candidateFactory(current), 15_000));
+      const generated = record(await bounded(signal, current => candidateFactory(current), 15_000));
+      candidate = candidateSchema.parse({ ...generated,
+        summary: typeof generated.summary === 'string' ? safeContactText(generated.summary, 1000) : generated.summary,
+        reply: typeof generated.reply === 'string' ? safeSmsReplyText(generated.reply) : generated.reply });
       if (candidate.intent === 'spam') candidate = { ...candidate, reply: null, suppression: 'spam' };
       else if (!phone.safeParse(binding.from).success) candidate = { ...candidate, reply: null, suppression: 'unsupported_recipient' };
       if (candidate.suppression !== null && candidate.reply !== null || candidate.suppression === null && candidate.reply === null) return unavailable();
@@ -296,18 +302,22 @@ export function reserveSmsReply(admin: Admin, receipt: SmsReplyReceipt, options?
     const message = await inbound(admin, current.binding, signal);
     if (!message || message.id !== current.inboundId) return unavailable();
     if (current.phase !== 'queued') return { receipt: current, emission: null };
-    const suppress = async (reason: 'disabled' | 'reassigned') => {
+    const suppress = async (reason: 'disabled' | 'reassigned' | 'unsupported_content') => {
       const next: SmsReplyReceipt = { ...current, revision: randomUUID(), phase: 'suppressed', reason };
       try { await transition(admin, current, next, signal, true); } catch { /* No emission on an uncertain suppression. */ }
       const saved = await currentReceipt(admin, current, signal);
       if (saved.phase === 'queued') return unavailable();
       return { receipt: saved, emission: null };
     };
+    // Frozen historical content cannot be shortened without changing what was
+    // approved and projected. Hold only these unsent, oversized candidates.
+    if (current.candidate.reply!.length >= 1600) return suppress('unsupported_content');
     const reason = await channelSuppression(admin, current, signal);
     if (reason) return suppress(reason);
     await projection(admin, current, signal);
     current = await currentReceipt(admin, current, signal);
     if (current.phase !== 'queued') return { receipt: current, emission: null };
+    if (current.candidate.reply!.length >= 1600) return suppress('unsupported_content');
     const finalMessage = await inbound(admin, current.binding, signal);
     if (!finalMessage || finalMessage.id !== current.inboundId) return unavailable();
     const changed = await channelSuppression(admin, current, signal);

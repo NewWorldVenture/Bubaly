@@ -2,6 +2,7 @@ import 'server-only';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import type { Tables } from '@/lib/database.types';
+import { safeContactText } from './text';
 import {
   SMS_REPLY_COLUMNS, smsReplyReceiptId, smsReplyOutboundId, smsReplyOutboundRef,
   validateSmsReplyReceipt, type SmsReplyReceipt,
@@ -48,7 +49,7 @@ function inboundMatches(row: Row | undefined, receipt: SmsReplyReceipt): boolean
   return !!row && row.id === receipt.inboundId && row.family_id === binding.familyId && row.channel === 'sms'
     && row.direction === 'inbound' && row.provider_ref === binding.smsSid && row.from_addr === binding.from
     && row.to_addr === binding.to && row.body === binding.body && row.subject === null
-    && (receipt.phase === 'legacy_unknown' ? (row.ai_summary ?? binding.body.slice(0, 1000)) === candidate.summary
+    && (receipt.phase === 'legacy_unknown' ? (row.ai_summary ?? safeContactText(binding.body, 1000)) === candidate.summary
       && (row.ai_intent ?? 'other') === candidate.intent : row.ai_summary === candidate.summary && row.ai_intent === candidate.intent);
 }
 function outboundMatches(row: Row | undefined, receipt: SmsReplyReceipt): boolean {

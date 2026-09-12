@@ -235,6 +235,27 @@ describe('voicemail empty acknowledgements', () => {
 });
 
 describe('SMS automatic reply reservation (not provider delivery verification)', () => {
+  it('retains complete Unicode characters when a signed body reaches the intake cap', async () => {
+    const body = `${'a'.repeat(4095)}😀`;
+    expect((await deliver(SMS, { Body: body })).status).toBe(200);
+    const incoming = db.table('family_inbox_messages').find(row => row.direction === 'inbound')!;
+    expect(incoming.body).toBe('a'.repeat(4095));
+    const receipt = db.table('ai_tool_calls').find(row => row.tool_name === 'contact_center.sms_reply')!;
+    expect(receipt.inputs).toMatchObject({ binding: { body: incoming.body } });
+    const before = structuredClone(db.table('family_inbox_messages'));
+    expect((await deliver(SMS, { Body: body })).status).toBe(200);
+    expect(db.table('family_inbox_messages')).toEqual(before);
+  });
+
+  it('replaces an unsupported NUL before persistence while preserving valid text on replay', async () => {
+    const body = 'A signed\u0000message with 😀';
+    expect((await deliver(SMS, { Body: body })).status).toBe(200);
+    const incoming = db.table('family_inbox_messages').find(row => row.direction === 'inbound')!;
+    expect(incoming.body).toBe('A signed\ufffdmessage with 😀');
+    expect((await deliver(SMS, { Body: body })).status).toBe(200);
+    expect(db.table('family_inbox_messages').filter(row => row.direction === 'inbound')).toHaveLength(1);
+  });
+
   it('binds both provider callback attributes to the reserved token and saved account', async () => {
     db.table('family_contact_channels')[0].ai_concierge_enabled = true;
     const accountSid = `AC${'4'.repeat(32)}`;
