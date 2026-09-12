@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
+import { autoFamilyName, autoOwnerName, DEFAULT_OWNER_DISPLAY_NAME } from '@/lib/onboarding/family';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -27,9 +28,17 @@ type AuthUser = {
   user_metadata?: Record<string, unknown> | null;
 };
 
-function deriveName(user: AuthUser, profileName?: string | null): string {
+/**
+ * The owner's name, or null when this account genuinely has none.
+ *
+ * Null is reachable and was mishandled: a phone signup collects a number and
+ * nothing else, so every source below is empty. The old fallback substituted
+ * the literal string 'My' for the person, which the caller then put through a
+ * possessive — creating "My's Family" with one member called "My".
+ */
+function deriveName(user: AuthUser, profileName?: string | null): string | null {
   const meta = (user.user_metadata?.full_name ?? user.user_metadata?.name) as string | undefined;
-  return (profileName?.trim() || meta?.trim() || user.email?.split('@')[0] || 'My').trim();
+  return autoOwnerName([profileName, meta, user.email?.split('@')[0]]);
 }
 
 /**
@@ -68,13 +77,16 @@ export async function ensureActiveFamily(
     .maybeSingle();
   if (profileErr) console.error('[ensure-family] profile lookup failed; using auth metadata', profileErr);
   const ownerName = deriveName(user, profile?.display_name ?? profile?.full_name ?? null);
-  const familyName = ownerName.endsWith('s') ? `${ownerName}' Family` : `${ownerName}'s Family`;
+  const familyName = autoFamilyName(ownerName);
+  // The member row needs a name even when the account has none; 'Parent' is
+  // what the provisioning RPC itself falls back to, so both paths agree.
+  const memberName = ownerName ?? DEFAULT_OWNER_DISPLAY_NAME;
 
   // The locked RPC bypasses RLS and returns the canonical family id.
   const { data: provisionedFamilyId, error: provisionError } = await admin.rpc('ensure_family_for_user', {
     p_user_id: user.id,
     p_name: familyName,
-    p_display_name: ownerName,
+    p_display_name: memberName,
     p_timezone: 'UTC',
   });
   let familyId = provisionedFamilyId;
@@ -102,7 +114,7 @@ export async function ensureActiveFamily(
   // idempotent, so if the trigger DID fire we just reconcile name/role instead
   // of duplicating.
   const { error: memberErr } = await admin.from('family_members').upsert(
-    { family_id: family.id, user_id: user.id, role: 'parent', display_name: ownerName, is_active: true },
+    { family_id: family.id, user_id: user.id, role: 'parent', display_name: memberName, is_active: true },
     { onConflict: 'family_id,user_id' },
   );
   if (memberErr) {

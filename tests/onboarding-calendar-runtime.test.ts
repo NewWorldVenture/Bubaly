@@ -9,7 +9,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 import { getMessages, translate } from '@/lib/i18n/messages';
 
 const mock = vi.hoisted(() => ({ db: null as unknown, cookies: new Map<string, string>(), saveProfile: vi.fn(), exchange: vi.fn(), identity: vi.fn(), legacyContext: vi.fn(),
-  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn(), locale: 'en-US' as LocaleCode }));
+  adapter: null as unknown, context: vi.fn(), sendEmail: vi.fn(), sendReactEmail: vi.fn(), locale: 'en-US' as LocaleCode }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: (name: string, value: string) => mock.cookies.set(name, value), get: (name: string) => mock.cookies.has(name) ? { value: mock.cookies.get(name) } : undefined }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => mock.db, createServiceClient: () => mock.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mock.legacyContext, getUserContext: mock.context }));
@@ -25,7 +25,8 @@ vi.mock('@/lib/sync/access-token', () => ({ getProviderAccessToken: async () => 
 vi.mock('@/lib/server/profiles', () => ({ saveUserProfile: mock.saveProfile }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: async () => {} }));
 vi.mock('@/lib/server/email', () => ({ sendEmail: mock.sendEmail }));
-vi.mock('@/lib/email', () => ({ APP_URL: 'https://bubaly.test', sendReactEmail: async () => {} }));
+vi.mock('@/lib/email', () => ({ APP_URL: 'https://bubaly.test', sendReactEmail: mock.sendReactEmail }));
+vi.mock('@/lib/emails/invite', () => ({ InviteEmail: () => null }));
 vi.mock('@/lib/emails/welcome', () => ({ WelcomeEmail: () => null }));
 vi.mock('@/lib/marketing/automation-events', () => ({ fireAutomationEvent: async () => {} }));
 vi.mock('@/lib/marketing/onboarding-contact', () => ({ upsertOnboardingContact: async () => {} }));
@@ -51,6 +52,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   mock.cookies.clear(); mock.legacyContext.mockReset();
   mock.sendEmail.mockReset().mockResolvedValue(undefined);
+  mock.sendReactEmail.mockReset().mockResolvedValue({ ok: true });
   mock.context.mockReset().mockResolvedValue({ user: { id: userId }, active: { familyId, member: { id: 'owner-member' }, role: 'parent', family: { timezone: 'UTC' } } });
   mock.saveProfile.mockReset().mockResolvedValue({ ok: true });
   mock.exchange.mockReset().mockResolvedValue({ accessToken: 'private-access', refreshToken: 'private-refresh', expiresAt: Date.now() + 3600_000 });
@@ -363,7 +365,13 @@ describe('onboarding OAuth routes and Finish integration', () => {
     expect(await finalizeOnboardingAction({ ...payload, calendarImport: { source: 'url', events: reloaded.data.events, receipt: reloaded.data.receipt } })).toMatchObject({ ok: true });
     expect(db.table('family_members').filter((row) => row.role === 'child')).toHaveLength(1);
     expect(db.table('invites')).toHaveLength(1);
-    expect(mock.sendEmail).toHaveBeenCalledTimes(1);
+    // One invite email for this invitee across BOTH finalize runs — the point
+    // of the keyed upsert. Counted by recipient rather than by total calls:
+    // the same helper also sends the welcome email, and the invite moved onto
+    // it when the wizard adopted the branded template the rest of the product
+    // already used.
+    const invites = mock.sendReactEmail.mock.calls.filter(([args]) => (args as { to: string }).to === 'parent@example.test');
+    expect(invites).toHaveLength(1);
     expect(db.table('calendar_events')).toHaveLength(1);
     expect(db.table('calendar_events')[0].title).toBe('Changed school meeting');
   });
