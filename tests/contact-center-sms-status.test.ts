@@ -132,10 +132,11 @@ describe('actual signed Contact Center status route and private receipt helper',
     expect(mocks.admin).not.toHaveBeenCalled();
   });
 
-  it.each([
+  const invalidFields: Record<string, string>[] = [
     { SmsSid: `SM${'d'.repeat(32)}` }, { SmsStatus: 'delivered' }, { MessageSid: '' }, { MessageSid: 'not-a-sid' },
     { MessageStatus: '' }, { MessageStatus: 'read' }, { From: 'sender-name' }, { To: '' }, { AccountSid: 'bad' },
-  ])('rejects malformed or conflicting identity %j', async patch => {
+  ];
+  it.each(invalidFields)('rejects malformed or conflicting identity %j', async patch => {
     expect((await POST(request({ ...fields(), ...patch }))).status).toBe(400);
     expect(mocks.admin).not.toHaveBeenCalled();
   });

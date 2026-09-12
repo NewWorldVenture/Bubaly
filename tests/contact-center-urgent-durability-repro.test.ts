@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks(); network.mockReset();
   vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('NEXT_PUBLIC_APP_URL', ORIGIN);
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://synthetic.supabase.co'); vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon');
-  vi.stubEnv('TWILIO_ACCOUNT_SID', 'AC_synthetic'); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN); vi.stubEnv('TWILIO_PHONE_NUMBER', '+15555550999');
+  vi.stubEnv('TWILIO_ACCOUNT_SID', `AC${'a'.repeat(32)}`); vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN); vi.stubEnv('TWILIO_PHONE_NUMBER', '+15555550999');
   vi.stubGlobal('fetch', network); vi.spyOn(console, 'error').mockImplementation(() => undefined);
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   mocks.concierge.mockResolvedValue({ intent: 'urgent', summary: 'Urgent help', reply: 'Received', aiUsed: false });
