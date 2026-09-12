@@ -150,10 +150,8 @@ describe('catalogues', () => {
     expect(keys.length).toBeGreaterThan(0);
     for (const locale of LOCALES) {
       const messages = getMessages(locale.code);
-      for (const key of keys) {
-        expect(typeof messages[key], `${locale.code} ${key}`).toBe('string');
-        expect(messages[key], `${locale.code} ${key}`).not.toBe('');
-      }
+      const invalid = keys.filter(key => typeof messages[key] !== 'string' || messages[key] === '');
+      expect(invalid, `${locale.code} has missing or empty source translations`).toEqual([]);
     }
   });
 
