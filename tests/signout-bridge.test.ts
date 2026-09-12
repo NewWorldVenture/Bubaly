@@ -100,7 +100,8 @@ describe('actual compatibility POST, cookie parsing and installed token revocati
     expect(decodeSignOutBridge(response.cookies.get(SIGNOUT_BRIDGE_COOKIE)?.value, new URL(response.headers.get('location')!).searchParams.get('intent')!)?.intent).toBeNull();
     expect(provider).not.toHaveBeenCalled();
   });
-  it.each([{ origin: 'https://other.invalid' }, { origin: 'null' }, { 'sec-fetch-site': 'cross-site' }])('rejects a cross-origin signout before provider or cookie mutation', async headers => {
+  const crossOriginHeaders: Record<string, string>[] = [{ origin: 'https://other.invalid' }, { origin: 'null' }, { 'sec-fetch-site': 'cross-site' }];
+  it.each(crossOriginHeaders)('rejects a cross-origin signout before provider or cookie mutation', async headers => {
     const response = await POST(request('local', headers));
     expect(response.status).toBe(403);
     expect(response.cookies.getAll()).toEqual([]);
