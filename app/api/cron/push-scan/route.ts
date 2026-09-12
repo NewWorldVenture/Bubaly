@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
+  let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
   let pushDispatchFailures = 0;
   try {
     pushed = await dispatchPendingPushes(supabase);
