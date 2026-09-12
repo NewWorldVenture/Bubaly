@@ -282,7 +282,7 @@ describe('the browser holds exactly one auth client', () => {
     expect(client).toContain('durableCookieOptions');
   });
 
-  it('is the only regular browser client, apart from isolated recovery and signup operations', () => {
+  it('is the only regular browser client, apart from isolated recovery, signup and password operations', () => {
     // The recovery and signup clients have no automatic refresh or URL detection;
     // installed-SDK cookie ownership is exercised by their Chromium fixtures.
     // All ordinary app callers must continue using the shared singleton.
@@ -291,6 +291,7 @@ describe('the browser holds exactly one auth client', () => {
     ].flatMap((dir) => walk(dir));
     const offenders = sources.filter((file) => file !== 'lib/supabase/client.ts' && file !== 'components/auth/recovery-form.tsx'
       && file !== 'lib/auth/signup-client.ts'
+      && file !== 'lib/auth/password-client.ts'
       && readFileSync(file, 'utf8').includes('createBrowserClient'));
     expect(offenders).toEqual([]);
   });

@@ -1,4 +1,9 @@
 import { expect, test as base, type BrowserContext, type Cookie } from '@playwright/test';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../../lib/database.types';
+import { syntheticChildEmail } from '../../lib/onboarding/child-login';
+import { deriveChildPassword } from '../../lib/onboarding/child-password';
 import {
   authCookieName, authCookies, closeWithoutSnapshot, createOwnedAccount,
   expireStoredSession, readSession, requireLocalOrigin, type OwnedAccount,
@@ -6,11 +11,78 @@ import {
 
 const enabled = process.env.E2E_DURABLE_SESSION === '1';
 const provider = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-const test = base.extend<{ account: OwnedAccount }>({
+type OwnedChild = { username: string; pin: string; userId: string; dispose: () => Promise<void> };
+
+async function createOwnedChild(account: OwnedAccount): Promise<OwnedChild> {
+  // Refuse remote providers before reading configuration or making a request.
+  const origin = requireLocalOrigin(provider);
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const secret = process.env.CHILD_LOGIN_SECRET ?? '';
+  if (!serviceKey || !secret) throw new Error('Durable-session child E2E requires disposable backend and child-login configuration.');
+  const admin = createClient<Database>(origin, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: (input, init) => fetch(input, { ...init, redirect: 'error' }) },
+  });
+  const username = `ds${randomBytes(10).toString('hex')}`;
+  const pin = String(randomInt(0, 10_000)).padStart(4, '0');
+  const memberId = randomUUID(), loginId = randomUUID();
+  let userId: string | null = null;
+  let disposed = false;
+  async function dispose() {
+    if (disposed || !userId) return;
+    // The throttle has no family FK. Remove only this unique owned username;
+    // all remaining deletes also carry the owned user/member/family predicates.
+    const operations = [
+      () => admin.from('child_login_throttle').delete().eq('username', username),
+      () => admin.from('child_logins').delete().eq('id', loginId).eq('family_id', account.familyId).eq('user_id', userId!),
+      () => admin.from('family_members').delete().eq('id', memberId).eq('family_id', account.familyId).eq('user_id', userId!),
+      () => admin.auth.admin.deleteUser(userId!),
+    ];
+    let failed = false;
+    for (const operation of operations) {
+      try { const { error } = await operation(); failed ||= !!error; } catch { failed = true; }
+    }
+    if (failed) throw new Error('Durable-session E2E could not clean up its owned child fixture.');
+    disposed = true;
+  }
+  try {
+    const { data, error } = await admin.auth.admin.createUser({
+      email: syntheticChildEmail(username), email_confirm: true,
+      // Derivation stays in this private Node setup and the real server action.
+      // Only the username and PIN are ever supplied to the browser form.
+      password: deriveChildPassword(secret, username, pin),
+      user_metadata: { child: true, family_id: account.familyId, member_id: memberId, username, display_name: 'SessionKid' },
+    });
+    if (error || !data.user) throw new Error();
+    userId = data.user.id;
+    const member = await admin.from('family_members').insert({
+      id: memberId, family_id: account.familyId, user_id: userId, role: 'child', display_name: 'SessionKid', is_active: true,
+    });
+    if (member.error) throw new Error();
+    const login = await admin.from('child_logins').insert({
+      id: loginId, family_id: account.familyId, member_id: memberId, user_id: userId, username, created_by: account.userId,
+    });
+    if (login.error) throw new Error();
+    const preferences = await admin.from('user_preferences').upsert({
+      user_id: userId, active_family_id: account.familyId, notification_prefs: { onboardingComplete: true },
+    }, { onConflict: 'user_id' });
+    if (preferences.error) throw new Error();
+    return { username, pin, userId, dispose };
+  } catch {
+    await dispose();
+    throw new Error('Durable-session E2E could not initialize its owned child fixture.');
+  }
+}
+
+const test = base.extend<{ account: OwnedAccount; childAccount: OwnedChild }>({
   account: async ({ baseURL }, runFixture) => {
     requireLocalOrigin(baseURL);
     const account = await createOwnedAccount(provider, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '');
     try { await runFixture(account); } finally { await account.dispose(); }
+  },
+  childAccount: async ({ account }, runFixture) => {
+    const child = await createOwnedChild(account);
+    try { await runFixture(child); } finally { await child.dispose(); }
   },
 });
 test.use({ trace: 'off', screenshot: 'off', video: 'off', locale: 'en-US' });
@@ -41,9 +113,103 @@ async function visitProtected(context: BrowserContext, origin: string) {
   } finally { await page.close(); }
 }
 
+async function signInChild(context: BrowserContext, origin: string, child: OwnedChild) {
+  const page = await context.newPage();
+  try {
+    await page.goto(`${origin}/kid-login`, { waitUntil: 'domcontentloaded' });
+    try {
+      await page.locator('input[name="username"]').fill(child.username);
+      await page.locator('input[name="pin"]').fill(child.pin);
+    } catch { throw new Error('Durable-session E2E could not fill its child sign-in form.'); }
+    // Real React form -> real Next server action -> disposable GoTrue -> guarded
+    // browser adoption. No intercepted login response or injected auth session.
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/home`, { timeout: 60_000 });
+    await expect(page.getByRole('heading', { level: 1 }).filter({ hasText: 'SessionKid' })).toBeVisible();
+    expect(readSession(await context.cookies(), authCookieName(provider)).user.id === child.userId, 'PIN login must save the owned child identity').toBe(true);
+  } finally { await page.close(); }
+}
+
+async function visitChildProtected(context: BrowserContext, origin: string, child: OwnedChild) {
+  const page = await context.newPage();
+  try {
+    const response = await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
+    expect(response?.status(), 'The child must retain protected access').toBe(200);
+    await expect(page).toHaveURL(`${origin}/home`);
+    await expect(page.getByRole('heading', { level: 1 }).filter({ hasText: 'SessionKid' })).toBeVisible();
+    expect(readSession(await context.cookies(), authCookieName(provider)).user.id === child.userId).toBe(true);
+  } finally { await page.close(); }
+}
+
 test.describe('durable browser session against disposable GoTrue', () => {
   test.skip(!enabled, 'Requires E2E_DURABLE_SESSION=1 and the disposable local Supabase.');
   test.setTimeout(90_000);
+
+  test('child PIN login survives cookie-only reopening until explicit sign-out and preserves another device and parent', async ({ browser, baseURL, account, childAccount }) => {
+    test.setTimeout(120_000);
+    const origin = requireLocalOrigin(baseURL), name = authCookieName(provider);
+    const contexts = new Set<BrowserContext>();
+    async function newContext() {
+      const context = await browser.newContext({ locale: 'en-US' });
+      contexts.add(context);
+      return context;
+    }
+    try {
+      const first = await newContext(), otherDevice = await newContext(), parent = await newContext();
+      await signIn(parent, origin, account);
+      await signInChild(first, origin, childAccount);
+      await signInChild(otherDevice, origin, childAccount);
+      const persisted = authCookies(await first.cookies(), name);
+      expect(persisted.length > 0, 'Child PIN login must save persistent auth cookies').toBe(true);
+      for (const cookie of persisted) {
+        expect((cookie.expires * 1000 - Date.now()) / 86_400_000).toBeGreaterThan(30);
+        expect(cookie.path).toBe('/');
+      }
+      await closeWithoutSnapshot(first);
+      contexts.delete(first);
+      let reopened: BrowserContext;
+      try {
+        reopened = await browser.newContext({ storageState: { cookies: persisted.filter(cookie => cookie.expires > 0), origins: [] }, locale: 'en-US' });
+      } catch { throw new Error('Durable-session E2E could not restore its child cookies in memory.'); }
+      contexts.add(reopened);
+      await visitChildProtected(reopened, origin, childAccount);
+      const before = readSession(await reopened.cookies(), name);
+      await expireStoredSession(reopened, name);
+      await visitChildProtected(reopened, origin, childAccount);
+      expect(readSession(await reopened.cookies(), name).refresh_token !== before.refresh_token, 'The reopened child session must perform a real token refresh').toBe(true);
+
+      const page = await reopened.newPage();
+      try {
+        await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
+        await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+        await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+        const [revocation] = await Promise.all([
+          page.waitForResponse(response => {
+            const url = new URL(response.url());
+            return url.origin === requireLocalOrigin(provider) && url.pathname === '/auth/v1/logout' && response.request().method() === 'POST';
+          }),
+          page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click(),
+        ]);
+        expect(revocation.status(), 'The disposable provider must confirm the explicit child logout').toBe(204);
+        expect(new URL(revocation.url()).searchParams.get('scope')).toBe('local');
+        await expect(page).toHaveURL(/\/login(?:\?|$)/);
+        expect(authCookies(await reopened.cookies(), name).every(cookie => cookie.value === ''), 'Explicit child sign-out must clear this browser session').toBe(true);
+        await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
+        await expect(page).toHaveURL(/\/login(?:\?|$)/);
+      } finally { await page.close(); }
+
+      // A real refresh on each independent context proves local logout did not
+      // revoke the child's second device or the parent's separate account.
+      await expireStoredSession(otherDevice, name);
+      await visitChildProtected(otherDevice, origin, childAccount);
+      await expireStoredSession(parent, name);
+      await visitProtected(parent, origin);
+      expect(readSession(await parent.cookies(), name).user.id === account.userId).toBe(true);
+    } finally {
+      const closed = await Promise.allSettled([...contexts].map(closeWithoutSnapshot));
+      if (closed.some(result => result.status === 'rejected')) throw new Error('Durable-session E2E could not close its child browser contexts.');
+    }
+  });
 
   test('persistent cookies survive a fresh browser context without local storage', async ({ browser, baseURL, account }) => {
     const origin = requireLocalOrigin(baseURL);

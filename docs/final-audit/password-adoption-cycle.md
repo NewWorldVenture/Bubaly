@@ -1,0 +1,22 @@
+# Password login ownership
+
+This cycle follows published logout checkpoint `980561ff`. AUTH-L09 was reproduced with the actual installed browser SDK and cookie adapter: password request A was held, another tab completed login B, then releasing A replaced B. The diagnostic printed only ownership booleans: B existed before the response, B was not preserved afterward, and A replaced it. Evidence: `Temp/bubaly-delayed-password-adoption-probe-20260912.cjs` and its log. The diagnostic uses intercepted synthetic providers and does not constitute a deployed workflow test.
+
+`lib/auth/password-client.ts` now runs password requests through an isolated public SDK client with automatic initialization, refresh and URL detection disabled. An empty initial storage view prevents the SDK's own initial subscription from refreshing ambient credentials. Before the first await, the helper captures the exact project session/user cookies and logout generation, including when the session is absent. Every fetch and final cookie write checks the current operation and browser ownership. Pending PKCE verifier cookies are preserved.
+
+Session adoption requires a coherent provider receipt, matching JWT user subject, a future numeric JWT expiry, a future session expiry, and exact cookie readback. The expiry check closes a malformed-response case found by the independent browser suite: fresh metadata must not authorize adoption of an already-expired JWT. Ownership checks do not grant server authority; provider password verification or the public SDK's token/user verification supplies that authority.
+
+A 20-second deadline retires the operation, aborts transport and disposes its SDK. Late server tokens cannot call `setSession` on the disposed operation, and a held final cookie write fails after retirement. Accepted adoption signals a fresh session read even when BroadcastChannel is unavailable. Later receipt checks permit normal rotation within the same user/session. Rotation during the pending request conservatively requires a fresh login attempt while retaining the existing session.
+
+LoginForm rejects duplicate, unmounted and retired submissions. Destination, method and recovery changes retire a pending request. Optional identity stitching is contained, and successful login, landing resolution and navigation each require a current session. Transient/local failures use existing translated copy.
+
+The child PIN path also adopts a password session. Its server action now uses an isolated nonpersisting SDK and returns only the authorized token pair, preserving the PIN secret and both throttle gates on the server. KidLoginForm captures browser ownership before invoking that action, then uses guarded public SDK token verification/adoption and current-session navigation checks. The exact `POST /kid-login` Server Action boundary skips ambient middleware refresh so its response cannot attach unrelated old authentication cookies. Ordinary requests keep their existing middleware behavior.
+
+## Verification in progress
+
+- Root middleware/persistence gate: 31 cases pass, including exact action exemption, unchanged request cookies and ordinary-request controls.
+- Normal-login lane: 56 unit checks and 56 controlled Chromium checks pass, including 23 new actual React/SDK login scenarios and 33 existing recovery scenarios; lint and preliminary nonincremental types pass.
+- Independent ownership lane: 29 actual SDK/Chromium cases pass, including delayed responses, empty-slot logout, final cookie-write races, unavailable storage, malformed/expired receipts, server-token verification, deadline disposal and fallback tab reconciliation.
+- Child server/UI lane and the additional disposable-backend acceptance journey are being finalized. Full frozen-source gates are pending.
+
+These tests preserve the boundary between controlled provider behavior and actual hosted Auth execution. A partial browser cookie write cannot be rolled back atomically; the helper reports failure without restoring old bytes over a replacement session. Unrelated server responses, ordinary OAuth/phone adoption, production session settings and physical mobile acceptance remain separate audit obligations. No SQL, shared navigation or dependencies are changed in this cycle.
