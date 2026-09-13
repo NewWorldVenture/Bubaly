@@ -36,12 +36,12 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: complete.** Fourteen findings, and the arithmetic stated
-exactly rather than approximately:
+**Audit status: reopened, then complete again.** Fifteen findings, and the
+arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **9** — F2, F4, F7, F8, F10, F11 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **10** — F2, F4, F7, F8, F10, F11, F15 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Closed without a code change** | **3** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -52,6 +52,9 @@ Nothing is left unexamined or unassigned.
 
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
+- **Reopened:** 2026-09-13 — F7 was not a one-off but a *shape*: an entitlement
+  stated on a screen and absent from the pipeline behind it. Every paid feature
+  was re-checked for that shape. It recurred (F15)
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
@@ -75,6 +78,7 @@ Nothing is left unexamined or unassigned.
 | F12 | The 404 page ships no server-rendered markup | Low | **Closed — recorded, not worth the fix** |
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
 | F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Fixed on main by #526** |
+| F15 | Family Autopilot (Plus) ran nightly for *every* family — both things that run it had no plan check | High | **Fixed** |
 
 ---
 
@@ -570,6 +574,71 @@ The rest of this branch — robots coverage, the seeded customer stories, the
 missing `<h1>`s, the brand-doubled titles — does not overlap #526 at all.
 
 ---
+
+## F15 — Family Autopilot ran for every family on the platform *(High, fixed)*
+
+F7 closed a gate that existed on the Contact Center screen and nowhere in the
+pipeline behind it. That is a shape, not an incident, so every paid feature was
+re-checked for it. Autopilot had the same one, and worse consequences.
+
+`/dashboard/autopilot` is `requireFeature`-gated, and `resolveAutopilotSuggestionAction`
+re-checks the tier before it writes. Both are correct. But the two things that
+actually *run* Autopilot checked nothing:
+
+| Entry point | Guard it had |
+|---|---|
+| `GET /api/cron/autopilot-scan` | none — `from('families').select('id').limit(5000)`, then scan each |
+| `POST /api/autopilot/scan` | `requireUserContext()` — a session, not an entitlement |
+
+So the nightly cron ran the full Plus feature for every family on the platform.
+`runAutopilotScan` is not a read: for a family that never bought it, it
+
+- wrote behavioural traits to `family_digital_twin_profiles`,
+- auto-created `reminders` rows and `grocery_items` (the "auto-executed" path),
+- inserted `autopilot_suggestions`, and
+- sent push/email through the notifications service.
+
+The gating made that worse rather than safer. A Free family got reminders and
+shopping-list entries they did not create, and notifications about them — then
+could not open `/dashboard/autopilot` to see where any of it came from, because
+the page redirects them to billing, and could not dismiss a suggestion, because
+the action returns `accessDenied`. The only surface that explained the writes was
+the one they were refused.
+
+### The fix — one resolver, not a fourth copy
+
+`requireFeature` could not be reused here: it resolves the caller's session and
+then throws a `redirect`, which a cron has neither of. That is exactly why every
+pipeline that *did* check had hand-rolled its own copy of "tier → level →
+compare" — `lib/server/ai-access.ts`, `lib/services/trips/confirmation-import.ts`
+and `lib/services/onboarding-calendar/access.ts` each hold a different one — and
+why the two above simply skipped it.
+
+So the resolution moved into `lib/server/feature-entitlement.ts`, and
+`requireFeature` became a wrapper over it. The page guard and the pipelines now
+compute entitlement with the same function; they cannot drift again without
+someone deleting the call.
+
+Both entry points now refuse, and the interesting part is what they do when the
+plan cannot be *read*. `resolveFamilyPlanLevel` throws on a failed subscription
+read, and an unreadable plan is not an unentitled family — the F7 lesson,
+applied again:
+
+- the cron counts it as a **failure** for that family (502 overall), never a
+  skip, so a subscription blip cannot silently stop Autopilot for a paying
+  family while the run reports success;
+- the route answers **503**, not 403, so a paying family is never told they need
+  to upgrade to something they already bought.
+
+### Proof, not a green test
+
+`tests/autopilot-plan-gate.test.ts` drives both real routes against an in-memory
+database holding one Free and one Plus household, and asserts which family ids
+`runAutopilotScan` was handed. Four mutations were applied to confirm the
+assertions bite — the cron gate, the route gate, "unreadable plan → skip", and
+"unreadable plan → 403" — and each failed the suite before being reverted. The
+one source-reading case in the file is the one claim that *is* about source:
+that `requireFeature` no longer holds its own copy of the comparison.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
