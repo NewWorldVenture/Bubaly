@@ -26,6 +26,9 @@ inferred from a filename or a comment.
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
 | F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Open — needs decision** |
 | F10 | Seeded placeholder records shown as real customer stories on the homepage and /pricing | High | **Fixed** |
+| F11 | Five public pages had no `<h1>` at all | Medium | **Fixed** |
+| F12 | The 404 page ships no server-rendered markup | Low | **Open — recorded** |
+| F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
 
 ---
 
@@ -300,6 +303,78 @@ longer renders them, which is the visible outcome, but deleting them is an admin
 action (Super Admin → Marketing, or SQL) that this session has no credentials
 for.
 
+## F11 — Five public pages had no `<h1>` *(Medium, fixed)*
+
+Verified against production: `/faq`, `/contact`, `/mobile` and `/family-display`
+each returned **zero `<h1>` elements**, starting their document outline at `<h2>`.
+
+All four used `SectionHeading` for their **page title**, and that component
+hard-coded `h2`. Pages with a hand-rolled hero (`/`, `/pricing`, `/features`)
+render exactly one `<h1>` and were unaffected — which is why this only hit the
+pages that reused the shared component.
+
+A missing `h1` costs screen-reader users their primary means of orienting on a
+page, and removes the strongest on-page relevance signal for search.
+
+**Fix.** `SectionHeading` takes an optional `as="h1"`, defaulting to `h2` so
+every existing section heading is unchanged. The five page titles set it. The
+class list is identical at either level and a test asserts that — this is a
+document-outline fix and those pages must look exactly as they did.
+
+**The fifth page.** The structural test caught `/resources/benchmarks`, which
+live probing could never have found: it 404s while its publication flag is off.
+Same defect, same fix.
+
+**A vacuous test, caught and fixed.** The first version of the sweep passed even
+with the fix reverted. The JSDoc I had just written on `SectionHeading` contains
+the literal `as="h1"` as an instruction to callers, so every page importing that
+module matched on the comment. Found by reverting one page and watching the test
+stay green — precisely the failure F4 is about. The sweep now strips comments
+before scanning, and reverting `/faq` correctly fails and names it.
+
+## F12 — The 404 page ships no server-rendered markup *(Low, recorded)*
+
+A dead URL under a public prefix correctly answers **404**, but the response body
+contains no rendered content — only an unresolved React Suspense placeholder:
+
+```html
+<body><div hidden=""><!--$?--><template id="B:0"></template><!--/$--></div>
+```
+
+69 characters of markup, against 6,133 on the homepage. The words "Page not
+found" appear exactly once in the response, escaped inside the JSON flight
+payload — never as HTML. Confirmed on two separate dead URLs.
+
+So the 404 page is blank until JavaScript loads and hydrates it.
+
+**Scope checked, and it is narrow.** All 17 public pages were measured and every
+one ships real markup (6 KB–92 KB). This is specific to the not-found path, not
+systemic.
+
+**Severity, honestly.** Visitors with JavaScript — effectively all of them — see
+the correct page after hydration, and the HTTP status is already correct, so the
+SEO impact is minimal. The cost is a blank screen on a slow connection and
+nothing at all without JS. Recorded with evidence rather than fixed, because the
+fix touches how `not-found.tsx` resolves translations and the payoff is small;
+worth doing deliberately rather than as a drive-by.
+
+## F13 — Unknown top-level paths redirect to login *(By design — no change)*
+
+`/nope` answers **307 → `/login?redirect=%2Fnope`** rather than 404. Paths under
+a known public prefix behave correctly: `/blog/nope`, `/features/nope` and
+`/customers/nope` all return 404.
+
+The cause is the middleware's allowlist: a path that is not public is treated as
+a protected app route. **That is the correct posture** — failing closed is what
+keeps an unlisted route from leaking, and the entire `/api/contact-center` and
+assistant-bridge history on this codebase is about routes that were *missing*
+from an allowlist. The cost is that a typo'd marketing URL lands on a login page
+and search engines see a soft 404 instead of a hard one.
+
+Deliberately **not changed**: trading fail-closed routing for a nicer typo
+experience is a bad exchange, and weakening auth routing is off-limits. Recorded
+so the trade-off is known rather than rediscovered.
+
 ---
 
 ## Verified healthy (no action)
@@ -315,7 +390,13 @@ for.
 | Production revision | `/api/build-info` reports `f9c4d7a1…`, matching `main` — production is current |
 | Typecheck | `tsc --noEmit` clean |
 | Lint | 0 errors (2 pre-existing `exhaustive-deps` warnings, untouched) |
-| Test suite | 1,148 files / 13,091 tests passing |
+| Test suite | 1,150 files / 13,102 tests passing |
+| Security headers | see above — CSP, HSTS, frame/nosniff/referrer/permissions all present |
+| Domain redirects | `http://bubaly.com`, `https://bubaly.com` and `http://www.bubaly.com` all 308 to `https://www.bubaly.com`; trailing slash 308s to the canonical path. An initial `000` reading on the apex was a transient blip — it resolved cleanly on all three retries, so it is not reported as a finding |
+| Accessibility basics | one `<h1>` per page (after F11), all images carry `alt`, `lang` set, skip link present, single `<main>` landmark |
+| Server-rendered content | all 17 public pages ship 6 KB–92 KB of real markup; only the 404 path does not (F12) |
+| Programmatic SEO routes | `/compare`, `/guides`, `/alternatives`, `/audiences`, `/questions`, `/glossary` render from `marketing_pages` and simply have no published rows yet — feature built, content pending. Not a defect |
+| Unresolved work markers | 38 `TODO`/`FIXME` in source; the substantive ones are migration-gated and explicitly marked "owner approval required", i.e. blocked behind F5. None independently closeable |
 | Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
 | Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
 
