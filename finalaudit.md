@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Ten audits of bubaly.com, kept in one file because one file is the record.
+Eleven audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -16,6 +16,7 @@ They ran over **different surfaces** and none supersedes another:
 | **H — Storage object paths** | the Storage buckets Passes A–G never looked at: which are public, and what protects an object in one | 1 | `H-01` |
 | **I — Role boundaries** | the question Pass D left open: not who is calling or which family, but which ROLE — can a child reach what a parent decides | 1 | `I-01` |
 | **J — What the AI may do** | the 94-tool registry: does a tool that declares it cannot write actually not write, given that the write gate believes the declaration | 0 | — |
+| **K — Tenant scope on the request path** | the step after D: a handler that has authenticated its caller and then takes an id out of the request body — is that id checked against the household the request is about | 2 | `K-01`, `K-02` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -54,6 +55,16 @@ export of a `'use server'` module is an HTTP endpoint with its own action id,
 callable without the component that normally calls it. 487 of them exist. The
 pass is at Pass D below, together with the false-positive class that nearly got
 33 non-defects reported as findings.
+
+**Pass K is Pass D's question one step further along.** D asked whether a
+server action knows WHO is calling; K asks, of route handlers, whether a handler
+that already knows who is calling checks that an id in the request body belongs
+to the household the request is about. The two findings are the same class on
+two surfaces and neither is a cross-tenant breach: RLS holds, and it holds
+membership-wide on purpose, so what crossed was one household of the caller's
+own into another of the caller's own. Pass K also records the sixth
+pattern-based miscount in this file — its own guard read clean over the very
+defect it was written for, and was caught by reverting the fix.
 
 Everything else is disjoint.
 
@@ -3188,3 +3199,209 @@ same criteria: it sits under the public `/api/blog` prefix, is IP rate-limited a
 against the code. Its degradation to an empty index is logged, with the comment
 citing the stale-sitemap defect (**F-012**) that once hid behind that same catch.
 Clean.
+
+---
+
+# Pass K — Tenant scope on the request path (K-01, K-02)
+
+Pass D asked whether a server action knows **who** is calling. This asks the
+question one step further along, of the other half of the surface: a route
+handler that has authenticated its caller and then takes an **id out of the
+request body** — does it check that the id belongs to the household the request
+is about?
+
+- **Surface:** **141 `route.ts` files, 149 exported handlers**; 71 of them reach
+  a service-role client. **2,809 Supabase query chains** across `app/` and `lib/`.
+- **Findings:** **2**, both fixed here. Both in the same class, neither a
+  cross-tenant breach.
+
+## The boundary is real, and it is deliberately wider than one household
+
+Every family table carries `family_id` — the replayed catalogue says **0 of 491**
+tables are member-keyed without one — and their RLS reads
+`is_family_member(family_id)`.
+
+That predicate admits **every family the caller belongs to**, and that is
+correct: a parent with a household on each side of a separation is one account
+with two families, and both have to work. Nothing is wrong with the policy.
+
+What is wrong is reading a row by `member_id` and calling the result *this
+family's* data. The filter is what narrows a membership-wide policy to the one
+household the page, the plan check and the feature gate were all decided
+against — and if the filter is absent, nothing else supplies it.
+
+## The routes that take an id and check it — the standard the two missed
+
+Three do this properly and are worth naming, because the pattern is established
+here and was simply not applied in two places:
+
+| route | what it does |
+|---|---|
+| `app/api/moving/recalculate/route.ts` | refuses with `context_changed` unless `body.familyId === ctx.active.familyId` **and** `body.memberId === ctx.active.member.id` |
+| `app/api/vacations/confirmation-import/route.ts` | eight-way comparison against the resolved context before it will act |
+| `app/api/paperwork/link/route.ts` | `expectedFamilyId !== ctx.active.familyId` → 409 |
+
+## Status summary
+
+| id | what it was | severity | state |
+|---|---|---|---|
+| K-01 | `/api/behavior/insight` read `behavior_logs` with **no family filter at all** | Medium | **fixed** |
+| K-02 | `/api/ai/health/coach` read three of its four health tables across households | Medium | **fixed** |
+
+## K-01 — One parenting insight, two households *(Medium, fixed)*
+
+`app/api/behavior/insight/route.ts` built its query as
+
+```ts
+let q = supabase.from('behavior_logs').select(…).gte('occurred_at', since).limit(200);
+if (body.memberId) q = q.eq('member_id', body.memberId);
+```
+
+— `occurred_at`, optionally `member_id`, and nothing else. The comment above it
+reads *"family-scoped via the cookie client + RLS"*, which is true of the client
+and not true of the scope.
+
+Two consequences, both live:
+
+1. With no `memberId` the route returned the caller's behaviour logs **from every
+   household they belong to**, blended into one summary and one set of parenting
+   tips. The page is per-family; the answer silently was not.
+2. `refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/behavior'])`
+   two statements above is checked against the **active** family only, so the
+   other household's data passed a gate it had never been held to.
+
+**Also fixed here:** `const { data: logs } = await q` discarded the error, and
+the next line answered *"No behavior has been logged yet. Start logging positive
+moments and concerns…"*. A refused read was therefore reported to a parent as an
+empty log, and they were invited to start logging what they had already logged —
+the same shape as **F-a**, on a different surface.
+
+## K-02 — A health answer that crossed households and then got medication wrong *(Medium, fixed)*
+
+`app/api/ai/health/coach/route.ts` grounds its answer in four reads issued
+together. Three took `memberId` straight from the request body with no family
+filter; the fourth did not:
+
+| read | before |
+|---|---|
+| `family_members` | `.eq('id', memberId)` |
+| `medical_profiles` | `.eq('member_id', memberId)` |
+| `symptom_logs` | `.eq('member_id', memberId)` |
+| `medications` | `.eq('family_id', familyId).eq('member_id', memberId)` ← **scoped** |
+
+The inconsistency is inside **one `Promise.all`**, and it is what makes this
+worse than merely wrong. Name a member of your *other* household and the coach
+describes that person — display name, date of birth, blood type, allergies,
+conditions, and their last ten symptoms — and then reports **"Active
+medications: none on file"**, because the one correctly scoped query returns
+nothing for a member of a different family.
+
+A confident wrong answer about medication, on a surface that opens by saying it
+is not medical advice, is worse than a refusal. All four reads now name the
+family, and a refused read now answers 503 rather than coaching over a medical
+record it could not read.
+
+## Proving the premise, rather than asserting it
+
+The premise — that `is_family_member` admits a second household — cannot be read
+off the policy text: `is_family_member` is a function, the policies are created
+inside `execute format(...)` loops, and the app filter is what actually scopes
+the query. So `docs/audit/member-scope-crossing-check.sql` proves it
+behaviourally against the replayed database, in a transaction that rolls back:
+
+1. a parent seeded into **two** families reads the second family's `symptom_logs`
+   and `behavior_logs` by `member_id` alone — the defect's premise;
+2. adding `family_id = <active>` returns **0** — the filter is what scopes it;
+3. a user in **neither** family reads **0** both ways — so (1) is a scoping gap
+   and not RLS being off, which would be a far larger finding.
+
+Negative control: pointing step 2's "active family" at the household the row is
+actually in fails the probe with both table names. It runs in CI — `run-probes.sh`
+globs `docs/audit/*-check.sql` — and the suite is **18/18**.
+
+## How Pass K is kept closed
+
+`tests/member-scoped-reads-name-their-family.test.ts` — **21 cases**, parsed with
+the TypeScript compiler over **2,809 query chains**.
+
+| what it holds | how |
+|---|---|
+| It is parsing something | floor of 500 chains — a sweep over nothing passes forever |
+| No read is scoped to a person without a household | `member_id`, `family_member_id`, `child_id`, `assigned_to`, `assignee_id` |
+| **It sees a filter added to a reassigned builder** | `let q = …; q = q.eq('member_id', …)` folded back into its chain |
+| It sees a chain broken across six lines | the chain is one AST node, so line breaks are irrelevant |
+| Both routes stay scoped, by name | failing with the route rather than with a number |
+| Every exemption states a checkable reason | > 40 characters, and a stale entry fails |
+| A `family_members` read never takes its id from the request | the other half of the class — see below |
+
+Each fix proved load-bearing by reverting it: removing the `behavior_logs`
+filter fails 2 cases naming the route and line; removing the `symptom_logs`
+filter fails 2 more; removing the `family_members` filter fails 2 more.
+
+### The half the first sweep could not see, and the near-miss inside it
+
+`family_members` is keyed by `id`, not `member_id`, so a read of it is not a
+member filter at all and the sweep above is blind to it — yet one of K-02's three
+crossing reads was exactly that shape. It was found by **reading the route**, not
+by the sweep. A class half-covered by a guard reads as covered, so the guard now
+covers both halves.
+
+There are **17** such reads in the tree and **all 17 are right**, for two reasons
+worth separating rather than listing. Fifteen pass an id that was **derived** —
+`cw.member_id` from a `child_wallets` row already resolved, `ctx.active.member.id`
+from the session, `memberProfile.member_id` from a signature-authenticated
+lookup — so the id could not name a stranger's member in the first place. Two are
+super-admin actions, where naming any member is the point. One file
+(`child-login-actions.ts`) does take `input.memberId` from the request and is
+right anyway, because it reads the row first and refuses unless
+`row.family_id === ctx.active.familyId`. That is a rule, not a list, and the guard
+encodes the rule.
+
+**And it was wrong on its first run.** The rule tests whether the id's expression
+is request-shaped, anchored at the start — which reads
+
+```ts
+const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
+```
+
+as *derived*, because the expression begins with `typeof`. The sweep passed
+cleanly over the very defect it had just been written for. It surfaced only
+because the fix was reverted to check the guard was load-bearing and **the
+general case stayed green** while the named-route case failed — the same vacuous
+pass that exposed the hole in Pass C's sweep, caught the same way. The predicate
+is now unanchored, and eight of the 21 cases pin it against both shapes so the
+mistake is a standing check rather than a memory.
+
+That is the **sixth** pattern-based miscount recorded in this audit, and the
+second found by reverting rather than by luck.
+
+## What was checked and found clean
+
+- **Service-role IDOR on the request path.** 149 handlers; the combination that
+  would be dangerous — session-authenticated, service-role client, caller-supplied
+  tenant id, no ownership check — occurs **0 times**.
+- **The `/api/cron` and webhook group.** 25 handlers reach no session guard; each
+  authenticates itself instead (`hasCronAuthorization`, a `Bearer ${secret}`
+  comparison, `validateTwilioSignature`, `verifyAlexaRequest`, Stripe's
+  `constructEvent`). `contact-center/voice/transcription` takes `familyId` from
+  the **query string**, which is inside Twilio's signed URL, so the id is
+  authenticated by the HMAC rather than trusted.
+- **`/api/admin/benchmarks/export`** re-verifies `getUser()` + `isSuperAdmin()` in
+  the handler, because a route handler is not protected by the `/admin` layout.
+  (It was flagged by a first sweep whose guard vocabulary simply did not contain
+  those two names — a detector gap, recorded here so the flag is not mistaken for
+  a finding.)
+- **`/api/ai/invest`, `/api/ai/schedule`, `/api/ai/trip`.** All three take
+  something caller-supplied and all three are right: `childWalletId` is used only
+  against `.eq('family_id', familyId)` rows, `memberIds` is a client-side filter
+  over rows already family-scoped, and `members` are names in a prompt rather
+  than ids.
+
+## Verification
+
+- Full suite: **1,184 files, 13,606 tests, all passing**
+- `tsc --noEmit` clean · `eslint` clean on every changed file
+- `npm run db:audit:queries` — 491 tables, 77 functions, 141 API routes, all resolve
+- Boundary probes **18/18** against a fresh replay of all **308** migrations
+- **No migration.** Both fixes are application filters over a policy that is
+  already correct, so nothing here is waiting on the gated ledger.
