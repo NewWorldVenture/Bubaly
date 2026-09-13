@@ -90,7 +90,7 @@ export function ChoresModule() {
     },
   });
 
-  const { data: rewards } = useRealtimeQuery<Reward>({
+  const { data: rewards, error: rewardsError, refresh: refreshRewards } = useRealtimeQuery<Reward>({
     table: 'rewards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('rewards').select('*').eq('family_id', familyId).order('cost_points'),
   });
@@ -209,7 +209,10 @@ export function ChoresModule() {
   }
 
   if (loading) return <SkeletonList count={6} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load chores'} onRetry={refresh} />;
+  // The rewards read matters too: it is what the redemption list is priced
+  // from, so losing it shows a child nothing to spend their points on.
+  const readError = error || rewardsError;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load chores'} onRetry={() => { void refresh(); void refreshRewards(); }} />;
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'mine', label: 'My Chores' },

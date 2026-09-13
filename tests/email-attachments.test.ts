@@ -52,6 +52,10 @@ beforeEach(() => {
 });
 
 async function deliver(files: File[], ref = 'email-1') {
+  return POST(await requestFor(files, ref));
+}
+
+async function requestFor(files: File[], ref = 'email-1') {
   const form = new FormData();
   form.set('to', 'household@bubaly.com');
   form.set('from', 'office@example.com');
@@ -59,9 +63,43 @@ async function deliver(files: File[], ref = 'email-1') {
   form.set('text', 'Please see attached.');
   form.set('Message-Id', ref);
   files.forEach((file, i) => form.append(`attachment-${i + 1}`, file));
-  return POST(new NextRequest('http://localhost/api/contact-center/email', {
-    method: 'POST', headers: { 'x-inbound-secret': 'test-secret' }, body: form,
-  }));
+
+  // Serialize the form, then hand the route a plain stream over those exact
+  // bytes rather than the FormData object itself. Two reasons, and the first is
+  // the one that matters: handing FormData straight to Request gives it
+  // undici's generator-backed body, and cancelling that mid-flight — which is
+  // precisely what the over-budget path does — leaves undici enqueueing into a
+  // stream it just closed. That surfaced as an unhandled rejection
+  // ("Invalid state: ReadableStream is already closed") that vitest reported
+  // against whichever test happened to be running, and an unhandled rejection
+  // nobody can attribute is how a real one goes unnoticed. A real inbound POST
+  // arrives on a Node HTTP stream, which cancels cleanly; this makes the
+  // fixture behave like the thing it stands in for.
+  //
+  // Second: no content-length is declared either way, so the route still takes
+  // its streaming size check rather than the cheap declared-length shortcut —
+  // the branch these tests exist to cover.
+  const serialized = new Response(form);
+  const body = new Uint8Array(await serialized.arrayBuffer());
+  const stream = new ReadableStream({
+    start(controller) {
+      for (let at = 0; at < body.byteLength; at += 65536) {
+        controller.enqueue(body.subarray(at, at + 65536));
+      }
+      controller.close();
+    },
+  });
+  // Built as a platform Request first: a streaming body needs `duplex`, which
+  // NextRequest's own init type does not carry.
+  return new NextRequest(new Request('http://localhost/api/contact-center/email', {
+    method: 'POST',
+    headers: {
+      'x-inbound-secret': 'test-secret',
+      'content-type': serialized.headers.get('content-type') ?? '',
+    },
+    body: stream,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' }));
 }
 
 function source(files: File[], overrides: Partial<Parameters<typeof fileEmailAttachments>[1]> = {}) {
@@ -184,6 +222,11 @@ describe('inbound multipart attachment capture', () => {
   });
 
   it('bounds the whole multipart request before any database or provider work', async () => {
+    // The fixture declares no content-length, so this is the streaming size
+    // check doing the work — not the cheap declared-length shortcut in front of
+    // it. A body that lies about its length has to be stopped by the bytes it
+    // actually sends, and that is the branch under test here.
+    expect((await requestFor([])).headers.get('content-length')).toBeNull();
     const response = await deliver([new File([new Uint8Array(MAX_MULTIPART_EMAIL_BYTES)], 'oversize.pdf', { type: 'application/pdf' })]);
     expect(response.status).toBe(413);
     expect(db.log).toHaveLength(0);

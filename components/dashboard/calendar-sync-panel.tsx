@@ -5,6 +5,7 @@ import { RefreshCw, Link2, Trash2, Plus, Check, AlertCircle } from 'lucide-react
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
+import { ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -37,7 +38,7 @@ export function CalendarSyncPanel() {
 
   // Feeds now persist in Supabase — they sync across every device and
   // auto-refresh nightly via cron, instead of living in this browser only.
-  const { data: feeds, loading } = useRealtimeQuery<CalendarFeed>({
+  const { data: feeds, loading, error: readError, refresh } = useRealtimeQuery<CalendarFeed>({
     table: 'calendar_feeds', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('calendar_feeds').select('*').eq('family_id', familyId).order('created_at'),
   });
@@ -82,6 +83,11 @@ export function CalendarSyncPanel() {
 
       {loading ? (
         <div className="rounded-xl border border-border p-6 text-center text-sm text-muted">{t('calendarSync.loadingCalendars')}</div>
+      ) : readError ? (
+        // "No calendars subscribed yet" after a failed read reads as "your
+        // subscriptions are gone", and the obvious response is to add them
+        // again — duplicating every feed the family already had.
+        <ErrorState message={t('calendarSync.couldNotLoadCalendars')} onRetry={() => { void refresh(); }} />
       ) : (feeds ?? []).length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
           <Link2 className="mx-auto h-8 w-8 text-muted/40" />

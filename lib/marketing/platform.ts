@@ -13,23 +13,11 @@ import { syncMarketingProviders } from './provider-sync';
 
 export type MarketingPlatformDb = SupabaseClient<Database>;
 export type MarketingPage = Tables<'marketing_pages'>;
-export type MarketingPageType =
-  | 'landing' | 'question' | 'guide' | 'comparison' | 'alternative'
-  | 'audience' | 'resource' | 'glossary' | 'feature' | 'blog' | 'custom';
-
-export const PAGE_TYPES: { value: MarketingPageType; label: string; prefix: string }[] = [
-  { value: 'landing', label: 'Landing page', prefix: '/lp' },
-  { value: 'question', label: 'Question', prefix: '/questions' },
-  { value: 'guide', label: 'Guide', prefix: '/guides' },
-  { value: 'comparison', label: 'Comparison', prefix: '/compare' },
-  { value: 'alternative', label: 'Alternative', prefix: '/alternatives' },
-  { value: 'audience', label: 'Audience', prefix: '/audiences' },
-  { value: 'resource', label: 'Resource', prefix: '/resources' },
-  { value: 'glossary', label: 'Glossary', prefix: '/glossary' },
-  { value: 'feature', label: 'Feature', prefix: '/features' },
-  { value: 'blog', label: 'Blog', prefix: '/blog' },
-  { value: 'custom', label: 'Custom', prefix: '/p' },
-];
+// The list itself lives in a leaf module so the Edge middleware can read it too
+// — this file is server-only. Imported for local use AND re-exported, so every
+// existing `from '@/lib/marketing/platform'` import keeps working unchanged.
+import { PAGE_TYPES, type MarketingPageType } from './page-types';
+export { PAGE_TYPES, type MarketingPageType };
 
 const PAGE_TYPE_SET = new Set<string>(PAGE_TYPES.map((item) => item.value));
 

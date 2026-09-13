@@ -36,8 +36,12 @@ export async function POST(req: NextRequest) {
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
   const supabase = createServiceClient();
   const callbackId = guardianEscalationEventId(body);
-  const claimed = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
-  if (!claimed) return NextResponse.json({ ok: true, duplicate: true });
+  const claim = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
+  // The claim could not be written, so nothing here has been recorded. A 200
+  // would tell Twilio this callback succeeded and it would never retry; a 503
+  // asks it to come back. Silence is the one answer that loses the event.
+  if (claim === 'unavailable') return NextResponse.json({ error: 'Escalation claim unavailable' }, { status: 503 });
+  if (claim !== 'claimed') return NextResponse.json({ ok: true, duplicate: true });
   const finish = async (payload: Record<string, unknown>, status = 200) => {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return NextResponse.json(payload, { status });

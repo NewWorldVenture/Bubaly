@@ -53,8 +53,11 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
   const callbackId = `${callSid}:screen:${turn}`;
-  const eventClaimed = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
-  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlSay(tr('screen.thankYouForCallingGoodbye')), twimlHangup()));
+  const claim = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
+  // Saying goodbye is right for a duplicate and wrong for an outage: it ends a
+  // live screening call and reports success. A 503 lets Twilio fall back.
+  if (claim === 'unavailable') return new NextResponse('', { status: 503 });
+  if (claim !== 'claimed') return twimlResponse(wrapTwiml(twimlSay(tr('screen.thankYouForCallingGoodbye')), twimlHangup()));
   const finish = async (xml: string) => {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return twimlResponse(xml);

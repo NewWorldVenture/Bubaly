@@ -19,7 +19,7 @@ import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -67,7 +67,7 @@ export function MomentsView({ departures, departuresFailed = false }: {
   const { success, error: toastError } = useToast();
 
   const nowISO = useMemo(() => new Date().toISOString(), []);
-  const { data: rows, loading } = useRealtimeQuery<Event>({
+  const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('calendar_events').select('*')
       .eq('family_id', familyId).gte('starts_at', nowISO)
@@ -181,7 +181,12 @@ export function MomentsView({ departures, departuresFailed = false }: {
         </div>
       )}
 
-      {loading ? <SkeletonList /> : moments.length === 0 ? (
+      {loading ? <SkeletonList /> : readError ? (
+        // "Nothing on the horizon" is the whole point of this page. Saying it
+        // when the calendar read failed is the page confidently telling a
+        // family there is nothing to get ready for.
+        <ErrorState message={t('momentsView.couldNotLoadMoments')} onRetry={() => { void refresh(); }} />
+      ) : moments.length === 0 ? (
         <EmptyState
           icon={Sparkles}
           title={t('moments.nothingOnTheHorizon')}
