@@ -1,5 +1,5 @@
 'use client';
-import { shouldPersistOnUnmount, resumeFrom } from '@/lib/library/progress';
+import { shouldPersistOnUnmount, resumeFrom, LIBRARY_CACHE } from '@/lib/library/progress';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Play, Pause, Bookmark, BookmarkCheck, Download, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
@@ -29,6 +29,20 @@ export type PlayableItem = {
   completed: boolean;
 };
 
+/**
+ * Where the bytes come from: Bubaly's own origin, not the publisher's.
+ *
+ * `cache.add()` fetches from the DOCUMENT context, so it answers to
+ * `connect-src` — not `media-src`, which is why streaming from a CDN worked and
+ * downloading from one never could. No podcast host is on this app's
+ * connect-src allowlist, so every Download press failed with a CSP refusal.
+ * A same-origin URL is permitted by `connect-src 'self'` as it stands, and it
+ * also sidesteps CORS, since `cache.add` rejects an opaque response.
+ */
+function mediaHref(itemId: string): string {
+  return `/library/media/${encodeURIComponent(itemId)}`;
+}
+
 export function ItemRow({ item }: { item: PlayableItem }) {
   const { success, error } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -49,11 +63,11 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   useEffect(() => {
     let alive = true;
     if (!item.mediaUrl || typeof caches === 'undefined') { setCached(false); return () => { alive = false; }; }
-    caches.match(item.mediaUrl)
+    caches.match(mediaHref(item.id))
       .then((hit) => { if (alive) setCached(Boolean(hit)); })
       .catch(() => { if (alive) setCached(false); });
     return () => { alive = false; };
-  }, [item.mediaUrl]);
+  }, [item.mediaUrl, item.id]);
 
   // Write the position on unmount as well as on the interval, so closing the
   // tab mid-episode does not lose the last stretch of listening.
@@ -121,12 +135,17 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         setCached(false);
         return;
       }
+      const href = mediaHref(item.id);
       try {
-        const cache = await caches.open('bubaly-library-v1');
-        if (next) { await cache.add(item.mediaUrl); setCached(true); success('Saved for offline.'); }
-        else { await cache.delete(item.mediaUrl); setCached(false); success('Removed from offline.'); }
+        const cache = await caches.open(LIBRARY_CACHE);
+        if (next) { await cache.add(href); setCached(true); success('Saved for offline.'); }
+        else { await cache.delete(href); setCached(false); success('Removed from offline.'); }
       } catch {
         setCached(false);
+        // The flag was written before the bytes were fetched, and used to stay
+        // written when the fetch failed — so the row claimed a download that
+        // did not exist and the tick asserted it. Put it back.
+        if (next) void saveProgressAction({ itemId: item.id, offline: false }).then(() => setOffline(false));
         error(next ? 'That file could not be stored offline.' : 'That file could not be removed.');
       }
     });
@@ -172,7 +191,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         </div>
       </div>
       {item.mediaUrl && (
-        <audio ref={audioRef} src={item.mediaUrl} preload="none" onTimeUpdate={onTimeUpdate}
+        <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
           onEnded={() => { setPlaying(false); void saveProgressAction({ itemId: item.id, completed: true }); }} />
       )}
       {offline && cached === false && (
