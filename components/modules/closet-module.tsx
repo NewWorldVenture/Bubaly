@@ -5,6 +5,7 @@ import {
   Shirt, Plus, Sparkles, Thermometer, Trash2, Star, X, Camera, History, WashingMachine, Check, Pencil, Wand2, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -411,7 +412,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     setUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${familyId}/closet/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'closet', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       setPhotoPath(stored.path);

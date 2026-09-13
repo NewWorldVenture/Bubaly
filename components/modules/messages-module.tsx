@@ -8,6 +8,7 @@ import {
   Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -385,7 +386,7 @@ export function MessagesModule() {
     try {
       const supabase = createClient();
       const ext = file.name.split('.').pop();
-      const path = `${familyId}/messages/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'messages', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);

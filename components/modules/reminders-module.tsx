@@ -8,6 +8,7 @@ import {
   Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo, ChevronDown, Search,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
@@ -632,7 +633,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     try {
       const supabase = createClient();
       const ext = file.name.split('.').pop();
-      const path = `${familyId}/reminders/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'reminders', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);

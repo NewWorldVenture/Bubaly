@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Seven audits of bubaly.com, kept in one file because one file is the record.
+Eight audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -13,6 +13,7 @@ They ran over **different surfaces** and none supersedes another:
 | **E — Read honesty** | the mirror of C: a read whose error is discarded, where something downstream then treats the absence it returns as a fact | 1 | `E-01` |
 | **F — Public API routes** | every `route.ts` under a PUBLIC middleware prefix, which reaches the handler with no session: does it authenticate itself, and does it only claim what it can support | 2 | `F-a`, `F-b` |
 | **G — RLS completeness** | all 491 tables in a real replayed catalogue: is RLS on, and is any policy a blanket `true` | 0 | — |
+| **H — Storage object paths** | the Storage buckets Passes A–G never looked at: which are public, and what protects an object in one | 1 | `H-01` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -2838,3 +2839,104 @@ their numbers suggest. Recorded as an observation, not a finding: the five-digit
 names appear to be the older scheme and sorting first may well be historically
 correct. Anyone re-pinning the manifest should confirm that rather than assume
 it, because the apply order is what a replay depends on.
+
+---
+
+# Pass H — Storage object paths (H-01)
+
+Passes A–G asked their questions of **tables**. Nothing asked them of
+`storage.objects`, and a family's photos do not live in a table.
+
+Seven buckets exist. Three are private (`documents`, `chore-proof`,
+`marketing-assets`); four are public (`avatars`, `marketplace-photos`,
+`feedback-attachments`, `family-media`).
+
+`family-media` being public is a **known, owner-tracked decision**, and
+`0216_family_media_bucket.sql` states it plainly: consumers resolve attachments
+with `getPublicUrl`, existing rows in `family_photos` / `family_messages`
+already store public URLs, so flipping the bucket to private would break every
+stored link, and hardening reads to signed URLs is tracked separately. That is
+not re-litigated here.
+
+What that decision implies, and the migration does not say, is the finding.
+
+## Status summary
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| H-01 | Four of six upload sites named objects with a millisecond timestamp, in a bucket where the path is the only access control | High | **Fixed** — this branch |
+
+---
+
+## H-01 — An enumerable name in a public bucket *(High, fixed)*
+
+While the bucket is public, Supabase serves
+`/storage/v1/object/public/family-media/<path>` to **anyone** — no session, no
+RLS. The family-scoped `SELECT` policy 0216 adds governs the *authenticated*
+Storage API; it is not in the path of a public URL. So the object path is the
+entire access control.
+
+Six places upload here. They did not agree on what a path is for:
+
+| site | path | |
+|---|---|---|
+| `photos-module.tsx` | `${familyId}/${folder}/${crypto.randomUUID()}.${ext}` | unguessable |
+| `create-memory.tsx` | `${familyId}/photos/${crypto.randomUUID()}.${ext}` | unguessable |
+| `closet-module.tsx` | `${familyId}/closet/${Date.now()}.${ext}` | **enumerable** |
+| `inventory-module.tsx` | `${familyId}/inventory/${Date.now()}.${ext}` | **enumerable** |
+| `messages-module.tsx` | `${familyId}/messages/${Date.now()}.${ext}` | **enumerable** |
+| `reminders-module.tsx` | `${familyId}/reminders/${Date.now()}.${ext}` | **enumerable** |
+
+A millisecond timestamp is not a secret. The family id is the only other
+component, and it is known to every current **and former** member. A day holds
+86.4M timestamps across three or four plausible extensions, and real uploads
+cluster into narrow windows, so a bounded scan finds them.
+
+The consequence is about people rather than arithmetic: **removing someone from
+a family did not stop them reading its closet, home-inventory, message and
+reminder attachments — or discovering new ones as they were added.** Message
+attachments are the sharpest of the four. Photos and Create-Memory, the two
+sites whose authors clearly thought about this, were already right; the
+disagreement between them is what made it visible.
+
+### The fix
+
+`familyMediaPath(familyId, kind, fileName)` in `lib/storage/family-media.ts` —
+one place that decides this, which all six sites now call. It keeps the family id
+as the first segment, because 0216's INSERT policy is
+`is_family_member((storage.foldername(name))[1])` and an upload whose first
+segment is not the family is refused.
+
+Deliberately **not** a migration: nothing here changes the bucket, and existing
+objects keep their stored paths, so no stored link breaks. That matters because
+the production migration ledger is gated (F5) — this had to be fixable without
+it, and it is.
+
+**It does not close SEC-001.** Objects uploaded before this remain enumerable,
+and the bucket is still public. The real fix is still signed URLs, which is the
+owner's tracked work. This removes the part that needed no migration and should
+not have waited for one.
+
+## How Pass H is kept closed
+
+`tests/family-media-paths-are-not-guessable.test.ts` — **8 cases**.
+
+| what it holds | how |
+|---|---|
+| The helper is unguessable | 500 paths, no collision; no epoch-shaped run of digits; at least 32 characters of unique segment |
+| The family folder stays first | or 0216's INSERT policy refuses every upload |
+| No site builds its own path | a sweep over every file that touches the bucket, failing with the file and line |
+| No uploader reaches for `Date.now()` | the specific defect, named separately so the reason survives |
+| The sweep can see | a synthetic good and bad line, because a pattern that never matches passes forever |
+
+Proved load-bearing by reverting one site to `${Date.now()}`: two cases fail,
+naming `components/modules/closet-module.tsx:415`.
+
+One existing test needed changing rather than satisfying.
+`tests/family-media-persistence.test.ts` asserted the literal string
+`crypto.randomUUID` inside each component — the right invariant written as an
+implementation detail, which a move into a shared helper necessarily breaks. It
+now asserts the components call `familyMediaPath()`, the same correction made
+once before in this repository when `wallet-money-action-boundaries` pinned a
+local helper by name. Its third file, the marketplace uploader, writes to a
+different bucket and still rolls its own, so it keeps the original assertion.
