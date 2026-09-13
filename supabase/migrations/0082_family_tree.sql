@@ -26,12 +26,16 @@ CREATE INDEX IF NOT EXISTS idx_family_tree_nodes_member ON family_tree_nodes(mem
 
 ALTER TABLE family_tree_nodes ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists family_tree_nodes_select on family_tree_nodes;
 CREATE POLICY family_tree_nodes_select ON family_tree_nodes FOR SELECT
   USING (family_id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid()));
+drop policy if exists family_tree_nodes_insert on family_tree_nodes;
 CREATE POLICY family_tree_nodes_insert ON family_tree_nodes FOR INSERT
   WITH CHECK (family_id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid()));
+drop policy if exists family_tree_nodes_update on family_tree_nodes;
 CREATE POLICY family_tree_nodes_update ON family_tree_nodes FOR UPDATE
   USING (family_id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid()));
+drop policy if exists family_tree_nodes_delete on family_tree_nodes;
 CREATE POLICY family_tree_nodes_delete ON family_tree_nodes FOR DELETE
   USING (family_id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid()));
 

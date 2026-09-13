@@ -1,6 +1,6 @@
 -- Durable purchase execution identity, independent of transaction charge fingerprints.
 -- Application access is RPC-only. Ledger/transaction deletion never cascades into history.
-CREATE TABLE public.finance_transaction_operation_receipts (
+create table if not exists public.finance_transaction_operation_receipts (
   family_id uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
   operation_key text NOT NULL CHECK (length(operation_key) > 0),
   original_tool_call_id uuid NOT NULL,
@@ -19,7 +19,7 @@ ALTER TABLE public.finance_transaction_operation_receipts ENABLE ROW LEVEL SECUR
 REVOKE ALL ON TABLE public.finance_transaction_operation_receipts
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE FUNCTION public.finance_record_transaction_operation(
+create or replace function public.finance_record_transaction_operation(
   p_tool_call_id uuid,
   p_family_id uuid,
   p_actor_user_id uuid,

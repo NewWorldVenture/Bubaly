@@ -27,15 +27,21 @@ CREATE INDEX IF NOT EXISTS family_reminders_list_idx ON family_reminders(list_id
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'reminder_lists_updated_at') THEN
-    CREATE TRIGGER reminder_lists_updated_at BEFORE UPDATE ON reminder_lists FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger reminder_lists_updated_at BEFORE UPDATE ON reminder_lists FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
 END $$;
 
 ALTER TABLE reminder_lists ENABLE ROW LEVEL SECURITY;
+drop policy if exists "reminder_lists_family" on reminder_lists;
 CREATE POLICY "reminder_lists_family" ON reminder_lists FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = reminder_lists.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = reminder_lists.family_id AND user_id = auth.uid() AND is_active)
 );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE reminder_lists;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'reminder_lists') then
+    alter publication supabase_realtime add table reminder_lists;
+  end if;
+end $pub$;

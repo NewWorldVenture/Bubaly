@@ -44,27 +44,39 @@ CREATE INDEX IF NOT EXISTS concierge_plans_status_idx    ON concierge_plans(fami
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'concierge_sessions_updated_at') THEN
-    CREATE TRIGGER concierge_sessions_updated_at BEFORE UPDATE ON concierge_sessions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger concierge_sessions_updated_at BEFORE UPDATE ON concierge_sessions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'concierge_plans_updated_at') THEN
-    CREATE TRIGGER concierge_plans_updated_at BEFORE UPDATE ON concierge_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger concierge_plans_updated_at BEFORE UPDATE ON concierge_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
 END $$;
 
 ALTER TABLE concierge_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE concierge_plans    ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "concierge_sessions_family" on concierge_sessions;
 CREATE POLICY "concierge_sessions_family" ON concierge_sessions FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = concierge_sessions.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = concierge_sessions.family_id AND user_id = auth.uid() AND is_active)
 );
 
+drop policy if exists "concierge_plans_family" on concierge_plans;
 CREATE POLICY "concierge_plans_family" ON concierge_plans FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = concierge_plans.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = concierge_plans.family_id AND user_id = auth.uid() AND is_active)
 );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE concierge_sessions;
-ALTER PUBLICATION supabase_realtime ADD TABLE concierge_plans;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'concierge_sessions') then
+    alter publication supabase_realtime add table concierge_sessions;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'concierge_plans') then
+    alter publication supabase_realtime add table concierge_plans;
+  end if;
+end $pub$;

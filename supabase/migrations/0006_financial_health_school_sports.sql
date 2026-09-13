@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS financial_accounts (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_financial_accounts_family ON financial_accounts(family_id);
-CREATE TRIGGER set_financial_accounts_updated BEFORE UPDATE ON financial_accounts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_financial_accounts_updated BEFORE UPDATE ON financial_accounts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_family ON transactions(family_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_family_date ON transactions(family_id, date);
-CREATE TRIGGER set_transactions_updated BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_transactions_updated BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS budgets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_budgets_family ON budgets(family_id);
-CREATE TRIGGER set_budgets_updated BEFORE UPDATE ON budgets FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_budgets_updated BEFORE UPDATE ON budgets FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS bills (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS bills (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_bills_family ON bills(family_id);
-CREATE TRIGGER set_bills_updated BEFORE UPDATE ON bills FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_bills_updated BEFORE UPDATE ON bills FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS savings_goals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS savings_goals (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_savings_goals_family ON savings_goals(family_id);
-CREATE TRIGGER set_savings_goals_updated BEFORE UPDATE ON savings_goals FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_savings_goals_updated BEFORE UPDATE ON savings_goals FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- HEALTH TABLES
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS workout_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_workout_logs_family ON workout_logs(family_id);
 CREATE INDEX IF NOT EXISTS idx_workout_logs_member ON workout_logs(family_id, member_id);
-CREATE TRIGGER set_workout_logs_updated BEFORE UPDATE ON workout_logs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_workout_logs_updated BEFORE UPDATE ON workout_logs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- SCHOOL TABLES
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS school_classes (
 );
 CREATE INDEX IF NOT EXISTS idx_school_classes_family ON school_classes(family_id);
 CREATE INDEX IF NOT EXISTS idx_school_classes_member ON school_classes(family_id, member_id);
-CREATE TRIGGER set_school_classes_updated BEFORE UPDATE ON school_classes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_school_classes_updated BEFORE UPDATE ON school_classes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS grades (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS grades (
 );
 CREATE INDEX IF NOT EXISTS idx_grades_family ON grades(family_id);
 CREATE INDEX IF NOT EXISTS idx_grades_member ON grades(family_id, member_id);
-CREATE TRIGGER set_grades_updated BEFORE UPDATE ON grades FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_grades_updated BEFORE UPDATE ON grades FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- SPORTS TABLES
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS teams (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_teams_family ON teams(family_id);
-CREATE TRIGGER set_teams_updated BEFORE UPDATE ON teams FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_teams_updated BEFORE UPDATE ON teams FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS game_results (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS game_results (
 );
 CREATE INDEX IF NOT EXISTS idx_game_results_family ON game_results(family_id);
 CREATE INDEX IF NOT EXISTS idx_game_results_team ON game_results(team_id);
-CREATE TRIGGER set_game_results_updated BEFORE UPDATE ON game_results FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_game_results_updated BEFORE UPDATE ON game_results FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- RLS POLICIES FOR ALL NEW TABLES

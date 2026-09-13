@@ -1198,14 +1198,15 @@ F-002 records reasoning that was wrong and what replaced it.
 | Area | Check | Result |
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
-| Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,518 tests |
+| Lint | `next lint` | ✅ 0 errors (4 pre-existing `react-hooks/exhaustive-deps` warnings) |
+| Unit tests | `vitest run` | ✅ 13,537 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
 | Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
 | Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
+| Migration **re**-apply | populated DB, replay from `0004` | ✅ 0 failed (was 18 — F-020) |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 14 probes, fresh 307-migration replay, run 2× | ✅ 14/14 each time (F-015 made it repeatable) |
+| RLS boundaries | 15 probes, fresh 307-migration replay, run 2× | ✅ 15/15 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
@@ -1265,6 +1266,15 @@ The `Supabase production migrations` workflow fails on every push for the reason
 Pass A's F5 records, so this is not a matter of waiting — it needs the operator
 action in both F5 and F-001. Agents must not apply migrations to production
 (`docs/PENDING_PROD_MIGRATIONS.md`), and this one did not.
+
+**What changed for the operator this pass.** The repair procedure in
+`LB-016 §4` would not have worked. Replayed against a database that already
+carries the schema — production's actual condition — `supabase db push` stopped
+on the *first* file it tried, and left `0004` unrecorded, so the guard would not
+have cleared either. That is now fixed and rehearsed end to end: see **F-020**.
+The finding stays open because the credentials are the operator's and applying
+migrations is not an agent action, but it is no longer open on top of a
+procedure that does not run.
 
 ---
 
@@ -2001,6 +2011,133 @@ two teaches people to ignore red.
 
 Verified: 15/15 probes on a pristine 307-migration replay, and 15/15 twice in a
 row on a used one.
+
+### F-020 · The documented production-recovery procedure did not work
+
+**Severity:** high · **Status:** closed — 18 migrations made re-appliable, and
+the rehearsal is now a CI gate
+
+`LB-016 §4.1` is the procedure an operator follows to unblock production. Its
+whole basis is one sentence:
+
+> Every migration in this repository is **additive and idempotent** … So the
+> ledger does not need to be *told* what is applied; it repairs itself by letting
+> `supabase db push` run from `0004`, where the already-applied migrations no-op
+> and the genuinely missing ones land.
+
+It cited two things as proof. **Neither one showed what it was cited for.**
+
+- `tests/migrations-are-additive.test.ts` bans `DROP TABLE` / `DROP COLUMN` /
+  `TRUNCATE` / `DROP TYPE`. That is *additive*. It says nothing about applying
+  anything twice.
+- The CI replay applies all 307 migrations to an **empty** database. On an empty
+  database `create policy` has nothing to collide with, so the replay cannot
+  observe idempotency even in principle.
+
+Additive is not idempotent, and nothing in the repository had ever asserted the
+property the recovery depends on. The one situation that exercises it is the one
+situation it had never been run in: a database that *already carries the schema*
+— which is precisely production.
+
+**What the evidence said.** `docs/audit/rehearse-ledger-repair.sh` reproduces
+production's condition exactly — full schema, ledger holding only `0001`–`0003`
+— and replays from `0004` the way `db push` does: version order, each file in
+its own transaction, a ledger row per success. Against the history as it stood:
+
+```
+re-applied cleanly (no-op as claimed): 286
+FAILED:                               18
+The operator's push would STOP at:
+  0004_rls.sql :: ERROR: policy "profiles_insert_self" for table "profiles"
+                         already exists
+0004 recorded: 0  -> requiresBaselineReview would still be TRUE
+```
+
+It stopped on the **first file it tried**. And because `0004` never recorded,
+`hasUnrecordedBaseline` would still have been true afterwards: the operator
+would have spent the maintenance window and come out with the ledger no more
+repaired than when they went in, the release still blocked, and no indication
+of which of the remaining 17 files would have stopped them next.
+
+**Why it broke.** Five ordinary Postgres statements are not idempotent and had
+no guard: `create policy`, `create trigger`, `create table`, `create index`, and
+`alter publication supabase_realtime add table`. Worth naming: **`create policy`
+has no `IF NOT EXISTS` form in any Postgres version**, so there is no way to
+write one that is safe to re-run — it must be preceded by a `drop policy if
+exists`. `0004` already did that for three of its policies and not for the
+others, which is the clearest possible sign this was an oversight rather than a
+decision.
+
+**The fix.** Each of the 18 follows the convention its own neighbours already
+used — `drop policy if exists` first, `create or replace trigger`, `create index
+if not exists`, `create table if not exists`, `add column if not exists`,
+`create or replace function`, and a `pg_publication_tables` existence check
+around the publication adds. Two needed more than a substitution:
+
+- **`0018`** creates its policies inside `execute format(...)` over a table
+  list. A static `drop policy if exists` cannot name a table that only exists as
+  `%I` at run time, so the drop had to go *inside* the loop as its own
+  `execute format`.
+- **`0226`** failed for an entirely different reason, and it is the interesting
+  one. It seeds 525 blog posts whose hero images are credited `LoremFlickr (CC)`.
+  `0238` later installs a trigger that refuses any hero image whose licence it
+  cannot identify, and `0231` nulls every LoremFlickr hero out. Replayed from
+  scratch that ordering is fine — the rows go in before the trigger exists. But
+  replayed against a populated schema the trigger is **already installed** when
+  `0226` runs, and it rejects all 525 rows. So the seed was re-introducing
+  exactly the data the product had decided to remove, and only the accident of
+  ordering hid it. Seeding those three columns `NULL` reaches the identical end
+  state (`0231`'s update now matches nothing; `0232`/`0235` still attach the
+  real Unsplash covers) without ever putting an unverified licence in the table.
+
+`0112` was left alone: it already had the publication guard, and the blanket
+transform had nested a second, redundant one inside it. Reverted.
+
+**After:**
+
+```
+re-applied cleanly (no-op as claimed): 304
+FAILED:                               0
+0004 recorded: 1
+requiresBaselineReview would now be FALSE — the guard clears on its own
+```
+
+A from-scratch replay is unchanged at **307 applied / 0 failed**, checked after
+every stage of the change rather than once at the end.
+
+**It cannot silently break again.** The rehearsal is now the last step of the
+`Database (migration replay · RLS boundary probes)` CI job. It runs last because
+it rewrites the ledger and replays everything, so nothing may depend on the
+database after it — and it is valuable *because* the job's earlier step already
+applied every migration once, which means the rehearsal applies each of them a
+**second** time. A migration added tomorrow is checked for idempotency on the
+pull request that introduces it, not in a maintenance window years later.
+
+I confirmed the gate actually fails rather than assuming it would, by adding a
+deliberately unguarded `create policy` as `0999` and running the job's two steps
+in order:
+
+```
+== migrations applied: 308, failed: 0 ==      <- the existing replay is happy
+FAILED: 1
+  0999_tmp_regression_probe.sql :: ERROR: policy "tmp_regression_probe" for
+                                          table "profiles" already exists
+REHEARSAL EXIT=1
+```
+
+The existing from-scratch replay passes it without complaint, which is the whole
+point: the new step catches a class of defect the old one structurally could
+not. The probe was then deleted and both runs re-verified clean.
+
+The script refuses any `PGHOST` that is not a unix socket or the loopback
+interface. That is a reachability test rather than a name allowlist — production
+is a remote host, and neither a unix socket nor loopback can reach it from
+anywhere — so it holds regardless of what a host is called.
+
+**What this does not do.** It does not apply anything to production. F-001 is
+still open and still an operator action. What changed is that the procedure the
+operator will follow has now been executed end to end against a faithful
+reproduction of production's condition, instead of being asserted.
 
 ## 4. Closed previously (regression-checked this pass)
 
