@@ -26,6 +26,7 @@ import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { localDayKey, localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
 
 type Event = Tables<'calendar_events'>;
 
@@ -170,7 +171,7 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
       </div>
       <div className="grid flex-1 auto-rows-fr grid-cols-7">
         {gridDays.map((d, i) => {
-          const dStr = d.toISOString().slice(0, 10);
+          const dStr = localDayKey(d);
           const inMonth = d.getMonth() === monthAnchor.getMonth();
           const isToday = dStr === todayStr;
           const evs = eventsByDay.get(dStr) ?? [];
@@ -306,7 +307,7 @@ export function CalendarModule() {
   const timedByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of timed) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -316,7 +317,7 @@ export function CalendarModule() {
   const allDayByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of allDay) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -327,7 +328,7 @@ export function CalendarModule() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of filtered) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -348,7 +349,7 @@ export function CalendarModule() {
   const upcomingByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of upcoming) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -402,7 +403,7 @@ export function CalendarModule() {
     setMobileDayIndex((new Date().getDay() + 6) % 7);
   }
 
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDayKey(today);
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
 
@@ -411,7 +412,7 @@ export function CalendarModule() {
 
   // Mobile day data
   const mobileDay = days[mobileDayIndex];
-  const mobileDayStr = mobileDay?.toISOString().slice(0, 10) ?? '';
+  const mobileDayStr = mobileDay ? localDayKey(mobileDay) : '';
   const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
   const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
 
@@ -434,7 +435,7 @@ export function CalendarModule() {
         };
       })
     : gridColumns.map((d) => {
-        const dStr = d.toISOString().slice(0, 10);
+        const dStr = localDayKey(d);
         return {
           key: dStr,
           date: d,
@@ -803,7 +804,7 @@ export function CalendarModule() {
           ) : upcomingByDay.map(([day, events]) => {
             const d = new Date(day);
             const isToday2 = day === todayStr;
-            const isTomorrow = day === new Date(today.getTime() + 86400000).toISOString().slice(0, 10);
+            const isTomorrow = day === shiftLocalDay(today, 1);
             const label = isToday2 ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
             return (
               <div key={day} className="mb-3">

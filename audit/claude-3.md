@@ -6,7 +6,7 @@ This file is written by Claude-3 and by nobody else.
 ---
 
 ### [CLAUDE-3][CRITICAL][AUTH/RLS] `invites_update` has no `WITH CHECK`, so an invitee rewrites their own invite and becomes `parent` of any family
-- **File:** `supabase/migrations/` → policy `invites_update` on `public.invites` (see `grep -rn "invites_update" supabase/migrations/`); consumed by `public.accept_invite(text)`
+- **File:** `supabase/migrations/0118_rls_drift_repair.sql:90` (originally `0004_rls.sql:106`) — policy `invites_update` on `public.invites`; consumed by `public.accept_invite(text)`
 - **Problem:** The policy is
 
   ```
@@ -137,9 +137,10 @@ This file is written by Claude-3 and by nobody else.
 ---
 
 ### [CLAUDE-3][HIGH][RLS] `child_logins` says "Managers manage" and means "any member" — a child can delete a sibling's login
-- **File:** policy `Managers manage child_logins` on `public.child_logins`;
-  consumers `app/(app)/family/child-login-actions.ts:104` (`resetChildPinAction`)
-  and `app/(auth)/actions.ts:116`
+- **File:** `supabase/migrations/01051_child_logins.sql:44` — policy
+  `Managers manage child_logins` on `public.child_logins`; consumers
+  `app/(app)/family/child-login-actions.ts:104` (`resetChildPinAction`) and
+  `app/(auth)/actions.ts:116`
 - **Problem:**
   ```
   POLICY "Managers manage child_logins"            -- FOR ALL
@@ -190,7 +191,10 @@ This file is written by Claude-3 and by nobody else.
 
 ---
 ### [CLAUDE-3][HIGH][DB] 163 `ON DELETE CASCADE` foreign keys have no supporting index — a family delete is a table scan per dependent table
-- **File:** schema-wide. 36 of them point at `public.families` (list below), 41 at `family_members`, 21 at `vacations`, 11 at `child_wallets`.
+- **File:** schema-wide. 28 CASCADE constraints point at `public.families`
+  (plus 8 `SET NULL`, which the delete also has to resolve — 36 scans per
+  family deletion, listed below), 41 CASCADE at `family_members` (plus 117
+  `SET NULL`), 21 at `vacations`, 11 at `child_wallets`.
 - **Problem:** Postgres implements referential integrity with a per-constraint
   query on the *child* table. With no index leading on the FK column that query
   is a sequential scan, and a cascading delete runs one per constraint while
@@ -356,3 +360,338 @@ This file is written by Claude-3 and by nobody else.
 - **Status:** OPEN
 
 ---
+### [CLAUDE-3][HIGH][RLS] Any family member can forge `audit_logs` rows — including as a parent, and including the platform-wide rows the admin Security page renders
+- **File:** `supabase/migrations/0118_rls_drift_repair.sql:116` (originally
+  `0004_rls.sql:132`) — policy `audit_insert` on `public.audit_logs`; writers `lib/server/audit.ts:17`,
+  `lib/services/activity/index.ts:77`, `lib/ai/runs/controls.ts:63`;
+  readers `app/(app)/admin/security/page.tsx:33` (service client),
+  `app/(app)/admin/audit/page.tsx:30`, `app/(app)/admin/audit-logs/page.tsx:34`,
+  `app/(app)/family/activity/page.tsx:25`
+- **Problem:**
+  ```
+  POLICY "audit_insert" FOR INSERT WITH CHECK ((family_id IS NULL) OR is_family_member(family_id))
+  POLICY "audit_select" FOR SELECT USING (can_manage_family(family_id))
+  ```
+  The check pins `family_id` and nothing else. `actor_id`, `action`, `resource`,
+  `resource_id` and `metadata` are all free, and the `family_id IS NULL` branch
+  means *any* authenticated user may write a row with no household at all.
+
+  **This exact defect was found on the sibling table and fixed there.**
+  `supabase/migrations/0260_trust_ledger_lockdown.sql:9`, about `trust_audit_logs`:
+
+  > *0093 lets ANY active member INSERT into it (`trust_audit_insert`) … So a
+  > child's session could file rows claiming a parent approved a bank transfer …
+  > An audit trail that its subjects can write is not an audit trail.*
+  > *Every legitimate writer is server code holding the service role … so
+  > dropping the member INSERT policy costs nothing and closes forgery entirely.*
+
+  `0260` drops that policy, and the catalogue confirms `trust_audit_logs` now
+  carries `trust_audit_read` and nothing else. The identical hole on
+  `audit_logs` — the older, family-facing trail that the admin **Security** page
+  renders — was not touched.
+- **Evidence:** acting **as `authenticated`** with a child's JWT in the replayed
+  schema:
+  ```
+   my role | child
+   INSERT 0 1     -- audit_logs(family_id=f1, actor_id=<the PARENT's uid>,
+                  --            action='delete', resource='wallet_transactions')
+   forged audit row, as the PARENT will read it
+     family_id  | 00000000-…-0000000000f1
+     actor_id   | 00000000-…-00000000a001      <- the parent
+     action     | delete
+     resource   | wallet_transactions
+     metadata   | {"note": "written by the child"}
+  ```
+- **Impact:** The audit trail is writable by the people it exists to hold
+  accountable. A child can (a) attribute an action to a parent in
+  `/family/activity`, (b) bury a real entry under noise, and (c) write
+  `family_id = null` rows which **no** RLS reader can see — while
+  `app/(app)/admin/security/page.tsx` reads the table with
+  `createServiceClient()` and renders the newest 25 rows. Twenty-five inserts
+  from one child session therefore replace the platform's security feed with
+  fabricated events attributed to whichever `actor_id` they chose. That same
+  page states, as a posture claim, *"Append-only audit log — Sensitive actions
+  are recorded permanently; only household managers and the super admin can read
+  them."* It is append-only (no UPDATE/DELETE policies — verified) and it is
+  read-restricted; what it is not is **authentic**.
+- **Not a disagreement with the design.** `docs/audit/household-trail-check.sql`
+  states the intent plainly — *"ANY member may append … while only a parent or
+  adult may read it back"* — and that is right: a trail a child cannot write has
+  holes in it for the person doing the work. The probe asserts **who may append**
+  and **who may read**. What neither it nor the policy asserts is that the row
+  says who actually appended it. `appendHouseholdTrail` already passes
+  `actor_id: scope.userId`, so pinning it costs the honest callers nothing.
+- **Fix:** Keep member append; pin the shape, the way `parent_approvals_insert`
+  already does on the neighbouring table:
+  ```sql
+  alter policy "audit_insert" on public.audit_logs
+    with check (is_family_member(family_id) and actor_id = auth.uid());
+  ```
+  That drops the `family_id IS NULL` branch (no client caller needs it —
+  `logAudit` is passed `familyId: null` only from service-client paths) and makes
+  `actor_id` unforgeable. `lib/ai/runs/controls.ts:63` and
+  `lib/services/activity/index.ts:77` both already set `actor_id: scope.userId`;
+  the cron/system scope has `userId = null` and writes through the service
+  client, which bypasses RLS, so it is unaffected. Extend
+  `household-trail-check.sql` with the third invariant: a child appending a row
+  that names the parent as `actor_id` must be rejected.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-3][MEDIUM][RLS] `activation_events_insert` pins the user but not the household, so any signed-in user writes milestones into any family
+- **File:** `supabase/migrations/0146_activation_events.sql:36` — policy
+  `activation_events_insert` on `public.activation_events`; read side
+  `lib/analytics/onboarding-server.ts`, `app/(app)/admin/**` activation funnels
+- **Problem:**
+  ```
+  POLICY "activation_events_insert" FOR INSERT WITH CHECK ((user_id IS NULL) OR (user_id = auth.uid()))
+  POLICY "activation_events_select" FOR SELECT USING ((user_id IS NOT NULL) AND (user_id = auth.uid()))
+  ```
+  `family_id` appears in neither clause, and the table is indexed by it
+  (`idx_activation_events_family_milestone`), so it is clearly meant to be
+  household-scoped. Passing `user_id = null` satisfies the check outright.
+- **Evidence:** acting **as `authenticated`** with a child's JWT, writing into a
+  household created by an unrelated owner:
+  ```
+   am I in the victim family? | member = f
+   INSERT 0 1
+   cross-family activation row
+     family_id | 00000000-…-0000000000f2   (The Victim Family)
+     milestone | first_capture
+     session_id| forged-session
+  ```
+- **Impact:** A cross-tenant **write**. Bounded — the select policy still stops
+  anyone reading another household's rows, and the milestone column is
+  CHECK-constrained to five values — so this is data integrity, not disclosure:
+  activation/funnel reporting and anything gated on "has this family reached
+  milestone X" can be set by a stranger. It is also the shape of defect Pass G
+  could not see: its sweep was "RLS enabled + no blanket `true` policy", and this
+  policy is neither disabled nor `true`.
+- **Fix:**
+  ```sql
+  alter policy "activation_events_insert" on public.activation_events
+    with check (user_id = auth.uid()
+                and (family_id is null or is_family_member(family_id)));
+  ```
+  Anonymous pre-signup milestones already have a path that does not need a
+  `family_id` (the beacon routes run under the service client), so requiring
+  `user_id = auth.uid()` for client-side inserts costs nothing.
+- **Status:** OPEN
+
+---
+### [CLAUDE-3][INFO][DB] Checked and correct: `SECURITY DEFINER` search_path, privileged-RPC grants, and what `anon` can execute
+- **Evidence:** against the replayed catalogue (310 migrations, 491 tables, 0 failures).
+  ```
+  secdef_total | secdef_no_searchpath
+            65 |                    0
+  ```
+  Every one of the 65 `SECURITY DEFINER` functions in `public` carries an
+  explicit `SET search_path`. No schema-shadowing escalation is available.
+
+  The seven `SECURITY DEFINER` functions that take a caller-supplied `uuid`
+  **without** an internal `is_family_member` / `can_manage_family` /
+  `auth.uid()` check are all closed to client roles:
+  ```
+   proname                         | authenticated | anon
+   bump_exit_intent                | f | f      loyalty_award_points       | f | f
+   loyalty_cancel_redemption       | f | f      loyalty_redeem_reward      | f | f
+   marketplace_place_bid_unchecked | f | f      wallet_credit_child_ledger | f | f
+   wallet_reserve_card_auth        | f | f
+  ```
+  The 31 `SECURITY DEFINER` functions `anon` *can* execute were read
+  individually. Each either takes no tenant identifier, or checks membership
+  before doing anything — e.g. `grocery_from_meal_plan(p_family_id,…)` opens with
+  `if not public.is_family_member(p_family_id) then raise exception`, and
+  `marketplace_join_circle(p_family, p_code)` with `if not
+  public.is_family_member(p_family)`. `accept_invite(p_token)` is reachable by
+  `anon` but requires `lower(v_invite.email) = lower(auth.jwt()->>'email')`,
+  which an anonymous caller cannot satisfy.
+- **One residual note, not a finding:** `accept_invite` distinguishes
+  *"This invite was issued to a different email"* from *"Invite is invalid or
+  expired"*, so a caller can tell a live token from a dead one. `invites.token`
+  defaults to `encode(gen_random_bytes(24),'hex')` — 192 bits — so there is
+  nothing to enumerate. Worth knowing if that default is ever shortened.
+- **Status:** VERIFIED
+
+---
+
+### [CLAUDE-3][INFO][SECURITY] Checked and correct: nine controls that this pass tried to break and could not
+- **Request bodies are all bounded.** All **76** of the `app/api/**/route.ts`
+  files that read a request body do so through `readBoundedRequestJson` /
+  `…Text` / `…FormData`. A scan for `req.json()` / `request.text()` /
+  `formData()` in a route file that does **not** import the bounded reader
+  returns **zero** hits.
+- **Secrets fail closed, without exception.** Every `if (!secret)` on an
+  authentication path refuses: `webhooks/stripe` and `webhooks/money` → 503;
+  `webhooks/resend` `verify()` → `false` → 401; `contact-center/email` →
+  `NODE_ENV !== 'production'`, i.e. closed in prod; `guardian/escalate` →
+  `if (!secret || authHeader !== …) 401`; `cron-auth.ts` → `!!secret && …`;
+  `childSignInAction` → refuses without `CHILD_LOGIN_SECRET`.
+  `validateTwilioSignature` returns `false` when `TWILIO_AUTH_TOKEN` is unset and
+  its `timingSafeEqual` length mismatch is caught into `false`.
+- **Webhook replay and idempotency hold.** Stripe: signature via
+  `constructEvent`, then a claim-token ledger in `stripe_webhook_events` with a
+  10-minute stale-claim reclaim and a conditional `.eq('claim_token', …)`
+  finalize. Resend: full Svix verification — `svix-id`/`timestamp`/`signature`,
+  ±300 s window, base64 HMAC, `timingSafeEqual` — then `svix_id` dedupe.
+  Contact Center: `recordInboundMessage` looks up `(channel, provider_ref)` before
+  writing and falls back to a digest that **includes `family_id`**, so two
+  households receiving identical messages do not collapse into one row. Alexa:
+  cert chain to a trusted root plus a ±150 s timestamp check in both directions.
+- **No user-controlled column reaches `.order()`.** The only two dynamic
+  `.order()` call sites are `lib/auto/queries.ts:17`, whose `order.col` is a
+  module-literal in all seven exported helpers, and
+  `lib/services/routines/index.ts:209`, whose field comes from a typed schedule
+  descriptor.
+- **PostgREST `.or()` is not injectable at any of its 36 call sites.** Every one
+  interpolates a UUID, an ISO timestamp or a literal, except the two that take a
+  person's text, and both sanitize: `sanitizeQuery` strips `[%_,()"\]`,
+  `safeSearchTerm` strips `[(),]` and escapes `[\%_]`. (The `*` gap is the LOW
+  finding above; it does not cross a family boundary.)
+- **`x-bubaly-family-id` never selects a tenant.** `assertAIRequestFamily`
+  compares the header to the already-resolved `familyId` and answers 409 on a
+  mismatch — an assertion, not a selector. `clientIp` reads `x-forwarded-for` /
+  `x-real-ip`, which Vercel sets at the edge; on any other host that header would
+  be caller-controlled and both IP limiters would be mintable.
+- **A forged `active_family_id` is harmless.** `user_preferences` is fully
+  self-writable (`prefs_all … using (user_id = auth.uid())`), but
+  `lib/supabase/auth.ts:175` resolves it as
+  `memberships.find(m => m.familyId === prefs?.active_family_id) ?? memberships[0]`
+  — an intersection with real memberships, so a forged value falls back rather
+  than selecting.
+- **Membership and role changes are manager-only.** `family_members` carries
+  `can_manage_family(family_id)` on insert, update **and** delete, with matching
+  `WITH CHECK` — a child cannot promote itself directly. The invite path (the
+  CRITICAL above) is the way around it, which is precisely why it matters.
+- **MFA fails closed.** `decideAal2` sends an unreadable assurance level to
+  step-up rather than allowing (`reason: 'assurance_unreadable'`), `needsStepUp`
+  only stops sessions that *can* reach aal2, and `isSafeReturnPath` rejects
+  `//host`, `/\`, CRLF and self-referential loops.
+- **The auth callback is not an open redirect.** `next` comes from
+  `resolveAuthSelection`, which runs `safeInternalRedirect` (rejects non-`/`,
+  `//`, `\`, `%2f`/`%5c`, and re-checks the parsed origin) before returning.
+  Two `next` parameters are treated as ambiguous and dropped.
+- **SSRF is guarded where a user-supplied URL is fetched.**
+  `lib/server/public-calendar-fetch.ts` and `public-document-fetch.ts`
+  DNS-resolve and pin every hop, rejecting the full v4/v6 private, loopback,
+  link-local, CGNAT, benchmark, TEST-NET and multicast ranges;
+  `public-media-fetch.ts` reuses the same guard with https-only, a redirect
+  budget, a byte ceiling and no pooled agent. `weekend/discover` routes family
+  feeds through `fetchPublicCalendarText` and reaches Ticketmaster/SeatGeek on
+  fixed hosts only. `lib/sync/providers/apple.ts:278` is the one place a
+  *provider's* response can supply an absolute URL that is then fetched with the
+  Apple ID credentials attached — it trusts iCloud, which is reasonable, but it
+  is the one hop with no pin.
+- **Money is never floating point.** Zero `double precision`/`real` columns whose
+  name matches `amount|price|cost|balance|total|cents|fee|salary|value|budget|spend|paid|income|rate`.
+- **Dead code worth one line:** `lib/sync/feed-token.ts:24 verifyFeedSignature`
+  has no callers, and would fail open on a missing `SYNC_TOKEN_KEY` (`secret =
+  process.env.SYNC_TOKEN_KEY ?? ''`) if it were ever wired up.
+- **Status:** VERIFIED
+
+---
+
+### [CLAUDE-3][INFO][RLS] The 14 `UPDATE` policies with no `WITH CHECK`, and which of them matter
+- **Evidence:**
+  ```
+  select c.relname, p.polname, pg_get_expr(p.polqual,p.polrelid)
+  from pg_policy p join pg_class c on c.oid=p.polrelid join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and p.polcmd='w' and p.polwithcheck is null;
+  ```
+  ```
+  assistant_links       assistant_links_update      can_manage_family(family_id)
+  call_logs             call_logs_update            EXISTS(family_members … user_id = auth.uid() AND is_active)
+  daily_insights        daily_insights_update       is_family_member(family_id)
+  families              families_update             can_manage_family(id)
+  family_communications comms_family_update         EXISTS(family_members …)
+  family_signals        family_signals_update       is_family_member(family_id)
+  family_tree_nodes     family_tree_nodes_update    family_id IN (SELECT … user_id = auth.uid())
+  front_desk_settings   front_desk_update           can_manage_family(family_id)
+  home_briefs           home_briefs_update          is_family_member(family_id)
+  invites               invites_update              can_manage_family(family_id) OR lower(email) = jwt email   ← CRITICAL above
+  moment_activations    moment_activations_update   is_family_member(family_id)
+  notifications         notif_update                user_id = auth.uid() OR (user_id IS NULL AND is_family_member(family_id))
+  profiles              profiles_update_self        id = auth.uid()
+  reasoning_snapshots   reasoning_snapshots_update  is_family_member(family_id)
+  ```
+- **Reading:** twelve of the fourteen are **symmetric** — the single predicate
+  constrains the same tenant column in the old row and the new one, so reusing
+  `USING` as the check is safe (you cannot move a row into a family you are not
+  in, or onto a `profiles.id` that is not yours). Two have an `OR`, and an `OR`
+  is where the asymmetry lives, because the branch that admits you may not be the
+  branch that constrains the columns you are writing:
+  - `invites_update` — the invitee branch constrains only `email`, leaving
+    `family_id` and `role` writable. **This is the CRITICAL finding above.**
+  - `notif_update` — the `user_id = auth.uid()` branch leaves `family_id`
+    writable, so a user can move their *own* notification into another
+    household's `family_id`. It stays visible only to them (the row still carries
+    their `user_id`, and the `user_id IS NULL` branch is what the other family
+    would need), so the reachable harm is a stray row in someone else's tenant
+    partition, not disclosure. Worth pinning when `invites_update` is fixed:
+    `with check (user_id = auth.uid() and is_family_member(family_id))`
+    (`supabase/migrations/0118_rls_drift_repair.sql:105`).
+- **Status:** VERIFIED
+
+---
+
+## What Claude-3 checked, and what came back clean
+
+Ground truth for every database claim in this file: `docs/audit/pg-bootstrap.sh`
+into a throwaway Postgres 16 on port 5434 — **310 migrations applied, 0 failed,
+491 tables** — with `docs/audit/run-probes.sh` green at **20/20** before and
+after. Role-boundary claims were made by `set_config('request.jwt.claim.sub', …)`
++ `set role authenticated` and reading back the actual rows, never by reading a
+policy and reasoning about it.
+
+**Nine findings, all reproduced in that database or in the code path itself:**
+
+| # | severity | claim |
+|---|---|---|
+| 1 | CRITICAL | `invites_update` has no `WITH CHECK`; an invitee rewrites `family_id` + `role` and `accept_invite` makes them `parent` of any household |
+| 2 | HIGH | child-PIN throttle keyed on the submitted string while the lookup is `ILIKE`; `2^(L-2)` buckets per account |
+| 3 | HIGH | `child_logins` "Managers manage" policy admits any member; a child deletes a sibling's login and can redirect a parent's PIN reset |
+| 4 | HIGH | 163 CASCADE foreign keys with no supporting index; measured 5,715 buffers → 4 on one of 36 `families` constraints |
+| 5 | HIGH | `audit_logs` lets any member forge `actor_id`, including into the `family_id IS NULL` rows the admin Security page renders with the service client |
+| 6 | MEDIUM | `activation_events_insert` pins the user, not the household — a cross-tenant write |
+| 7 | MEDIUM | `/api/assistant` + 3 others rely on a per-lambda `Map` for a limit the comment calls a security control |
+| 8 | MEDIUM | the 20-probe suite is structurally blind to over-granting policies (it only asserts default-deny) |
+| 9 | LOW | PostgREST's `*`→`%` escapes both search sanitizers |
+
+**Checked and found correct — a zero, evidenced:**
+
+- **65/65** `SECURITY DEFINER` functions pin `search_path`; **0** do not.
+- **7/7** privileged `SECURITY DEFINER` functions that take an unchecked tenant
+  uuid are denied to `anon` *and* `authenticated`.
+- **31** `SECURITY DEFINER` functions reachable by `anon` read individually:
+  every one either takes no tenant id or opens with a membership check.
+- **76/76** route handlers that read a request body bound it; **0** unbounded.
+- **7/7** missing-secret branches on an authentication path fail closed
+  (stripe, money, resend, contact-center email, guardian escalate, cron-auth,
+  child sign-in).
+- **5/5** provider webhook families (Stripe billing, Stripe money, Resend,
+  Twilio ×5, Alexa) verify a signature and dedupe replays.
+- **36** `.or()` call sites: 34 interpolate machine values (UUIDs, ISO
+  timestamps, literals), 2 sanitize user text.
+- **2/2** dynamic `.order()` call sites take module literals.
+- `family_members` insert/update/delete are all `can_manage_family(family_id)`
+  with a matching `WITH CHECK` on update; `families_update` is
+  `can_manage_family(id)`.
+- **0** floating-point money columns.
+- `x-bubaly-family-id`, `active_family_id` and the `next=` redirect are all
+  re-derived or intersected server-side rather than trusted.
+- MFA step-up, the OAuth/magic-link callback, sign-out and the SSRF guards were
+  each tried and did not yield.
+
+**Not re-derived** (owned by `finalaudit.md` Passes A–O): unbounded reads
+(F-002/F-013), anon grants on the money tables (F-003), cross-household AI job
+claiming (F-006), blanket `true` policies (Pass G), storage buckets (Pass H),
+caller-supplied tenant ids on route handlers (Pass K), the AI tool registry
+(Pass J), token columns (Pass O).
+
+**Could not reach from here:** anything requiring production credentials — the
+live migration ledger (F5/F-001), whether `CHILD_LOGIN_SECRET`,
+`CONTACT_CENTER_INBOUND_SECRET` and `SYNC_TOKEN_KEY` are actually set in
+production (every one of them fails closed if not, which is the right direction
+but means the feature is silently off), and whether the production edge
+normalizes `x-forwarded-for` the way Vercel's does.

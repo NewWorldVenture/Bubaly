@@ -16,22 +16,26 @@ LAST-UPDATE: 2026-09-13T23:18Z
 ---
 
 ## Claude-2
-CURRENT: surveying frontend surfaces; building inventory of list/detail pages for state-coverage audit
-COMPLETED: read audit/README.md
-NEXT: (1) missing error/empty/loading states, (2) a11y, (3) responsive, (4) i18n gaps, (5) client/server correctness, (6) forms
-FILES-TOUCHED: audit/claude-2.md, audit/status.md (own section only) — AUDIT ONLY, no source edits
+CURRENT: done — 17 findings written to audit/claude-2.md (1 CRITICAL, 4 HIGH, 7 MEDIUM, 3 LOW, 9 INFO/clean)
+COMPLETED: (1) missing error/empty/loading states across 395 pages; (2) a11y — icon names, keyboard operability, focus visibility, labels, alt, skip link, aria-live, modal contract, contrast; (3) responsive — tables, fixed widths, iOS 16px rule; (4) i18n in the UI — lib/guardian catalogs + 245 hardcoded 'en-US' formatters; (5) client/server — bundle weight, useEffect fetches, TZ/hydration; (6) forms — double-submit, labels, destructive confirms
+HEADLINE: CRITICAL components/modules/calendar-module.tsx buckets events by UTC date against local-midnight columns — PROVEN by TZ replay: every event lands one column off in Europe/Amsterdam + Asia/Tokyo (Sunday vanishes entirely), and every evening event does the same in America/*. HIGH app/globals.css:179 .focus-ring is unscoped — PROVEN by compiling with the repo's own tailwind config: `outline: 2px solid transparent` with no :focus selector, so 202 elements have no visible focus indicator (the 16 that use focus-visible:focus-ring are all on the marketing surface).
+NEXT: available for follow-up verification; happy to re-prove any finding on request
+FILES-TOUCHED: audit/claude-2.md, audit/status.md (own section only). NO SOURCE FILE MODIFIED — audit only, all fixes are written as recommendations for Claude-1.
+FILES-READ-CLOSELY (for Claude-1 before editing): components/modules/calendar-module.tsx, app/globals.css, components/ui/input.tsx, components/ui/states.tsx, app/(app)/guardian/*, app/(app)/family/*, app/(app)/dashboard/family-access/page.tsx, components/guardian/routing-settings.tsx, components/guardian/call-history.tsx, design/tokens.json, lib/utils/format.ts, lib/guardian/*
 BLOCKERS: none
-LAST-UPDATE: 2026-09-13T23:18Z
+LAST-UPDATE: 2026-09-13T23:45Z
 
 ---
 
 ## Claude-3
-CURRENT: auth flows + RLS write-boundary sweep against a replayed PG16 (310 migrations, 491 tables) on port 5434
-COMPLETED: read audit/README.md + finalaudit passes A-O; bootstrapped ground-truth DB; 3 proven findings (CRITICAL invites_update missing WITH CHECK -> cross-family parent takeover; HIGH child-PIN throttle bypass via ILIKE wildcard; HIGH child_logins write policy admits any member)
-NEXT: rate-limit coverage on mutating routes, webhook replay/idempotency, money check constraints, unbounded selects, secrets fail-open, MFA/step-up, OAuth callback
-FILES-TOUCHED: audit/claude-3.md, audit/status.md (own section only) - AUDIT ONLY, no source edits
-BLOCKERS: none
-LAST-UPDATE: 2026-09-13T23:40Z
+CURRENT: DONE - 12 findings written to audit/claude-3.md (9 defects + 3 INFO/verified). Ground-truth PG16 on port 5434 still up if anyone wants it.
+COMPLETED: auth flows end-to-end, RLS write boundaries (acting AS authenticated), webhooks, rate-limit coverage, FK/index shape, secdef search_path, anon RPC grants, secrets fail-open, SSRF, body bounds, .or()/order injection. 310 migrations replayed, 491 tables, probes 20/20 green.
+HEADLINE: **CRITICAL** `invites_update` has no WITH CHECK -> a guest invitee rewrites family_id+role and accept_invite makes them `parent` of ANY household (proven twice, incl. a family she was never invited to). Pass I read this policy and called it "exactly right" - it read USING and not the missing WITH CHECK.
+ALSO HIGH: child-PIN throttle bypass via ILIKE `_` wildcard (16 buckets per 6-char username); `child_logins` "Managers manage" policy admits any member (child deleted a sibling's login); 163 CASCADE FKs with no index (measured 5,715 buffers -> 4); `audit_logs` lets any member forge actor_id, incl. the family_id-NULL rows the admin Security page renders with the service client (0260 fixed exactly this on trust_audit_logs and left audit_logs open).
+NEXT: nothing queued - available if Claude-1 wants any finding re-proved or a probe drafted.
+FILES-TOUCHED: audit/claude-3.md, audit/status.md (own section only) - AUDIT ONLY, zero source edits
+BLOCKERS: none. Fixes are Claude-1's to apply; every finding carries the exact SQL/TS change.
+LAST-UPDATE: 2026-09-14T00:20Z
 
 ---
 

@@ -80,6 +80,7 @@ deliberately **not applied** to production.
 |---|---|---|
 | **O-01** | A child could read, change and delete the family's stored card PIN. `family_credentials` allows categories `card` and `pin`, stores `secret` as plain text, and all four policies were `is_family_member`. Proved: a `child` on an `aal1` session READ the PIN, UPDATED it, DELETED the row. | **Fixed** — `0297`, **not applied to production** |
 | **I-01** | A social restriction could be removed by the person it restricted. Deleting the override row restores the higher default, returning `publish_posts` to someone a parent deliberately stopped. | **Fixed** — `0296`, **not applied to production** |
+| **U-01** | **The family calendar put every event on the wrong day outside UTC.** Day columns were keyed from a *local-midnight* `Date` through `toISOString()`; events from their true instant, also through `toISOString()`. Those agree only at offset zero. Found by **Claude-2**, replayed by Claude-1: in `Europe/Amsterdam` and `Asia/Tokyo` **0 of 7** days matched their own column and the seventh day's events keyed to a date no column carried, so they **did not render at all**; in `America/New_York` events from 21:00 and in `America/Los_Angeles` from 19:00 landed a column late. Six of the eleven shipped locales are UTC+1/+2. | **Fixed** — `lib/time/local-day.ts` + 19 guard cases |
 
 Both fixes are authored, replay clean, and are gated behind **F5**. Until the
 ledger is repaired, **both defects are live in production.**
@@ -94,6 +95,11 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**.
 | id | finding | found by | state |
 |---|---|---|---|
 | **P-01** | **Vacation Planner and Weekend Planner gated on hrefs the catalog did not contain**, so `resolveFeatureEntitlement` returned `allowed: true` for every family at all 21 call sites. The sidebar rendered both as unlocked (it reads the resolved tier, not `minLevel`), and `/api/vacations/ai` and `/api/weekend/discover` — a model call and a Ticketmaster/SeatGeek fan-out on the deployment's own keys — were open to Free. Neither feature appeared on the published `/pricing` grid, which is generated from the same catalog: the product sold neither and the code gave both away | **Claude-4**, verified by Claude-1 | **Fixed** |
+
+| **U-02** | A failed Guardian profile read renders the **factory defaults**, and Save is an `upsert onConflict: family_id,member_id` — so saving over a failed read **overwrites the family's real call-routing configuration**, `default_mode_unknown` included. The E-01 class with teeth: not a wrong answer, a destroyed setting | **Claude-2** | OPEN |
+| **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2** | OPEN |
+| **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard | **Claude-2** | OPEN |
+| **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
 
 **P-01 is the mirror of L-01.** L-01 gated a feature the plans sell; P-01 gave
 away two the plans never mention. Same file, opposite direction, and both
@@ -193,7 +199,25 @@ by glob.
 
 # 7. Frontend
 
-*Consolidated from `audit/claude-2.md` — worker running; findings merged as they land.*
+**Claude-2: 26 entries — 1 critical, 4 high, 7 medium, 3 low, 9 recorded clean.**
+Full detail in `audit/claude-2.md`.
+
+The frontend's defining weakness is the **E-01 class on the screen**: a read
+whose error is discarded, and an empty state shown in its place. Six surfaces:
+
+| surface | what a failed read renders |
+|---|---|
+| `/guardian` (5 pages) | "0 scams blocked" on the safety dashboard; "No communications match your filters" over a possibly-full log |
+| `/guardian/settings` | the factory defaults — and Save then **upserts them over the family's real config** (**U-02**) |
+| `/family/members` | "No members yet." — provably unreachable by any *successful* read, since `requireUserContext()` guarantees the caller is an active member. That branch fires **only** on failure |
+| `/family/activity` | "No activity recorded yet" over the audit trail |
+| `/family/permissions` | misdiagnoses a failed read as an unapplied database seed |
+| `/dashboard/family-access` | existing kid logins appear absent |
+
+**47 pages still batch reads with raw `Promise.all`** — the pattern
+`lib/supabase/settle.ts` was written to retire after it "took out /dashboard" in
+production. Six have no error handling at all, including the public
+`app/(marketing)/blog/page.tsx`.
 
 Already established: the whole 848 KB i18n catalogue was serialized into every
 page (**F9**, closed as a recorded decision); five public pages had no `<h1>`
@@ -248,7 +272,32 @@ Passes D, F, G, I, K, N, O. The headline results:
 
 # 11. UX / Accessibility
 
-*Consolidated from `audit/claude-2.md` — worker running.*
+- **U-03 — focus is invisible across the signed-in app.** `.focus-ring` suppresses
+  the native outline and paints its ring unconditionally, with no
+  `:focus-visible`. 202 of 218 uses are the bare form. Keyboard users cannot see
+  where they are.
+- **U-05 — 74 icon-only buttons have no accessible name**, and the destructive
+  ones are the majority. A screen-reader user is offered an unlabelled control
+  that deletes.
+- **In light mode, four semantic text colours fail WCAG AA** — `accent`,
+  `warning`, `success`, `danger` compute to 2.67–4.38:1 — across **504** text
+  sites.
+- **The shared `Field`** announces an error but never sets `aria-invalid`.
+- **Destructive actions in the medical and money modules delete on one click**
+  with no confirmation.
+- **Every date, time and money value renders in US English** regardless of
+  locale: 245 hardcoded `'en-US'` formatters and a USD-only
+  `lib/utils/format.ts`, in a product shipping eleven locales.
+- **Guardian's safety vocabulary** — scam types, trust levels, routing labels —
+  is 45 hardcoded English strings in `lib/`, on a surface `GATED_SURFACES`
+  cannot see. The same blind spot as Claude-1's finding on `lib/server/ai-access.ts`:
+  the i18n gate covers marketing and the app shell, not `lib/` or `app/api`.
+
+**Recorded clean, at equal weight:** the skip link (correct, wired to a real
+`<main id="main-content">` in both layouts) · `alt` text (0 real offenders) ·
+`aria-live` across 117 sites with the toast severity split correct · focus
+management inside the shared Modal · client-side loading/error modelling ·
+0 empty `catch {}`.
 
 ---
 
@@ -269,7 +318,10 @@ CI runs a mobile device matrix (iPhone SE / iPhone / Pixel / iPad, Chromium-
 emulated) gating every PR on no horizontal overflow and no sub-16px inputs.
 An Expo client lives under `mobile/` and shares `design/tokens`.
 
-*Further findings consolidated from `audit/claude-2.md` — worker running.*
+**Recorded clean by Claude-2:** wide tables are contained — 0 unwrapped `<table>`
+outside the guarded directory, and all 26 wide `min-w` elements are already
+wrapped. The iOS 16px zoom-on-focus rule is correct and its `!important` is
+load-bearing. No heavy library is pulled into a client bundle.
 
 ---
 
@@ -421,7 +473,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,192 files / 13,684 tests
+npx vitest run                         # 1,193 files / 13,703 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 310 migrations, 0 failed

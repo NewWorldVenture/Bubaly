@@ -287,3 +287,169 @@ one approval. **The credit side has no such lock, and nothing had raced it.**
   insert as "already paid" rather than as a failure. Either way, correct the
   docstring: it currently describes a mechanism that was never built.
 - **Status:** OPEN
+
+---
+
+## Sweep 3 — features that are wired but cannot work
+
+Method, and its first result was a false positive worth recording: a scan for
+`.from('x')` with no matching `.insert/.update/.upsert/.delete` reported 41
+"tables read but never written". Checking them one at a time, most were writable
+after all —
+
+- **19** are written through a *dynamic* table name the scan cannot see:
+  `components/vacations/shared.tsx:130` does `.from(table).insert(...)` where
+  `table` is a prop, which is how every `vacation_*` table is populated, and
+  `lib/family/actions.ts:22` holds a `WRITABLE` allowlist keyed by table name
+  that covers `family_routines`, `family_milestones`, `family_memories`,
+  `family_emergency_contacts/plans`, `family_stress_signals` and five more;
+- **7** are catalogs seeded by a migration `INSERT` (`invest_assets`,
+  `social_providers`, `sync_providers`, `marketplace_circles`, …);
+- **12** are written by RPCs or webhook handlers.
+
+Three survive. Each is a feature that a family can reach and that cannot
+produce a non-empty state on a production database.
+
+---
+
+### [CLAUDE-4][HIGH][FEATURES] The Experience Scorecard is in every family's sidebar and its only possible state is an empty state that tells them to run a SQL file
+
+- **File:** `lib/constants/navigation.ts:218`,
+  `app/(app)/dashboard/experience/page.tsx`,
+  `components/modules/experience-scorecard-module.tsx:50-58` and `:87`
+- **Problem:** the page reads `experience_audits` and rolls it up. **Nothing
+  writes `experience_audits`** — not a server action, not a route handler, not a
+  cron, not the `lib/family/actions.ts` `WRITABLE` allowlist, not a migration
+  `INSERT`, not even `SEED_ALL.sql`. The only producer in the repository is
+  `supabase/seed_experience_audits_one_family.sql`, a hand-run developer seed.
+  So `card.auditedSurfaces` is always `0` and the module always renders its empty
+  state — whose copy is:
+
+  ```tsx
+  description="Once surfaces are audited, this scorecard grades each one across the
+  six premium dimensions and tracks the trend. Run
+  seed_experience_audits_one_family.sql to populate a baseline."
+  ```
+- **Evidence:** every reference to the table in the repository, with test files,
+  worktrees and `lib/database.types.ts` excluded:
+
+  ```
+  supabase/migrations/0144_experience_audits.sql   (DDL, indexes, 4 RLS policies)
+  components/modules/experience-scorecard-module.tsx:22,50,51,54   (read only)
+  tests/behavior-read-bounded.test.ts:42                            (asserts the read is bounded)
+  supabase/seed_experience_audits_one_family.sql                    (dev seed)
+  ```
+
+  No writer. `PRODUCTION_DEPLOYMENT_CHECKLIST.md:83` — *"Legacy service-role seed
+  scripts require a confirmed non-production seed scope"* — is the line that
+  makes this permanent rather than a matter of remembering: the seeds are barred
+  from production on purpose.
+- **Impact:** `minLevel: 0`, so the entry is visible and unlocked to every family
+  on every plan, in the "Family AI OS" group. A parent taps "Experience
+  Scorecard" and is told to run a `.sql` file. That is a developer instruction
+  shipped as product copy (it is also the one string in that module not passed
+  through `t()`, so it is English in all eleven locales).
+- **Fix:** decide which of the two this is and do that one.
+  (a) It is an internal instrument — remove the nav entry and keep the page for
+  super-admins, as `/dashboard/journeys` and `/dashboard/onboarding-funnel`
+  already do (`isSuperAdmin()` → `notFound()`).
+  (b) It is a product feature — then something has to write the rows: the six
+  dimensions are all measurable from telemetry the app already has, and the
+  scorecard would need a producer (a nightly pass, or a write at the end of each
+  audited surface's render).
+  Either way, delete the seed-file instruction from user-facing copy.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-4][MEDIUM][FEATURES] The Family App Store installs apps that nothing in the product ever reads, from a catalog production never gets
+
+- **File:** `app/(app)/dashboard/app-store/page.tsx`,
+  `app/(app)/dashboard/app-store/actions.ts:18,32,44`,
+  `supabase/migrations/0165_family_app_store.sql`
+- **Problem:** three separate things are each individually true.
+  1. **The install does nothing.** `installAppAction` upserts
+     `family_app_installs`; `uninstallAppAction` deletes; a third action toggles
+     `enabled`. The complete set of readers of that table is **one**:
+     `app/(app)/dashboard/app-store/page.tsx:27`, which uses it to decide whether
+     the button on that same page says "Install" or "Installed". No AI tool, no
+     nav, no dashboard, no capability check anywhere consults a family's installs.
+     The `enabled` column has no reader at all.
+  2. **The catalog is empty in production.** `family_apps` has no `family_id` —
+     it is global reference data — and no migration inserts a row. The only
+     producer is `supabase/seed_family_apps.sql` / `SEED_ALL.sql`, whose own
+     header calls it *"500-row test data"*, and which the deployment checklist
+     bars from production.
+  3. **The page is unreachable.** `/dashboard/app-store` appears in no nav group,
+     no `PRIMARY_NAV`, no `MOBILE_TABS`, no `ALL_SERVICES_CATALOG`, and is not
+     linked from any other page. A scan of all 353 static page routes for a path
+     literal named anywhere outside the page's own folder leaves 22 candidates,
+     of which 9 are `${BASE}`-template marketplace tabs, 4 are deliberate
+     `redirect()` stubs, and this is one of the genuine remainder.
+- **Evidence:**
+
+  ```
+  $ rg -n "family_app_installs" (excl. node_modules, .claude, mobile, *.test.*)
+    app/(app)/dashboard/app-store/page.tsx:27      ← the only read
+    app/(app)/dashboard/app-store/actions.ts:18,32,44
+    supabase/migrations/0165_family_app_store.sql  (DDL/RLS)
+    database-map.md:103, feature-inventory.md:12   (docs)
+  $ rg -ci "insert into (public\.)?family_apps" supabase/migrations/*.sql → 0
+  $ rg -n "app-store" lib/constants/*.ts components/app/*.tsx → (no output)
+  ```
+- **Impact:** a complete vertical — migration, RLS, catalog model, ranking and
+  recommendation logic (`lib/appstore/catalog.ts`), three server actions, an
+  optimistic install button — that on production shows an empty grid to anyone
+  who guesses the URL, and whose one write has no consumer. `feature-inventory.md`
+  lists it as a shipped feature.
+- **Fix:** it is a product decision, not a code fix. If the App Store ships:
+  seed `family_apps` from a **migration** (it is global reference data, which is
+  what migrations are for), give installs a consumer, and add the nav entry +
+  catalog row. If it does not: the page, the two tables and the actions should
+  leave the tree, and `feature-inventory.md` should stop claiming it.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-4][MEDIUM][FEATURES] The first-run brief's "dinner ideas" come from a catalog production has no way to populate
+
+- **File:** `app/onboarding/actions.ts:81-102` (`fetchDinnerCandidates`),
+  `lib/onboarding/dinner-ideas.ts`,
+  `components/onboarding/onboarding-wizard.tsx:772`,
+  `components/dashboard/home-outcome-card.tsx:55`
+- **Problem:** same shape as `family_apps`. `meal_ideas` is a global catalog
+  (`0139_meal_ideas.sql`, no `family_id`) whose comment says *"No client
+  writes"*; nothing in the app writes it; no migration inserts a row; the only
+  producer is `supabase/seed_meal_ideas.sql`. `fetchDinnerCandidates` is
+  best-effort by design — *"if the table isn't migrated yet the brief just
+  carries no dinner ideas (never blocks onboarding)"* — so an **empty** catalog
+  is indistinguishable from a missing one and produces `[]` silently.
+- **Evidence:** `rg -ci "insert into (public\.)?meal_ideas" supabase/migrations/*.sql`
+  → 0. The catalog is the brief's only source: `lib/onboarding/dinner-ideas.ts`
+  is a pure picker over the rows it is handed, and its header states the reason —
+  *"A brand-new family has no recipes of its own, so the briefing's 3 dinner
+  ideas come from the curated meal_ideas catalog."*
+- **Impact:** this is the VALUE-FIRST payoff the onboarding wizard is built
+  around (`previewCalendarImportAction`, *"the user sees their day/week come
+  together before we ask them to configure anything"*). With an empty catalog the
+  dinner block never renders, and
+  `onboarding-wizard.tsx:772` shows the shape of the worst case:
+
+  ```ts
+  const hasBrief = !!brief && (brief.todayCount > 0 || brief.dinnerIdeas.length > 0
+                               || brief.timeSavedMinutes > 0 || brief.conflicts.length > 0);
+  ```
+
+  A family that skips the calendar import — no events today, no conflicts, no
+  minutes saved — has **all four** disjuncts false, so the "here is your first
+  brief" card is not rendered at all and the wizard's final step is a plain
+  "All set". The one term that would have carried it on its own is the one fed by
+  the empty catalog. The same catalog feeds the home dashboard's weekly dinner
+  ideas (`home-outcome-card.tsx:55`).
+- **Fix:** move the curated catalog into a migration — it is reference data with
+  no tenant, exactly like `invest_assets` (`0`-family, seeded by migration) and
+  `social_providers`. That is a five-line change of file, not of content. And
+  separate "catalog is empty" from "catalog is missing" in
+  `fetchDinnerCandidates`, so an empty production catalog is visible in the logs
+  instead of looking like a family with no ideas.
+- **Status:** OPEN
