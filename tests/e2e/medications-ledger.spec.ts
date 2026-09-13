@@ -16,6 +16,9 @@ const sources = Object.fromEntries([
   'components/modules/medications-module.tsx', 'lib/hooks/use-realtime-query.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/medications/adherence.ts',
+  // adherence.ts resolves a dose slot in the family's zone; the in-page loader
+  // below throws on any module missing from this list, so its imports belong here.
+  'lib/time/zoned.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
@@ -44,6 +47,8 @@ type Fixture = {
 };
 type Probe = {
   mount: (role?: 'child' | 'parent', family?: string) => void;
+  /** The FAMILY's zone, which is what resolves a dose slot to an instant. */
+  timezone: (zone: string) => void;
   unmount: () => void;
   seed: (table: Table, rows: Row[]) => void;
   online: () => void;
@@ -124,14 +129,21 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
     const p = window.__medicationsAudit = { toasts: [], errors: [], throwMutation: false };
     window.addEventListener('error', event => p.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
-    let currentFamily = ${JSON.stringify(familyId)}; const familyId = ${JSON.stringify(familyId)}, userId = ${JSON.stringify(userId)}, sessionId = '11111111-1111-4111-8111-111111111111';
+    let currentFamily = ${JSON.stringify(familyId)}, familyTimezone = 'UTC'; const familyId = ${JSON.stringify(familyId)}, userId = ${JSON.stringify(userId)}, sessionId = '11111111-1111-4111-8111-111111111111';
     const members = [{ id: ${JSON.stringify(childId)}, family_id: familyId, user_id: userId, display_name: 'Casey', role: 'child' },
       { id: ${JSON.stringify(parentId)}, family_id: familyId, user_id: userId, display_name: 'Alex', role: 'parent' }];
     let role = 'parent';
     const app = () => {
       const currentMembers = members.map(member => ({ ...member, family_id: currentFamily,
         id: currentFamily === familyId ? member.id : member.role === 'parent' ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' : '99999999-9999-4999-8999-999999999999' }));
-      return { familyId: currentFamily, userId, members: currentMembers, selfMember: currentMembers.find(member => member.role === role), role };
+      // The real context always carries the family, and the module reads its
+      // timezone to resolve a dose slot. UTC is the default because that is what
+      // this fixture already assumes: its recorded doses are stamped at the
+      // 08:00 slot as 08:00Z. A test that cares about the family's own clock
+      // sets it with p.timezone before mounting.
+      // (No backticks in here - this whole block is a template literal.)
+      return { familyId: currentFamily, userId, family: { id: currentFamily, name: 'Fixture family', timezone: familyTimezone },
+        members: currentMembers, selfMember: currentMembers.find(member => member.role === role), role };
     };
     const db = window.supabase.createClient(${JSON.stringify(provider)}, 'synthetic-public-anon-fixture', { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
     const from = db.from.bind(db);
@@ -166,6 +178,7 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
     const access = () => ({ userId, familyId: currentFamily, memberId: app().selfMember.id, membershipUpdatedAt: '2026-09-12T00:00:00Z', role, isSuperAdmin: false, planLevel: 2, featureTiers: {} });
     p.seed = (table, rows) => cache.writePartitionedCache(cache.cacheIdentity({ userId, sessionId, accessIdentity: cacheAccessKey(access()) }, table, familyId, table === 'medication_doses' ? [familyId, load('@/lib/medications/adherence').localDateKey(new Date())] : [familyId]), rows);
     let root;
+    p.timezone = (zone) => { familyTimezone = zone; };
     p.mount = (nextRole = 'parent', family = familyId) => { role = nextRole; currentFamily = family; root ??= ReactDOM.createRoot(document.getElementById('root')); ReactDOM.flushSync(() => root.render(React.createElement(LocaleProvider, { locale, source: 'default', messages }, React.createElement(AuthenticatedCacheBoundary, { access: access() }, React.createElement(Medications))))); };
     p.unmount = () => { ReactDOM.flushSync(() => root.unmount()); root = null; };
     p.online = () => window.dispatchEvent(new Event('online'));
@@ -440,8 +453,13 @@ test('an existing dose assigned to another member is preserved rather than toggl
 
 test.describe('unresolvable local clock slot', () => {
   test.use({ timezoneId: 'America/New_York' });
+  // The gap that matters is the FAMILY's, not the viewer's: 02:30 on 2026-03-08
+  // never happens in New York, so a household there cannot have taken that dose.
+  // The browser also sits in New York, which is the ordinary case — a member at
+  // home. What changed is which clock decides, and the family's is the answer.
   test('the spring DST gap remains visible for review and cannot be logged at a silently shifted time', async ({ page }) => {
     const state = await fixture(page); state.rows.medication_schedules[0].time_of_day = '02:30:00';
+    await page.evaluate(() => window.__medicationsAudit.timezone('America/New_York'));
     await page.clock.setFixedTime(new Date('2026-03-08T12:00:00.000Z')); await mount(page); await ready(page);
     await expect(markTaken(page)).toBeDisabled();
     await expect(page.getByText('This dose changed. Refresh and review it before logging.', { exact: true })).toBeVisible();

@@ -16,6 +16,9 @@ const sources = Object.fromEntries([
   'components/modules/medications-module.tsx', 'lib/hooks/use-realtime-query.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/medications/adherence.ts',
+  // adherence.ts resolves a dose slot in the family's zone; the in-page loader
+  // below throws on any module missing from this list, so its imports belong here.
+  'lib/time/zoned.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
@@ -133,7 +136,12 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
     const app = () => {
       const currentMembers = members.map(member => ({ ...member, family_id: currentFamily,
         id: currentFamily === familyId ? member.id : member.role === 'parent' ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' : '99999999-9999-4999-8999-999999999999' }));
-      return { familyId: currentFamily, userId, members: currentMembers, selfMember: currentMembers.find(member => member.role === role), role };
+      // The real context always carries the family, and the module reads its
+      // timezone to resolve a dose slot. UTC is what this fixture already
+      // assumes: its recorded doses are stamped at the 08:00 slot as 08:00Z.
+      // (No backticks in here - this whole block is a template literal.)
+      return { familyId: currentFamily, userId, family: { id: currentFamily, name: 'Fixture family', timezone: 'UTC' },
+        members: currentMembers, selfMember: currentMembers.find(member => member.role === role), role };
     };
     const db = window.supabase.createClient(${JSON.stringify(provider)}, 'synthetic-public-anon-fixture', { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
     const from = db.from.bind(db);
