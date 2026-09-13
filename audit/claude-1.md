@@ -144,3 +144,74 @@ for, and that is finding 1.
 - **Status:** VERIFIED
 
 ---
+## Sweep 2 — integration failure modes
+
+For each provider: when it is unconfigured or down, does the feature fail open,
+fail closed, or fail *silently while claiming success*? The third is the shape
+Pass C was built around, and the interesting place to look for it is at an
+integration boundary rather than a database one.
+
+**Mostly clean, and worth stating.** `twilioFetch` throws on any non-2xx and on
+an unconfigured account (the SID interpolates to `undefined`, the URL 404s), so
+Twilio fails loud rather than no-op. Three of the four `sendSms` call sites catch
+and `console.error`. `hasEncryptionKey()` is checked before both sync OAuth
+callbacks and redirects to `error=no_encryption_key` rather than storing an
+unencrypted token. `isAIConfigured()` gates the assistant with a 503 and a code.
+
+One path is not clean, and it is the emergency one.
+
+---
+
+### [CLAUDE-1][MEDIUM][INTEGRATIONS] An emergency escalation records parents as notified who were not
+
+- **File:** `app/api/guardian/escalate/route.ts:112` (`notifiedIds.push`) vs `:115-120` (the send)
+- **Problem:** the member id is pushed onto `notifiedIds` **before** anything is
+  attempted, and the row is written with `notified_member_ids: notifiedIds`:
+
+  ```ts
+  const phone = m.user_id ? phoneMap.get(m.user_id) : null;
+  if (!phone) continue;
+  notifiedIds.push(m.id);          // ← recorded as notified here
+
+  try {
+    await sendSms(phone, smsText);
+    smsSent = true;                // ← honest: only on success
+  } catch { /* non-fatal */ }      // ← and no log at all
+  ```
+
+  `smsSent` is correct — it is set only after `sendSms` resolves, which is
+  **C-02**'s fix applied properly. `notifiedIds` is the same defect one level
+  down, and C-02 did not reach it.
+- **Evidence:** `pushSent` comes from a single family-wide `notifications` row
+  (`user_id: null`), inserted once outside the loop — so it is a family-level
+  fact and cannot stand in for any individual member. `smsSent` is one boolean
+  for the whole loop, so if the first parent's SMS succeeds and the second's
+  throws, the row reads `sms_sent: true` with **both** parents in
+  `notified_member_ids`. Nothing distinguishes them.
+- **Impact:** `guardian_escalations` is the record of who was warned about a
+  family emergency — read afterwards by the family, and by anyone asked why a
+  parent did not respond. It can say a parent was notified when their SMS threw.
+  And the bare `catch { /* non-fatal */ }` is the **only** send path in this
+  codebase that discards the error without logging: the three Contact Center
+  callers all `console.error`. So there is no way to reconstruct which parent
+  was actually reached.
+- **Fix:** track per-member outcomes rather than one boolean — push to
+  `notifiedIds` only after a channel succeeds for that member, and log the
+  failure the way the Contact Center paths do. If the column is meant to record
+  *intent* rather than delivery, rename it; `notified_member_ids` on an emergency
+  record cannot mean "we tried".
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-1][INFO][INTEGRATIONS] Provider degradation, checked
+
+| provider | unconfigured | on failure | verdict |
+|---|---|---|---|
+| Twilio | `twilioFetch` throws (SID is `undefined`, URL 404s) | throws with status + bounded body | loud — good |
+| Stripe | `effectiveSecretKey` falls back to env, then `null` | — | admin page shows `hasSecret` boolean only |
+| Sync (Google/Microsoft/Apple) | `hasEncryptionKey()` guards both callbacks | redirects `error=no_encryption_key` | closed — never stores a plaintext token |
+| AI (assistant) | `isAIConfigured()` → 503 `not_configured` | `describeAIError` | honest |
+| **AI (scam screening)** | **silently degrades to pattern matching** | **silently degrades** | **see the HIGH finding above** |
+
+- **Status:** VERIFIED
