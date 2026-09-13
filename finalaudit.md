@@ -100,6 +100,7 @@ PRODUCTION READY: NO
 
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
+- DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -15468,6 +15469,23 @@ Four finance views now consume error/loading/stale signals. Existing ErrorState 
 #### Evidence
 docs/final-audit/finance-read-state-cycle.md; tests/e2e/finance-read-states.spec.ts
 
+#### Cross-branch note
+The repair recorded here lives on this branch only. main still carried the
+original four views, so the defect was reachable in production the whole time
+this record read FIXED locally — and it was found again, independently, in the
+sweep recorded as DATA-008. That sweep repaired the same four views on
+claude/roadmap-implementation-ld8bon in a simpler form, on top of main's
+useRealtimeQuery rather than this branch's rewritten one, and additionally
+covers the Payments summary tiles, which this branch's version does not.
+
+So there are now two implementations of the same fix on two branches. A test
+merge reports 13 conflicts between them, across these four views, rewards-module,
+meals-module and middleware.ts. Whichever lands second must resolve to ONE
+implementation; this branch's is the richer (it can distinguish stale from
+loading), and the render-level tests from DATA-008 should be kept either way.
+Recording it here so the duplication is a known decision rather than a surprise
+at merge.
+
 #### Final Status
 🔄 IN PROGRESS
 
@@ -20266,6 +20284,87 @@ tests/public-pages-reachable.test.ts; unauthenticated production probes of
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe pending.
 
+### DATA-008 — A failed read must not render as an empty one
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: lib/hooks/use-realtime-query.ts consumers — components/finance/{bills,budgets,payments,savings}-view.tsx; components/dashboard/calendar-sync-panel.tsx; components/marketplace/listing-questions.tsx; components/moments/moments-view.tsx; components/modules/{rewards,meals,habits,chores,inbox,closet,projects,relationship,marketplace}-module.tsx; components/vacations/vacations-list.tsx
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+useRealtimeQuery returns { data, loading, error, refresh }. A call site that
+takes only data cannot tell "this family has nothing" from "the query did not
+come back", and every one of them resolved that the same way: render the empty
+state. Eighteen call sites across fourteen files did exactly that.
+
+Four of them are money pages served as standalone routes with no coordinating
+wrapper — /dashboard/bills, /budgets, /payments and /savings — so nothing
+covered them. What each said versus what was true:
+
+    "No bills yet"                                  the bills query failed
+    "No budgets yet"                                the budgets query failed
+    "No payments" + +$0.00 / -$0.00 / +$0.00 / 0    the transactions query failed
+    "No savings goals"                              the goals query failed
+
+Three more where the false claim costs something different: Calendar sync's
+"No calendars subscribed yet" reads as the family's feeds having been deleted,
+and the obvious response duplicates every one of them; Listing Q&A's "No
+questions yet" makes a seller stop checking a question a buyer really did ask;
+Moments' "Nothing on the horizon" comes from the page whose entire job is to say
+what to get ready for.
+
+And eleven modules each reported their PRIMARY read's failure correctly while a
+second read's error passed silently — a rewards balance computed from reads that
+failed, a grocery list that looks empty, a habit streak that looks broken, an
+inbox where every sender is a stranger, a trip card with no travellers.
+
+#### Fixes Applied
+Every one of the eighteen takes the error and the refresh from the hook and
+either renders ErrorState with a retry ahead of its empty state, or folds the
+missing error into the gate the page already had. Retries re-run every read they
+gate on. Budgets watches both of its reads — spend-to-date comes from
+transactions, so losing that alone reported every category as untouched — and
+Payments' summary tiles show a skeleton while the first read runs and an em dash
+when it failed, because a zero is a figure and the page may only state one it
+has. Twenty-eight catalogue keys across all seven base catalogues.
+
+#### Retest Results
+tests/finance-views-read-boundary.test.ts (23), tests/read-boundary-empty-vs-failed.test.ts
+(12) and tests/read-error-surfaced.test.ts (113) pass on Node 24.15.0; the first
+two render the real components through the hook's three states rather than
+grepping source. Reverting the four money pages fails 14 of 23 and leaves
+exactly the nine controls green — a genuinely empty read still says so, and a
+read still in flight claims neither. Reverting the three pages fails 9 of 12.
+A stand-in ErrorState calls the handler it was given, so a "Try again" wired to
+nothing fails too: replacing one onRetry with a no-op fails that case alone.
+
+tests/read-error-surfaced.test.ts closes the class rather than the instances. It
+sweeps all 231 useRealtimeQuery call sites in 111 files and requires each to
+surface its error — accepting the grouped readQueries.some(query => query.error)
+form the vacation detail pages use — or its file to be named in EXEMPT with a
+reason. Three are: run-timeline's two queries are liveness stamps that schedule a
+router.refresh() while the content comes from server props, and on-this-day-card
+and home-moment-card return null with nothing to show, so a failed read costs an
+additive Home card rather than asserting anything false. The list is tested
+downward as well, so an exemption a file no longer needs fails.
+
+#### Evidence
+tests/finance-views-read-boundary.test.ts; tests/read-boundary-empty-vs-failed.test.ts;
+tests/read-error-surfaced.test.ts; tests/vacations-views-read-boundary.test.ts
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe pending.
+
 # Final Regression
 
 ## Build
@@ -20429,6 +20528,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
+- DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
 
 ## Production Readiness
 NO
