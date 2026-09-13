@@ -5,6 +5,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { logAudit } from '@/lib/server/audit';
 import { getOrCreateChannelResult } from '@/lib/contact-center/server';
 import { provisionFamilyEmailLocal } from '@/lib/contact-center/provision';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 import { familyDetailsSchema, finalizeOnboardingSchema, previewCalendarImportSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
 import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
@@ -814,14 +816,23 @@ export async function finalizeOnboardingAction(input: {
   // Give the new family its @bubaly.com address — the one a teacher or a
   // doctor's office can be given so appointment mail reaches the concierge.
   //
+  // Family+ only, read from the same constant the Contact Center screen and the
+  // inbound webhook use. A family on Free or on the Basic trial finishes
+  // onboarding without an address and claims one from the Contact Center after
+  // upgrading, which is where that control has always been. Provisioning is
+  // gated BEFORE the webhook deliberately: gating the webhook first would strand
+  // mail addressed to an address the family still holds.
+  //
   // Best effort, and last, on purpose. The family already exists and setup has
-  // already succeeded by this point; a contended name or an unreachable table
-  // must not turn a finished onboarding into a retry. An unassigned family
-  // simply has no address yet and can claim one in the Contact Center, which is
-  // where that control has always been.
+  // already succeeded by this point; a contended name, an unreachable table, or
+  // an unavailable subscription read must not turn a finished onboarding into a
+  // retry.
   try {
-    const channel = await getOrCreateChannelResult(admin, familyId);
-    if (!channel.error) {
+    const planLevelForFamily = await resolveFamilyPlanLevel(admin, familyId);
+    const channel = planLevelForFamily >= FAMILY_EMAIL_MIN_PLAN_LEVEL
+      ? await getOrCreateChannelResult(admin, familyId)
+      : null;
+    if (channel && !channel.error) {
       const provisioned = await provisionFamilyEmailLocal(admin, familyId, family.name);
       if (!provisioned.assigned && provisioned.reason !== 'already_assigned') {
         console.warn('[onboarding] family email address not assigned', familyId, provisioned.reason);

@@ -5,12 +5,13 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: complete.** Fourteen findings. **Ten are fixed in code** — seven
-on this branch, and F1, F3 and F14 on `main` via #526, whose sitemap
+**Audit status: complete.** Fourteen findings. **Eleven are fixed in code** —
+eight from this audit, and F1, F3 and F14 on `main` via #526, whose sitemap
 implementation superseded mine and which I withdrew in its favour. One finding
-was disproved and withdrawn after re-checking. **Three remain**, each closed with
-a decision and an owner: two need credentials this session cannot hold (F5, F6)
-and one needs a pricing call (F7). Nothing is left unexamined or unassigned.
+was disproved and withdrawn after re-checking. **Two remain**, and both need
+credentials this session cannot hold: F5 (Supabase access token) and F6
+(`CONTACT_CENTER_INBOUND_SECRET` and MX records). Nothing is left unexamined or
+unassigned.
 
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
@@ -29,7 +30,7 @@ and one needs a pricing call (F7). Nothing is left unexamined or unassigned.
 | F4 | The test named for F1's property only grepped source | Medium | **Fixed** |
 | F5 | Supabase production migration workflow cannot authenticate | High | **Operator — credentials** |
 | F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Operator — config** |
-| F7 | Family email is gated on the screen only — inbound pipeline has no plan check | Medium | **Decision needed** |
+| F7 | Family email is gated on the screen only — inbound pipeline has no plan check | Medium | **Fixed** — owner chose Family+ |
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
 | F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Closed — decision recorded** |
 | F10 | Seeded placeholder records shown as real customer stories on the homepage and /pricing | High | **Fixed** |
@@ -188,39 +189,59 @@ Current live behaviour is correct for that state: `POST /api/contact-center/emai
 answers **401** (verified three times), meaning the route runs and refuses. Before
 #516 it answered 307 → `/login`, so the route never executed at all.
 
-## F7 — The family email gate exists only on the screen *(Medium, decision needed)*
+## F7 — The family email gate existed only on the screen *(Medium, fixed)*
 
-**Corrected on re-examination.** I first recorded this as "a Free family is given
-an address it cannot see", which understates it. Tracing the whole path found no
-plan check anywhere except the screen:
+**Corrected once on re-examination, then resolved.** I first recorded this as "a
+Free family is given an address it cannot see", which understated it. Tracing the
+whole path found no plan check anywhere except the screen:
 
-| Stage | Plan gate |
+| Stage | Gate, before |
 |---|---|
-| Contact Center screen (`app/(app)/dashboard/contact-center/page.tsx`) | `requirePlanLevel(2)` — Family+ |
-| Address provisioning at onboarding | **none** — runs for every tier |
-| Inbound webhook (`app/api/contact-center/email/route.ts`) | **none** |
+| Contact Center screen | `requirePlanLevel(2)` — a bare literal |
+| Address provisioning at onboarding | **none** — ran for every tier |
+| Inbound webhook | **none** |
 | `lib/contact-center/{server,address,provision}.ts` | **none** |
 
-The route resolves the family from the recipient local-part and proceeds. So a
-**Free** family has a working `@bubaly.com` address that receives mail, files it
-into the inbox, runs the AI concierge over it, and auto-replies **as the family**
-— while the product surface says Family+. The only thing they cannot do is look
-at the inbox.
+So a **Free** family had a working `@bubaly.com` address that received mail,
+filed it, ran the AI concierge over it and auto-replied **as the family**. The
+only thing they could not do was open the inbox.
 
-That matters in both directions, which is exactly why it needs a decision rather
-than a default:
+**Resolved: the owner chose Family+.** All three surfaces now read one constant,
+`FAMILY_EMAIL_MIN_PLAN_LEVEL` in `lib/constants/plans.ts`. The bare
+`requirePlanLevel(2)` is gone — a literal in one file is what let the other two
+drift in the first place, so moving the feature between tiers is now a change to
+that line rather than a hunt through three files.
 
-- If Family+ is the intent, Free families are consuming AI inference and sending
-  outbound mail under the product's own domain, ungated.
-- If every family should have an address, the screen's `requirePlanLevel(2)` is
-  the thing that is wrong.
+Two details that carry the risk:
 
-**Deliberately not decided here.** Either fix is a pricing choice, and gating the
-inbound route would start dropping mail for any Free family whose address is
-already in circulation — a user-visible behaviour change that should be made
-knowingly. Worth noting the ordering if Family+ is chosen: gate provisioning
-first, then the route, or existing Free addresses go dark with mail already in
-flight.
+**Ordering.** Provisioning is gated *before* the webhook, deliberately. Gating
+the webhook first would strand mail addressed to an address a family still
+holds. With provisioning closed, a family below the line has no address for
+anything to arrive at, and the webhook check covers the single case left: an
+address issued while the family was Family+ and still resolvable after a
+downgrade.
+
+**An unreadable plan is not an unentitled family.** `resolveFamilyPlanLevel`
+throws when the subscription read fails, and the webhook catches that separately
+and answers **503**, exactly as its other read failures do. Answering 200 would
+tell the provider the message was handled — no retry, and no copy of it
+anywhere — so a teacher's email would be gone because a database read blipped.
+That case has its own test, and reverting the 503 to a 200 fails it.
+
+The same throw sits inside onboarding's provisioning block, which is still
+wrapped and still last, so a subscription blip cannot turn a completed signup
+into a retry.
+
+Verified non-vacuous three ways: reverting the page to its literal, the webhook's
+503 to a 200, and the provisioning gate each fail exactly the case that covers
+them.
+
+**One follow-up worth doing when MX is live (F6).** A refused message currently
+answers `{ ok: true, skipped: 'plan' }` — acknowledged and logged, matching this
+route's existing idiom for a recipient it will not process. A real bounce would
+be kinder to the sender, who otherwise learns nothing. Not built here because
+nothing is routed to the webhook yet, so there is no live behaviour to preserve
+or break.
 
 ## F8 — Page titles doubled the brand *(Low, fixed)*
 
@@ -586,7 +607,6 @@ someone who has access this session does not.
 |---|---|---|
 | **F5** Supabase migration workflow | Operator | The access token or project ref lost its privileges some time after 2026-09-07. Restore it, **then** repair the ledger baseline per the runbook — the gate throws by design until `0004` is recorded, and that is explicitly a credentialed operator action |
 | **F6** Family email routing | Operator | Set `CONTACT_CENTER_INBOUND_SECRET` in Vercel and point `bubaly.com` MX at `/api/contact-center/email?key=…`. Until then the webhook correctly answers 401 |
-| **F7** Family email plan gating | Product + Engineering | Decide whether Free families get a working address. Today the gate is on the screen only: provisioning and the inbound webhook have none, so a Free family receives mail, runs the AI concierge and auto-replies as the family. If Family+ is the intent, gate provisioning first and the route second, or addresses already in circulation go dark mid-flight |
 | **F10** Seed rows in the database | Operator | The site no longer renders them. Deleting the three `case_studies` rows is a Super Admin action |
 | **F9** i18n payload | Engineering | Design settled, safety proven, and the mechanism now needs no middleware or restructure — a nested provider in `app/(app)/layout.tsx` with a 702-key (44 KB) root set. Three named keys to cover first. Needs one person to confirm a marketing page renders in a browser, which this environment cannot do |
 
