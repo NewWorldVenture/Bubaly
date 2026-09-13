@@ -247,7 +247,8 @@
       "Requiredness is scoped to the captured caller. Missing key checks, fallback operators and configuration presence do not prove working integrations.",
       "Three template-only names have no captured consumer. Source-only names are not automatically template defects, because many are CI/platform bindings.",
       "No runtime, network, provider, build, test or post-write checks were performed."
-    ]
+    ],
+    "addendum": "ALEXA_SKILL_ID was added by hand when the variable was introduced, not by a rescan; the counts above describe the original bounded scan."
   },
   "variables": [
     {
@@ -366,6 +367,35 @@
           "path": "lib/ai/provider.ts",
           "line": 502
         }
+      },
+      "configuredState": "not-inspected"
+    },
+    {
+      "name": "ALEXA_SKILL_ID",
+      "provider": "Amazon Alexa skill",
+      "purpose": "Application id of the Alexa skill whose signed requests the assistant endpoint will act on.",
+      "purposeStatus": "source-evidenced",
+      "classification": "public-config",
+      "classificationBasis": "A skill's application id is an identifier Amazon puts in every request envelope, not a credential; it is treated as sensitive configuration because it names this deployment's skill.",
+      "sensitiveConfiguration": true,
+      "browserExposure": "Not approved for browser exposure by this registry.",
+      "templateDefinitions": [
+        {
+          "path": ".env.example",
+          "line": 177,
+          "kind": "template-name"
+        }
+      ],
+      "consumers": [
+        {
+          "path": "lib/assistant/alexa-verify.ts",
+          "line": 138,
+          "kind": "environment-read"
+        }
+      ],
+      "behavior": {
+        "requiredness": "optional-hardening",
+        "observation": "configuredAlexaSkillId returns null for an unset or blank value and alexaApplicationIdOk then accepts any application id. The request signature, certificate chain, timestamp freshness and access token are enforced regardless; this variable additionally restricts the endpoint to one skill, because Amazon signs every skill's requests genuinely."
       },
       "configuredState": "not-inspected"
     },

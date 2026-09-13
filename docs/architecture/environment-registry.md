@@ -6,7 +6,7 @@ Source SHA256: `9d279dd1d614ffd6376492b6f8d3b3d44fa4e5dfe6516ea51e2100c91e2441c3
 
 ## Coverage and safety
 
-- 100 distinct names: 73 declared in `.env.example`, plus 27 observed only in scoped source/workflow references.
+- 101 distinct names: 74 declared in `.env.example`, plus 27 observed only in scoped source/workflow references. `ALEXA_SKILL_ID` was added by hand when the variable was introduced; every other row comes from the bounded scan described below.
 - The source scan covered `app`, `lib`, `scripts` and `.github` once, with bounded, value-suppressed context. It did not read complete files for a new code review.
 - Reported lexical file searches: `lib`: 498; `app`: 644; `scripts`: 30; `.github`: 5. Prior-read exclusions and dynamic lookup sites are recorded in the JSON.
 - Previously inspected files were not reread. Retained excerpts were reused where available; this is an explicit coverage limit.
@@ -28,6 +28,7 @@ The JSON contains additional consumer locations, template definition lines, sens
 | `AI_CITATION_API_KEY` | AI citation integration: Credential for AI-citation synchronization. | `secret` | **conditional-unverified**: The synchronization path checks endpoint and key together and writes state on missing configuration. Provider identity and final status are unverified. | `lib/marketing/provider-sync.ts:124` |
 | `AI_CITATION_API_URL` | AI citation integration: Configured endpoint for AI-citation synchronization. | `public-config` | **conditional-unverified**: The synchronization path checks endpoint and key together and writes state on missing configuration. Provider identity and final status are unverified. | `lib/marketing/provider-sync.ts:123` |
 | `AI_MODEL` | OpenAI routing: AI model-selection override. | `public-config` | **optional-override**: Settings can prefer a stored model; getProvider accepts a recognized model or falls back to DEFAULT_OPENAI_MODEL. Dynamic task-model environment aliases remain unresolved. | `lib/ai/provider.ts:502` |
+| `ALEXA_SKILL_ID` | Amazon Alexa skill: Application id of the skill whose signed requests the assistant endpoint acts on. | `public-config` (sensitive config) | **optional-hardening**: an unset or blank value accepts any application id; the request signature, certificate chain, timestamp freshness and access token are enforced regardless. Added by hand when the variable was introduced, not by a rescan. | `lib/assistant/alexa-verify.ts:138` |
 | `ANTHROPIC_API_KEY` | Anthropic setting: Credential retained in AI configuration and readiness displays. | `secret` | **unverified**: Configuration/status reads are evidenced. The inspected provider factory creates an OpenAIProvider; active Anthropic request usage is not established. | `lib/ai/settings.ts:32` |
 | `APPLE_CALDAV_BASE_URL` | Apple CalDAV: CalDAV endpoint override. | `public-config` | **optional-override**: The provider defines a literal endpoint fallback. | `lib/sync/providers/apple.ts:37` |
 | `APPLE_SYNC_ENABLED` | Apple CalDAV: Apple sync configuration gate. | `public-config` | **conditional**: isAppleSyncConfigured compares this variable to a literal. The enabled literal and actual configured state are not reproduced. | `lib/sync/providers/apple.ts:47` |
