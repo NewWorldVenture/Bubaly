@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Thirteen audits of bubaly.com, kept in one file because one file is the record.
+Fourteen audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -19,6 +19,7 @@ They ran over **different surfaces** and none supersedes another:
 | **K — Tenant scope on the request path** | the step after D: a handler that has authenticated its caller and then takes an id out of the request body — is that id checked against the household the request is about | 2 | `K-01`, `K-02` |
 | **L — Offer versus gate** | the published plans in `lib/constants/plans.ts` against the catalog that opens a page and the allowance that meters a request: is a family served what it was sold | 3 | `L-01`–`L-03` |
 | **M — State that outlives its request** | the three places a value produced by one request is read by another — module scope on a warm instance, `unstable_cache` keys, and shared HTTP caches — where the boundary has already been evaluated and cannot be evaluated again | 1 | `M-01` |
+| **N — What the browser downloads** | every module a client bundle can reach: does any of them read an environment variable that is not `NEXT_PUBLIC_`, given that such a read is inlined as a literal into JavaScript the browser receives | 0 | — |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -3697,3 +3698,84 @@ blind spots. The sweep now resolves a same-file constant too.
 - Full suite: **1,187 files, 13,633 tests, all passing**
 - `tsc --noEmit` clean · `eslint` clean on every changed file
 - **No migration.**
+
+---
+
+# Pass N — What the browser downloads (0 findings)
+
+`process.env.X` in a module a client bundle can reach is not read at runtime —
+it is **inlined as a literal** into JavaScript the browser downloads. So the
+question is not whether a module is careful with a key. It is whether the
+bundler can see that module from a client component at all.
+
+Next answers part of it. `import 'server-only'` throws at build time when a
+client bundle reaches the module, and **196** modules here declare it. What it
+does not cover is a module that holds a secret and never declares it.
+
+- **Surface:** **452 client modules**; the bundle reaches **870** modules in
+  total through value imports. **8** `NEXT_PUBLIC_*` variables exist.
+- **Result:** **0 findings.** One module a client bundle reaches names a
+  non-`NEXT_PUBLIC_` variable and it is `NODE_ENV`, which Next inlines by design
+  and which names no secret.
+
+## The eight public variables, checked rather than assumed
+
+`NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_BUILD_ID`,
+`NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`. Every one is public by construction — a URL, a
+build identifier, the **anon** key, the **publishable** key, the **public**
+VAPID half. None is a secret wearing a public prefix, which is the way this
+particular defect usually arrives.
+
+## Three edges that are not bundling edges
+
+This is the part worth keeping, because the first run of this sweep reported
+**20 leaks** — `STRIPE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`TWILIO_AUTH_TOKEN`, `CHILD_LOGIN_SECRET`, `RESEND_API_KEY`,
+`MICROSOFT_SYNC_CLIENT_SECRET` — and **all twenty were false**.
+
+| edge | why it is not a bundling edge | of the 20 |
+|---|---|---|
+| **`'use server'`** | an RPC boundary. A client component importing `searchRecordsAction` receives a stub; none of that module's code, and none of its imports' code, reaches the browser | **13** |
+| **`import type`** | erased by the compiler. One client module appeared to import a `page.tsx`; it imports `type { InboxRow }` from it | **1** |
+| **a directive below a comment block** | the prologue is the first **statement**, and a file may comment above it. `app/(app)/dashboard/search/actions.ts` puts `'use server'` on **line 17**, so a five-line window read it as a plain server module imported by a client component | **2** |
+
+The third is the dangerous one: the other two add noise, but that one
+**manufactures exactly the finding being looked for** — a secret-holding module
+imported straight into a client component — out of a correct file. Reported
+without checking, it would have been the audit's most alarming finding and its
+most wrong.
+
+That is the **eighth** pattern-based miscount recorded in this file. It differs
+from the previous seven in being caught before anything was written down rather
+than after: the chains were read one at a time, and every one ended at a
+`'use server'` line.
+
+## How Pass N is kept closed
+
+`tests/the-browser-bundle-holds-no-secret.test.ts` — **9 cases**.
+
+| what it holds | how |
+|---|---|
+| The traversal is walking the app | floors of 100 client modules and 100 reachable — a traversal that reaches nothing reports no leaks forever |
+| Nothing reachable reads a non-public variable | and the failure names the **import chain**, not just the file |
+| It sees a client module reading a secret directly | fixture |
+| `NEXT_PUBLIC_*` and `NODE_ENV` are not secrets | fixture |
+| **It recognises a directive below 16 lines of comments** | fixture, *plus* the assertion that a five-line window does not — the mistake pinned, not just the fix |
+| It recognises a directive below a block comment | fixture |
+| It drops `import type` and `{ type X }`-only clauses | fixture |
+| It keeps a value import that merely mentions a type | the other direction, so the fix cannot be "ignore everything" |
+| **`lib/supabase/server.ts` is unreachable from any client bundle** | the one module naming `SUPABASE_SERVICE_ROLE_KEY`; if the sweep can reach it, the rest is decoration |
+
+Proved load-bearing against the **real tree**, not only fixtures: planting
+`process.env.SUPABASE_SERVICE_ROLE_KEY` into `components/pwa/register-sw.tsx`
+fails with *"reached via itself, a client module"*, and adding a non-`server-only`
+lib module holding `STRIPE_SECRET_KEY` and importing it from that same component
+fails with *"reached via components/pwa/register-sw.tsx"*.
+
+## Verification
+
+- Full suite: **1,188 files, 13,642 tests, all passing**
+- `tsc --noEmit` clean · `eslint` clean
+- **No code change.** Nothing was found to fix.
