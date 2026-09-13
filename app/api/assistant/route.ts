@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!link) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const utterance = typeof payload.utterance === 'string' ? payload.utterance.slice(0, MAX_UTTERANCE_CHARS) : '';
-  const intent = classifyAssistantUtterance(utterance);
+  const intent = classifyAssistantUtterance(utterance, new Date(), link.timezone);
   try {
     const reply = await answerAssistant(supabase, link, intent);
     await recordAssistantEvent(supabase, link, reply.intent, utterance, reply.outcome);

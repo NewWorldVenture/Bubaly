@@ -16,6 +16,7 @@ import {
   CAPTURE_NOT_ALLOWED_SPEECH, type AgendaEvent, type AgendaTask,
 } from './answers';
 import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, type AssistantIntent } from './intent';
+import type { VoiceRoute } from '@/lib/voice/command-router';
 
 type Client = SupabaseClient<Database>;
 
@@ -189,9 +190,9 @@ export async function answerAssistant(
       if (!link.scopes.includes('capture')) {
         return { speech: CAPTURE_NOT_ALLOWED_SPEECH, outcome: 'refused', intent: 'capture' };
       }
-      const saved = await saveAssistantCapture(supabase, link, intent.route.kind, intent.route.text, now);
+      const saved = await saveAssistantCapture(supabase, link, intent.route, now);
       if (!saved) throw new Error('capture write failed');
-      return { speech: captureSpeech(intent.route), outcome: 'captured', intent: `capture:${intent.route.kind}` };
+      return { speech: captureSpeech(intent.route, link.timezone, now), outcome: 'captured', intent: `capture:${intent.route.kind}` };
     }
 
     default:
@@ -208,15 +209,24 @@ export async function answerAssistant(
  * and failing for exactly the households who would most use it.
  */
 async function saveAssistantCapture(
-  supabase: Client, link: AssistantLink, kind: string, text: string, now: Date,
+  supabase: Client, link: AssistantLink, route: VoiceRoute, now: Date,
 ): Promise<boolean> {
-  const title = boundSpeech(text, 200);
+  const { kind } = route;
+  const title = boundSpeech(route.text, 200);
   if (!title) return false;
 
   if (kind === 'event') {
+    // The time the person actually said. `route.startsAt` is null only when no
+    // date or time was in the utterance, and `now` is the honest reading of
+    // "schedule a parent teacher conference" with nothing else given.
+    //
+    // This used to be `starts_at: now` unconditionally, with the parsed date
+    // thrown away a layer earlier — so "add soccer practice on Friday at 4pm"
+    // put soccer practice in the calendar at the moment you said it.
+    const startsAt = route.startsAt ?? now;
     const { error } = await supabase.from('calendar_events').insert({
-      family_id: link.family_id, title, starts_at: now.toISOString(),
-      all_day: false, category: 'general', created_by: link.user_id,
+      family_id: link.family_id, title, starts_at: startsAt.toISOString(),
+      all_day: route.allDay, category: 'general', created_by: link.user_id,
     } as never);
     if (error) { console.error('[assistant] event insert failed', error); return false; }
     return true;
@@ -246,8 +256,12 @@ async function saveAssistantCapture(
 
   const listId = await ensureList(supabase, link, 'todo_lists', 'To do');
   if (!listId) return false;
+  // "Remind me to renew the passports on Friday" is a task that is due on
+  // Friday. Dropping the day made it a task due whenever someone noticed it,
+  // which is the thing the person was asking not to have to do.
   const { error } = await supabase.from('todo_items').insert({
     family_id: link.family_id, list_id: listId, title,
+    ...(route.dueDate ? { due_date: route.dueDate } : {}),
   } as never);
   if (error) { console.error('[assistant] task insert failed', error); return false; }
   return true;

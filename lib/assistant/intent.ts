@@ -47,6 +47,24 @@ const FORGETTING_RE = /\b(forget|forgetting|missing|miss(ed)?\s+anything|overloo
 const HELP_RE = /\b(help|what can (you|i) (do|say)|how does this work|commands?)\b/i;
 
 /**
+ * Openers that mean "do this". When an utterance starts with one, the words
+ * after it are the THING, not a question about it — so none of the question
+ * matchers above get a say.
+ *
+ * Without this, each question matcher is a trap for a perfectly ordinary
+ * command, because the words overlap:
+ *
+ *   "schedule the school play on Tuesday"   -> AGENDA_RE     ("schedule")
+ *   "remind me to help with the homework"   -> HELP_RE       ("help")
+ *   "remind me not to forget the passports" -> FORGETTING_RE ("forget")
+ *   "put it on the calendar tomorrow"       -> AGENDA_RE     ("calendar")
+ *
+ * Each of those was heard as a question and answered instead of being saved,
+ * which to the person is Bubaly ignoring them.
+ */
+const IMPERATIVE_RE = /^(add|put|get|buy|pick up|need|schedule|remind me|note|remember|jot|write)\b/i;
+
+/**
  * Speech an assistant passes through when it heard nothing useful. Alexa sends
  * an empty slot rather than omitting it, so a blank string is a real case.
  */
@@ -54,21 +72,26 @@ function isBlank(text: string): boolean {
   return text.trim().length === 0;
 }
 
-export function classifyAssistantUtterance(raw: string, now: Date = new Date()): AssistantIntent {
+export function classifyAssistantUtterance(
+  raw: string, now: Date = new Date(), timezone?: string,
+): AssistantIntent {
   const utterance = (raw ?? '').trim();
   if (isBlank(utterance)) return { kind: 'help' };
 
   // Questions are matched before capture. Without this, "what's on today"
   // parses as an event ("today" is a date) and Bubaly would silently create a
   // calendar entry called "what's on" instead of answering.
-  if (HELP_RE.test(utterance)) return { kind: 'help' };
-  if (FORGETTING_RE.test(utterance)) return { kind: 'forgetting' };
-  if (NEXT_RE.test(utterance)) return { kind: 'next' };
-  if (AGENDA_RE.test(utterance)) {
-    return { kind: 'agenda', day: TOMORROW_RE.test(utterance) ? 'tomorrow' : 'today' };
+  const commanded = IMPERATIVE_RE.test(utterance);
+  if (!commanded) {
+    if (HELP_RE.test(utterance)) return { kind: 'help' };
+    if (FORGETTING_RE.test(utterance)) return { kind: 'forgetting' };
+    if (NEXT_RE.test(utterance)) return { kind: 'next' };
+    if (AGENDA_RE.test(utterance)) {
+      return { kind: 'agenda', day: TOMORROW_RE.test(utterance) ? 'tomorrow' : 'today' };
+    }
   }
 
-  const route = classifyVoiceCommand(utterance, now);
+  const route = classifyVoiceCommand(utterance, now, timezone);
   if (isBlank(route.text)) return { kind: 'unknown', utterance };
   return { kind: 'capture', route };
 }
@@ -129,13 +152,44 @@ export function unknownSpeech(utterance: string): string {
     : HELP_SPEECH;
 }
 
-/** Confirmation after saving something, naming what it became. */
-export function captureSpeech(route: VoiceRoute): string {
+/**
+ * A date said out loud: "Saturday", "Saturday at 4pm", "the 3rd of October".
+ *
+ * Weekday-relative for the coming week because that is how people hold dates in
+ * their head, and a bare date for anything further out. No year, no "2026-09-19"
+ * — a speech engine reads that as a subtraction.
+ */
+function speakableDate(instant: Date, timezone: string, withTime: boolean, now: Date): string {
+  const zone = timezone || 'UTC';
+  const days = Math.round((instant.getTime() - now.getTime()) / 86_400_000);
+  const dayPart = days >= 0 && days <= 6
+    ? new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long' }).format(instant)
+    : new Intl.DateTimeFormat('en-GB', { timeZone: zone, day: 'numeric', month: 'long' }).format(instant);
+  if (!withTime) return dayPart;
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: 'numeric', minute: '2-digit', hour12: true })
+    .format(instant)
+    .replace(':00', '')       // "4:00 pm" is read back as "four zero zero"
+    .replace(/\s?([ap])m/i, '$1m');
+  return `${dayPart} at ${time}`;
+}
+
+/**
+ * Confirmation after saving something, naming what it became AND when.
+ *
+ * The when matters more here than anywhere else in the app: there is no screen
+ * to glance at, so the spoken confirmation is the only chance a person gets to
+ * catch "Friday" being heard as "Thursday" before they find out by missing it.
+ */
+export function captureSpeech(route: VoiceRoute, timezone = 'UTC', now: Date = new Date()): string {
   const what = boundSpeech(route.text, 120);
   switch (route.kind) {
     case 'shopping': return `Added ${what} to the shopping list.`;
-    case 'task': return `Added a task: ${what}.`;
-    case 'event': return `Added ${what} to the calendar.`;
+    case 'task': return route.dueDate
+      ? `Added a task: ${what}, due ${speakableDate(new Date(`${route.dueDate}T12:00:00Z`), timezone, false, now)}.`
+      : `Added a task: ${what}.`;
+    case 'event': return route.startsAt
+      ? `Added ${what} to the calendar for ${speakableDate(route.startsAt, timezone, !route.allDay, now)}.`
+      : `Added ${what} to the calendar.`;
     case 'note': return `Noted: ${what}.`;
     default: return `Saved ${what}.`;
   }

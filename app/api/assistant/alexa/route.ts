@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const link = await resolveAssistantLink(supabase, token);
   if (!link) return NextResponse.json(alexaSpeechResponse(ALEXA_NOT_LINKED_SPEECH));
 
-  const intent = classifyAssistantUtterance(translated.utterance);
+  const intent = classifyAssistantUtterance(translated.utterance, new Date(), link.timezone);
   try {
     const reply = await answerAssistant(supabase, link, intent);
     await recordAssistantEvent(supabase, link, reply.intent, translated.utterance, reply.outcome);
