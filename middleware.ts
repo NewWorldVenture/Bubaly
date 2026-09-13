@@ -51,6 +51,14 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
+  // The generated social preview images. Every crawler that renders a shared
+  // Bubaly link — X, Slack, Discord, iMessage, WhatsApp, LinkedIn, Facebook —
+  // fetches these WITHOUT a session, so behind the session boundary they
+  // answered 307 to /login and no shared link showed a preview at all. They
+  // render a fixed brand card from build-time assets: no request input, no
+  // family data, nothing to protect.
+  '/opengraph-image',
+  '/twitter-image',
   // Liveness/readiness probe for uptime monitors + LB health checks. Must be
   // reachable without a session (a monitor cannot authenticate); it is read-only
   // and returns only booleans/latency/missing-var names — never a secret.

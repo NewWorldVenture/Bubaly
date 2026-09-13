@@ -6,6 +6,7 @@
 import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { OG_SIZE, OG_CONTENT_TYPE, OG_ALT } from '@/lib/og/social-image';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -98,12 +99,34 @@ export async function resolveMarketingMetadata(path: string, fallback: Metadata)
     ...(title ? { title } : {}),
     ...(description ? { description } : {}),
     ...(canonical ? { alternates: { ...priorAlternates, canonical } } : {}),
+    // A segment that declares `openGraph` REPLACES the root layout's resolved
+    // object — Next does not deep-merge it, and it stops applying the
+    // `app/opengraph-image.tsx` file convention for that route. Returning only
+    // {title, description} therefore deleted og:image, og:url, og:type and
+    // og:site_name from every marketing page while /login (which does not call
+    // this) kept all four. Shared links to the homepage, pricing, features and
+    // every blog post rendered with no preview image anywhere.
+    //
+    // So the site-wide defaults are restated here in full. They stay first so a
+    // page's own fallback.openGraph still wins for anything it sets.
     openGraph: {
-      // The plain string, never the `absolute` wrapper. openGraph carries no
-      // brand template of its own, so it was never doubled and needs no opt-out.
+      type: 'website',
+      siteName: 'Bubaly',
+      images: [{
+        url: `${SITE_URL}/opengraph-image`,
+        width: OG_SIZE.width,
+        height: OG_SIZE.height,
+        alt: OG_ALT,
+        type: OG_CONTENT_TYPE,
+      }],
       ...priorOg,
+      // The plain string, never the `absolute` wrapper that the document title
+      // may carry. openGraph has no brand template of its own, so og:title was
+      // never doubled and needs no opt-out.
       ...(resolved ? { title: resolved } : {}),
       ...(description ? { description } : {}),
+      // The canonical is the page's own URL, so it is also the right og:url.
+      ...(canonical ? { url: canonical } : (priorOg.url ? {} : { url: `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}` })),
     },
   };
 }
