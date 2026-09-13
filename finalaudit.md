@@ -697,16 +697,23 @@ other way:
 - **Super-admins bypass**, exactly as they do on the page, so preview still
   works.
 
-### Two tiers that may themselves be the mistake
+### Two tiers that were themselves the mistake — now free
 
 `/dashboard/migrate` ("Switch to Bubaly", the competitor-import wizard) and
-`/referrals` (refer-a-friend) are both Basic in the catalog, so both are now
-refused to a Free family — which is what the sidebar has always told them. But
-an on-ramp and a referral programme are odd things to sell, and if the intent is
-for Free families to have them, **the fix is the tier, not the gate**: one line
-in `FEATURE_CATALOG`, or an override on the admin's Tier & Features page. That
-is a one-line change in one place now, which is precisely what it was not
-before.
+`/referrals` (refer-a-friend) were both Basic in the catalog. The sidebar had
+always shown them locked to a Free family, but nothing enforced it until the fix
+above — so the day enforcement arrived, a Free family lost the wizard that brings
+their data across from a competitor and the page that refers a friend.
+
+Raised here as "the fix is the tier, not the gate", and the owner made that call
+on 2026-09-13. **Both are `free` now.** An on-ramp you have to buy before you can
+use it is not an on-ramp, and a referral programme switched off for everyone who
+has not paid refers nobody.
+
+The `requireFeature` calls stay on both pages. At the free tier they pass
+everyone, and if either tier ever moves back, enforcement follows without anyone
+having to remember those two pages exist. That is the whole point of the fix: the
+tier is now the only thing that decides, and it is one line.
 
 ### Proof
 

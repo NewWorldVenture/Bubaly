@@ -125,8 +125,13 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('tax-vault', 'Tax Document Vault', 'Finances & Admin', 'basic', '/dashboard/tax-vault'),
   F('calendar-sync', 'Calendar Sync', 'Finances & Admin', 'free', '/dashboard/sync'),
   F('family-accounts', 'Family Accounts', 'Finances & Admin', 'free', '/dashboard/settings#members'),
-  F('switch-to-family', 'Switch to Family', 'Finances & Admin', 'basic', '/dashboard/migrate'),
-  F('refer-a-friend', 'Refer a Friend', 'Finances & Admin', 'basic', '/referrals'),
+  // Free deliberately: an on-ramp you have to buy before you can use it is not
+  // an on-ramp. Bringing a family's data across from a competitor is how they
+  // arrive, so it cannot sit behind the thing they have not bought yet.
+  F('switch-to-family', 'Switch to Family', 'Finances & Admin', 'free', '/dashboard/migrate'),
+  // Free for the same reason: a family that cannot refer anyone until they pay
+  // is a referral programme switched off for everyone who has not paid.
+  F('refer-a-friend', 'Refer a Friend', 'Finances & Admin', 'free', '/referrals'),
   F('ai-calendar', 'AI Calendar', 'Finances & Admin', 'plus', '/dashboard/family-coo'),
   F('family-tax-center', 'Family Tax Center', 'Finances & Admin', 'plus', '/dashboard/family-cfo'),
   F('auto-bill-pay', 'Auto Bill Pay', 'Finances & Admin', 'plus', '/dashboard/family-cfo'),
