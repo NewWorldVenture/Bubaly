@@ -1,9 +1,13 @@
 import { Logo } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { LanguageBar } from '@/components/i18n/language-picker';
+import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
+  // Onboarding is a long client-driven flow; it keeps the whole catalogue
+  // rather than a scope that would have to track every step.
   return (
+    <ScopedLocaleProvider namespaces="all">
     <div className="flex min-h-dvh flex-col">
       <header className="flex items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
@@ -18,5 +22,6 @@ export default async function OnboardingLayout({ children }: { children: React.R
         <LanguageBar />
       </footer>
     </div>
+    </ScopedLocaleProvider>
   );
 }

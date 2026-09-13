@@ -5,9 +5,12 @@ import { ExitIntent } from '@/components/marketing/exit-intent';
 import { ConsentManager } from '@/components/marketing/consent-manager';
 import { BackToTop } from '@/components/marketing/back-to-top';
 import { SkipLink } from '@/components/a11y/skip-link';
+import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
+import { MARKETING_SCOPE } from '@/lib/i18n/scopes';
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
+    <ScopedLocaleProvider namespaces={MARKETING_SCOPE}>
     <div className="marketing-theme flex min-h-dvh flex-col bg-bg text-fg transition-colors duration-300">
       <SkipLink />
       <SiteHeader />
@@ -18,5 +21,6 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <ConsentManager />
       <BackToTop />
     </div>
+    </ScopedLocaleProvider>
   );
 }
