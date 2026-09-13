@@ -217,8 +217,34 @@ describe('the row that reaches the database', () => {
 
   it('still routes a shopping item to a grocery list', async () => {
     const writes = await capture('add milk to the shopping list');
-    const item = writes.find((w) => w.table === 'grocery_items');
-    expect(item?.payload).toMatchObject({ name: 'Milk', family_id: 'fam-1' });
-    expect(item?.payload.list_id, 'a list is created when the family has none').toBeTruthy();
+    const rows = writes.find((w) => w.table === 'grocery_items')?.payload as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: 'Milk', family_id: 'fam-1' });
+    expect(rows[0].list_id, 'a list is created when the family has none').toBeTruthy();
+  });
+
+  it('adds three things when three things were said', async () => {
+    // One line reading "Milk, eggs and bread" is not a shopping list — you
+    // cannot tick off the eggs.
+    const writes = await capture('add milk, eggs and bread to the shopping list');
+    const rows = writes.find((w) => w.table === 'grocery_items')?.payload as unknown as Record<string, unknown>[];
+    expect(rows.map((r) => r.name)).toEqual(['Milk', 'eggs', 'bread']);
+  });
+
+  it('keeps a spoken count as a quantity', async () => {
+    const writes = await capture('add 2 pints of milk, 12 eggs to the shopping list');
+    const rows = writes.find((w) => w.table === 'grocery_items')?.payload as unknown as Record<string, unknown>[];
+    expect(rows).toEqual([
+      expect.objectContaining({ name: 'pints of milk', quantity: '2' }),
+      expect.objectContaining({ name: 'eggs', quantity: '12' }),
+    ]);
+  });
+
+  it('does not split a dish that has "and" in its name', async () => {
+    // No comma, so "and" is part of the thing rather than a separator.
+    const writes = await capture('add macaroni and cheese to the shopping list');
+    const rows = writes.find((w) => w.table === 'grocery_items')?.payload as unknown as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe('Macaroni and cheese');
   });
 });

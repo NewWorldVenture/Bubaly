@@ -17,6 +17,7 @@ import {
 } from './answers';
 import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, type AssistantIntent } from './intent';
 import type { VoiceRoute } from '@/lib/voice/command-router';
+import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 
 type Client = SupabaseClient<Database>;
 
@@ -31,6 +32,9 @@ export type AssistantLink = {
 
 export type AssistantOutcome = 'answered' | 'captured' | 'refused' | 'error';
 export type AssistantReply = { speech: string; outcome: AssistantOutcome; intent: string };
+
+/** Most items one spoken sentence can add, so a stuck microphone cannot fill a list. */
+const MAX_SPOKEN_ITEMS = 20;
 
 /** Longest utterance worth storing on the audit row. */
 const UTTERANCE_LOG_CHARS = 240;
@@ -247,9 +251,26 @@ async function saveAssistantCapture(
   if (kind === 'shopping') {
     const listId = await ensureList(supabase, link, 'grocery_lists', 'Groceries');
     if (!listId) return false;
-    const { error } = await supabase.from('grocery_items').insert({
-      family_id: link.family_id, list_id: listId, name: title, created_by: link.user_id,
-    } as never);
+
+    // People do not dictate one item at a time. "Add milk, eggs and bread to
+    // the shopping list" was becoming a single line reading "Milk, eggs and
+    // bread", which is not a shopping list — you cannot tick off the eggs.
+    //
+    // splitItems only breaks on "and" when a comma is already present, so
+    // "macaroni and cheese" survives as one thing; parseGroceryItem pulls a
+    // count out of "2 pints of milk" and leaves "2% milk" alone. Both have been
+    // in lib/capture/parse.ts all along, used by the typed capture box and not
+    // by the speaker.
+    const items = splitItems(title)
+      .slice(0, MAX_SPOKEN_ITEMS)
+      .map((raw) => parseGroceryItem(raw))
+      .filter((item) => item.name.trim().length > 0);
+    if (items.length === 0) return false;
+
+    const { error } = await supabase.from('grocery_items').insert(items.map((item) => ({
+      family_id: link.family_id, list_id: listId,
+      name: boundSpeech(item.name, 200), quantity: item.quantity, created_by: link.user_id,
+    })) as never);
     if (error) { console.error('[assistant] grocery insert failed', error); return false; }
     return true;
   }
