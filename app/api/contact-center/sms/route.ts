@@ -12,7 +12,7 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { autoReplyText } from '@/lib/contact-center/routing';
+import { autoReplyText, classifyIntent, summarizeInbound } from '@/lib/contact-center/routing';
 import { safeContactText } from '@/lib/contact-center/text';
 import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
 
@@ -114,8 +114,17 @@ export async function POST(req: NextRequest) {
       // Retain unsupported/legacy intake without inventing a unique reply occasion.
       result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
     }
-  } catch {
-    return new NextResponse('Reply preparation temporarily unavailable', { status: 503 });
+  } catch (error) {
+    // Filing the text matters more than answering it. Twilio does not retry an
+    // inbound-SMS webhook, so a 503 here is the family never seeing the message
+    // at all — and a concierge that overruns the 15s candidate budget, or one
+    // slow read inside the reply bookkeeping, was enough to cause one. Fall
+    // back to the same deterministic classifier `runConcierge` uses when the
+    // model is unavailable: the message is filed, an urgent one still escalates
+    // to the human fallback number, and the only thing lost is the auto-reply.
+    console.error('[contact-center] SMS reply preparation failed; filing without a reply', error);
+    replyReceipt = null;
+    result = { summary: summarizeInbound(body), intent: classifyIntent(body) };
   }
 
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
