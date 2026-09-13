@@ -192,6 +192,25 @@ jobs:
       - name: Boundary probes
         run: bash docs/audit/run-probes.sh
 
+      # Production's ledger records only 0001-0003 while its schema carries all
+      # 307 migrations, so recovery means replaying from 0004 over a database
+      # that ALREADY HAS the schema (LB-016 §4). A from-scratch replay cannot
+      # show whether that works: every statement above ran against an empty
+      # database, where `create policy` has nothing to collide with.
+      #
+      # This re-runs all 307 against the schema this job just built. It is the
+      # only step that proves a migration is idempotent rather than merely
+      # correct, and it is why it runs LAST: it rewrites the ledger and replays
+      # everything, so nothing may depend on the database afterwards.
+      #
+      # It fails if any migration cannot be re-applied — which is what a new
+      # `create policy` / `create trigger` / `create index` / `alter publication
+      # add table` without a guard does. Fix those the way the neighbours do
+      # (`drop policy if exists` first, `create or replace trigger`,
+      # `if not exists`), not by exempting the file.
+      - name: Migrations re-apply onto an existing schema (LB-016 §4 repair)
+        run: bash docs/audit/rehearse-ledger-repair.sh
+
   e2e:
     # `npm run test:e2e` runs playwright with no project filter, so ALL projects
     # execute here — including the mobile device matrix (iphone-se / iphone / pixel

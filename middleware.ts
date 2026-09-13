@@ -3,95 +3,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
-import { MARKETING_PUBLIC_PREFIXES } from '@/lib/marketing/page-types';
+import { PROTECTED, PUBLIC, matchesPrefix } from '@/lib/auth/route-access';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
   shouldForwardAuthCode,
 } from '@/lib/auth/session';
 
-const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
-  '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
-  // The public family-display page (device compatibility + setup). Deliberately
-  // NOT '/display': that path is the signed-in kiosk and must stay protected.
-  '/family-display',
-  // Both are sign-in entry points, not authenticated family data. The header's
-  // Get started link and a child's PIN sign-in must work before a session exists.
-  '/welcome', '/kid-login',
-  '/join', '/offline',
-  // Legal pages — public for everyone, including signed-out visitors.
-  '/terms', '/privacy', '/cookies', '/acceptable-use',
-  // Public household benchmarks (k-anonymized aggregates); the page itself
-  // answers 404 while the admin publication flag is off.
-  '/resources/benchmarks',
-  // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
-  '/s',
-  // Public reviews wall + submission page — no login required.
-  '/reviews',
-  // Customer story pages enforce publication on the server before rendering.
-  '/customers',
-  // Public Family Wallet gift pages — relatives gift via an unguessable token.
-  '/gift',
-  // The Pay-ID resolver a relative follows from a shared handle. It is the
-  // signed-out half of the gift flow: it reads through the service role
-  // precisely because the visitor has no session, then forwards to the
-  // '/gift' token above. Left out of this list, every shared Pay-ID answered
-  // 307 to /login — so the grandparent the handle was shared with was asked
-  // to create a Bubaly account before they could send a gift, while the
-  // /gift link it resolves to worked. It leaks nothing a guess could not
-  // already learn: an unknown or inactive handle renders the same dead-end
-  // page as an active one with no live link.
-  '/pay',
-  // Public exit-intent offer resolve + metric beacon (anonymous visitors).
-  '/api/exit-intent',
-  // Public contact, blog, and marketing telemetry endpoints. These routes
-  // apply their own bounded-body, rate-limit, and consent/token controls.
-  '/api/contact',
-  '/api/blog',
-  '/api/ab',
-  '/api/mkt',
-  '/api/services/descriptions',
-  // Public gift-link AI assistant; the gift token and durable IP limiter are
-  // the authorization boundary for this narrowly scoped read path.
-  '/api/ai/gift',
-  // The landing-page metric beacon. The page prefixes themselves come from
-  // MARKETING_PUBLIC_PREFIXES below, which is the same list the platform
-  // publishes them under.
-  '/api/lp/track',
-  // Public marketing forms (lead capture) + their submit endpoint.
-  '/f',
-  '/api/forms',
-  // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
-  // with no login — the unguessable feed token IS the authorization.
-  '/api/sync/feeds',
-  // The generated social preview images. Every crawler that renders a shared
-  // Bubaly link — X, Slack, Discord, iMessage, WhatsApp, LinkedIn, Facebook —
-  // fetches these WITHOUT a session, so behind the session boundary they
-  // answered 307 to /login and no shared link showed a preview at all. They
-  // render a fixed brand card from build-time assets: no request input, no
-  // family data, nothing to protect.
-  '/opengraph-image',
-  '/twitter-image',
-  // Liveness/readiness probe for uptime monitors + LB health checks. Must be
-  // reachable without a session (a monitor cannot authenticate); it is read-only
-  // and returns only booleans/latency/missing-var names — never a secret.
-  '/api/health',
-  // Scheduled jobs, internal callbacks, and provider webhooks authenticate
-  // themselves with a shared secret or provider signature in their route.
-  '/api/cron',
-  '/api/concierge-calls',
-  '/api/guardian',
-  '/api/email/welcome',
-  // Provider webhooks (signature-verified) and the signed unsubscribe link must
-  // be reachable without a session.
-  '/api/webhooks',
-  '/api/marketing/unsubscribe',
-  // Every prefix a published marketing page can live under, read from the same
-  // list the platform builds those paths with. Hand-copying them here is how
-  // /questions, /guides, /compare, /alternatives, /audiences, /resources,
-  // /glossary and /p came to answer 307 to /login for every anonymous visitor
-  // and every search engine — eight of the eleven families, invisible. The page
-  // is the authorization boundary: it renders only published, non-deleted rows.
-  ...MARKETING_PUBLIC_PREFIXES];
 
 // Provider callbacks authenticate inside their handlers. Keep this list exact:
 // future Contact Center settings or data endpoints still require a user session.
@@ -171,7 +88,18 @@ export async function middleware(req: NextRequest) {
 
   const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
     || (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
-    || PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+    || matchesPrefix(path, PUBLIC);
+
+  // Whether this path requires a session AT ALL. Public wins first, so a
+  // public path nested under a protected prefix — /api/webhooks under /api —
+  // stays reachable.
+  //
+  // A path that is neither is a path with no route: it falls through to the
+  // router, which renders app/not-found.tsx with a 404. It used to be sent to
+  // /login, which put a sign-in form in front of a typo and showed crawlers a
+  // redirect to an irrelevant page — a soft 404 — for every bad URL on the
+  // internet that happens to point here.
+  const isProtected = !isPublic && matchesPrefix(path, PROTECTED);
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
   // handlers verify the token themselves (`authenticateAI` /
@@ -186,7 +114,7 @@ export async function middleware(req: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isPublic || bearerApi) return NextResponse.next({ request: req });
+    if (isPublic || bearerApi || !isProtected) return NextResponse.next({ request: req });
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', safeInternalRedirect(`${path}${req.nextUrl.search}`, path));
@@ -233,7 +161,7 @@ export async function middleware(req: NextRequest) {
   const sessionMayStillBeValid = isRetryableAuthError(error) && hasAuthCookies(
     req.cookies.getAll().map((c) => c.name),
   );
-  if (!user && !isPublic && !bearerApi) {
+  if (!user && isProtected && !bearerApi) {
     if (sessionMayStillBeValid) {
       console.warn('[middleware] auth lookup failed transiently; keeping the session', error);
       return res;

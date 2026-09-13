@@ -223,17 +223,72 @@ That check is correct and must not be bypassed.
 
 ### 4.1 What the repair actually is
 
-Not a stamping exercise. Every migration in this repository is **additive and
-idempotent** — `tests/migrations-are-additive.test.ts` holds the whole history
-to zero `DROP TABLE` / `DROP COLUMN` / `TRUNCATE` / `DROP TYPE`, and CI replays
-all 291 of them against a real Postgres on every PR (`Database (migration
-replay · RLS boundary probes)`). So the ledger does not need to be *told* what
-is applied; it repairs itself by letting `supabase db push` run from `0004`,
-where the already-applied migrations no-op and the genuinely missing ones land.
+Not a stamping exercise. The ledger does not need to be *told* what is applied;
+it repairs itself by letting `supabase db push` run from `0004`, where the
+already-applied migrations no-op and the genuinely missing ones land.
 
 Writing rows into `supabase_migrations.schema_migrations` by hand is the option
 NOT to take: it asserts that work was done without doing it, and a migration
 wrongly marked applied is skipped forever.
+
+#### This was rehearsed, because it used to be false
+
+Until 2026-09-13 this section justified itself by pointing at
+`tests/migrations-are-additive.test.ts` and the CI replay. **Neither one showed
+what it was cited for.** The additive test bans `DROP TABLE` / `DROP COLUMN` /
+`TRUNCATE` / `DROP TYPE`; it says nothing about re-applying anything. The CI
+replay ran every migration against an **empty** database, where `create policy`
+has nothing to collide with. Additive is not idempotent, and no test in the
+repository had ever asserted the property the repair depends on.
+
+`docs/audit/rehearse-ledger-repair.sh` now asserts it, by reproducing
+production's exact condition — full schema, ledger holding only `0001`–`0003` —
+and replaying from `0004` the way `db push` does. Run against the history as it
+stood, the repair **did not work**:
+
+```
+re-applied cleanly (no-op as claimed): 286
+FAILED:                               18
+The operator's push would STOP at:
+  0004_rls.sql :: ERROR: policy "profiles_insert_self" for table "profiles"
+                         already exists
+0004 recorded: 0  -> requiresBaselineReview would still be TRUE
+```
+
+It stopped on the **first** migration, and because `0004` was never recorded the
+guard would not have cleared either — the operator would have finished the
+maintenance window with the ledger no more repaired than when they started, and
+the release still blocked.
+
+The 18 files were made genuinely re-appliable, each following the convention its
+own neighbours already used: `drop policy if exists` before `create policy`
+(which `0004` itself already did for three of its policies), `create or replace
+trigger`, `create index if not exists`, `create or replace function`, and an
+existence check around `alter publication supabase_realtime add table`. `0018`
+creates its policies through `execute format(...)` over a table list, so the
+drop had to be added *inside* the loop — a static `drop policy if exists` cannot
+name a table that only exists as `%I` at run time. `0226` was the last holdout
+for a different reason (F-020 in `finalaudit.md`): it seeds 525 hero images
+credited `LoremFlickr (CC)`, and `0238`'s licence trigger — already installed
+when the replay reaches `0226` — rejects them. Seeding those heroes `NULL`
+reaches the same end state, since `0231` nulls them out anyway.
+
+The rehearsal now reports **0 failures**, `0004` records, and
+`requiresBaselineReview` goes false on its own.
+
+#### It cannot silently break again
+
+`bash docs/audit/rehearse-ledger-repair.sh` is the last step of the
+`Database (migration replay · RLS boundary probes)` CI job, running against that
+job's own throwaway service container. Because the job's earlier step already
+applied every migration once, the rehearsal applies each of them a **second**
+time — so a newly added migration is checked on the very pull request that
+introduces it, not years later in a maintenance window.
+
+A new `create policy` / `create trigger` / `create index` / `alter publication
+… add table` without a guard fails that step by name. Fix it the way the
+neighbours do; do not exempt the file. The script refuses any `PGHOST` that is
+not a unix socket or loopback, so it cannot be pointed at production.
 
 ### 4.2 Prerequisite, now satisfied
 

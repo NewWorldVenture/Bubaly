@@ -66,27 +66,39 @@ CREATE INDEX IF NOT EXISTS departure_plans_event_idx  ON departure_plans(event_i
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trip_plans_updated_at') THEN
-    CREATE TRIGGER trip_plans_updated_at BEFORE UPDATE ON trip_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger trip_plans_updated_at BEFORE UPDATE ON trip_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'departure_plans_updated_at') THEN
-    CREATE TRIGGER departure_plans_updated_at BEFORE UPDATE ON departure_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger departure_plans_updated_at BEFORE UPDATE ON departure_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
 END $$;
 
 ALTER TABLE trip_plans      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE departure_plans ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "trip_plans_family" on trip_plans;
 CREATE POLICY "trip_plans_family" ON trip_plans FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = trip_plans.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = trip_plans.family_id AND user_id = auth.uid() AND is_active)
 );
 
+drop policy if exists "departure_plans_family" on departure_plans;
 CREATE POLICY "departure_plans_family" ON departure_plans FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = departure_plans.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = departure_plans.family_id AND user_id = auth.uid() AND is_active)
 );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE trip_plans;
-ALTER PUBLICATION supabase_realtime ADD TABLE departure_plans;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'trip_plans') then
+    alter publication supabase_realtime add table trip_plans;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'departure_plans') then
+    alter publication supabase_realtime add table departure_plans;
+  end if;
+end $pub$;

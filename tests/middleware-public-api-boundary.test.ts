@@ -2,7 +2,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const middleware = readFileSync('middleware.ts', 'utf8');
+// The public allowlist moved to lib/auth/route-access.ts when middleware
+// gained a PROTECTED list (so an unrouted path 404s instead of being sent
+// to /login). Both files are read here: the routing LOGIC is still in
+// middleware.ts, the allowlist entries are in the other.
+const middleware = readFileSync('middleware.ts', 'utf8') + readFileSync('lib/auth/route-access.ts', 'utf8');
 
 /**
  * What the middleware ACTUALLY answers, rather than what its source says.
