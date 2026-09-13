@@ -33,6 +33,272 @@ Everything else is disjoint.
 
 ---
 
+# Part 0 — Consolidated view
+
+Maintained by **Claude-1** (coordinator). This part is a roll-up **over** the
+detailed passes below, not a replacement for them: every entry points at the
+finding that carries the evidence. Nothing below Part 0 is rewritten or removed
+when this view is rebuilt.
+
+Worker findings live in `audit/claude-1.md` … `audit/claude-4.md`; `audit/status.md`
+is the board. Only Claude-1 edits this file.
+
+**Honesty rule for this part:** a heading with no findings says so. An area no
+worker has audited yet is recorded as *not yet audited*, never as "clean" —
+*"we checked"* and *"we could not see"* must not read the same on the page.
+
+## Coverage as of this rebuild
+
+| Area | Audited by | Depth |
+|---|---|---|
+| Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
+| Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
+| Architecture / integration seams | Claude-1 | in progress |
+| Frontend / UI / responsive / accessibility | Claude-2 | **not yet started** |
+| Backend / API / auth / security | Claude-3 | **not yet started** |
+| QA / flows / performance / edge cases | Claude-4 | **not yet started** |
+
+# Executive Summary
+
+Two deep passes are complete (41 findings, `F1`–`F22` and `F-001`–`F-020`), and
+a coordinator pass on architecture and integration is in progress. **Three
+findings remain open, and exactly one is a release blocker.**
+
+The blocker is the production migration ledger (A's **F5** / B's **F-001**):
+production carries the full schema but a three-row ledger, so every release
+touching `supabase/` halts at the baseline guard. It needs a credentialed
+operator; agents must not apply it.
+
+The most consequential finding of this pass is **F-020**, because of what it
+says about the others: the documented procedure for clearing that blocker
+**did not work**, and had never been tested. It cited two guards as proof and
+neither could observe the property it claimed. Replayed against production's
+actual condition it stopped on the first file. That is now fixed, rehearsed,
+and enforced by CI on every pull request.
+
+The pattern worth carrying into the remaining passes: **the failures here are
+mostly guards that could not see what they were named for** — a sweep that read
+one line at a time (Pass C), a probe that granted itself privileges (F-015), a
+concurrency check that never ran two things at once (F-019), an index test that
+could not see `UNIQUE` declarations, a replay that ran only against an empty
+database (F-020). Verifying that a guard fails when it should is the single
+highest-yield check in this repository.
+
+# Critical Issues
+
+| # | Finding | Status |
+|---|---|---|
+| **F-020** | The documented production-recovery procedure did not work — `db push` stopped on `0004` and left the guard unclearable | **FIXED** + CI gate |
+
+# High Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F5 / F-001** | Production migration ledger records only `0001`–`0003`; every schema release is blocked | **BLOCKED — operator** |
+| F15 | Family Autopilot ran for every family on the platform | fixed |
+| F16 | Paid features enforced only by the sidebar padlock | fixed |
+| F18 | Endpoints behind gated pages had no gate | fixed |
+| F20 | A child could clear the chore board | fixed |
+| F21 | A child could grant themselves a reward | fixed (app) · `0295` awaiting operator |
+| F22 | A child's username was matched as a pattern | fixed |
+| F1 | The sitemap advertised 435 dead URLs | fixed |
+| F9 | The entire i18n catalogue ships on every page | closed as a decision |
+| F10 | Seeded records presented as real customer stories | fixed |
+| F-003 | `anon` held INSERT/UPDATE/DELETE on all five money tables | fixed · `0290` awaiting operator |
+| F-005 | Every blog post not baked in at build time returned 500 | fixed |
+| F-006 | Any signed-in user could claim another household's AI jobs | fixed · `0292` awaiting operator |
+| F-008 | Six nightly jobs silently stopped at 1,000 rows | fixed |
+| F-010 | Notification generation failed outright for affected households | fixed · `0293` awaiting operator |
+| F-011 | The fix for F-008 had the same defect it was written to fix | fixed |
+| F-012 | The sitemap was six days stale and would have stayed stale for a year | fixed |
+| F-013 | 59 reads asked for more rows than the server would ever return | fixed |
+| F-014 | Notification dedupe failed on every run | fixed |
+| F-017 | A family's "today" was Greenwich's today | fixed |
+| F-018 | Nine family-scoped reads were sequential scans | fixed |
+| F-019 | The money-safety probe asserted concurrency it never tested | fixed |
+| CLAUDE-1 | Nothing enforced migration idempotency, so it could regress silently | fixed (CI gate) |
+| CLAUDE-1 | Two branches independently claimed migration version `0295` | fixed (renumbered `0296`) |
+| CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
+
+# Medium Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F6** | Family email is built but not routed | **OPEN — operator config** |
+| **F19** | Most AI endpoints run unmetered | **OPEN — pricing decision for the owner** |
+| F2 | `robots.txt` omitted 20 authenticated surfaces | fixed |
+| F4 | The test named for F1's property could not observe it | fixed |
+| F7 | The family email gate existed only on the screen | fixed |
+| F11 | Five public pages had no `<h1>` | fixed |
+| F17 | The documented tier map disagreed with the enforced one | fixed |
+| F-004 | The money-boundary probe could not catch F-003 in CI | fixed |
+| F-007 | The additive-migrations guard flagged a revoke as destructive | fixed |
+| F-009 | A provider error in the mailer took down the whole cron run | fixed |
+| F-015 | A probe granted itself privileges and left them, poisoning the suite | fixed |
+| F-016 | The documented crawl workflow drops a live session cookie into the tree | fixed |
+| CLAUDE-1 | `/api/contact-center` was public as a prefix, not as exact paths | fixed |
+| CLAUDE-1 | A runtime gate fails on this Node and passes on CI's | **OPEN — worker collision** |
+
+# Low Priority
+
+| # | Finding | Status |
+|---|---|---|
+| F3 | The homepage was published twice | fixed |
+| F8 | Page titles doubled the brand | fixed |
+| F12 | The 404 page ships no server-rendered markup | closed — recorded |
+| F14 | Nine sitemap URLs declare themselves non-canonical | fixed by #526 |
+| **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
+
+# Architecture
+
+Claude-1's scope. Detail in `audit/claude-1.md`.
+
+- **F-020** and its CI gate are the substantive architectural findings of this
+  pass: the repository's recovery story depended on a property (migration
+  idempotency) that nothing enforced and one guard actively misrepresented.
+- **Migration numbering is a cross-branch race.** `schema_migrations` has a
+  PRIMARY KEY on `version`, but the guard that protects it
+  (`tests/migration-version-safety.test.ts`) can only see one branch at a time.
+  Two branches took `0295` simultaneously. The guard did its job *after* the
+  merge, which is the only moment it can — worth knowing when several sessions
+  author migrations in parallel, as they are now.
+- **Merge direction carries security weight.** Resolving a conflict toward the
+  branch rather than toward `main` silently reverted a fix in one case
+  (rewards) and would have widened an auth boundary in another (contact-center).
+  On this repository a merge conflict in an auth or money path deserves the same
+  scrutiny as the original change.
+
+# Frontend
+
+**Not yet audited this pass.** Claude-2's scope; `audit/claude-2.md` is empty.
+Pass A covered public marketing pages for SEO, headings and titles (F1–F14) but
+did not audit component behaviour, state handling, loading/error states, or
+responsive layout.
+
+# Backend
+
+Covered in depth by Pass B for the data layer (reads, writes, cron, caching) and
+by Pass A for entitlement and authorization on gated endpoints (F16, F18, F19).
+**Route-by-route API auditing is Claude-3's scope and has not started.**
+
+# Database
+
+Pass B's core surface, plus Claude-1's F-020 work.
+
+- 308 migrations, replay 0 → 308 clean, and now **re-appliable** onto a populated
+  schema (the F-020 gate).
+- 19 boundary probes under `docs/audit/`, globbed by `run-probes.sh`, all passing.
+- Open: the production ledger (F-001). Five migrations (`0290`, `0292`, `0293`,
+  `0295`, and #541's `0296`) are authored, tested, and **not in production**.
+
+# Security/Auth
+
+- Pass A found and closed four privilege-escalation classes (F15, F16, F18, F20,
+  F21, F22) — all but F21's migration half are live.
+- Pass B closed the money-table grant hole (F-003) and cross-household AI job
+  claiming (F-006).
+- Claude-1 this pass: prevented a merge from reopening F21's app half, and
+  narrowed `/api/contact-center` from a public prefix to five exact paths.
+- **A full authorization sweep over all 146 API routes is Claude-3's scope and
+  has not started.**
+
+# UX/Accessibility
+
+**Not yet audited this pass.** Claude-2's scope. Pass A touched `<h1>` presence
+on five public pages (F11); nothing else here is accessibility coverage.
+
+# Performance
+
+Partial. F9 (i18n payload, closed as a decision), F-018 (nine sequential scans
+turned into index scans, measured at 700k rows), F-008/F-011/F-013 (row-ceiling
+correctness, which is also a throughput property). **Systematic performance work
+— bundle size, render cost, query N+1, cold start — is Claude-4's scope and has
+not started.**
+
+# Mobile/Responsive
+
+**Not yet audited this pass.** Claude-2's scope. CI runs a mobile device matrix
+(iphone-se / iphone / pixel / ipad) asserting no horizontal overflow and no
+sub-16px inputs, so there is a standing gate; no one has audited beyond it.
+
+# Integrations
+
+Claude-1's scope, in progress.
+
+- CI (`ci.yml`): five jobs; the Database job now carries the idempotency gate.
+- Supabase: service-role vs anon client split; production ledger blocked (F-001).
+- Vercel: deploys on merge to `main`; code fixes reach production, schema does not.
+- Provider webhooks: Twilio (contact centre, Guardian), email inbound — each
+  authenticates in its own handler; middleware must let them through, which is
+  the exact-path narrowing above.
+- **Not yet audited:** push/APNs, calendar feed subscribers, AI provider fallbacks.
+
+# Testing/QA
+
+- 13,641 unit tests across 1,187 files on #541's merged tree; 15,806 on #510's.
+- 19 SQL boundary probes; E2E with a mobile device matrix.
+- **The recurring defect class is vacuous guards** — see the Executive Summary.
+  Claude-4 should treat "revert the fix and confirm the test fails" as the
+  standard for any guard it reviews, not an optional extra.
+- Open: `tests/stream-cancellation-runtime.test.ts` is Node-patch-sensitive.
+
+# Broken/Incomplete Features
+
+- **Family email** (F6) — built, not routed. Operator config.
+- **AI metering** (F19) — most AI endpoints run unmetered. Owner decision.
+- **`endEmergencyAction` writes no audit row at all** — recorded in Pass C as a
+  missing feature rather than a discarded result.
+- Five migrations authored but not applied to production (see Database).
+
+# Technical Debt
+
+- `docs/PENDING_PROD_MIGRATIONS.md` describes a baseline that is 70+ migrations
+  behind; the range sentence has been corrected twice by the range simply growing.
+- 17 historical duplicate migration versions were renamed; `ci-dedupe-migration-versions.mjs`
+  remains as a no-op safety net.
+- Four baseline `react-hooks/exhaustive-deps` lint warnings.
+- `finalaudit.md` is now large enough that three concurrent sessions conflict in
+  it on nearly every merge. Part 0 exists partly to give a stable place to read
+  the state without diffing the whole file.
+
+# Recommended Fix Order
+
+1. **Operator: repair the production ledger** (F-001 / F5), following
+   `docs/runbooks/LB-016-…md` §4 — now rehearsed end to end. This unblocks
+   everything below it.
+2. **Operator: apply the five held migrations** — `0290` (money grants),
+   `0292` (privileged RPC), `0293` (`related_id` type), `0295` (reward
+   redemption), `0296` (social-access delete). Until then F-003, F-006, F-010,
+   F21 and I-01 are only half-live.
+3. **Operator: route family email** (F6).
+4. **Owner: decide AI metering** (F19).
+5. Pin or guard the Node-sensitive runtime test.
+6. Run the three unstarted worker passes (Claude-2, -3, -4).
+
+# Verification Checklist
+
+Commands, with what a good answer looks like. Everything here was run this pass
+unless marked.
+
+- [x] `npx tsc --noEmit` → clean
+- [x] `npm run lint` → 0 errors (4 baseline warnings)
+- [x] `npx vitest run` → all pass (13,641 on #541's tree)
+- [x] `npm run build` → exits 0
+- [x] `npm run db:audit:migrations` → no collisions
+- [x] `npm run db:audit:queries` → every table, column, function, route resolves
+- [x] `bash docs/audit/verify-pg.sh up` → all migrations applied, 0 failed
+- [x] `bash docs/audit/rehearse-ledger-repair.sh` → **FAILED: 0**, `0004` recorded
+- [x] `bash docs/audit/run-probes.sh` → 19/19
+- [x] `node scripts/check-conflict-targets.mjs` → every target inferable
+- [x] Gate proven load-bearing: plant an unguarded `create policy`, confirm the
+      rehearsal fails **and** the from-scratch replay does not
+- [ ] Frontend / accessibility pass (Claude-2)
+- [ ] API authorization sweep over all 146 routes (Claude-3)
+- [ ] End-to-end flow + edge-case pass (Claude-4)
+- [ ] Production: ledger repaired and five migrations applied (operator)
+
+---
+
 # Pass A — Public surface (F1–F22)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
@@ -528,7 +794,7 @@ nothing at all without JS. Recorded with evidence rather than fixed, because the
 fix touches how `not-found.tsx` resolves translations and the payoff is small;
 worth doing deliberately rather than as a drive-by.
 
-## F13 — Unknown top-level paths redirect to login *(By design — no change)*
+## F13 — Unknown top-level paths redirect to login *(Superseded — main #544 fixed it a third way)*
 
 `/nope` answers **307 → `/login?redirect=%2Fnope`** rather than 404. Paths under
 a known public prefix behave correctly: `/blog/nope`, `/features/nope` and
@@ -541,9 +807,29 @@ assistant-bridge history on this codebase is about routes that were *missing*
 from an allowlist. The cost is that a typo'd marketing URL lands on a login page
 and search engines see a soft 404 instead of a hard one.
 
-Deliberately **not changed**: trading fail-closed routing for a nicer typo
-experience is a bad exchange, and weakening auth routing is off-limits. Recorded
-so the trade-off is known rather than rediscovered.
+Deliberately **not changed** at the time: trading fail-closed routing for a nicer
+typo experience is a bad exchange, and weakening auth routing is off-limits.
+Recorded so the trade-off is known rather than rediscovered.
+
+> **Superseded on 2026-09-13 by main #544** — and the reasoning above is why this
+> note matters rather than a quiet edit. This entry told a future reader the
+> change was off-limits. It is not, because #544 did not take either side of the
+> trade-off as stated. It added an explicit **`PROTECTED`** list alongside
+> `PUBLIC` in `lib/auth/route-access.ts`, so a path is now one of three things
+> rather than two:
+>
+>     isPublic    -> serve it
+>     isProtected -> require a session      (fail-closed, unchanged)
+>     neither     -> fall through to the router, which 404s
+>
+> An unlisted app route is still protected, because app routes live under
+> prefixes that are in `PROTECTED`. `/nope` is under neither list, so it is a
+> path with no route and answers 404. Fail-closed routing is preserved exactly;
+> the soft 404 is gone.
+>
+> The general lesson is worth more than the fix: a finding closed as "an
+> unavoidable trade-off" is a finding that stopped looking for a third option.
+> **Do not revert #544 on the strength of the paragraph above it.**
 
 ---
 
