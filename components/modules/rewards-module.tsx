@@ -24,6 +24,7 @@ import {
   type AssignmentLike, type RedemptionLike,
 } from '@/lib/rewards/points';
 import type { Tables, RedemptionStatus } from '@/lib/database.types';
+import { requestRedemptionAction, decideRedemptionAction, type RedemptionDecision } from '@/app/(app)/dashboard/rewards/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Reward = Tables<'rewards'>;
@@ -107,31 +108,24 @@ export function RewardsModule() {
   }
 
   // ── Redemption flow ───────────────────────────────────────
+  // Through the server action, which resolves the role from the session and
+  // reads the title and cost from the reward. This used to insert directly and
+  // let the CLIENT decide `status`, `decided_by` and `cost_points` — so anyone
+  // who could edit the request could grant themselves a reward at any price.
   async function requestReward(r: Reward, forMemberId: string) {
     setBusy(r.id);
-    const sb = createClient();
-    const { error: err } = await sb.from('reward_redemptions').insert({
-      family_id: familyId, reward_id: r.id, member_id: forMemberId,
-      reward_title: r.title, cost_points: r.cost_points,
-      // A manager redeeming for themselves can approve instantly; otherwise it
-      // enters the approval queue.
-      status: canManage && forMemberId === selfMember?.id ? 'approved' : 'requested',
-      decided_by: canManage && forMemberId === selfMember?.id ? selfMember?.id ?? null : null,
-      decided_at: canManage && forMemberId === selfMember?.id ? new Date().toISOString() : null,
-    });
+    const result = await requestRedemptionAction({ rewardId: r.id, forMemberId });
     setBusy(null);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(canManage && forMemberId === selfMember?.id ? 'Reward redeemed' : 'Redemption requested');
+    if (!result.ok) { toastError(result.error); return; }
+    const instant = canManage && forMemberId === selfMember?.id;
+    success(instant ? 'Reward redeemed' : 'Redemption requested');
   }
 
-  async function decide(red: Redemption, status: RedemptionStatus) {
+  async function decide(red: Redemption, status: RedemptionDecision) {
     setBusy(red.id);
-    const sb = createClient();
-    const { error: err } = await sb.from('reward_redemptions').update({
-      status, decided_by: selfMember?.id ?? null, decided_at: new Date().toISOString(),
-    }).eq('id', red.id);
+    const result = await decideRedemptionAction({ id: red.id, decision: status });
     setBusy(null);
-    if (err) { toastError(describeDbError(err)); return; }
+    if (!result.ok) { toastError(result.error); return; }
     success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 

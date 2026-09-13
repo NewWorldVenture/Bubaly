@@ -83,17 +83,21 @@ drop policy if exists "Members can manage family_automation_rules" on public.fam
 drop policy if exists family_automation_rules_select on public.family_automation_rules;
 drop policy if exists family_automation_rules_write on public.family_automation_rules;
 
+drop policy if exists family_automation_rules_select on public.family_automation_rules;
 create policy family_automation_rules_select on public.family_automation_rules
   for select to authenticated using (public.is_family_member(family_id));
 
 -- One policy per command, because `for all` cannot express "everyone reads,
 -- managers write".
+drop policy if exists family_automation_rules_insert on public.family_automation_rules;
 create policy family_automation_rules_insert on public.family_automation_rules
   for insert to authenticated with check (public.can_manage_family(family_id));
+drop policy if exists family_automation_rules_update on public.family_automation_rules;
 create policy family_automation_rules_update on public.family_automation_rules
   for update to authenticated
   using (public.can_manage_family(family_id))
   with check (public.can_manage_family(family_id));
+drop policy if exists family_automation_rules_delete on public.family_automation_rules;
 create policy family_automation_rules_delete on public.family_automation_rules
   for delete to authenticated using (public.can_manage_family(family_id));
 

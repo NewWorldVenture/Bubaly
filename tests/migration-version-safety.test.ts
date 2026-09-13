@@ -40,7 +40,12 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    expect(audit.nextVersion).toBe('0296');
+    // Bumped whenever a migration lands — 0295 is the reward-redemption
+    // decision guard (#542) and 0296 is the social-access DELETE grant. Both
+    // branches independently claimed 0295; stating the number rather than
+    // deriving it is exactly what caught that, so a file that quietly reuses
+    // one, or a rebase that drops one, fails here.
+    expect(audit.nextVersion).toBe('0297');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

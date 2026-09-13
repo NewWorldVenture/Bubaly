@@ -33,7 +33,7 @@ create or replace function public.set_support_ticket_updated_at()
 returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end; $$;
 
-create trigger trg_support_tickets_updated_at
+create or replace trigger trg_support_tickets_updated_at
   before update on public.support_tickets
   for each row execute function public.set_support_ticket_updated_at();
 
@@ -42,6 +42,7 @@ create sequence if not exists public.support_ticket_seq;
 
 -- RLS: only service-role (admin console) reads/writes
 alter table public.support_tickets enable row level security;
+drop policy if exists "service_role_all" on public.support_tickets;
 create policy "service_role_all" on public.support_tickets
   using (true) with check (true);
 
@@ -64,6 +65,7 @@ create table if not exists public.admin_users (
 );
 
 alter table public.admin_users enable row level security;
+drop policy if exists "service_role_all" on public.admin_users;
 create policy "service_role_all" on public.admin_users
   using (true) with check (true);
 

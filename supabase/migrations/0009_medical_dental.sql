@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS health_providers (
 );
 CREATE INDEX IF NOT EXISTS idx_health_providers_family ON health_providers(family_id, kind);
 CREATE INDEX IF NOT EXISTS idx_health_providers_member ON health_providers(family_id, member_id);
-CREATE TRIGGER set_health_providers_updated BEFORE UPDATE ON health_providers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_health_providers_updated BEFORE UPDATE ON health_providers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- INSURANCE POLICIES  (medical or dental)
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS insurance_policies (
 );
 CREATE INDEX IF NOT EXISTS idx_insurance_policies_family ON insurance_policies(family_id, kind);
 CREATE INDEX IF NOT EXISTS idx_insurance_policies_member ON insurance_policies(family_id, member_id);
-CREATE TRIGGER set_insurance_policies_updated BEFORE UPDATE ON insurance_policies FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_insurance_policies_updated BEFORE UPDATE ON insurance_policies FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- MEDICAL PROFILES  (one row per member; shared by both sections)
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS medical_profiles (
   updated_at                 timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_medical_profiles_family ON medical_profiles(family_id);
-CREATE TRIGGER set_medical_profiles_updated BEFORE UPDATE ON medical_profiles FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+create or replace trigger set_medical_profiles_updated BEFORE UPDATE ON medical_profiles FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================
 -- RLS — everyone in the family can READ; only parents/adults can WRITE.

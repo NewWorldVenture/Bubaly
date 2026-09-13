@@ -194,64 +194,114 @@ ALTER TABLE public.trust_audit_logs   ENABLE ROW LEVEL SECURITY;
 
 -- Helper predicates inline. Members of the family can read; managers (parent/adult) write.
 -- trust_policies
+drop policy if exists "trust_policies_read" on public.trust_policies;
 CREATE POLICY "trust_policies_read" ON public.trust_policies FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_policies.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "trust_policies_write" on public.trust_policies;
 CREATE POLICY "trust_policies_write" ON public.trust_policies FOR ALL USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_policies.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_policies.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active));
 
 -- permission_grants
+drop policy if exists "permission_grants_read" on public.permission_grants;
 CREATE POLICY "permission_grants_read" ON public.permission_grants FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = permission_grants.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "permission_grants_write" on public.permission_grants;
 CREATE POLICY "permission_grants_write" ON public.permission_grants FOR ALL USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = permission_grants.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = permission_grants.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active));
 
 -- trust_delegations
+drop policy if exists "trust_delegations_read" on public.trust_delegations;
 CREATE POLICY "trust_delegations_read" ON public.trust_delegations FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_delegations.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "trust_delegations_write" on public.trust_delegations;
 CREATE POLICY "trust_delegations_write" ON public.trust_delegations FOR ALL USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_delegations.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_delegations.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active));
 
 -- approval_requests: members read; managers decide; anyone in family can be a requester (insert).
+drop policy if exists "approval_requests_read" on public.approval_requests;
 CREATE POLICY "approval_requests_read" ON public.approval_requests FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = approval_requests.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "approval_requests_insert" on public.approval_requests;
 CREATE POLICY "approval_requests_insert" ON public.approval_requests FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = approval_requests.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "approval_requests_update" on public.approval_requests;
 CREATE POLICY "approval_requests_update" ON public.approval_requests FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = approval_requests.family_id AND fm.user_id = auth.uid() AND fm.is_active));
 
 -- trust_scores: read by members, write by managers.
+drop policy if exists "trust_scores_read" on public.trust_scores;
 CREATE POLICY "trust_scores_read" ON public.trust_scores FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_scores.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "trust_scores_write" on public.trust_scores;
 CREATE POLICY "trust_scores_write" ON public.trust_scores FOR ALL USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_scores.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_scores.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active));
 
 -- emergency_sessions: members read; managers activate/end.
+drop policy if exists "emergency_sessions_read" on public.emergency_sessions;
 CREATE POLICY "emergency_sessions_read" ON public.emergency_sessions FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = emergency_sessions.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "emergency_sessions_write" on public.emergency_sessions;
 CREATE POLICY "emergency_sessions_write" ON public.emergency_sessions FOR ALL USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = emergency_sessions.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = emergency_sessions.family_id AND fm.user_id = auth.uid() AND fm.role IN ('parent','adult') AND fm.is_active));
 
 -- trust_audit_logs: read by members, insert by family members (append-only — no update/delete policy).
+drop policy if exists "trust_audit_read" on public.trust_audit_logs;
 CREATE POLICY "trust_audit_read" ON public.trust_audit_logs FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_audit_logs.family_id AND fm.user_id = auth.uid() AND fm.is_active));
+drop policy if exists "trust_audit_insert" on public.trust_audit_logs;
 CREATE POLICY "trust_audit_insert" ON public.trust_audit_logs FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM public.family_members fm WHERE fm.family_id = trust_audit_logs.family_id AND fm.user_id = auth.uid() AND fm.is_active));
 
 -- ─── Realtime ───────────────────────────────────────────────────────────────
-ALTER PUBLICATION supabase_realtime ADD TABLE public.trust_policies;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.permission_grants;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.trust_delegations;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.approval_requests;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.trust_scores;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.emergency_sessions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.trust_audit_logs;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'trust_policies') then
+    alter publication supabase_realtime add table public.trust_policies;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'permission_grants') then
+    alter publication supabase_realtime add table public.permission_grants;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'trust_delegations') then
+    alter publication supabase_realtime add table public.trust_delegations;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'approval_requests') then
+    alter publication supabase_realtime add table public.approval_requests;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'trust_scores') then
+    alter publication supabase_realtime add table public.trust_scores;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'emergency_sessions') then
+    alter publication supabase_realtime add table public.emergency_sessions;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'trust_audit_logs') then
+    alter publication supabase_realtime add table public.trust_audit_logs;
+  end if;
+end $pub$;
