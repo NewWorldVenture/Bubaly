@@ -31,6 +31,16 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/customers',
   // Public Family Wallet gift pages — relatives gift via an unguessable token.
   '/gift',
+  // The Pay-ID resolver a relative follows from a shared handle. It is the
+  // signed-out half of the gift flow: it reads through the service role
+  // precisely because the visitor has no session, then forwards to the
+  // '/gift' token above. Left out of this list, every shared Pay-ID answered
+  // 307 to /login — so the grandparent the handle was shared with was asked
+  // to create a Bubaly account before they could send a gift, while the
+  // /gift link it resolves to worked. It leaks nothing a guess could not
+  // already learn: an unknown or inactive handle renders the same dead-end
+  // page as an active one with no live link.
+  '/pay',
   // Public exit-intent offer resolve + metric beacon (anonymous visitors).
   '/api/exit-intent',
   // Public contact, blog, and marketing telemetry endpoints. These routes
