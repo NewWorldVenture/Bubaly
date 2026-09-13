@@ -21,6 +21,7 @@ import { displayCalendarFilter, displayEventDays, displayReminderTime, eventOver
 import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';

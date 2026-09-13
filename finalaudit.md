@@ -20725,8 +20725,8 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 19 | `F1`–`F19` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, and the audit's own probes | 16 | `F-001`–`F-016` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
+| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 
 **Where they touch, stated plainly.** Only two places:
 
@@ -20752,19 +20752,19 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F19)
+# Pass A — Public surface (F1–F20)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Nineteen findings, and the
+**Audit status: reopened, then complete again.** Twenty findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **13** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -20809,6 +20809,7 @@ Nothing is left unexamined or unassigned.
 | F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
 | F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
+| F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
 
 ---
 
@@ -21416,16 +21417,23 @@ other way:
 - **Super-admins bypass**, exactly as they do on the page, so preview still
   works.
 
-### Two tiers that may themselves be the mistake
+### Two tiers that were themselves the mistake — now free
 
 `/dashboard/migrate` ("Switch to Bubaly", the competitor-import wizard) and
-`/referrals` (refer-a-friend) are both Basic in the catalog, so both are now
-refused to a Free family — which is what the sidebar has always told them. But
-an on-ramp and a referral programme are odd things to sell, and if the intent is
-for Free families to have them, **the fix is the tier, not the gate**: one line
-in `FEATURE_CATALOG`, or an override on the admin's Tier & Features page. That
-is a one-line change in one place now, which is precisely what it was not
-before.
+`/referrals` (refer-a-friend) were both Basic in the catalog. The sidebar had
+always shown them locked to a Free family, but nothing enforced it until the fix
+above — so the day enforcement arrived, a Free family lost the wizard that brings
+their data across from a competitor and the page that refers a friend.
+
+Raised here as "the fix is the tier, not the gate", and the owner made that call
+on 2026-09-13. **Both are `free` now.** An on-ramp you have to buy before you can
+use it is not an on-ramp, and a referral programme switched off for everyone who
+has not paid refers nobody.
+
+The `requireFeature` calls stay on both pages. At the free tier they pass
+everyone, and if either tier ever moves back, enforcement follows without anyone
+having to remember those two pages exist. That is the whole point of the fix: the
+tier is now the only thing that decides, and it is one line.
 
 ### Proof
 
@@ -21578,6 +21586,90 @@ entitlement — is the right instrument, which is exactly the decision above.
 
 The numbers an owner needs are here; the choice is theirs.
 
+## F20 — A child could clear the chore board *(High, fixed)*
+
+The plan sweeps asked who may use a feature. This one asks who may use it
+*within* a family, and it is the same shape with a different subject.
+
+The chores board has four manager-only writes. Two were defended and two were
+manager-only on the screen alone:
+
+| Board action | UI | Server |
+|---|---|---|
+| Approve a submission | `manager &&` | ✅ trigger `chore_assignment_decision_guard` (0223) |
+| Pay a chore reward | `manager &&` | ✅ `isManager` in `payChoreRewardAction` + manager-only wallet RLS (0217) |
+| **Add a chore** | `manager &&` | ❌ nothing |
+| **Delete an assignment** | `manager &&` | ❌ nothing |
+
+Nothing behind the screen agreed. The actions took any signed-in member,
+`createChore` and `deleteChoreAssignment` scope by family and not by role, and
+the RLS on `chore_assignments` is `is_family_member` for **all four**
+operations (migration 0004 applies one membership-only policy set across 21
+family tables). So a child could delete any chore on the board — including one
+assigned to them — and mint chores assigned to a sibling, with points.
+
+### Why this is the gap and not the design
+
+The team had already reasoned about exactly this class. Migration 0223 closed
+`update chore_assignments set status='approved'` by a child, and its own header
+calls it "an accountability/integrity forgery, not a money-minting one", the
+sibling of the `chore_submissions` forge closed in 0222.
+
+Deleting the assignment reaches the same end from the other direction. A child
+who cannot forge *completion* can simply remove the row: the chore is gone from
+the board, and so is the record that it was ever owed. Closing one and not the
+other is not a decision anyone made — 0223 enumerates the statuses a member may
+drive and never mentions the delete.
+
+### The fix, and where it sits
+
+`isManager` in the two server actions, refusing before the service is reached.
+
+The action layer rather than the service, for two reasons. It is where the
+screen's claim lives; and it is where `payChoreRewardAction` — the board's third
+manager-only write, and the one that moves money — already puts it, so the
+board's writes now check in one consistent place. The service stays reachable by
+the assistant's path, which the Trust Engine governs separately and which this
+audit did not examine.
+
+**Defence in depth is the right follow-up and is deliberately not in this
+change.** The repo's own pattern (0222, 0223) is a database trigger alongside the
+code check, and a `can_manage_family()` guard on delete would be its natural
+sibling. But the migration ledger is the subject of F5: the baseline is
+unrepaired and the workflow cannot authenticate, so adding a migration that
+cannot be applied would enlarge a backlog that is already blocked. It belongs
+with the operator who fixes F5, and is recorded here rather than half-done.
+
+### The open half: who may advance a status
+
+`ChoreRow` carried the comment *"Assignee can advance their own chore's status;
+managers can act on any."* Neither half was true. The control renders for every
+member regardless of assignee, and `setChoreProgress` scopes by family only — so
+any member can advance any chore, including submitting a sibling's chore they
+did not do.
+
+That comment is now corrected to say what the code does, rather than the rule
+being implemented quietly. Enforcing "assignee, or a manager" is a product
+decision: it is a real restriction on a board families may drive
+collaboratively, and unlike the delete there is no screen-level claim being
+violated — the UI and the server already agree. It needs an owner's call, not a
+patch.
+
+### Three candidates checked and cleared
+
+Run against every component that gates UI on `isManager`, the same sweep also
+looked at:
+
+- `setLocationSharing` — no role check, and **correct**: it writes only the
+  caller's own `member_locations` row. A member turning their own sharing off is
+  the point.
+- `saveAISettingsAction` — no role check in the action, and **correct**:
+  `updateAISettings` refuses a non-manager in the service, one layer down.
+- `savePlace` / `deletePlace` / `setGeofenceEnabled` — already `isManager`-gated.
+
+Recording what the sweep cleared matters as much as what it caught: three of the
+four plausible instances were already right.
+
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
 #526 merged to `main` as `61ad4bb0` while this branch was open, and it rewrote
@@ -21711,7 +21803,7 @@ risk surface is hydration, which is precisely what could not be exercised here.
 
 ---
 
-# Pass B — Data layer (F-001–F-016)
+# Pass B — Data layer (F-001–F-019)
 
 A running, evidence-based audit of bubaly.com. Every entry records what was
 checked, **how**, and what the check actually returned. Nothing is marked closed
@@ -21738,13 +21830,13 @@ F-002 records reasoning that was wrong and what replaced it.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,464 tests |
+| Unit tests | `vitest run` | ✅ 13,518 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
-| Migration names | `db:audit:migrations` | ✅ 306 files, no collisions |
-| Migration replay | fresh DB, 0 → 306 | ✅ all applied, 0 failed |
+| Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
+| Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 13 probes, fresh 306-migration replay, run 3× | ✅ 13/13 each time (F-015 made it repeatable) |
+| RLS boundaries | 14 probes, fresh 307-migration replay, run 2× | ✅ 14/14 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
@@ -21754,6 +21846,9 @@ F-002 records reasoning that was wrong and what replaced it.
 | Row-ceiling honesty | scan of `app/` + `lib/` | ✅ 0 limits above the cap (was 59 — F-013) |
 | Notification dedupe | 5 cron runs, duplicate-group count | ✅ no new duplicates (F-014) |
 | Public sitemap | 1,049 published posts vs the served file | ✅ 1,049 listed (was 1,048 — F-012) |
+| Calendar-day correctness | day keys vs DATE columns, 9 zones | ✅ family zone on every user-facing surface (F-017) |
+| Query plans | family-scoped reads at 700k rows | ✅ index scan, was a full scan (F-018) |
+| Money under concurrency | 2 simultaneous auths vs one balance | ✅ exactly 1 approves (F-019) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -22347,6 +22442,197 @@ $ git check-ignore -v cookies.json
 .gitignore:36:cookies.json	cookies.json
 ```
 
+### F-017 · A family's "today" was Greenwich's today, on every surface that shows a day
+
+**Severity:** high · **Status:** CLOSED — `dayKeyInTz` adopted across the
+user-facing surfaces; the background remainder is allowlisted with reasons
+
+A DATE column in this schema holds the day on the family's kitchen wall.
+`new Date().toISOString().slice(0, 10)` answers the day at Greenwich. Nineteen
+files compared one against the other.
+
+This is not an edge case. Measured across every minute of a day:
+
+```
+America/Los_Angeles   420 min/day wrong   (29.2%)
+America/New_York      240 min/day wrong   (16.7%)
+Asia/Tokyo            540 min/day wrong   (37.5%)
+Australia/Sydney      600 min/day wrong   (41.7%)
+```
+
+For a Californian household that is **every evening from 5pm**.
+
+Proven end to end against the database, at 18:30 on a Sunday in Los Angeles:
+
+```
+instant                : 2026-09-14T01:30:00Z
+family wall clock      : Sunday, September 13, 2026 at 6:30 PM
+the family's today     : 2026-09-13
+page's today (UTC)     : 2026-09-14   ← what meal_plans was queried with
+
+  the page rendered  →  "Monday pasta — tomorrow"
+  the family was eating →  "Sunday roast — eaten TONIGHT"
+```
+
+The same instant rolled `weekStart` forward too, so **"this week" silently became
+next week every Sunday evening**.
+
+Three findings within the class were worse than a wrong list:
+
+- **The family display.** A wall-mounted kitchen screen took the *server's*
+  midnight (`setHours(0,0,0,0)`), which on a UTC host is 17:00 in California —
+  the screen turned over to tomorrow's schedule in the middle of the afternoon,
+  every day. It now uses the family's day bounds.
+- **Medication reminders.** `generateFamilyNotifications` bounded "doses already
+  logged today" at UTC midnight. In California that window opens at 17:00 local,
+  so the morning dose looked untaken and the family was reminded again; in Tokyo
+  it opens at 09:00 the *previous* local day, so yesterday's dose was mistaken
+  for today's and **the reminder never fired**. A missed medication reminder is
+  the worse of the two.
+- **Allowance scheduling.** A parent setting up an allowance on Sunday evening
+  in California had `next_run_on` dated from Monday.
+
+The fix was already written and documented. `lib/services/scope.ts` has carried
+`dayKeyInTz` / `zonedDayBoundsMs` all along, and its own header names this exact
+bug — *"a household in America/Los_Angeles sees tomorrow's day key for the last
+seven hours of every day"*. Four surfaces used it; nineteen never adopted it.
+This finding is about adoption, not about inventing a mechanism.
+
+Two helpers were missing and are added: `addDaysToDayKey` and `weekStartDayKey`,
+both string-in/string-out so they never touch an instant and cannot be knocked
+off by a DST transition. Measured: from local midnight on 26 Oct 2026, adding
+seven *fixed* days lands at 23:00 on 1 Nov — a day short of the calendar answer.
+The window where that bites is 26–31 Oct, which is precisely why spot-checking
+one date misses it.
+
+**Converted:** kitchen, readiness, agents, intelligence, planning, moments,
+family-cfo, food, display, wallet actions, and the medication window in
+`lib/server/notifications.ts`.
+
+**Not converted, each with its reason**, recorded in the guard's allowlist rather
+than left looking overlooked: `lib/network/aggregate-server.ts` (platform-wide
+aggregation — UTC bucketing is what a cross-household benchmark should use),
+`app/api/cron/wallet-allowance/route.ts` (platform-wide cron; bounded at one day
+early for families west of UTC), and five background derivations that take a
+`familyId` but no zone, so converting them means threading one through.
+
+`tests/family-day-not-greenwich-day.test.ts` fails on any new surface that builds
+a Greenwich day key beside a DATE filter without reaching for the zone helpers,
+and a second case fails if an allowlist entry outlives its reason — an allowlist
+that rots is how the next regression hides. Reverting the kitchen fix fails it;
+restoring it passes. `tests/family-day-key-arithmetic.test.ts` pins the helpers,
+including both DST directions.
+
+One correction worth recording: my first two attempts at the DST assertion had
+the direction backwards, and I only got it right by measuring across a year
+rather than reasoning about it. Spring-forward arrives an hour *late* and stays
+inside the right day; it is the autumn transition that lands on the previous
+evening.
+
+### F-018 · Nine family-scoped reads were sequential scans of whole tables
+
+**Severity:** medium · **Status:** CLOSED — migration `0294`
+
+A read filtered by `family_id` on a table with no index *leading* on that column
+scans the whole table — every other household's rows included. The cost then
+grows with the **platform**, not with the family, which is the shape that looks
+fine in staging and becomes a page-load problem at scale. RLS sharpens it: the
+policies gate on `family_id`, so the predicate is applied to every row on every
+read whether or not the application also filters on it.
+
+Measured on `sync_job_runs` loaded with **700,000 rows across 2,000 households**
+— a year of quarter-hourly calendar syncs — running the query the sync history
+page actually issues:
+
+```
+before   Parallel Seq Scan   38,258 buffers   ~46 ms   (46, 48, 46 ms)
+after    Index Scan               54 buffers   ~0.30 ms (0.33, 0.30, 0.28 ms)
+```
+
+~150× faster, ~700× fewer buffers, and bounded by one family's rows.
+
+Nine tables were in that state, each indexed in the order its page queries, so
+one index serves both the filter and the sort:
+
+| Table | Index |
+|---|---|
+| `sync_job_runs` | `(family_id, started_at desc)` |
+| `guardian_routing_rules` | `(family_id, priority)` |
+| `social_post_variants` | `(family_id, post_id)` |
+| `activation_events` | `(family_id, milestone)` |
+| `allowance_rules`, `meal_vote_options`, `meal_vote_ballots`, `move_boxes`, `crm_contacts` | `(family_id)` |
+
+**What was deliberately left alone, and why it matters to the finding.** A first
+pass flagged 27 more tables. Checked against `pg_index` rather than against the
+migration text, **23 of those already had a leading index** from a `UNIQUE` or
+`PRIMARY KEY` declaration on `family_id` — my SQL-text parser simply could not
+see those forms. The remaining four — `ai_messages`, `member_badges`,
+`marketplace_listing_shares`, `social_publish_jobs` — are each read by
+`family_id` *alongside* a primary key or another indexed column, so the other
+index already does the selective work and a `family_id` index would buy nothing
+and cost write throughput.
+
+So the rule is not "every family-scoped read needs a `family_id` index". It is
+"a family-scoped read needs **some** selective index", and only nine had none.
+
+That correction is the reason this closed as a SQL probe rather than a unit
+test. `docs/audit/family-scoped-index-check.sql` asserts against `pg_index`,
+where a UNIQUE or PK declaration is visible as the index it really creates;
+reading the migration SQL for the same fact is what produced 23 false positives.
+The probe also proves it can fail — it drops one index inside a transaction,
+confirms the assertion notices, and rolls back — because a check that cannot
+detect the state it forbids is decoration. Verified: 14/14 probes on a fresh
+307-migration replay, twice, with the dropped index still present afterwards.
+
+### F-019 · The money-safety probe asserted concurrency it never tested
+
+**Severity:** medium (instrument) · **Status:** CLOSED — `docs/audit/wallet-concurrency-check.sql`
+
+The product is correct. The *check* was not, and after F-015 that is a finding in
+its own right.
+
+`wallet-overspend-check.sql` says it proves `wallet_reserve_card_auth` "counts a
+pending hold against the balance (so concurrent auths serialize under its FOR
+UPDATE lock)". It runs a fixed **sequential** sequence. Nothing in it ever runs
+two authorizations at once, so the single property most worth knowing about a
+child's wallet — *you cannot spend the same dollar twice by tapping twice* — was
+inferred from the presence of a lock rather than demonstrated.
+
+Raced for real, two `$8` authorizations against a `$10` balance on separate
+connections:
+
+```
+with FOR UPDATE (the shipped function)
+  A-15 OK: 1 of 2 simultaneous $8 authorizations approved against $10; $8.00 held
+
+with FOR UPDATE removed
+  A-15 FAIL: 2 of 2 simultaneous $8 authorizations approved against $10 (a=t, b=t)
+```
+
+Two approvals is a child spending **$16 of a $10 balance**. So the lock is
+load-bearing, the shipped behaviour is right, and that is now evidence instead
+of an assumption.
+
+Two things about the probe itself are worth recording, because both are mistakes
+I made and then had to correct:
+
+- **The seed cannot live in the `do $$` block.** That block is one transaction,
+  its writes stay uncommitted, and a dblink session taking `FOR UPDATE` on those
+  rows waits on it forever. The first draft hung exactly that way. The seed is
+  now plain top-level statements, which psql commits one at a time.
+- **Two plain `dblink()` calls are not a race.** They run one after the other,
+  each in its own committed transaction — which proves a hold is counted *across*
+  transactions, a weaker claim, and the same kind of overclaim this finding is
+  about. It now uses `dblink_send_query` / `dblink_get_result` so both are
+  genuinely in flight before either is collected.
+
+Where `dblink` is unavailable the probe SKIPs with a notice rather than failing:
+a check that cannot run is not a check that found a problem, and conflating the
+two teaches people to ignore red.
+
+Verified: 15/15 probes on a pristine 307-migration replay, and 15/15 twice in a
+row on a used one.
+
 ## 4. Closed previously (regression-checked this pass)
 
 | ID | Finding | Still closed by |
@@ -22387,7 +22673,7 @@ $ git check-ignore -v cookies.json
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 1 warning |
-| `vitest run` | 13,464 tests passed |
+| `vitest run` | 13,518 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
 | `db:audit:migrations` | passed, next version 0291 |
@@ -22411,3 +22697,13 @@ $ git check-ignore -v cookies.json
 | notifications cron ×5 | URI-too-long: 0 · duplicate groups 117 → 117 |
 | pristine replay, grants before any probe | five privileged RPCs service-role-only |
 | `git check-ignore cookies.json` | ignored (was untracked and committable — F-016) |
+| day-key drift, every minute of a day, 9 zones | LA 29.2% · NYC 16.7% · Tokyo 37.5% · Sydney 41.7% |
+| meal-plan read at 18:30 Sunday in LA | rendered tomorrow's dinner; now renders tonight's |
+| DST week arithmetic, measured across 2026 | 26–31 Oct: +7 fixed days lands a day short |
+| F-017 guard with the kitchen fix reverted | fails — not vacuous |
+| `sync_job_runs` at 700k rows / 2,000 households | 38,258 buffers · 46 ms → 54 buffers · 0.30 ms |
+| 27 further tables checked against `pg_index` | 23 already indexed via UNIQUE/PK; 4 covered by another index |
+| A-14 probe, index dropped in a rolled-back txn | the check detects it — not decoration |
+| 2 overlapping $8 auths vs a $10 wallet | 1 approved, $8 held — the lock serializes them |
+| the same race with `FOR UPDATE` removed | 2 of 2 approved ($16 of $10) — the probe catches it |
+| `run-probes.sh`, pristine replay and used DB | 15/15, and 15/15 twice in a row |

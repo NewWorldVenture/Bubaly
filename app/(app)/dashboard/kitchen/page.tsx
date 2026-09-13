@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { addDaysToDayKey, dayKeyInTz, weekStartDayKey } from '@/lib/services/scope';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { pantrySummary, expiringSoon } from '@/lib/pantry/logic';
 import { coerceNutrition, type Nutrition } from '@/lib/meals/nutrition';
@@ -14,12 +15,6 @@ import { ErrorState } from '@/components/ui/states';
 export const metadata: Metadata = { title: 'Smart Kitchen | Bubaly' };
 export const dynamic = 'force-dynamic';
 
-function mondayOf(d: Date): string {
-  const c = new Date(d);
-  const day = (c.getDay() + 6) % 7; // 0=Mon
-  c.setDate(c.getDate() - day);
-  return c.toISOString().slice(0, 10);
-}
 
 export default async function KitchenPage() {
   const t = await getTranslations();
@@ -27,10 +22,15 @@ export default async function KitchenPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
+  // The family's calendar day, not Greenwich's. `plan_date` is the day on the
+  // kitchen wall, so asking for it with a UTC day key served tomorrow's dinner
+  // from 5pm onwards in California — 29% of every day — and rolled `weekStart`
+  // into next week every Sunday evening.
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const weekStart = mondayOf(now);
-  const weekEnd = new Date(new Date(weekStart).getTime() + 6 * 86400000).toISOString().slice(0, 10);
+  const tz = ctx.active.family.timezone || 'UTC';
+  const today = dayKeyInTz(now, tz);
+  const weekStart = weekStartDayKey(today);
+  const weekEnd = addDaysToDayKey(weekStart, 6);
 
   const [planRes, pantryRes, leftoverRes, recipesRes, groceryRes, nutritionRes] = await settleAll([
     supabase.from('meal_plans')

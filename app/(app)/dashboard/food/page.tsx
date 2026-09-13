@@ -9,11 +9,11 @@ import { createServer } from '@/lib/supabase/server';
 import { makeDegradeRead } from '@/lib/meals/degrade-read';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Food & Nutrition' };
 export const dynamic = 'force-dynamic';
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
 
 // Per-query fail-safe so one erroring/not-yet-migrated table (e.g. dining_out)
@@ -76,9 +76,13 @@ export default async function FoodPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date();
-  const todayIso = isoDate(now);
-  const weekEnd = isoDate(new Date(now.getTime() + 6 * 86400000));
-  const expSoon = isoDate(new Date(now.getTime() + 14 * 86400000));
+  // `plan_date` and `expires_at` are calendar days on the family's wall, so the
+  // keys are resolved in their zone — a UTC key shows tomorrow's dinner from
+  // 5pm onwards in California.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayIso = dayKeyInTz(now, tz);
+  const weekEnd = addDaysToDayKey(todayIso, 6);
+  const expSoon = addDaysToDayKey(todayIso, 14);
 
   const [
     { data: dinners, count: planCount },

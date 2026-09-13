@@ -29,6 +29,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import {
   completeChoreAssignment, createChore, deleteChoreAssignment, setChoreProgress,
@@ -66,6 +67,37 @@ export type ChoreStatusResult =
  * `submissionId` is only meaningful for the create; every other action here
  * addresses a row that already exists, where a repeat is idempotent already.
  */
+/**
+ * Adding a chore and removing one are the board's two manager-only writes.
+ *
+ * They were manager-only on the SCREEN. `chores-module.tsx` renders the Add
+ * button and the Delete menu item behind `manager &&`, and nothing behind that
+ * agreed: the actions took any signed-in member, `createChore` and
+ * `deleteChoreAssignment` scope by family and not by role, and the RLS on
+ * `chore_assignments` is `is_family_member` for all four operations (0004). So
+ * a child could delete any chore on the family's board, including one assigned
+ * to them, and mint chores assigned to a sibling.
+ *
+ * That is the gap left either side of 0222/0223, which closed FORGING a chore's
+ * completion as an "accountability/integrity forgery". Deleting the assignment
+ * reaches the same end from the other direction — the chore is simply gone, and
+ * so is the record that it was ever owed.
+ *
+ * The check sits here rather than in the service because here is where the
+ * screen's claim lives, and because `payChoreRewardAction` — the board's third
+ * manager-only write, and the one that moves money — already puts it here. The
+ * service stays reachable by the assistant's path, which the Trust Engine
+ * governs separately.
+ */
+async function refuseUnlessManager(role: string | null | undefined): Promise<string | null> {
+  if (isManager(role)) return null;
+  const t = await getTranslations();
+  // An existing, accurate key rather than a new one. A new string means twelve
+  // locale files, and eleven of them would be my invention rather than a
+  // translation — the one thing lib/i18n/messages/INVARIANT.txt exists to stop.
+  return t('actions.onlyAParentGuardianCan16');
+}
+
 async function choreScope(submissionId?: unknown) {
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -112,7 +144,9 @@ export async function setChoreStatusAction(
 export async function deleteChoreAssignmentAction(assignmentId: string): Promise<ChoreActionResult> {
   const t = await getTranslations();
   if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
-  const { scope } = await choreScope();
+  const { ctx, scope } = await choreScope();
+  const refused = await refuseUnlessManager(ctx.active.role);
+  if (refused) return { ok: false, error: refused };
 
   try {
     const result = await deleteChoreAssignment(scope, assignmentId);
@@ -153,7 +187,9 @@ export async function createChoreAction(input: CreateChoreActionInput): Promise<
   // A chore created with NO assignee still cannot be deduplicated: the key lives
   // on the assignment row, and there isn't one. The board refuses to submit
   // without a member, so that gap is the assistant's path, not this one.
-  const { scope } = await choreScope(input.submissionId);
+  const { ctx, scope } = await choreScope(input.submissionId);
+  const refused = await refuseUnlessManager(ctx.active.role);
+  if (refused) return { ok: false, error: refused };
 
   try {
     const result = await createChore(scope, {

@@ -3,10 +3,13 @@ import { getTranslations } from '@/lib/i18n/server';
 import { Logo } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { LanguageBar } from '@/components/i18n/language-picker';
+import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
+import { AUTH_SCOPE } from '@/lib/i18n/scopes';
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations();
   return (
+    <ScopedLocaleProvider namespaces={AUTH_SCOPE}>
     <div className="flex min-h-dvh flex-col">
       {/* Safe-area padded for the same reason as the marketing header and
           `.app-topbar`: with viewport-fit=cover and a black-translucent status
@@ -26,5 +29,6 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
         <Link href="/" className="hover:text-fg">{t('app.backToHome')}</Link>
       </footer>
     </div>
+    </ScopedLocaleProvider>
   );
 }

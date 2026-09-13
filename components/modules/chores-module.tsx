@@ -553,7 +553,14 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
   const StatusIcon = status.icon;
   const done = isCompleted(a.status);
   const canPay = manager && done && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents;
-  // Assignee can advance their own chore's status; managers can act on any.
+  // Any member can advance any chore here, and the server agrees — the status
+  // control is not gated on assignee or role, and `setChoreProgress` scopes by
+  // family only. This comment used to claim "assignee can advance their own;
+  // managers can act on any", which was never enforced anywhere. Whether it
+  // SHOULD be is a product decision (it would stop a child submitting a
+  // sibling's chore), recorded as the open half of F20 rather than changed
+  // quietly here. Forging the decision statuses is separately impossible:
+  // migration 0223 guards 'approved'/'rejected' with can_manage_family().
   const nextStatus = a.status === 'todo' ? 'in_progress' : a.status === 'in_progress' ? 'submitted' : null;
 
   return (

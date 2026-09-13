@@ -15,8 +15,8 @@ import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderR
 import { onThisDayNotice } from '@/lib/memories/on-this-day';
 import { imminentMomentNotices } from '@/lib/moments/notify';
 import { deliveryTimeFor } from '@/lib/services/notifications';
-import { systemScopeForFamily } from '@/lib/services/scope';
 import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
+import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
@@ -50,12 +50,32 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const in48 = new Date(now.getTime() + 48 * HOUR).toISOString();
   const in14d = new Date(now.getTime() + 14 * 24 * HOUR).toISOString();
   const nowIso = now.toISOString();
-  // Date-only (YYYY-MM-DD) bounds for the date columns on renewals/opportunities.
-  const todayKey = nowIso.slice(0, 10);
-  const todayStartIso = `${todayKey}T00:00:00.000Z`;
+
+  // "Today" has to be the family's day, and for one reader here that is not a
+  // nicety. `todayStartIso` bounds the doses already logged today, and the
+  // medication reminder asks "has this dose been taken yet?" against it. Read in
+  // UTC it starts at 17:00 local in California — so the morning dose looks
+  // untaken every evening and the family is reminded again — and in Tokyo it
+  // starts at 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for
+  // today's and the reminder never fires. A missed medication reminder is the
+  // worse of the two, and neither is acceptable.
+  const { data: familyRow } = await supabase
+    .from('families').select('timezone').eq('id', familyId).maybeSingle();
+  const tz = familyRow?.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const todayStartIso = new Date(zonedDayBoundsMs(todayKey, tz).start).toISOString();
+
+  // Doses are fetched from 24h BEFORE the family's day start, so a dose logged
+  // late last night still counts when deciding whether today's is outstanding.
+  // This bound came from the branch side of the merge; it is kept, but computed
+  // from the family-zone day start above rather than the UTC one it used to
+  // slice — which is the defect that side carried.
   const doseFetchFromIso = new Date(Date.parse(todayStartIso) - 24 * HOUR).toISOString();
-  const renewalMaxKey = new Date(now.getTime() + 90 * 24 * HOUR).toISOString().slice(0, 10);
-  const signupMaxKey = new Date(now.getTime() + 7 * 24 * HOUR).toISOString().slice(0, 10);
+
+  // These two only bound 90- and 7-day windows, where a day either way changes
+  // nothing; they use the same key for consistency rather than out of need.
+  const renewalMaxKey = addDaysToDayKey(todayKey, 90);
+  const signupMaxKey = addDaysToDayKey(todayKey, 7);
 
   const [scope, sourceResults] = await Promise.all([
     // Read once: the medication match needs the family's zone before the

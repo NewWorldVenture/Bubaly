@@ -10,6 +10,7 @@ import { createServer } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Planning & Organization' };
 export const dynamic = 'force-dynamic';
@@ -79,7 +80,8 @@ export default async function PlanningPage() {
   const supabase = await createServer();
   const now = new Date();
   const nowIso = now.toISOString();
-  const todayIso = now.toISOString().slice(0, 10);
+  // `milestone_date` is a calendar day, so the key is the family's, not UTC's.
+  const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
 
   const [
     { data: events, count: eventCount },
