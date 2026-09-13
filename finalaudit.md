@@ -8,6 +8,18 @@ They ran over **different surfaces** and neither supersedes the other:
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
+| **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
+
+**Pass C changes the disposition of two Pass A findings.** Both are recorded
+below rather than edited in place, so the history stays readable:
+
+- **F9** (the whole i18n catalogue on every page) was closed as *a decision*.
+  It is now fixed and verified in production — `/cookies` went from 266 KB to
+  20 KB gzipped. See **F-C03**.
+- **F13** (unknown top-level paths redirecting to login) was recorded as *by
+  design — no change*. The owner directed the change on 2026-09-13 and it is
+  shipped and verified. Superseded by decision, not overturned on the merits.
+  See **F-C05**.
 
 **Where they touch, stated plainly.** Only two places:
 
@@ -2213,3 +2225,190 @@ reproduction of production's condition, instead of being asserted.
 | 2 overlapping $8 auths vs a $10 wallet | 1 approved, $8 held — the lock serializes them |
 | the same race with `FOR UPDATE` removed | 2 of 2 approved ($16 of $10) — the probe catches it |
 | `run-probes.sh`, pristine replay and used DB | 15/15, and 15/15 twice in a row |
+
+
+---
+
+# Pass C — Delivery and integration (F-C01–F-C10)
+
+Ran 2026-09-13 against the live site and the real code paths. Every finding
+here was reproduced before it was written, and every fix was verified in
+production after deploy rather than assumed from a green build.
+
+Full working notes, with the commands and outputs, are in `audit/claude-1.md`.
+
+## F-C01 — The sitemap dated 24 URLs with the time the file ran *(High, fixed)*
+
+`app/sitemap.ts` opened with `const now = new Date()` and applied it to all 15
+static routes and 9 category tabs. Every regeneration told crawlers those URLs
+had just changed.
+
+Evidence: the live sitemap carried `2026-09-13T11:51:45.957Z` on 24 entries,
+identical to the millisecond — the build's own transaction time.
+
+Fixed by #526. Each source now answers from its own real date; anything with no
+real date omits `lastmod` rather than inventing one.
+`tests/sitemap-lastmod-is-content-dated.test.ts` generates the sitemap twice
+with the clock moved a year between and requires every date to be identical, so
+a `new Date()` reintroduced anywhere in the pipeline fails immediately.
+
+## F-C02 — 445 of 1,508 sitemap URLs were not indexable *(High, fixed)*
+
+435 answered `404` with `noindex`, 9 canonicalised to `/blog`, and the homepage
+was listed twice.
+
+The 435 were `marketing_pages` registry rows for `/blog/Seed <uuid>` slugs.
+That table is a path *overlay* — a row supplies a page's title and description,
+not proof the path resolves — and `/blog/<slug>` is served from `blog_posts`,
+which hides synthetic seed rows. They were also unparseable as URLs: the slug
+was interpolated raw, putting a literal space inside `<loc>`.
+
+Fixed by #526. `canonicalUrl()` in `lib/marketing/sitemap-urls.ts` is now the
+only thing that may mint a `<loc>`. Production verified: 1,063 URLs, none
+returning 404, none `noindex`, none canonicalising elsewhere.
+
+*Overlaps Pass A's F1/F3/F14, which found the same URL set from the crawler
+side. Same defect, independently reproduced.*
+
+## F-C03 — The whole message catalogue shipped on every public page *(High, fixed — supersedes F9)*
+
+`LocaleProvider` is a client component, so the catalogue handed to it in the
+root layout was serialised into the RSC payload of every route beneath — which
+is every route.
+
+Measured on production: `/cookies`, a legal page of a few hundred words, was
+949,769 bytes raw and 265,651 gzipped, of which **246,126 gzipped was the
+catalogue** — 93% — carrying wallet errors, marketplace copy and the admin
+studio's capability matrix onto a cookie policy.
+
+Fixed by #540. Each surface declares the namespaces its own client components
+use; marketing needs 26 of 13,449 keys. The authenticated app keeps the whole
+catalogue deliberately: 3,791 keys across 368 namespaces with 96 non-literal
+`t()` calls, where no static subset is provable and there is no crawler or
+first-visit cost to pay for it.
+
+Production, gzipped: `/cookies` 266→20 KB, `/faq` 276→31 KB, `/terms` 269→24 KB,
+`/` 291→45 KB.
+
+`tests/i18n-client-scope.test.ts` walks the import graph from every page and
+fails, naming the key and file, if a scope does not cover what its client
+components ask for.
+
+## F-C04 — /blog shipped its entire search corpus to the browser *(Medium, fixed)*
+
+All 1,048 published posts were passed to the client search component as a prop,
+so React serialised the corpus into the HTML of a page that renders 25 cards:
+446 KB of a 597 KB response, paid by every visitor so the minority who type in
+the box could filter locally.
+
+Fixed by #543. The index loads on first interaction from
+`/api/blog/search-index`, edge-cached, so the corpus is fetched per publish
+rather than per visitor. Production: 88,907 → 40,098 gzipped (−54.9%),
+occurrences of the corpus in the HTML 1,048 → 0, 25 cards still rendered.
+
+## F-C05 — Every unrouted path answered a login form *(Medium, fixed — supersedes F13)*
+
+`/nope`, `/some-random-thing` and `/.env` all answered `307` to
+`/login?redirect=…`. Middleware had one list, `PUBLIC`, and redirected
+everything else — right for a real app route, wrong for a path with no route.
+
+A person following a stale link met a sign-in form instead of "page not found",
+and after signing in would have landed on a 404 anyway. A crawler saw a
+redirect to an irrelevant page, which Google counts as a **soft 404**.
+
+Fixed by #544. `PROTECTED` now names the paths that require a session; a path
+on neither list falls through to `app/not-found.tsx`.
+
+**This inverted a safety property** — forgetting to classify a route used to
+leave it protected and now leaves it reachable — so
+`tests/route-access-is-total.test.ts` walks `app/` and fails if any routable
+top-level path is on neither list. It earned itself immediately, catching
+`/display` (the signed-in kiosk), `/account`, `/money` and `/settings` missing
+from the first `PROTECTED` list.
+
+Verified in production: unrouted paths answer 404 with `noindex`; all twenty
+protected segments still 307 to `/login`; public pages still 200;
+`/dashboard/not-a-page` still redirects rather than revealing which pages exist.
+
+## F-C06 — A CSS margin lived in the message catalogue *(Low, fixed)*
+
+`tableOfContents.80px0px600px` held `-80px 0px -60% 0px`, the `rootMargin` of
+the blog table of contents' `IntersectionObserver`, duplicated across all seven
+full catalogues. A translator or tool altering it produces a value
+`IntersectionObserver` rejects; it throws at construction and the table of
+contents disappears for that locale on every article while the English build
+stays green.
+
+Fixed by #546. `tests/catalogue-holds-language-only.test.ts` sweeps for CSS
+lengths, hex colours, URLs and CSS keywords. It deliberately does not catch
+`profileQuestions.householdThree` (`'3'` — numerals differ by script) or
+`network.bandNone` (`'none'` — a word a reader sees); both are pinned so the
+rule cannot widen onto them.
+
+## F-C07 — Nineteen environment variables are undocumented *(Medium, open)*
+
+`.env.example` documents 75; app code reads 89. Nineteen are absent.
+
+The sharpest is `CONTACT_CENTER_INBOUND_SECRET`. The inbound email endpoint is
+correctly fail-closed in production, so with the secret unset it rejects
+**every** inbound message, silently, and nothing says why. Apple calendar sync
+is configured by two undocumented variables (`APPLE_SYNC_ENABLED`,
+`APPLE_CALDAV_BASE_URL`) and is simply off until someone reads the source.
+
+Fix: add the operator-facing variables with a line each saying what breaks when
+unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
+under their own heading.
+
+## F-C08 — A second release workflow is failing *(Medium, open)*
+
+`.github/workflows/supabase-forward-release.yml` failed on its most recent run
+(34781290560, 2026-09-13T20:36Z) and on the one before that. It uploaded its
+`production-forward-release-audit` artifact successfully, so the failure is the
+audit's own verdict rather than a broken job.
+
+Together with F5 / F-001, this means **production database state is not being
+verified by anything that currently works**. The specific gap needs the run's
+artifact; it has not been read, and no cause is asserted here.
+
+## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
+
+`NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
+read with a non-null assertion, and there is no central env validation module.
+
+Reproduced: starting the built app with those unset made `/pricing` answer 500
+with `Error: supabaseUrl is required` while `/terms` and `/cookies` rendered
+fine. A misconfigured deploy degrades into scattered 500s on whichever pages
+happen to read the database, instead of refusing to start.
+
+## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
+
+`mobile/` is a real Expo app of 42 TypeScript files with **zero** test files.
+Its CI job has three steps: install, `npm run typecheck`, and
+`npx expo config --type public`. No lint, no unit tests, no build.
+
+The web app is gated on 13,500 tests and a mobile device matrix; the mobile app
+is gated on "it compiles and its config parses". Separately, nothing audits the
+mobile dependency tree — `npm audit --package-lock-only` there reports 14
+moderate advisories, while the root tree reports zero of any severity.
+
+## Verified clean in Pass C
+
+Recorded so no later pass re-derives them:
+
+- **Security headers** — full CSP with `frame-ancestors 'none'`, HSTS
+  `max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `nosniff`,
+  `strict-origin-when-cross-origin`, a scoped permissions policy.
+- **The CSP matches reality** — every `fetch()` inside a `"use client"` module
+  targets a host in `connect-src`. Google, OpenAI, Resend and the grocery and
+  recipe integrations are all server-side.
+- **The server/client boundary holds** — no client module imports
+  `lib/supabase/server`, `createServiceClient` or `SUPABASE_SERVICE_ROLE_KEY`.
+- **Redirects** — `http→https` and apex→www are clean 308s.
+- **Images** — 69 `<img>` on the public pages, every one with non-empty alt;
+  35 lazy-loaded, the above-fold ones correctly not.
+- **Structured data** — 33 JSON-LD blocks, all parse, one schema type per page,
+  no duplicates.
+- **Page metadata** — no duplicate titles or descriptions across the 15 static
+  routes; each has exactly one `<h1>`, a description and an `og:image`.
+- **Web dependencies** — `npm audit --production` reports zero advisories at
+  every severity.

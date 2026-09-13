@@ -231,3 +231,55 @@ Status:   OPEN — needs the artifact or the earlier part of the job log
 | supabase-forward-release | failure, success, failure | **failing** — see above |
 | supabase-production-migrations | failure ×3 | **blocked on credentials** — see section C |
 
+
+### E. Architecture / integration — second sweep
+
+```
+[CLAUDE-1][MEDIUM][MOBILE] the Expo app has no tests and CI barely checks it
+File:     mobile/ (42 .ts/.tsx files), .github/workflows/ci.yml:82-105
+Problem:  The mobile app ships zero test files, and its CI job runs only
+          `npm run typecheck` and `npx expo config --type public`.
+Evidence: `find mobile -name '*.test.*' -o -name '*.spec.*'` returns 0. The job
+          has exactly three steps: install, typecheck, validate config. No lint,
+          no unit tests, no build.
+Impact:   The web app is gated on 13,500 tests and a device matrix; the mobile
+          app is gated on "it compiles and its config parses". A logic defect in
+          any of the 42 files reaches a store build unchallenged.
+Fix:      Two steps at least — lint, and a smoke test that renders the root and
+          asserts the Supabase client is constructed from EXPO_PUBLIC_* rather
+          than a hardcoded value. A build step would be better still.
+Status:   OPEN
+```
+
+```
+[CLAUDE-1][LOW][DEPS] the mobile dependency tree is not audited anywhere
+File:     mobile/package-lock.json (separate from the root lockfile)
+Problem:  Nothing runs `npm audit` against the mobile tree.
+Evidence: root `npm audit --production` → 0 vulnerabilities of any severity,
+          which is genuinely clean. `cd mobile && npm audit --package-lock-only`
+          → 14 moderate. None high or critical, so this is hygiene rather than
+          an incident, but no one is watching it.
+Impact:   A future high-severity advisory in the mobile tree surfaces only when
+          someone happens to look.
+Fix:      Add `npm audit --audit-level=high` to the mobile CI job.
+Status:   OPEN
+```
+
+```
+[CLAUDE-1][INFO][DEPS] the web dependency tree is clean
+Evidence: `npm audit --production` reports 0 info / 0 low / 0 moderate / 0 high
+          / 0 critical.
+Status:   VERIFIED — no action
+```
+
+```
+[CLAUDE-1][LOW][OPS] a runtime workflow has not run in a week
+File:     .github/workflows/move-date-recalculation-runtime.yml
+Problem:  Last run 2026-09-06, and the run before it failed.
+Evidence: two runs on record: success, failure. Nothing since.
+Impact:   NONE. Checked: it is `pull_request` with a five-path filter covering
+          two migrations and three SQL fixtures. Nothing has touched those
+          files since 2026-09-06, so the workflow is correctly idle, not
+          broken. Withdrawn.
+Status:   VERIFIED — not a finding
+```

@@ -13,12 +13,18 @@ are verifying or contradicting it.
 ---
 
 ## Claude-1
-CURRENT: scaffolding + dispatching workers; then architecture & integration
-COMPLETED: read finalaudit.md (41 prior findings indexed); created /audit
-NEXT: architecture/integration sweep; merge worker findings into finalaudit.md
+CURRENT: waiting on Claude-2/3/4; will merge their findings into finalaudit.md
+COMPLETED: scaffolding; workers dispatched; architecture+integration sweep
+  (CSP vs real outbound hosts, server/client boundary, env contract, workflow
+  health, dependency audit, mobile gate); Pass C written into finalaudit.md as
+  F-C01–F-C10 with all 41 prior findings preserved; #526/#540/#543/#544/#546
+  shipped and verified in production
+NEXT: merge worker findings as they land; add the category index the goal asks
+  for (Critical/High/Medium/Low, Frontend/Backend/…) over all three passes
 FILES-TOUCHED: audit/status.md, audit/claude-1.md, finalaudit.md
-BLOCKERS: none
-LAST-UPDATE: 2026-09-13T22:35Z
+BLOCKERS: F-C08 needs a workflow artifact read; F5/F-001/F-C07 need a
+  credentialed operator — none block the audit itself
+LAST-UPDATE: 2026-09-13T22:50Z
 
 ## Claude-2
 CURRENT: not started
