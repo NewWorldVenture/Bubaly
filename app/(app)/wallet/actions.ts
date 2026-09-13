@@ -14,6 +14,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { logWalletAudit } from '@/lib/server/audit';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -98,10 +99,10 @@ export async function activateFamilyWalletAction(): Promise<Result> {
     if (ruleError) return actionFailure(ruleError, t('actions.couldNotProvisionWalletRules'));
   }
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: familyId, actor_user_id: userId, action: 'wallet_activated', entity_type: 'family_wallets', entity_id: wallet.id,
     detail: 'Family Wallet activated (virtual-ledger mode)',
-  });
+  }, 'wallet activation');
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -167,10 +168,10 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   const { error: txErr } = await supabase.from('wallet_transactions').insert(rows);
   if (txErr) return actionFailure(txErr, t('actions.couldNotAddThoseFunds'));
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: familyId, actor_user_id: userId, action: 'funds_added', entity_type: 'child_wallets', entity_id: cw.id,
     detail: `Added ${amount} cents`, metadata: { split, parts },
-  });
+  }, 'added funds');
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -553,10 +554,10 @@ export async function recordBabysitterPaymentAction(input: {
   });
   if (error) return actionFailure(error, t('actions.couldNotRecordThatBabysitter'));
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'babysitter_paid',
     entity_type: 'babysitter_payments', detail: `Recorded babysitter payment of $${(input.amountCents / 100).toFixed(2)}`,
-  });
+  }, 'babysitter payment');
   revalidatePath('/wallet/babysitters');
   return { ok: true };
 }
@@ -646,10 +647,10 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
     return actionFailure(error, t('actions.couldNotClaimThatPay'));
   }
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: familyId, actor_user_id: ctx.user.id, action: 'pay_handle_claimed',
     entity_type: 'pay_handles', detail: handle, metadata: { handle, childWalletId: input.childWalletId },
-  });
+  }, 'Pay-ID claim');
   revalidatePath('/wallet/gift');
   return { ok: true };
 }

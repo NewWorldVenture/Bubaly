@@ -87,6 +87,7 @@ export default async function FamilyDisplayPage() {
     <>
       <Section className="pt-20 text-center">
         <SectionHeading
+          as="h1"
           eyebrow={t('marketingDisplay.eyebrow')}
           title={t('marketingDisplay.title')}
           description={t('marketingDisplay.subtitle')}

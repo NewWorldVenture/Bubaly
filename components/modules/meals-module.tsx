@@ -136,13 +136,13 @@ export function MealsModule() {
     },
   });
 
-  const { data: recipes, refresh: refreshRecipes } = useRealtimeQuery<Recipe>({
+  const { data: recipes, error: recipesError, refresh: refreshRecipes } = useRealtimeQuery<Recipe>({
     table: 'family_recipes', familyId, deps: [familyId],
     fetcher: (supabase) => supabase.from('family_recipes').select('*').eq('family_id', familyId)
       .order('last_made_at', { ascending: false, nullsFirst: false }).order('name').limit(200),
   });
 
-  const { data: groceryItems, refresh: refreshGrocery } = useRealtimeQuery<Tables<'grocery_items'>>({
+  const { data: groceryItems, error: groceryError, refresh: refreshGrocery } = useRealtimeQuery<Tables<'grocery_items'>>({
     table: 'grocery_items', familyId, deps: [familyId],
     fetcher: (supabase) => supabase.from('grocery_items')
       .select('*').eq('family_id', familyId)
@@ -274,7 +274,10 @@ export function MealsModule() {
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  // A grocery list that looks empty because its read failed is the expensive
+  // one: someone shops without it and buys the week twice, or not at all.
+  const readError = error || recipesError || groceryError;
+  if (readError) return <ErrorState message={readError} onRetry={() => { void refresh(); void refreshRecipes(); void refreshGrocery(); }} />;
 
   return (
     <div className="module-with-sidebar">

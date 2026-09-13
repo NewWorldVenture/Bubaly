@@ -34,6 +34,7 @@ export default async function MobilePage() {
     <>
       <Section className="pt-20 text-center">
         <SectionHeading
+          as="h1"
           eyebrow={t('mobile.mobile')}
           title={t('mobile.bubalyInYourPocket')}
           description={t('mobile.installTheWebAppToday')}

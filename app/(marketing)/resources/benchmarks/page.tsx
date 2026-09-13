@@ -67,7 +67,7 @@ export default async function BenchmarksPage() {
   return (
     <>
       <Section className="pt-20 text-center">
-        <SectionHeading eyebrow={t('benchmarksPage.eyebrow')} title={t('benchmarksPage.title')} description={t('benchmarksPage.description')} />
+        <SectionHeading as="h1" eyebrow={t('benchmarksPage.eyebrow')} title={t('benchmarksPage.title')} description={t('benchmarksPage.description')} />
         <p className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2 text-sm text-muted">
           <ShieldCheck className="h-4 w-4 text-emerald-400" /> {t('benchmarksPage.aggregatedNotice')}
         </p>

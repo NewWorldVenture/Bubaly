@@ -12,6 +12,7 @@ import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type 
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { logWalletAudit } from '@/lib/server/audit';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
@@ -113,10 +114,10 @@ export async function POST() {
 
     // Record this call for per-day metering (only matters for the metered tier,
     // but logging always keeps the count honest if the plan changes mid-day).
-    await supabase.from('wallet_audit_logs').insert({
+    await logWalletAudit(supabase, {
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_coach_call',
       entity_type: 'ai_wallet_coach', detail: 'AI Money Coach generated',
-    });
+    }, 'AI money coach call');
 
     return NextResponse.json({ coaching, tier });
   } catch (err) {

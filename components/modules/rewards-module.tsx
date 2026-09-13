@@ -54,11 +54,11 @@ export function RewardsModule() {
     table: 'rewards', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('rewards').select('*').eq('family_id', familyId).order('cost_points'),
   });
-  const { data: assignments } = useRealtimeQuery<Assignment>({
+  const { data: assignments, error: assignmentsError } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('chore_assignments').select('*').eq('family_id', familyId).eq('status', 'approved'),
   });
-  const { data: redemptions } = useRealtimeQuery<Redemption>({
+  const { data: redemptions, error: redemptionsError } = useRealtimeQuery<Redemption>({
     table: 'reward_redemptions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reward_redemptions').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -136,7 +136,10 @@ export function RewardsModule() {
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rewards'} />;
+  // Points earned come from assignments and points spent from redemptions, so a
+  // balance rendered without either is simply a wrong number shown to a child.
+  const readError = error || assignmentsError || redemptionsError;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load rewards'} />;
 
   return (
     <div>

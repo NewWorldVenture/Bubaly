@@ -67,12 +67,15 @@ export async function POST(req: NextRequest) {
   if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
     try {
-      await admin.from('notifications').insert({
+      const { error: notifyError } = await admin.from('notifications').insert({
         family_id: familyId, type: 'system',
         title: '🚨 Urgent voicemail at your family line', body: result.summary,
         related_type: 'contact_center',
       });
-    } catch (error) { console.error('[contact-center] urgent voicemail notification write failed', error); }
+      // The insert resolves with an error rather than throwing, so this catch
+      // never saw a failed write: an urgent message reached nobody, silently.
+      if (notifyError) console.error('[contact-center] urgent voicemail notification write failed', notifyError);
+    } catch (error) { console.error('[contact-center] urgent voicemail notification write threw', error); }
   }
 
   return new NextResponse('', { status: 204 });

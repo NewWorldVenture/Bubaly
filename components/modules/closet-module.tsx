@@ -165,8 +165,10 @@ export function ClosetModule() {
   }
 
   const loading = items.loading || outfits.loading || logs.loading;
-  const error = items.error || outfits.error || logs.error;
-  const refresh = () => { void items.refresh(); void outfits.refresh(); void logs.refresh(); };
+  // locations is what the weather-aware suggestions are built from; dropping
+  // its error silently turned those into plain suggestions.
+  const error = items.error || outfits.error || logs.error || locations.error;
+  const refresh = () => { void items.refresh(); void outfits.refresh(); void logs.refresh(); void locations.refresh(); };
 
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={t('closetModule.couldNotLoadTheCloset')} onRetry={refresh} />;

@@ -115,7 +115,7 @@ export default async function FAQPage() {
       <FaqStructuredData items={schemaItems} />
       <MarketingPageStructuredData path="/faq" name={t('faq.faqFamilyKnowledgeCenter')} description={t('faq.answersToCommonQuestionsAbout')} />
       <Section className="pt-20 text-center">
-        <SectionHeading eyebrow={t('marketing.nav.faq')} title={t('faq.questionsAnswered')} description={t('faq.everythingYouNeedToKnow')} />
+        <SectionHeading as="h1" eyebrow={t('marketing.nav.faq')} title={t('faq.questionsAnswered')} description={t('faq.everythingYouNeedToKnow')} />
       </Section>
 
       {!aeo.available && (

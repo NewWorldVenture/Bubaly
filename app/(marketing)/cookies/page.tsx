@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LEGAL_REVISED } from '@/lib/marketing/content-revisions';
 import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
@@ -59,7 +60,7 @@ export default async function CookiesPage() {
       <LegalPage
         title={t('cookies.cookiePolicy')}
         summary={t('cookies.theSmallFilesThatKeep')}
-        lastUpdated="2026-06-24"
+        lastUpdated={LEGAL_REVISED['/cookies']}
         path="/cookies"
         sections={SECTIONS}
       />

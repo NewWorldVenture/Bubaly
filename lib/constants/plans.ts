@@ -42,6 +42,22 @@ export function planLevel(plan: string | null | undefined): number {
   }
 }
 
+/**
+ * Minimum plan level for a family's own @bubaly.com address.
+ *
+ * The gate used to be a bare `requirePlanLevel(2)` on the Contact Center screen
+ * and nowhere else, so the SCREEN was Family+ while the pipeline behind it was
+ * open to everyone: provisioning ran for every tier at onboarding, and the
+ * inbound webhook had no plan check at all. A Free family therefore had a
+ * working address that received mail, ran the AI concierge over it, and
+ * auto-replied as the family — they simply could not see the inbox.
+ *
+ * All three now read this constant, so the entitlement is stated once. Moving
+ * the feature to another tier is a change to this line, not a hunt through
+ * three files.
+ */
+export const FAMILY_EMAIL_MIN_PLAN_LEVEL = 2;
+
 // Short tier labels by plan level (0/1/2) — used in the account widget etc.
 export const TIER_LABEL_BY_LEVEL = ['Free Tier', 'Basic Tier', 'Plus Tier'] as const;
 export const tierLabelForLevel = (level: number): string =>

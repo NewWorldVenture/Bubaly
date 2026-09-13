@@ -48,9 +48,21 @@ export default async function NegotiationsInboxPage() {
 
   const rows = (negRows ?? []) as Row[];
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
-  const { data: listings } = listingIds.length
+  const { data: listings, error: listingsError } = listingIds.length
     ? await sb.from('marketplace_listings').select('id, title, member_id, price_cents').in('id', listingIds)
-    : { data: [] };
+    : { data: [], error: null };
+  // The guard above is defeated without this one. Every row is dropped by the
+  // `if (!l) continue` below when listingMap is empty, so a failed listings read
+  // renders the same false-empty inbox the negotiations guard exists to prevent
+  // — with the negotiations read having succeeded.
+  if (listingsError) {
+    return (
+      <div className="module-page">
+        <PageHeader title={tr('marketplaceNegotiations.offers')} description={tr('negotiations.everyMakeAnOfferNegotiation')} />
+        <ErrorState message={tr('negotiations.couldnTLoadYourOffers')} />
+      </div>
+    );
+  }
   const listingMap = new Map((listings ?? []).map((l) => [l.id, l]));
   const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.display_name ?? 'A neighbor';

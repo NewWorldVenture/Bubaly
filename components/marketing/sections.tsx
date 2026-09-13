@@ -29,16 +29,32 @@ export function SectionHeading({
   title,
   description,
   align = 'center',
+  as = 'h2',
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   align?: 'center' | 'left';
+  /**
+   * Heading level. A section heading is an `h2` by default, which is right for
+   * a section *within* a page — but four public pages (/faq, /contact, /mobile,
+   * /family-display) used this component for their PAGE title and so shipped
+   * with no `h1` at all, starting the document outline at `h2`.
+   *
+   * Pages that hand-roll a hero (/, /pricing, /features) were unaffected, which
+   * is why this only ever hit the four that reused the component.
+   *
+   * Set `as="h1"` on the first heading of a page that has no other `h1`. The
+   * styling is deliberately unchanged: this is a document-outline fix, not a
+   * visual one, and the four pages should look exactly as they did.
+   */
+  as?: 'h1' | 'h2';
 }) {
+  const Heading = as;
   return (
     <div className={cn('max-w-2xl', align === 'center' && 'mx-auto text-center')}>
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-      <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{title}</h2>
+      <Heading className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{title}</Heading>
       {description && <p className="mt-4 text-lg text-muted">{description}</p>}
     </div>
   );

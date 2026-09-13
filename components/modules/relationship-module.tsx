@@ -65,15 +65,15 @@ export function RelationshipModule() {
     table: 'relationship_dates', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_dates').select('*').eq('family_id', familyId),
   });
-  const { data: gifts } = useRealtimeQuery<Gift_>({
+  const { data: gifts, error: giftsError } = useRealtimeQuery<Gift_>({
     table: 'relationship_gift_ideas', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_gift_ideas').select('*').eq('family_id', familyId),
   });
-  const { data: profileRows } = useRealtimeQuery<Profile>({
+  const { data: profileRows, error: profileError } = useRealtimeQuery<Profile>({
     table: 'relationship_profile', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('relationship_profile').select('*').eq('family_id', familyId),
   });
-  const { data: wishes } = useRealtimeQuery<Wish>({
+  const { data: wishes, error: wishesError } = useRealtimeQuery<Wish>({
     table: 'wishlist_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wishlist_items').select('*').eq('family_id', familyId),
   });
@@ -298,7 +298,8 @@ export function RelationshipModule() {
   }
 
   if (dl) return <SkeletonList count={5} />;
-  if (de) return <ErrorState message={typeof de === 'string' ? de : 'Failed to load'} />;
+  const readError = de || giftsError || profileError || wishesError;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load'} />;
 
   return (
     <div>

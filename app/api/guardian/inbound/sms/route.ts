@@ -42,8 +42,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const eventClaimed = await claimGuardianCallback(supabase, 'inbound_sms', smsSid);
-  if (!eventClaimed) return new NextResponse('', { status: 200 });
+  const claim = await claimGuardianCallback(supabase, 'inbound_sms', smsSid);
+  // The claim could not be written, so nothing here has been recorded. A 200
+  // would tell Twilio this callback succeeded and it would never retry; a 503
+  // asks it to come back. Silence is the one answer that loses the event.
+  if (claim === 'unavailable') return new NextResponse('', { status: 503 });
+  if (claim !== 'claimed') return new NextResponse('', { status: 200 });
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 

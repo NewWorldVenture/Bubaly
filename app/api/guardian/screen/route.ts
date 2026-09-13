@@ -53,8 +53,11 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
   const callbackId = `${callSid}:screen:${turn}`;
-  const eventClaimed = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
-  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlSay(tr('screen.thankYouForCallingGoodbye')), twimlHangup()));
+  const claim = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
+  // Saying goodbye is right for a duplicate and wrong for an outage: it ends a
+  // live screening call and reports success. A 503 lets Twilio fall back.
+  if (claim === 'unavailable') return new NextResponse('', { status: 503 });
+  if (claim !== 'claimed') return twimlResponse(wrapTwiml(twimlSay(tr('screen.thankYouForCallingGoodbye')), twimlHangup()));
   const finish = async (xml: string) => {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return twimlResponse(xml);
@@ -282,8 +285,11 @@ async function notifyFamily(
   memberProfile: { member_id: string } | null,
   opts: { commId: string; callerName: string; summary: string; urgency: string },
 ) {
+  // Non-fatal, but not invisible: the insert RESOLVES with an error rather than
+  // throwing, so this catch never saw a failed write and a screened emergency
+  // call could reach nobody with nothing logged.
   try {
-    await supabase.from('notifications').insert({
+    const { error } = await supabase.from('notifications').insert({
       family_id: familyId,
       user_id: null,
       type: 'system',
@@ -294,7 +300,10 @@ async function notifyFamily(
       related_type: 'guardian_communications',
       related_id: opts.commId,
     });
-  } catch { /* non-fatal */ }
+    if (error) console.error('[guardian] screening notification write failed', error);
+  } catch (error) {
+    console.error('[guardian] screening notification write threw', error);
+  }
 }
 
 function twimlResponse(xml: string): NextResponse {

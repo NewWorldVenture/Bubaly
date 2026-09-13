@@ -83,7 +83,7 @@ export function ProjectsModule() {
   }
 
   const loading = projects.loading || materials.loading || quotes.loading;
-  const error = projects.error || materials.error || quotes.error;
+  const error = projects.error || materials.error || quotes.error || contractors.error;
   const refresh = () => { void projects.refresh(); void materials.refresh(); void quotes.refresh(); void contractors.refresh(); };
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={tr('projectsModule.couldNotLoadYourProjects')} onRetry={refresh} />;

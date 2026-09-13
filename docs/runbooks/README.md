@@ -8,6 +8,15 @@ links to a grounded runbook with exact commands + exit criteria.
 Source of truth for status: `docs/LAUNCH_BLOCKERS.md` (LB-xxx) and `docs/PRODUCT_LAUNCH_AUDIT.md`
 (PLA-xxxx). Do the steps roughly in this order — earlier ones unblock later evidence.
 
+## Family email is one env var and an MX record away — F6
+
+The Family Contact Center's inbound side is code-complete, provisioned, gated to
+Family+ and fail-closed (verified 401 in production on 2026-09-13). It needs
+`CONTACT_CENTER_INBOUND_SECRET` set in Vercel and `bubaly.com` MX pointed at an
+inbound-parse provider. Exact steps, including what the secret controls and how
+to tell a routing failure from a provider one:
+[`family-contact-center-routing.md`](family-contact-center-routing.md).
+
 ## 0. Restore CI first (unblocks all automated evidence) — LB-015
 
 CI has been failing at **infrastructure/provisioning** (every run ~5s, no runner) — **not a code

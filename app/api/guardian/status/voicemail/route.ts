@@ -55,8 +55,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const eventClaimed = await claimGuardianCallback(supabase, 'voicemail_recording', recordingSid);
-  if (!eventClaimed) {
+  const claim = await claimGuardianCallback(supabase, 'voicemail_recording', recordingSid);
+  // The claim could not be written, so nothing here has been recorded. A 200
+  // would tell Twilio this callback succeeded and it would never retry; a 503
+  // asks it to come back. Silence is the one answer that loses the event.
+  if (claim === 'unavailable') return new NextResponse('', { status: 503 });
+  if (claim !== 'claimed') {
     return new NextResponse(wrapTwiml(twimlSay(tr('voicemail.thankYouGoodbye')), twimlHangup()), {
       headers: { 'content-type': 'application/xml' },
     });

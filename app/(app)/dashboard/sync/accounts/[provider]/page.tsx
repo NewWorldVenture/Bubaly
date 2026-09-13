@@ -76,11 +76,20 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
 const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> = {
   'connected=1': { tone: 'success', text: 'Account connected. Run “Sync now” to pull and push your data.' },
   'disconnected=1': { tone: 'success', text: 'Account disconnected and access revoked.' },
+  // Disconnected, but the grant at the provider was NOT withdrawn — no adapter,
+  // no refresh token to present, or the revoke call failed. Deleting our row
+  // does not withdraw a grant the provider still holds, and the member who just
+  // asked to disconnect is precisely the one who needs to know that.
+  'disconnected=kept': { tone: 'success', text: 'Account disconnected. We could not withdraw its access at the provider, so revoke it there too if you want the grant removed.' },
   'error=not_configured': { tone: 'danger', text: 'This provider’s OAuth is not configured on the server (missing client credentials).' },
   'error=no_encryption_key': { tone: 'danger', text: 'SYNC_TOKEN_KEY is not set, so tokens cannot be stored securely. Connection blocked.' },
   'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
   'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
   'error=connect_failed': { tone: 'danger', text: 'Could not complete the connection. Please try again.' },
+  // The disconnect route reports this when the account row could not be
+  // deleted. It must not fall through to 'disconnected=1' above: that line
+  // tells the member their access was revoked, and here it was not.
+  'error=disconnect_failed': { tone: 'danger', text: 'Could not disconnect the account, so its access has NOT been revoked. Please try again.' },
 };
 
 export default async function SyncProviderPage({

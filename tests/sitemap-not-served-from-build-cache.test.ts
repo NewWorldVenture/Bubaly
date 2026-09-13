@@ -59,7 +59,16 @@ describe('the sitemap cannot be served from a stale build cache', () => {
     // a megabyte of excerpts and hero-image metadata on every crawl.
     expect(SITEMAP).toContain('getAllPostRefs');
     expect(SITEMAP).not.toMatch(/\bgetAllPosts\b/);
-    const refs = POSTS.slice(POSTS.indexOf('export async function getAllPostRefs('));
-    expect(refs).toContain("'slug, published_at'");
+    const start = POSTS.indexOf('export async function getAllPostRefs(');
+    expect(start, 'getAllPostRefs should exist').toBeGreaterThan(-1);
+    const next = POSTS.indexOf('\nexport ', start + 1);
+    const refs = POSTS.slice(start, next === -1 ? undefined : next);
+    // Dates and slug — `updated_at` because lastmod must reflect an EDIT, not
+    // the publication date. Nothing else: no excerpt, no tags, no hero image.
+    const select = refs.match(/fetchAllPublishedRows<[^>]*>\('([^']*)'\)/)?.[1];
+    expect(select).toBe('slug, published_at, updated_at');
+    for (const heavy of ['excerpt', 'hero_image_url', 'tags', 'body']) {
+      expect(select, `a sitemap entry is not made of ${heavy}`).not.toContain(heavy);
+    }
   });
 });

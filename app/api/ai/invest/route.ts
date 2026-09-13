@@ -12,6 +12,7 @@ import { portfolioValue, type Holding, type PriceMap } from '@/lib/invest/portfo
 import { buildInvestCoachPrompt, parseInvestCoach } from '@/lib/invest/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { logWalletAudit } from '@/lib/server/audit';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -90,9 +91,9 @@ export async function POST(req: NextRequest) {
     );
     if (!coaching.explainer) return NextResponse.json({ error: t('invest.couldNotGenerateAnExplanation') }, { status: 502 });
 
-    await supabase.from('wallet_audit_logs').insert({
+    await logWalletAudit(supabase, {
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_invest_call', entity_type: 'ai_invest_mentor', detail: 'Money Mentor explainer',
-    });
+    }, 'AI invest mentor call');
     return NextResponse.json({ coaching, tier });
   } catch (err) {
     console.error('Invest mentor error:', err);

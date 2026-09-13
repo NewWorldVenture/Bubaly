@@ -23,6 +23,10 @@ export type BlogPost = {
   excerpt: string;
   author: string;
   date: string;
+  /** When the post's content last changed, if the row records it. Distinct from
+   *  `date` (publication): a post edited after publishing has a later revision,
+   *  and the sitemap must report that rather than the original publish date. */
+  updatedAt?: string;
   readingMinutes: number;
   tags: string[];
   category: BlogCategory;
@@ -125,6 +129,7 @@ function toPost(r: Row): BlogPost {
     excerpt: r.excerpt,
     author: r.author,
     date: r.published_at,
+    updatedAt: 'updated_at' in r && typeof r.updated_at === 'string' ? r.updated_at : undefined,
     readingMinutes: r.reading_minutes,
     tags: Array.isArray(r.tags) ? r.tags.filter((t): t is string => typeof t === 'string') : [],
     category: r.category as BlogCategory,
@@ -152,7 +157,7 @@ function toPost(r: Row): BlogPost {
 // For 1,000+ posts this cuts the payload from megabytes to kilobytes and is the
 // single biggest speedup for /blog. toPost() coerces a missing body → [].
 const CARD_COLUMNS =
-  'slug, title, excerpt, author, published_at, reading_minutes, tags, category, featured, accent_color, hero_image_url, hero_image_alt, hero_image_credit';
+  'slug, title, excerpt, author, published_at, updated_at, reading_minutes, tags, category, featured, accent_color, hero_image_url, hero_image_alt, hero_image_credit';
 
 async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Promise<Pick<Row, K>[]> {
   // `slug` breaks ties: 717 of the published rows share a `published_at` with
@@ -191,16 +196,22 @@ export async function getAllPosts(): Promise<BlogPost[]> {
 }
 
 /**
- * Just the slug and date of every published article.
+ * Just the slug and dates of every published article.
  *
  * `app/sitemap.ts` needs nothing else, and it is now rendered per request, so
  * the projection is the difference between reading ~1 MB of excerpts, tags and
  * hero-image metadata on every crawl and reading a few tens of kilobytes.
  */
-export async function getAllPostRefs(): Promise<{ slug: string; date: string }[]> {
+export async function getAllPostRefs(): Promise<{ slug: string; date: string; updatedAt?: string }[]> {
   try {
-    const rows = await fetchAllPublishedRows<'slug' | 'published_at'>('slug, published_at');
-    return publicRows(rows as Row[]).map((r) => ({ slug: r.slug, date: r.published_at }));
+    const rows = await fetchAllPublishedRows<'slug' | 'published_at' | 'updated_at'>('slug, published_at, updated_at');
+    return publicRows(rows as Row[]).map((r) => ({
+      slug: r.slug,
+      date: r.published_at,
+      // A post edited after publication changed on the EDIT date. Same rule the
+      // full loader applies; the sitemap needs it and nothing else from the row.
+      updatedAt: 'updated_at' in r && typeof r.updated_at === 'string' ? r.updated_at : undefined,
+    }));
   } catch (error) {
     unstable_rethrow(error);
     console.error('[blog] getAllPostRefs failed — sitemap will omit articles', error);

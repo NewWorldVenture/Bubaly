@@ -25,6 +25,7 @@ import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/service
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { googleAdapter } from '@/lib/sync/providers/google-adapter';
+import { logSyncProviderError } from '@/lib/sync/audit';
 
 type Admin = ReturnType<typeof createServiceClient>;
 type Account = { id: string; user_id: string | null; family_id: string; external_id: string | null };
@@ -102,7 +103,7 @@ export async function runGoogleSync(admin: Admin, account: Account): Promise<Run
     const msg = redact(e instanceof Error ? e.message : String(e));
     const status = e instanceof GoogleApiError ? e.status : null;
     result.error = msg;
-    await admin.from('sync_provider_errors').insert({
+    await logSyncProviderError(admin, {
       family_id: account.family_id, account_id: account.id, provider: 'google',
       code: status ? String(status) : 'sync_failed', message_redacted: msg, http_status: status,
       is_fatal: status === 401 || status === 403,
@@ -279,7 +280,7 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       }
     } catch (e) {
       // Per-item failure: record and continue so one bad event can't abort the run.
-      await admin.from('sync_provider_errors').insert({
+      await logSyncProviderError(admin, {
         family_id: account.family_id, account_id: account.id, provider: 'google', code: 'push_event',
         message_redacted: redact(e instanceof Error ? e.message : String(e)),
         http_status: e instanceof GoogleApiError ? e.status : null,
@@ -402,7 +403,7 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
         result.skipped++;
       }
     } catch (e) {
-      await admin.from('sync_provider_errors').insert({ family_id: account.family_id, account_id: account.id, provider: 'google', code: 'push_task', message_redacted: redact(e instanceof Error ? e.message : String(e)), http_status: e instanceof GoogleApiError ? e.status : null });
+      await logSyncProviderError(admin, { family_id: account.family_id, account_id: account.id, provider: 'google', code: 'push_task', message_redacted: redact(e instanceof Error ? e.message : String(e)), http_status: e instanceof GoogleApiError ? e.status : null });
       result.skipped++;
     }
   }

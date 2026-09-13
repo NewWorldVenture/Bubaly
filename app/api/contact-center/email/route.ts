@@ -20,6 +20,8 @@ import {
   routeInboundToPlanner, fileInboundPaperwork,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
@@ -84,6 +86,29 @@ export async function POST(req: NextRequest) {
   }
   const familyId = routed.familyId;
   if (!familyId) return NextResponse.json({ ok: true, skipped: 'unknown address' });
+
+  // Family+ only, from the same constant the Contact Center screen and
+  // onboarding provisioning read. Provisioning is gated too, so in practice a
+  // family below the line has no address for anything to arrive at; this covers
+  // the one case that leaves — an address issued while the family was Family+
+  // and still resolvable after they downgraded.
+  //
+  // resolveFamilyPlanLevel THROWS when the subscription read fails, and that
+  // distinction is the whole point of catching it here: an unreadable plan is
+  // not an unentitled family. Answering 200 would tell the provider the message
+  // was handled and there would be no retry and no copy of it anywhere, so a
+  // failed read answers 503 exactly as the other reads in this route do.
+  let familyPlanLevel: number;
+  try {
+    familyPlanLevel = await resolveFamilyPlanLevel(admin, familyId);
+  } catch (error) {
+    console.error('[contact-center] email plan read failed', error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  if (familyPlanLevel < FAMILY_EMAIL_MIN_PLAN_LEVEL) {
+    console.warn('[contact-center] inbound email for a family below the email plan level', { familyId, familyPlanLevel });
+    return NextResponse.json({ ok: true, skipped: 'plan' });
+  }
 
   const [channelResult, familyResult] = await Promise.all([
     getOrCreateChannelResult(admin, familyId),

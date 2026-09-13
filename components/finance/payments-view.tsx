@@ -5,7 +5,7 @@ import { History, Search, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState, Skeleton } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, fmtDueDate } from '@/lib/finance/hub';
@@ -18,7 +18,7 @@ export function PaymentsView() {
   const tr = useTranslations();
   const { familyId } = useApp();
 
-  const { data: rows, loading } = useRealtimeQuery<Txn>({
+  const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
@@ -76,7 +76,14 @@ export function PaymentsView() {
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
             <div>
-              <div className={cn('text-xl font-bold tabular-nums', s.color)}>{s.value}</div>
+              {/* +$0.00 is a statement about this family's money. Until the read
+                  that produced it has come back — or once it has failed — there
+                  is no figure to state, and a placeholder says so honestly. */}
+              {loading ? (
+                <Skeleton className="h-7 w-20" />
+              ) : (
+                <div className={cn('text-xl font-bold tabular-nums', s.color)}>{readError ? '—' : s.value}</div>
+              )}
               <div className="text-[11px] text-muted">{s.label}</div>
             </div>
           </div>
@@ -97,7 +104,9 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {loading ? <SkeletonList /> : filtered.length === 0 ? (
+      {loading ? <SkeletonList /> : readError ? (
+        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); }} />
+      ) : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">
