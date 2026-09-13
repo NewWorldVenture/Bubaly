@@ -287,3 +287,43 @@ this audit recommends for every guard — it just cuts the other way here.
   one asserts feature secrets stay OUT of `REQUIRED_ENV` (so nobody turns this
   into a 503), one asserts every name in `FEATURE_ENV` is actually read by the
   codebase (so the list cannot go stale and decorative).
+
+### [CLAUDE-1][HIGH][INTEGRATION] Five nightly jobs reported success while counting their own failures
+
+- **File/path:** `app/api/cron/{feedback-github-sync,library-feeds,automations,marketing-social,marketing}/route.ts`
+- **Problem:** Each of these counted failures and then answered
+  `{ ok: true, … }` with HTTP **200**. Four did it through
+  `{ ok: true, ...summary }`, where the failure counter is not visible in the
+  response literal at all.
+- **Evidence:**
+  - **0 of 24** cron routes write a durable run record — verified across the
+    directory. Vercel Cron's HTTP status is therefore the only signal a run
+    failed, and `/api/health` (before the fix above) could not see cron at all.
+  - The counters are real and do increment: `library-feeds` `failed++` at two
+    sites; `runAutomations` → `failures`; `runDueRecurringAds` → `failures`;
+    `processMarketingGenerationJobs` → `failed`; `runGithubFeedbackSync` →
+    `errors`.
+  - 19 of the 24 already answer **502** on failure — the house pattern from
+    F-009 — so these five were the inconsistent ones, not a deliberate design.
+- **Impact:** A run in which every item failed was indistinguishable from a clean
+  run. Library feeds could stop refreshing, marketing automations stop firing,
+  recurring ads stop posting, and the marketing job worker fail every claimed
+  job, with the scheduler recording success each night.
+- **Recommended fix:** applied — each derives `ok` from its own counter and
+  answers 502 when non-zero. Two things deliberately left alone: an unconfigured
+  integration (`configured: false`, `wallet_not_deployed`) is a clean run and
+  stays 200; and `persistenceFailed` in the marketing worker already throws, so
+  it correctly arrives as a 500.
+- **Status:** FIXED. `tsc` clean, 13,609 tests pass.
+- **Proved load-bearing:** `tests/cron-failed-runs-are-visible.test.ts`. Each of
+  the five fixes was reverted **individually** and the test failed naming that
+  file, five for five.
+
+**Method note.** My first version of this test flagged six routes, two of them
+wrongly — `{ ok: true, sent: 0, reason: 'no activity in the last 24h' }` is a
+legitimate nothing-to-do run. The rule that works is narrower: *reporting success
+in the same response that carries a failure counter*. A second case covers the
+spread form specifically, because `{ ok: true, ...summary }` is how four of these
+hid — the counter never appears in the literal, so any check reading the response
+shape alone misses them. That is the third time in this session a text scan of
+mine was wrong before it was right; each one is now a test instead.

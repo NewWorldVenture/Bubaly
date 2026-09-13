@@ -53,7 +53,7 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 |---|---|---|
 | Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
-| Architecture / integration seams | Claude-1 | in progress |
+| Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
 | Frontend / UI / responsive / accessibility | Claude-2 | **not yet started** |
 | Backend / API / auth / security | Claude-3 | **not yet started** |
 | QA / flows / performance / edge cases | Claude-4 | **not yet started** |
@@ -119,6 +119,8 @@ highest-yield check in this repository.
 | CLAUDE-1 | Nothing enforced migration idempotency, so it could regress silently | fixed (CI gate) |
 | CLAUDE-1 | Two branches independently claimed migration version `0295` | fixed (renumbered `0296`) |
 | CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
+| CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
+| CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
 
 # Medium Priority
 
@@ -148,6 +150,7 @@ highest-yield check in this repository.
 | F12 | The 404 page ships no server-rendered markup | closed — recorded |
 | F14 | Nine sitemap URLs declare themselves non-canonical | fixed by #526 |
 | **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
+| CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
 
 # Architecture
 
@@ -199,6 +202,15 @@ Pass B's core surface, plus Claude-1's F-020 work.
   claiming (F-006).
 - Claude-1 this pass: prevented a merge from reopening F21's app half, and
   narrowed `/api/contact-center` from a public prefix to five exact paths.
+- Claude-1 verified the **service-role boundary** by planting a `'use client'`
+  page that imports `createServiceClient`: the build fails, and the key's value
+  is absent from every emitted client chunk. It failed *before* the change too
+  (via `next/headers`), so the boundary was sound and the fix is hardening — the
+  protection is now declared rather than inherited. Recorded that way rather than
+  as a closed vulnerability.
+- All 24 cron routes enforce `hasCronAuthorization`, which is correctly
+  fail-closed (`!!secret &&`, so an unset secret cannot become a matchable
+  `Bearer undefined`). Now asserted per-route by a test rather than by grep.
 - **A full authorization sweep over all 146 API routes is Claude-3's scope and
   has not started.**
 
@@ -231,6 +243,12 @@ Claude-1's scope, in progress.
 - Provider webhooks: Twilio (contact centre, Guardian), email inbound — each
   authenticates in its own handler; middleware must let them through, which is
   the exact-path narrowing above.
+- **Cron observability:** 0 of 24 routes write a durable run record, so the HTTP
+  status is the only signal a run failed. Five routes answered 200 while counting
+  failures; all five now answer 502, matching the other 19.
+- **Config contract:** 79 distinct env vars, no central schema. `/api/health` now
+  reports a `FEATURE_ENV` tier as `degraded`/200 — the six secrets whose absence
+  silently disables a whole subsystem. Previously invisible; see High Priority.
 - **Not yet audited:** push/APNs, calendar feed subscribers, AI provider fallbacks.
 
 # Testing/QA
@@ -292,6 +310,10 @@ unless marked.
 - [x] `node scripts/check-conflict-targets.mjs` → every target inferable
 - [x] Gate proven load-bearing: plant an unguarded `create policy`, confirm the
       rehearsal fails **and** the from-scratch replay does not
+- [x] Service-role boundary: plant a `'use client'` importer, confirm the build
+      fails **and** confirm the control (guard removed) fails too — otherwise you
+      are reporting a hole that was never open
+- [x] `/api/health` degraded tier proved load-bearing by reverting the branch
 - [ ] Frontend / accessibility pass (Claude-2)
 - [ ] API authorization sweep over all 146 routes (Claude-3)
 - [ ] End-to-end flow + edge-case pass (Claude-4)
