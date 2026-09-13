@@ -27,7 +27,7 @@ unassigned.
 | F4 | The test named for F1's property only grepped source | Medium | **Fixed** |
 | F5 | Supabase production migration workflow cannot authenticate | High | **Operator — credentials** |
 | F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Operator — config** |
-| F7 | Family email address provisioning is not plan-gated | Low | **Product decision** |
+| F7 | Family email is gated on the screen only — inbound pipeline has no plan check | Medium | **Decision needed** |
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
 | F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Closed — decision recorded** |
 | F10 | Seeded placeholder records shown as real customer stories on the homepage and /pricing | High | **Fixed** |
@@ -186,11 +186,39 @@ Current live behaviour is correct for that state: `POST /api/contact-center/emai
 answers **401** (verified three times), meaning the route runs and refuses. Before
 #516 it answered 307 → `/login`, so the route never executed at all.
 
-## F7 — Family email provisioning is not plan-gated *(Low, open — decision)*
+## F7 — The family email gate exists only on the screen *(Medium, decision needed)*
 
-Provisioning runs for every tier, while the Contact Center screen is Family+. A
-Free family is therefore given an address it cannot see. This is a product
-decision, not a defect — recorded so it is chosen rather than inherited.
+**Corrected on re-examination.** I first recorded this as "a Free family is given
+an address it cannot see", which understates it. Tracing the whole path found no
+plan check anywhere except the screen:
+
+| Stage | Plan gate |
+|---|---|
+| Contact Center screen (`app/(app)/dashboard/contact-center/page.tsx`) | `requirePlanLevel(2)` — Family+ |
+| Address provisioning at onboarding | **none** — runs for every tier |
+| Inbound webhook (`app/api/contact-center/email/route.ts`) | **none** |
+| `lib/contact-center/{server,address,provision}.ts` | **none** |
+
+The route resolves the family from the recipient local-part and proceeds. So a
+**Free** family has a working `@bubaly.com` address that receives mail, files it
+into the inbox, runs the AI concierge over it, and auto-replies **as the family**
+— while the product surface says Family+. The only thing they cannot do is look
+at the inbox.
+
+That matters in both directions, which is exactly why it needs a decision rather
+than a default:
+
+- If Family+ is the intent, Free families are consuming AI inference and sending
+  outbound mail under the product's own domain, ungated.
+- If every family should have an address, the screen's `requirePlanLevel(2)` is
+  the thing that is wrong.
+
+**Deliberately not decided here.** Either fix is a pricing choice, and gating the
+inbound route would start dropping mail for any Free family whose address is
+already in circulation — a user-visible behaviour change that should be made
+knowingly. Worth noting the ordering if Family+ is chosen: gate provisioning
+first, then the route, or existing Free addresses go dark with mail already in
+flight.
 
 ## F8 — Page titles doubled the brand *(Low, fixed)*
 
@@ -282,20 +310,43 @@ Two candidate mechanisms, both blocked, and the third disproved outright:
    mishandling its request/response pair causes Supabase to treat a reused
    refresh token as stolen and **revoke the entire session family**. Threading a
    header through its five return points is not verifiable here.
-3. **Per-group root layouts** (the officially supported Next.js pattern) would
-   deliver it cleanly, but requires deleting `app/layout.tsx` and moving the
-   eight ungrouped top-level routes into groups — an app-router restructure.
+3. **A nested provider** — the cleanest option, and no restructure at all. The
+   root layout keeps `LocaleProvider` but is given only the keys every route
+   *outside* `app/(app)` can reach; `app/(app)/layout.tsx`, which already
+   exists, renders a nested `LocaleProvider` carrying the full catalogue, and
+   the inner context simply wins for signed-in pages.
+
+   Measured: the root set is **702 keys — 44 KB of 793 KB (5.5%)**, covering
+   marketing, auth, onboarding, library, join, pay, gift, reviews, `/s` and
+   offline together. Public pages drop by ~94%; signed-in pages carry the extra
+   44 KB, which is the whole cost and is paid behind a login.
+
+   Completeness was checked the same way as before, and **only three keys are
+   uncovered**, all in one file:
+
+   ```
+   marketingDisplay.mockScheduleTitle  app/(marketing)/family-display/page.tsx
+   marketingDisplay.mockAskTitle       app/(marketing)/family-display/page.tsx
+   marketingDisplay.mockHandledTitle   app/(marketing)/family-display/page.tsx
+   ```
+
+   They are defined in that server page and passed to a client component, so
+   the generator must scan non-`(app)` server files for key literals too — the
+   same pattern that makes a global subset unsafe, but here it is three keys in
+   one file rather than 123 across the admin console.
 
 The common blocker is verification: the entire risk surface of all three is
 **client-side hydration**, and a browser cannot run in this environment. Chromium
 dies in the proxy relay for every host (see *Method*), so the one thing that
 would prove a scoped payload still renders every string cannot be run.
 
-**Recommendation.** Take option 3, scoped to marketing + auth only, whose key
-sets are proven complete above. Leave the signed-in app on the full catalogue —
-it holds 1,122 client files and the 123 server-defined keys, it is past what can
-be verified by inspection, and it sits behind a login where payload matters
-least. Expected result: the public site's largest asset drops by roughly 97%.
+**Recommendation.** Take option 3. Leave the signed-in app on the full catalogue
+via the nested provider — it holds 1,122 client files and the 123 server-defined
+keys, past what inspection can cover, and it sits behind a login where payload
+matters least. Handle the three `marketingDisplay.*` keys, generate the root set,
+and add a test that regenerates it and fails on any drift; then the failure mode
+reduces to "is a key missing", which is a static property a test can settle
+exhaustively without a browser.
 
 That is a deliberate, evidence-backed decision to defer, not an open question:
 the measurements, the safety proof, the counterexamples, and the mechanism are
@@ -492,10 +543,31 @@ someone who has access this session does not.
 |---|---|---|
 | **F5** Supabase migration workflow | Operator | The access token or project ref lost its privileges some time after 2026-09-07. Restore it, **then** repair the ledger baseline per the runbook — the gate throws by design until `0004` is recorded, and that is explicitly a credentialed operator action |
 | **F6** Family email routing | Operator | Set `CONTACT_CENTER_INBOUND_SECRET` in Vercel and point `bubaly.com` MX at `/api/contact-center/email?key=…`. Until then the webhook correctly answers 401 |
-| **F7** Plan gating for family addresses | Product | Decide whether a Free family should be given an address it cannot see. Provisioning currently runs for every tier while the Contact Center screen is Family+ |
+| **F7** Family email plan gating | Product + Engineering | Decide whether Free families get a working address. Today the gate is on the screen only: provisioning and the inbound webhook have none, so a Free family receives mail, runs the AI concierge and auto-replies as the family. If Family+ is the intent, gate provisioning first and the route second, or addresses already in circulation go dark mid-flight |
 | **F10** Seed rows in the database | Operator | The site no longer renders them. Deleting the three `case_studies` rows is a Super Admin action |
-| **F9** i18n payload | Engineering | Design settled and safety proven; needs one person to run option 3 in a browser |
-| **Dev dependency advisories** | Engineering | 8 advisories (3 moderate, 5 high) in `vitest`, `@xmldom/xmldom`, `browserslist`, `tar`, `js-yaml`, `brace-expansion`. **Production dependencies are clean** (`npm audit --omit=dev` → 0), which is exactly what CI enforces. Not fixed here because `npm audit fix` cannot even produce a plan — it exits with an internal npm error — so forcing it risks a lockfile rewrite against a 13,102-test suite for a dev-only gain |
+| **F9** i18n payload | Engineering | Design settled, safety proven, and the mechanism now needs no middleware or restructure — a nested provider in `app/(app)/layout.tsx` with a 702-key (44 KB) root set. Three named keys to cover first. Needs one person to confirm a marketing page renders in a browser, which this environment cannot do |
+
+
+## Dependency security — closed, nothing to fix
+
+`npm audit` reports 8 advisories (3 moderate, 5 high). **None of them affect
+bubaly.com**, and that was checked rather than assumed: every package was
+resolved against the production dependency tree.
+
+| package | in production tree |
+|---|---|
+| `js-yaml`, `tar`, `brace-expansion`, `browserslist` | no |
+| `@xmldom/xmldom`, `vitest`, `@vitest/mocker`, `baseline-browser-mapping` | no |
+
+`npm audit --omit=dev --audit-level=moderate` — the exact command CI runs —
+reports **0 vulnerabilities**. All 8 are build and test tooling that never
+reaches the deployed artifact.
+
+So there is no site finding here. Upgrading the dev toolchain is ordinary
+maintenance, not audit remediation, and worth noting it cannot be done casually:
+`npm audit fix` cannot even produce a plan on this tree (it exits with an
+internal npm error), so it would mean a hand-managed lockfile rewrite against a
+13,000-test suite for no change to what users run.
 
 ## Method, and what it could not reach
 
