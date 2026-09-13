@@ -10,6 +10,11 @@ They ran over **different surfaces** and neither supersedes the other:
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 | **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
 | **D — Frontend and accessibility** (2026-09-13) | the *authenticated* app, which A and B barely touched on the frontend: dialogs, labels, keyboard reachability, headings, loading and error states, React effect correctness | 14 | `F-D01`–`F-D14` |
+| **E — Backend, auth and security** (2026-09-13) | RLS and grants audited against a real catalogue after replaying 308 migrations, all 141 API routes mapped to their guard, all 61 public-list carve-outs read, storage buckets, secrets | 9 | `F-E01`–`F-E09` |
+
+> **Pass E opens with the most serious finding in this document.** See
+> **F-E01**: every child in a family can read, edit and delete the family
+> password vault, and the secrets are stored in plaintext.
 
 **Pass C changes the disposition of two Pass A findings.** Both are recorded
 below rather than edited in place, so the history stays readable:
@@ -2525,3 +2530,98 @@ is worth more than fixing any single one of them.
 
 Eight areas were checked and found sound; they are listed in `audit/claude-2.md`
 so a later pass does not re-derive them.
+
+
+---
+
+# Pass E — Backend, auth and security (F-E01–F-E09)
+
+Ran 2026-09-13. Working notes in `audit/claude-3.md`.
+
+**Method, and why it found things greps do not.** All 308 migrations were
+replayed into a local Postgres 16 and then RLS, grants, policies and
+`SECURITY DEFINER` functions were audited **against the live catalogue**, not
+by text search. That distinction is load-bearing: this repo enables RLS through
+`DO $$ … EXECUTE format('alter table public.%I enable row level security')`
+loops, so a text scan reports 216 tables "missing RLS" while the catalogue
+reports zero missing. All 141 `app/api` routes were mapped to their guard and
+all 61 entries of the public carve-out list were read individually.
+
+**Two caveats that bound every finding below.**
+
+1. These describe the **committed migrations as replayed locally**. If F-001
+   still holds and production's ledger is stuck at `0001–0003`, production may
+   not carry even the policies verified here as correct. That cuts both ways,
+   and F-C08 makes it likely: there is currently no working path to apply a
+   migration to production.
+2. Migrations `0237`, `0239` and `0292` did not replay locally — the `vector`
+   extension was absent — so the **marketing platform spine tables were not
+   checked**. That is a known gap, not a clean bill.
+
+## F-E01 — Every child can read, edit and delete the family password vault *(CRITICAL)*
+
+`public.family_credentials` holds Wi-Fi passwords, account logins, PINs and card
+details, with `secret` stored as **plaintext `text`**.
+
+All four of its policies are written as `is_family_member(family_id)`, which
+answers "is this user in the family" and **ignores role entirely** — unlike
+`can_manage_family()`, and unlike the `documents` table, which correctly ANDs in
+`can_manage_family` for its sensitive rows.
+
+Children are real auth users with `family_members.user_id` set
+(`app/(app)/family/child-login-actions.ts:49-60`). The page carries no role
+check; `requireAal2` is a no-op for children (`lib/auth/mfa.ts:103`); and the
+module reads through the browser client anyway, so **RLS is the only boundary
+and it does not hold**.
+
+A child signed into the family app can read every stored password, change them,
+or delete them.
+
+## F-E02 — Step-up MFA is presentational *(High)*
+
+`requireAal2` guards 19 pages by redirect, but the data on those pages is
+fetched by client components straight from PostgREST
+(`components/finance/bills-view.tsx:54,63`), and
+
+```sql
+select count(*) from pg_policies where qual/with_check ilike '%aal%'  -->  0
+```
+
+No policy knows what `aal` is. `aal2Verdict` — which exists precisely so route
+handlers can answer `403 step_up_required` — is wired into 3 routes, none of
+them money.
+
+A stolen `aal1` session reads and writes bills, expenses, autopay and both
+vaults without ever being asked for a code.
+
+## F-E03 — The `family-media` bucket is public *(High)*
+
+`supabase/migrations/0216_family_media_bucket.sql:22-24` creates the bucket with
+`public = true`, so family photos, videos, message attachments and reminder
+attachments are served from `/storage/v1/object/public/…` **with no session**.
+The four family-scoped SELECT policies the same migration creates never run on
+that path.
+
+The migration documents this as a tracked follow-up (LB-009), so it is a known
+decision rather than an oversight — but it is a live exposure, and one that
+survives both row deletion and membership revocation, because the object URL
+keeps working.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-E04 | OAuth tokens in `social_account_tokens` are family-member readable, while the equivalent `sync_tokens` is service-only | Medium |
+| F-E05 | `feedback-attachments` is a public bucket holding user-uploaded screenshots | Medium |
+| F-E06 | The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | Medium |
+| F-E07 | Twilio signature verification is off outside production and depends on `NEXT_PUBLIC_APP_URL` being exactly right | Medium |
+| F-E08 | Shared-secret comparisons are not constant time | Low |
+| F-E09 | An authorization failure in the marketing AI route answers 500, not 403 | Low |
+
+F-E06 is the same variable as **F-C07**, reached from the other side: Pass C
+found it undocumented, Pass E found it accepted in a query string.
+
+## Verified healthy in Pass E
+
+Twelve items, listed in `audit/claude-3.md`, including that no table is
+actually missing RLS once the catalogue is read rather than grepped.
