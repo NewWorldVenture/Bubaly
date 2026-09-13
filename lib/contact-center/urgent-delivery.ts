@@ -14,10 +14,25 @@ const TOOL = 'contact_center.urgent_delivery';
 const PREFIX = `${TOOL}:`;
 const CURSOR_KEY = `${PREFIX}cursor`;
 const MAX_ATTEMPTS = 5;
+/**
+ * What a receipt will accept, EXPORTED so callers bound their input to the same
+ * numbers instead of guessing them.
+ *
+ * The email route took its headers straight from the request and only sliced
+ * `body`, so a long `To` threw a ZodError below, which nothing caught — the
+ * message was answered 503 and never filed at all. Two places holding the same
+ * limits privately is how that happens; there is now one place.
+ */
+export const MAX_PROVIDER_REF = 2048;
+export const MAX_ADDRESS = 512;
+export const MAX_SUBJECT = 1000;
+export const MAX_BODY = 8000;
+export const MAX_SUMMARY = 1000;
+
 const inputSchema = z.object({
   version: z.literal(1), familyId: z.string().min(1).max(128), channel: z.enum(['sms', 'voice', 'email']),
-  providerRef: z.string().min(1).max(2048), from: z.string().max(512).nullable(), to: z.string().max(512).nullable(),
-  subject: z.string().max(1000).nullable(), body: z.string().max(8000), summary: z.string().max(1000), intent: z.literal('urgent'),
+  providerRef: z.string().min(1).max(MAX_PROVIDER_REF), from: z.string().max(MAX_ADDRESS).nullable(), to: z.string().max(MAX_ADDRESS).nullable(),
+  subject: z.string().max(MAX_SUBJECT).nullable(), body: z.string().max(MAX_BODY), summary: z.string().max(MAX_SUMMARY), intent: z.literal('urgent'),
 }).strict();
 const outputSchema = z.object({
   version: z.literal(1), revision: z.string().uuid(),

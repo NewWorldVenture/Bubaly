@@ -20,7 +20,14 @@ import {
   routeInboundToPlanner, fileInboundPaperwork,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
+// Aliased: this file already has a MAX_BODY, and it is a different limit —
+// that one bounds the whole REQUEST (1 MB), this one bounds the body FIELD a
+// receipt will accept (8 KB). Importing it unaliased silently swapped the
+// second for the first, which is the same defect wearing a different hat.
+import {
+  MAX_ADDRESS, MAX_BODY as MAX_RECEIPT_BODY, MAX_PROVIDER_REF, MAX_SUBJECT,
+  captureInboundWithUrgency, attemptUrgentDelivery,
+} from '@/lib/contact-center/urgent-delivery';
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
 export const runtime = 'nodejs';
@@ -69,11 +76,26 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Invalid payload', { status: 400 });
   }
 
-  const to = pick(fields, 'to', 'To', 'recipient', 'envelope_to');
-  const from = pick(fields, 'from', 'From', 'sender') || null;
-  const subject = pick(fields, 'subject', 'Subject') || null;
-  const body = (pick(fields, 'text', 'body-plain', 'stripped-text', 'plain') || pick(fields, 'html', 'body-html')).slice(0, 8000);
-  const messageId = pick(fields, 'Message-Id', 'message-id', 'messageId') || null;
+  // Every one of these is bounded to what the urgent receipt's schema accepts,
+  // not just `body`.
+  //
+  // captureInboundWithUrgency parses its input against those exact caps and
+  // does not catch the ZodError, so it reached this route's `catch` and
+  // answered 503 — with nothing written. No inbox row, no escalation, no
+  // notification, no auto-reply, and deterministic, so every provider
+  // redelivery failed the same way. A school mailing a class distribution list
+  // has a `To` header well past 512 characters, and the non-urgent path files
+  // it fine, so the loss landed precisely on the messages this subsystem
+  // exists to escalate.
+  //
+  // Bounding here rather than widening the schema: these are headers from an
+  // unauthenticated sender, and the caps are the contract. Truncating an
+  // absurd header keeps the message; refusing it loses the message.
+  const to = pick(fields, 'to', 'To', 'recipient', 'envelope_to').slice(0, MAX_ADDRESS);
+  const from = pick(fields, 'from', 'From', 'sender').slice(0, MAX_ADDRESS) || null;
+  const subject = pick(fields, 'subject', 'Subject').slice(0, MAX_SUBJECT) || null;
+  const body = (pick(fields, 'text', 'body-plain', 'stripped-text', 'plain') || pick(fields, 'html', 'body-html')).slice(0, MAX_RECEIPT_BODY);
+  const messageId = pick(fields, 'Message-Id', 'message-id', 'messageId').slice(0, MAX_PROVIDER_REF) || null;
 
   const local = parseRecipientLocal(to);
   if (!local) return NextResponse.json({ ok: true, skipped: 'no bubaly recipient' });
