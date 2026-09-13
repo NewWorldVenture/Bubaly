@@ -32,8 +32,12 @@ const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_
 
 /** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
 async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
+  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
+  // `archived_at` (0014) — and only `archived_at` is ever written, by the
+  // shopping module. Asking one of them calls an archived list open and
+  // quietly files the family's groceries where nobody is looking.
   const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false)
+    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
     .order('created_at', { ascending: true }).limit(1).maybeSingle();
   if (lookupError) throw new Error('Autopilot could not read the family shopping list');
   if (existing) return existing.id;

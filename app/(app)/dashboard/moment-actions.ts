@@ -68,8 +68,10 @@ export async function addMomentGroceryAction(input: {
 
   // Resolve the active (non-archived) list, or create "Groceries" — same rule the
   // Grocery module uses, so the moment's items land exactly where the family shops.
+  // Both archive columns: only `archived_at` is ever written (the shopping
+  // module stamps it), so `is_archived` alone calls an archived list active.
   const { data: lists } = await supabase.from('grocery_lists')
-    .select('id').eq('family_id', input.familyId).eq('is_archived', false)
+    .select('id').eq('family_id', input.familyId).eq('is_archived', false).is('archived_at', null)
     .order('created_at').limit(1);
   let listId = lists?.[0]?.id;
   if (!listId) {

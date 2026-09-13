@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -60,5 +61,56 @@ describe('the default list is the one the family can still see', () => {
     const result = await ensureDefaultList(scopeFor(db as unknown as SupabaseClient<Database>));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.id).toBe('current');
+  });
+});
+
+// The cases above pin ONE reader. The trap is that there are a dozen, spread
+// across the web app, the API routes and the phone, and each was written by
+// someone reading a neighbouring query rather than the migrations — which is
+// how seven of them came to ask `is_archived` (never written) or nothing at all
+// while the shopping module stamped `archived_at`. Fixing them one at a time
+// leaves the next one free to be written the same way, so the rule is checked
+// against the source: a `grocery_lists` read filters BOTH columns, or it is on
+// the list below and says why.
+describe('every grocery_lists reader asks both archive columns', () => {
+  const ROOTS = ['lib', 'app', 'components', 'mobile/src'];
+  // Reads that deliberately span archived lists. A caller naming an explicit
+  // list id is saying which list it means; second-guessing that would be the
+  // service overruling its caller (tests/grocery-write-path.test.ts pins it).
+  const DELIBERATE = new Set(['lib/services/groceries/index.ts:eq(\'id\', listId)']);
+
+  function selects(): { file: string; statement: string }[] {
+    const found: { file: string; statement: string }[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(full); continue; }
+        if (!/\.tsx?$/.test(entry.name)) continue;
+        const text = readFileSync(full, 'utf8');
+        for (const match of text.matchAll(/from\('grocery_lists'\)/g)) {
+          const end = text.indexOf(';', match.index!);
+          const statement = text.slice(match.index!, end === -1 ? text.length : end).replace(/\s+/g, ' ');
+          // Creating a list is not reading one, and neither is archiving it.
+          if (!statement.includes('.select(') || /\.(insert|update|upsert|delete)\(/.test(statement)) continue;
+          found.push({ file: full, statement });
+        }
+      }
+    };
+    for (const root of ROOTS) walk(root);
+    return found;
+  }
+
+  const reads = selects();
+
+  it('finds the readers at all', () => {
+    // Guards that quietly stop matching pass forever. If this number falls, the
+    // scan broke or the table was renamed — either way, look before lowering it.
+    expect(reads.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(reads.map((read) => [read.file, read.statement] as const))('%s filters live lists', (file, statement) => {
+    if ([...DELIBERATE].some((entry) => entry.startsWith(`${file}:`) && statement.includes(entry.slice(file.length + 1)))) return;
+    expect(statement, `${file} must exclude lists the family archived`).toContain("eq('is_archived', false)");
+    expect(statement, `${file} must exclude lists the family archived`).toContain("is('archived_at', null)");
   });
 });
