@@ -40,13 +40,18 @@ LAST-UPDATE: 2026-09-14T00:20Z
 ---
 
 ## Claude-4
-CURRENT: writing the INFO records for spines traced clean, then the closing summary
-COMPLETED: 17 findings across 7 sweeps. 1 CRITICAL (the in-app spend path overdraws two ways), 4 HIGH, 6 MEDIUM, 4 LOW, 2 INFO.
-NEXT: INFO records (run state machine, gift/pay spine, allowance date math, orphan-page census, nav href coverage) + closing summary
-FILES-TOUCHED: audit/claude-4.md, audit/status.md (own section only) — AUDIT ONLY, no source edits. Throwaway PG at /tmp/pgaudit_db:54399 (will tear down).
+CURRENT: DONE — audit/claude-4.md complete (8 sweeps, 24 findings, closing summary). Throwaway PG torn down.
+COMPLETED: 1 CRITICAL · 5 HIGH · 7 MEDIUM · 4 LOW · 7 INFO. Every behavioural claim executed: 310/310-migration replay via docs/audit/verify-pg.sh, money paths raced on two live connections, pure modules bundled with esbuild and run. NO source file modified.
+NEXT: nothing queued — available if Claude-1 wants a specific area re-checked.
+FILES-TOUCHED: audit/claude-4.md, audit/status.md (own section only). AUDIT ONLY.
 BLOCKERS: none
-FOR CLAUDE-1 — the two that most want your attention:
-  * CRITICAL: lib/wallet/server.ts:285/309. bucketBalanceCents reduces the whole ledger in JS with no row bound (PostgREST caps at db-max-rows: measured $92.00 reported against a real $40.00 on a 1,052-row bucket) and debitSpendBucket's no-approval branch is a check-then-insert with no lock (two simultaneous $8 spends against $10 both posted; balance -$6.00). Both raced on the 310-migration replay. F-019 proved the card-auth RPC safe; this is the third derivation of the same number and it is neither bounded nor locked.
-  * HIGH: tests/wallet-allowance-persistence.test.ts:13 asserts the EXACT text of the defective allowance update, so the one-line fix for the allowance double-pay turns the suite red. A guard that blocks its own fix.
-  * My earlier HIGH on /dashboard/vacations + /dashboard/weekend was patched in lib/constants/feature-catalog.ts by someone else this session; re-verified, both now resolve to `basic`. The companion test finding is still open.
-LAST-UPDATE: 2026-09-14T00:58Z
+
+FOR CLAUDE-1 — read in this order:
+  1. CRITICAL · lib/wallet/server.ts:285 + :309. The wallet balance is derived three times; two do it in SQL under FOR UPDATE, the third fetches the whole ledger over PostgREST and reduces in JS. It has no row bound (measured: $92.00 reported against a real $40.00 on a 1,052-row bucket, because PostgREST caps at db-max-rows) AND no lock (raced: two simultaneous $8 spends against $10 both posted, balance -$6.00). Reached from requestSpendAction's no-approval branch, whose own docstring says "Never overdraws". F-019 proved the card-auth RPC safe; this is the one spend path that is not an RPC.
+  2. HIGH · tests/wallet-allowance-persistence.test.ts:13 asserts the exact text of the defective allowance update, so the one-line fix for the allowance double-pay turns the suite RED. Proven by applying the fix to a scratch copy and re-evaluating the assertion. Its sibling tests/allowance-cron-idempotency.test.ts asserts the CORRECT claim on the cron and never opens this file — two guards for one property, pointed at different implementations, disagreeing about which is right.
+  3. HIGH · runDueAllowancesAction (app/(app)/wallet/actions.ts:328) is missing the .lte('next_run_on', today) claim the cron has. A/B raced: cron shape = 1 credit, action shape = 2 credits, same rule, same seconds.
+  4. HIGH · /dashboard/home + 6 sub-pages: sold as Plus on /pricing, locked at Plus in the sidebar, opened at Basic by requirePlanLevel(1). The AI routes behind those pages gate on the catalog, so a Basic family opens a Plus screen where every AI button answers 403.
+  5. HIGH · /dashboard/experience is in EVERY family's sidebar (minLevel 0) and nothing anywhere writes experience_audits. Its only possible state is an empty state whose copy is "Run seed_experience_audits_one_family.sql to populate a baseline."
+
+NOTE: my earlier HIGH on /dashboard/vacations + /dashboard/weekend is FIXED (your commit c8a7d576). Re-verified: both now resolve to `basic`. Marked FIXED in my file. Worth knowing: tests/route-plan-gate.test.ts was green before the fix and green after it, 37 passed both times, identical output — the guard never moved.
+LAST-UPDATE: 2026-09-14T01:05Z

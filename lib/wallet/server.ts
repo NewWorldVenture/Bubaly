@@ -8,6 +8,7 @@ import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
 
 type DB = SupabaseClient<Database>;
@@ -122,11 +123,16 @@ export async function childSpendableCents(supabase: DB, familyId: string, childW
   if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
   if (!bucket) return 0;
 
-  const { data: txns, error: transactionError } = await supabase
-    .from('wallet_transactions')
-    .select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', bucket.id)
-    .in('status', ['completed', 'processing']);
+  // Paged: PostgREST caps at db-max-rows whatever the client asks, so an
+  // unbounded read of a busy ledger totals only its first page.
+  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+    (from, to) => supabase
+      .from('wallet_transactions')
+      .select('direction, amount_cents, status')
+      .eq('family_id', familyId).eq('bucket_id', bucket.id)
+      .in('status', ['completed', 'processing'])
+      .order('id').range(from, to),
+  );
   if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
 
   return (txns ?? []).reduce((sum, t) => {
@@ -289,8 +295,21 @@ export async function bucketBalanceCents(supabase: DB, params: {
     .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
   if (bucketError) return { bucketId: null, available: 0, error: walletFailure(bucketError, 'Could not load the wallet bucket.') };
   if (!bucket?.id) return { bucketId: null, available: 0, error: 'The wallet bucket is unavailable.' };
-  const { data: txns, error: transactionError } = await supabase.from('wallet_transactions')
-    .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  // Paged, not a bare select. PostgREST caps a response at `db-max-rows` (1,000
+  // by default) whatever the client asked for, so an unbounded read of a busy
+  // ledger silently ends after the first page and this `reduce` totals a
+  // FRACTION of it — reporting a balance that is not the child's balance.
+  //
+  // `tests/no-limit-above-the-row-cap.test.ts` was written for exactly this and
+  // could not see it: it looks for `.limit(n)` where n exceeds the cap, and this
+  // read had no `.limit()` at all. Its own header even names the consequence —
+  // "wallet balances totalled from part of the ledger".
+  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+    (from, to) => supabase.from('wallet_transactions')
+      .select('direction, amount_cents, status')
+      .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
+      .order('id').range(from, to),
+  );
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
   const available = (txns ?? []).reduce(
     (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,

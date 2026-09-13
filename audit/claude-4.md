@@ -83,7 +83,12 @@ every one of them was a `.claude/worktrees/` copy), and diff that set against th
   No call site changes. Then close the class: a test that asserts every href
   literal reaching `requireFeature`/`refuseUnlessEntitled` exists in
   `tiersByHref(resolveFeatureTiers({}))` — the scan above, as a guard.
-- **Status:** OPEN
+- **Status:** FIXED by Claude-1 during this session (commit `c8a7d576`, "P-01:
+  two features the product does not sell, and the code gave away"). Re-verified
+  after the edit by re-running the same probe: `/dashboard/vacations` and
+  `/dashboard/weekend` now both resolve to `"basic"`. The class guard is not yet
+  written, and the companion finding below — the test that passed over this — is
+  still OPEN.
 
 ---
 
@@ -125,6 +130,10 @@ every one of them was a `.claude/worktrees/` copy), and diff that set against th
   Revert the catalog fix and this goes red on three rows; with the fix it is
   green. Better still, extend the `savings` harness to run the whole `GATED`
   table — the mocks are already generic.
+- **Post-fix confirmation:** the catalog defect was fixed during this session
+  (commit `c8a7d576`). This suite was run before and after: **green both times,
+  37 passed, identical output.** A guard whose result does not move when the
+  defect it exists for is fixed was not measuring that defect.
 - **Status:** OPEN
 
 ---
@@ -1114,3 +1123,86 @@ not see" must not read the same.
   batch overflows the gateway's URI limit, returns empty, and re-inserts every
   candidate — *"observed exactly that, every run"*). Correct at 12 members.
 - **VERIFIED**
+
+---
+
+## Summary — what was traced, what broke, what held
+
+**Eight sweeps. 24 findings: 1 CRITICAL, 5 HIGH, 7 MEDIUM, 4 LOW, 7 INFO.**
+
+Everything behavioural here was executed, not inferred. A throwaway Postgres 16
+was bootstrapped with `bash docs/audit/verify-pg.sh up` — **310/310 migrations
+applied, 0 failed** — and every money claim was raced on it with two connections
+genuinely in flight. Pure modules (`lib/features/tiers.ts`,
+`lib/wallet/allowance.ts`, `lib/services/scope.ts`, `lib/constants/navigation.ts`)
+were bundled with esbuild and run. No source file was modified.
+
+### The three things worth reading first
+
+1. **`lib/wallet/server.ts:285/309` — the in-app spend path overdraws two ways.**
+   The balance is the one number that has to be right, and it is derived three
+   times: twice in SQL under a `FOR UPDATE` lock, once by fetching the whole
+   ledger over PostgREST and reducing it in JavaScript. That third one has no row
+   bound (**$92.00 reported against a real $40.00** on a 1,052-row bucket) and no
+   lock (**two simultaneous $8 spends against $10 both posted; balance −$6.00**).
+   The function's own docstring says "Never overdraws".
+2. **`tests/wallet-allowance-persistence.test.ts:13` — a guard that blocks its own
+   fix.** It asserts the exact text of the defective allowance update. Applying
+   the one-line claim predicate that stops the double-pay makes the assertion
+   fail. Proven by applying the fix to a copy in scratch and re-evaluating the
+   assertion against both.
+3. **Three descriptions of one offer.** `minLevel`, `defaultTier` and
+   `requirePlanLevel(n)` all claim to say who may use a destination; 28 of 135
+   nav destinations disagree, `resolveItems` reads only one of them, and the
+   consequences run in both directions — Home & Maintenance is *sold* as Plus,
+   *locked* at Plus, and *opened* at Basic; Operations Center is a permanent
+   unlocked button that only produces a billing upsell.
+
+### Method notes, including one I got wrong
+
+- A `.from('x')` scan reported 41 tables "read but never written". **Nineteen of
+  them were false** — written through a dynamic `.from(table)` where `table` is a
+  React prop (`components/vacations/shared.tsx:130`) or an allowlist key
+  (`lib/family/actions.ts:22`). An earlier version of the same scan reported 84
+  readers of one table and every one was a `.claude/worktrees/` copy. Three
+  candidates survived contact with the code, and all three are real.
+- Every finding here names the file and line that was read. Where the claim is
+  behavioural there is a command and its output.
+
+### Traced and found correct
+
+- **The run/step state machine** — 14 run states and 14 step states, checked
+  against the *replayed* CHECK constraints, not the migration text. The single
+  vocabulary difference (`ai_requests` has no `paused`) is handled at the one
+  boundary where it can bite, with the reason written beside it. `completed` and
+  `cancelled` are one-way doors in both tables.
+- **Nav integrity** — 183 nav href literals and 102 catalog hrefs, all resolving
+  to real pages. Zero dead links. `ADMIN_NAV`'s "no coming-soon stubs" promise
+  holds. Of 353 static routes, 22 look unlinked and 21 are explained (template
+  hrefs, deliberate redirect stubs, super-admin analytics); one is a genuine
+  orphan and has a finding.
+- **The Pay-ID resolver** — identical dead-end for an unknown handle, a revoked
+  handle and a handle with no live link.
+- **Recipe → grocery** — servings scaling applied, duplicates skipped by
+  normalised name, the skip count reported.
+- **The allowance cron** — claims each rule atomically with a `next_run_on`
+  predicate, and the A/B race proves the predicate is what makes it safe. It is
+  the *hand-run* twin that does not.
+- **Date arithmetic** — right at both DST transitions, both month-end shapes, the
+  leap day, the year boundary and ±14-hour zones. One real defect (the monthly
+  clamp ratchets to the 28th and never returns) and nothing else.
+- **Performance** — 56 N+1 candidates and 63 unbounded reads examined; all but the
+  wallet balance are bounded by a date window, an `.in(ids)` or a `head: true`
+  count, and no page render path issues a query per row.
+
+### Where I would look next, with more time
+
+- The remaining 62 unbounded reads on growing tables, for **display** truncation
+  rather than decision truncation — a family past `db-max-rows` documents or
+  transactions silently sees a partial list with no "and 400 more".
+- The 350 source-text-only test files (1,233 cases). Three were checked and all
+  three were green over something; the base rate matters and I did not measure it.
+- `invite → accept → first render` as a *functional* flow. Claude-3 is on its
+  security; nobody has walked what a second parent actually sees on arrival.
+- A family of 12 against the per-member fan-out surfaces beyond notifications
+  (the approvals queue, the activity feed, the family map).

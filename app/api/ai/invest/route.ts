@@ -13,6 +13,7 @@ import { buildInvestCoachPrompt, parseInvestCoach } from '@/lib/invest/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { logWalletAudit } from '@/lib/server/audit';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -67,7 +68,11 @@ export async function POST(req: NextRequest) {
     let portfolioValueCents = 0, holdingsCount = 0;
     if (body.childWalletId) {
       const [{ data: holdings }, { data: assets }] = await settleAll([
-        supabase.from('invest_holdings').select('asset_id, shares, avg_cost_cents').eq('family_id', familyId).eq('child_wallet_id', body.childWalletId),
+        // Paged: this total is the portfolio value the model is told about.
+        readAllAsQuery<{ asset_id: string; shares: number; avg_cost_cents: number }>(
+          (from, to) => supabase.from('invest_holdings').select('asset_id, shares, avg_cost_cents')
+            .eq('family_id', familyId).eq('child_wallet_id', body.childWalletId!).order('asset_id').range(from, to),
+        ),
         supabase.from('invest_assets').select('id, price_cents'),
       ]);
       const prices: PriceMap = Object.fromEntries((assets ?? []).map((a) => [a.id, a.price_cents]));

@@ -286,3 +286,55 @@ is no job that never runs and no schedule pointing at a 404. Verified by set
 comparison of all three sources.
 
 - **Status:** VERIFIED
+## Sweep 4 — the question S-01 forces on the whole schema
+
+S-01 existed because a policy had `USING` and no `WITH CHECK`. Asked of all 175
+UPDATE policies in the replayed catalogue: **13 have no `WITH CHECK`.**
+
+**13 is not 13 findings, and the reason is worth stating.** When `WITH CHECK` is
+absent Postgres evaluates `USING` against the NEW row — so
+`can_manage_family(family_id)` as a *single* predicate still forces the new row
+into a family the caller manages. Eleven of the thirteen are that shape and are
+safe: `assistant_links`, `call_logs`, `daily_insights`, `families`,
+`family_communications`, `family_signals`, `family_tree_nodes`,
+`front_desk_settings`, `home_briefs`, `moment_activations`,
+`reasoning_snapshots`.
+
+The dangerous shape is a **disjunction**, where one branch pins a column that is
+not the authorization column — S-01's `lower(email) = jwt email` while
+`family_id` and `role` moved freely. Two of the thirteen have a broader surface:
+
+### [CLAUDE-1][LOW][SECURITY] `notifications_update` can convert a personal notification into a family-wide one
+- **Policy:** `((user_id = auth.uid()) OR ((user_id IS NULL) AND is_family_member(family_id)))`
+- A caller may write their own notification row and, setting `user_id` to NULL,
+  satisfy the second branch — turning a notification addressed to them into one
+  addressed to the whole family. They must already be a member of that family,
+  so nothing crosses a tenant. Recorded for completeness, not urgency.
+- **Status:** OPEN
+
+### [CLAUDE-1][MEDIUM][SECURITY] A user can rewrite their own `profiles.email`, and an admin flow resolves accounts by it
+- **Policy:** `profiles_update_self` — `USING (id = auth.uid())`, no `WITH CHECK`
+- **Evidence:** as `authenticated`, `update public.profiles set email='…' where id = auth.uid()` → `UPDATE 1`.
+  `profiles` has **no unique index on `email`** — only `profiles_pkey` on `id`.
+- **What it does NOT reach:** `is_super_admin()` reads
+  `auth.jwt()->>'email'` against the `super_admins` table, and
+  `isSuperAdminEmail` reads `auth.user.email` from the JWT. **Neither consults
+  `profiles.email`, so this is not an escalation** — checked specifically,
+  because that is the version of this finding that would have mattered.
+- **What it does reach:** `app/(app)/admin/actions.ts:104` resolves a family
+  owner by `.from('profiles').eq('email', …)` during super-admin family
+  creation. Two accounts may now carry the same address, and `maybeSingle()`
+  over a duplicate returns `PGRST116`. The realistic harm is a super admin
+  creating a family for the wrong account, not an attacker reaching an existing
+  one.
+- **Fix:** `profiles.email` should be maintained from `auth.users` rather than
+  written by the user — the upsert in `lib/server/profiles.ts` already does that
+  — so the column belongs outside the self-update policy, with a unique index.
+- **Status:** OPEN
+
+### [CLAUDE-1][INFO][SECURITY] No second S-01
+Of 175 UPDATE policies, 13 lack `WITH CHECK`; 11 are single family-scoped
+predicates and therefore safe by Postgres's own default; the two above are
+recorded and neither is an escalation. **The invite policy was the only one
+where a disjunction let a caller move a row into a scope they did not hold.**
+- **Status:** VERIFIED

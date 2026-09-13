@@ -81,6 +81,7 @@ deliberately **not applied** to production.
 | **O-01** | A child could read, change and delete the family's stored card PIN. `family_credentials` allows categories `card` and `pin`, stores `secret` as plain text, and all four policies were `is_family_member`. Proved: a `child` on an `aal1` session READ the PIN, UPDATED it, DELETED the row. | **Fixed** — `0297`, **not applied to production** |
 | **I-01** | A social restriction could be removed by the person it restricted. Deleting the override row restores the higher default, returning `publish_posts` to someone a parent deliberately stopped. | **Fixed** — `0296`, **not applied to production** |
 | **S-01** | **A guest could accept an invite as a parent.** `invites_update` was created with a `USING` clause and **no `WITH CHECK`**; Postgres then reuses `USING` as the write check, and that clause's invitee branch constrains exactly one column — `email`. So the invited person could rewrite `family_id` and `role` on their own row, and `accept_invite()` (SECURITY DEFINER) copies both straight into `family_members`. Found by **Claude-3**, reproduced end to end by Claude-1: a babysitter invited as `guest` issued one `update invites set role='parent'`, accepted through the ordinary flow, and **joined the household as a parent**. No second family, no guessed UUID — the `family_id` is in her own invite row, which `invites_select` lets her read. `authenticated` holds UPDATE on the table by Supabase's default privileges, so it is one PostgREST PATCH with no app code involved. | **Fixed** — `0298`, **not applied to production** |
+| **Q-01** | **A child's spendable balance was totalled from part of the ledger, and spends raced.** `bucketBalanceCents` fetched the whole `wallet_transactions` history over PostgREST with **no bound** and reduced it in JavaScript. PostgREST caps at `db-max-rows`, so on a busy bucket it totalled the first page — **Claude-4 measured $92.00 reported against a real $40.00** on 1,052 rows. It also read-then-inserted with no lock: **two simultaneous $8 spends against $10 both posted, balance −$6.00**. Six other money operations go through locking RPCs; this was the one spend path that did not, and `requestSpendAction`'s own docstring says *"Never overdraws"*. | **Half fixed** — the read is paged (deployable, no migration); the race needs an RPC |
 | **U-01** | **The family calendar put every event on the wrong day outside UTC.** Day columns were keyed from a *local-midnight* `Date` through `toISOString()`; events from their true instant, also through `toISOString()`. Those agree only at offset zero. Found by **Claude-2**, replayed by Claude-1: in `Europe/Amsterdam` and `Asia/Tokyo` **0 of 7** days matched their own column and the seventh day's events keyed to a date no column carried, so they **did not render at all**; in `America/New_York` events from 21:00 and in `America/Los_Angeles` from 19:00 landed a column late. Six of the eleven shipped locales are UTC+1/+2. | **Fixed** — `lib/time/local-day.ts` + 19 guard cases |
 
 **All three fixes are authored, replay clean, and are gated behind F5. Until the
@@ -303,6 +304,17 @@ all five webhook families verify and dedupe · 36 `.or()` sites non-injectable �
 `active_family_id` and `next=` all re-derived server-side · MFA, sign-out, the
 OAuth callback and the SSRF guards each tried and did not yield.
 
+**Every UPDATE policy asked S-01's question.** 175 policies; **13 have no
+`WITH CHECK`**, and 13 is not 13 findings: absent `WITH CHECK` means Postgres
+evaluates `USING` on the NEW row, so a *single* `can_manage_family(family_id)`
+still forces the row into a family the caller manages. Eleven are that shape and
+safe. The dangerous shape is a **disjunction** whose branch pins a column other
+than the authorization one — and **the invite policy was the only one**.
+`notifications_update` can turn a personal notification into a family-wide one
+(low), and `profiles_update_self` lets a user rewrite their own `email` with no
+unique index (medium) — checked specifically against `is_super_admin()`, which
+reads the **JWT** email and not `profiles.email`, so it is not an escalation.
+
 - **Tenancy**: `is_family_member(family_id)` is membership-WIDE by design, which
   is correct for a parent with two households — and means the application filter
   is what narrows a query to one. Two routes did not supply it (**K-01**,
@@ -348,7 +360,34 @@ scans at 700k rows; now index scans. **F-008**/**F-011**/**F-013** — the
 PostgREST row ceiling, which is a correctness *and* performance defect.
 **M-01** — shared-cache headers.
 
-*Further findings consolidated from `audit/claude-4.md` — worker running.*
+**Claude-4: 8 sweeps, 24 findings**, every money claim raced on a 310-migration
+replay with two connections genuinely in flight. Detail in `audit/claude-4.md`.
+
+**Q-01 is the row ceiling again, on money.** Pass B recorded it three times —
+**F-008** (six nightly jobs silently stopped at 1,000 rows), **F-011** (the fix
+for F-008 had the same defect), **F-013** (59 reads asked for more rows than the
+server would ever return) — and `tests/no-limit-above-the-row-cap.test.ts` was
+written to close it. That guard looks for `.limit(n)` where n exceeds the cap,
+so a read with **no `.limit()` at all** is invisible to it. Its own header names
+the consequence it could not see: *"wallet balances totalled from part of the
+ledger"*.
+
+Six ledger totals were unbounded and all six are now paged: `bucketBalanceCents`
+and the second balance derivation in `lib/wallet/server.ts`, the invest bucket
+balance, the savings-goal progress total, the invest portfolio, and the holdings
+the Money Mentor is told about.
+
+**A count not reported:** the first sweep for this flagged **nine** sites, and
+**six were `.insert()` or `.update()` chains** — a write has no row ceiling to
+exceed. The guard now requires `.select(`.
+
+**Still open — the race.** `bucketBalanceCents` reads and `debitSpendBucket`
+inserts, with nothing between them. `wallet_decide_spend` is the shape to copy:
+it locks the bucket `for update`, recomputes the total in SQL, and refuses with
+`insufficient_funds`. It cannot be reused as-is because it decides an existing
+approval row rather than posting a fresh spend, so this needs its own RPC — and
+a migration, behind **F5**. Authoring a money RPC without being able to race it
+end to end would be worse than recording it, so it is recorded.
 
 ---
 
@@ -446,6 +485,8 @@ only by reverting a fix to confirm the guard went red:
 | A probe granted itself privileges and left them, so the suite's answer depended on what ran before it (**F-015**) | running the suite twice |
 | The money-safety probe asserted a concurrency it never tested (**F-019**) | reading what it actually did |
 | `tests/route-plan-gate.test.ts` asserts each route's **source text** — that `refuseUnlessEntitled(` was typed, not that it refuses anyone. Three of its twenty rows named hrefs the catalog did not contain, so the gate they assert returned `allowed: true` for every family. Green on all three, and would stay green with the catalog emptied | **Claude-4**, from the behavioural side |
+| `tests/wallet-allowance-persistence.test.ts` asserts the **exact text** of the defective allowance update, so the one-line claim predicate that stops a double-pay turns the suite red. The test blocks its own fix | **Claude-4**, by applying the fix to a scratch copy |
+| `tests/no-limit-above-the-row-cap.test.ts` checks `.limit(n > cap)` and is structurally blind to a read with **no limit at all** — which is how a wallet balance came to be totalled from one page | Claude-1, from Q-01 |
 | **The 20-probe boundary suite was green over S-01 the whole time.** It asserts default-deny — can family B reach family A's rows — and never that a *granted* branch pins the columns it does not intend to grant. An invitee legitimately reaching her own row is the granted branch; what she may then WRITE into it was never asked | **Claude-3**, from the exploit |
 | A route-level scan for cron idempotency reported **11 of 24 routes with none** — including `notifications`, the one route **F-014** already proved idempotent. It dedupes inside `generateFamilyNotifications` on `related_id`; the mechanism is not visible at the route's own level | reading the helper, before the number was written down |
 
@@ -461,6 +502,14 @@ predating the catalog keep working — so both were free to every family while t
 nav advertised them as Basic+ and the pricing grid listed neither. Found by
 **Claude-4**; verified and fixed by Claude-1, with two guards. Details in
 `audit/claude-4.md`.
+
+**Claude-4 also found:** `/dashboard/home` + 6 sub-pages are sold as Plus on
+`/pricing`, locked at Plus in the sidebar, and opened at Basic by
+`requirePlanLevel(1)` — so a Basic family opens a Plus screen where every AI
+button answers 403. And the **Experience Scorecard** is in every family's
+sidebar at `minLevel: 0` while **nothing anywhere writes `experience_audits`**;
+its only reachable state is an empty state reading *"Run
+seed_experience_audits_one_family.sql to populate a baseline."*
 
 Established: the AI Assistant (**L-01**) — a permanently pinned sidebar button
 that produced a billing upsell for a feature the Free plan sells. `AI_MONTHLY_ALLOWANCE`
@@ -515,7 +564,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,193 files / 13,703 tests
+npx vitest run                         # 1,194 files / 13,707 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 311 migrations, 0 failed
