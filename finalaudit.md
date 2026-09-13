@@ -2940,3 +2940,43 @@ now asserts the components call `familyMediaPath()`, the same correction made
 once before in this repository when `wallet-money-action-boundaries` pinned a
 local helper by name. Its third file, the marketplace uploader, writes to a
 different bucket and still rolls its own, so it keeps the original assertion.
+
+---
+
+## Observed and not fixed: a CI check that passes on cache luck
+
+`tests/e2e/marketing-public.spec.ts:11` — *"the mobile menu becomes usable when
+its client code is ready"* — failed once on #510's merge head and passed on a
+cold re-run. The mechanism is worth recording, because the next person to see it
+will otherwise call it a flake and re-run, which is what happened here.
+
+The test intercepts `/_next/static/*.js` to hold hydration back, then asserts it
+actually held something:
+
+```ts
+await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => { heldScripts += 1; … });
+await slowPage.goto('/', { waitUntil: 'commit' });
+await expect.poll(() => heldScripts).toBeGreaterThan(0);   // failed: 0
+```
+
+`beforeEach` has already navigated the `page` fixture to `/`, and the test then
+opens `context.newPage()`. Both share one `BrowserContext`, so the chunks can be
+served from that context's HTTP cache with **no network request** — the route
+handler never fires and `heldScripts` stays 0. Playwright's own retry reuses the
+same context, which is why `Retry #1` reproduced it rather than clearing it; a
+fresh CI container, with a cold cache, passed.
+
+So the assertion measures *whether a request happened*, which depends on cache
+state the test does not control. It is not wrong about the behaviour it targets —
+a menu that stays inert until its code arrives — it is just not reliably
+exercising it. Roughly one run in some number silently tests nothing, and
+occasionally fails outright.
+
+**Not fixed here, deliberately.** It is green, it belongs to no finding in this
+document, and changing a passing test on someone else's branch to satisfy a
+hypothesis is how an audit starts widening into work nobody asked for — the same
+reason `endEmergencyAction`'s missing audit row is recorded above rather than
+built. The fix, when someone wants it, is one line: open the slow page in a
+**fresh context** (`browser.newContext()`) rather than `context.newPage()`, so
+the interception is deterministic. That strengthens the test rather than
+relaxing it, which is the only acceptable direction.
