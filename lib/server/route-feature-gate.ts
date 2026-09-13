@@ -9,10 +9,10 @@ type DB = SupabaseClient<Database>;
 /**
  * Refuses a route handler whose feature the family does not have.
  *
- * These endpoints sit behind pages that are `requireFeature`-gated, and each
- * one calls a model. The page refused; the endpoint behind it did not, so the
- * fetch was the bypass — the same shape as the family @bubaly.com address and
- * the Autopilot cron, on a surface that costs money per request.
+ * These endpoints sit behind pages that are `requireFeature`-gated. The page
+ * refused; the endpoint behind it did not, so the fetch was the bypass — the
+ * same shape as the family @bubaly.com address and the Autopilot cron. Most of
+ * them call a model, which is the surface where it costs money per request.
  *
  * `hrefs` is the feature (or features) the endpoint serves; a caller entitled to
  * ANY of them may proceed. Several endpoints are shared by two modules, and
@@ -40,7 +40,7 @@ export async function refuseUnlessEntitled(
       if (entitlement.allowed) return null;
       outcomes.push({ reason: entitlement.reason, needLevel: entitlement.needLevel });
     } catch (error) {
-      console.error('[ai-feature-gate] plan read failed', { href, error });
+      console.error('[route-feature-gate] plan read failed', { href, error });
       return NextResponse.json(
         { error: 'Bubaly could not confirm your plan right now. Try again in a moment.', code: 'unavailable' },
         { status: 503 },

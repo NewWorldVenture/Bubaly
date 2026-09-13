@@ -53,7 +53,7 @@ Nothing is left unexamined or unassigned.
 | F15 | Family Autopilot (Plus) ran nightly for *every* family — both things that run it had no plan check | High | **Fixed** |
 | F16 | 24 of 62 paid features were enforced only by the sidebar padlock — the URL was the bypass | High | **Fixed** |
 | F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
-| F18 | 14 AI endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, on the surface that costs money per call | High | **Fixed** |
+| F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
 
 ---
@@ -712,7 +712,7 @@ drift again. Only the five routes that are not catalog features at all
 nothing to say about them. A test pins that the derivation stays derived: adding
 a hand-written entry that contradicts the catalog fails it.
 
-## F18 — AI endpoints behind gated pages had no gate *(High, fixed)*
+## F18 — Endpoints behind gated pages had no gate *(High, fixed)*
 
 Thirty-nine routes live under `/api/ai`. Every one of them calls a model, which
 is the only surface in this application that costs money per request. Of those:
@@ -751,12 +751,33 @@ and the page that hosts it, not by matching names:
 | `ai/trip` | `modules/trip-intel-module` | `/dashboard/trip-intel` |
 | `ai/auto/accident` | `auto/accident-client` | `/dashboard/auto` |
 
-All fourteen now refuse through `refuseUnlessEntitled`, which resolves through
+The same sweep run outside `/api/ai` found six more, most of which also call a
+model:
+
+| Endpoint | Called from | Page it serves |
+|---|---|---|
+| `behavior/insight` | `modules/behavior-module` | `/dashboard/behavior` |
+| `weekend/discover` | `modules/weekend-module` | `/dashboard/weekend` |
+| `vacations/ai`, `vacations/weather` | `vacations/trip-concierge`, `trip-weather` | `/dashboard/vacations` |
+| `social/ai` | `social/studio-form` | `/dashboard/social` |
+| `notifications/generate` | `modules/notifications-module` | `/dashboard/notifications` |
+
+All twenty now refuse through `refuseUnlessEntitled`, which resolves through
 the same function the page does. The refusal happens **before the rate limiter
 and before the provider call**, which the tests pin explicitly: a gate placed
 after the model would refuse the family and still have paid for the answer.
 `ai/assist` is served by two modules, so it accepts either — requiring both
 would refuse someone the page in front of them allows.
+
+Two more were checked and deliberately left alone. `/api/paperwork/capture` and
+`/api/paperwork/link` are reached from `/capture`, which is not a catalog
+feature, so there is no one feature a call to them belongs to — the same
+reasoning that left `family_milestones` open in F16. `/api/assistant` and
+`/api/assistant/alexa` are unauthenticated **by design** and correctly so: the
+token is the authorization (like the ICS feeds), they rate-limit by IP *before*
+the token lookup so the endpoint cannot be used to guess tokens at speed, and
+the Alexa one verifies Amazon's signature and answers a bare 403 when it cannot
+be proven — with no speech, so a prober learns nothing.
 
 One near-miss worth recording. `components/marketing/switching-band.tsx` appears
 in a grep for `/api/ai/flyer`, which looked for a moment like a public marketing

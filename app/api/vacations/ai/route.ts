@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('ai.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not.
+  // Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/vacations']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-vacations:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
     { error: t('ai.tooManyTripAiRequests') },

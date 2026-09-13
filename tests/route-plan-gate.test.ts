@@ -112,7 +112,7 @@ describe('an AI endpoint refuses before it spends anything', () => {
   });
 });
 
-describe('every AI endpoint behind a gated page carries the gate', () => {
+describe('every endpoint behind a gated page carries the gate', () => {
   // The pairing is the finding: each route serves a page that refuses the same
   // families it did not. Removing a line here has to be deliberate.
   const GATED: Record<string, string[]> = {
@@ -130,6 +130,14 @@ describe('every AI endpoint behind a gated page carries the gate', () => {
     'ai/resolve-conflict': ['/dashboard/conflicts'],
     'ai/savings': ['/dashboard/subscriptions'],
     'ai/trip': ['/dashboard/trip-intel'],
+    // Not under /api/ai, and the same finding: each serves a gated page, and
+    // most of them call a model too.
+    'behavior/insight': ['/dashboard/behavior'],
+    'weekend/discover': ['/dashboard/weekend'],
+    'vacations/ai': ['/dashboard/vacations'],
+    'vacations/weather': ['/dashboard/vacations'],
+    'social/ai': ['/dashboard/social'],
+    'notifications/generate': ['/dashboard/notifications'],
   };
 
   const read = (route: string) => fs.readFileSync(path.join(process.cwd(), 'app/api', route, 'route.ts'), 'utf8');

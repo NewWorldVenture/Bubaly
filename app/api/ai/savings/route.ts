@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { refuseUnlessEntitled } from '@/lib/server/ai-feature-gate';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';

@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
-import { refuseUnlessEntitled } from '@/lib/server/ai-feature-gate';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
 import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
