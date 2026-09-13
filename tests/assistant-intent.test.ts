@@ -117,10 +117,10 @@ describe('speech an assistant actually reads well', () => {
   });
 
   it('confirms a capture by naming what it became', () => {
-    expect(captureSpeech({ text: 'milk', kind: 'shopping', explicit: true })).toBe('Added milk to the shopping list.');
-    expect(captureSpeech({ text: 'call the dentist', kind: 'task', explicit: true })).toBe('Added a task: call the dentist.');
-    expect(captureSpeech({ text: 'school play', kind: 'event', explicit: true })).toBe('Added school play to the calendar.');
-    expect(captureSpeech({ text: 'boiler noise', kind: 'note', explicit: true })).toBe('Noted: boiler noise.');
+    expect(captureSpeech({ text: 'milk', kind: 'shopping', explicit: true, startsAt: null, allDay: false, dueDate: null })).toBe('Added milk to the shopping list.');
+    expect(captureSpeech({ text: 'call the dentist', kind: 'task', explicit: true, startsAt: null, allDay: false, dueDate: null })).toBe('Added a task: call the dentist.');
+    expect(captureSpeech({ text: 'school play', kind: 'event', explicit: true, startsAt: null, allDay: false, dueDate: null })).toBe('Added school play to the calendar.');
+    expect(captureSpeech({ text: 'boiler noise', kind: 'note', explicit: true, startsAt: null, allDay: false, dueDate: null })).toBe('Noted: boiler noise.');
   });
 
   it('repeats back what it heard when it did not understand', () => {

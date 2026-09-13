@@ -51,101 +51,21 @@ export const DEFAULT_SCHEDULE: RecurringAdSchedule = {
   timezone: 'UTC',
 };
 
-const MINUTES_PER_DAY = 24 * 60;
 /** A year of days. Long enough for any cadence here, short enough to always end. */
 const MAX_LOOKAHEAD_DAYS = 400;
 
-export function isValidTimezone(timezone: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-type LocalParts = { year: number; month: number; day: number; hour: number; minute: number };
-
-const partsCache = new Map<string, Intl.DateTimeFormat>();
-function formatterFor(timezone: string): Intl.DateTimeFormat {
-  let dtf = partsCache.get(timezone);
-  if (!dtf) {
-    dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    });
-    partsCache.set(timezone, dtf);
-  }
-  return dtf;
-}
-
-/** The wall-clock reading an observer in `timezone` sees at `instant`. */
-export function localPartsAt(instant: Date, timezone: string): LocalParts {
-  const parts: Record<string, string> = {};
-  for (const part of formatterFor(timezone).formatToParts(instant)) parts[part.type] = part.value;
-  return {
-    year: Number(parts.year),
-    month: Number(parts.month),
-    day: Number(parts.day),
-    // 'en-US' with hour12:false renders midnight as 24 in some ICU versions.
-    hour: Number(parts.hour) % 24,
-    minute: Number(parts.minute),
-  };
-}
-
-/** Zone offset in ms at a given instant (positive east of UTC). */
-function offsetMsAt(instant: Date, timezone: string): number {
-  const p = localPartsAt(instant, timezone);
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - instant.getTime();
-}
-
-/**
- * The instant at which the clock in `timezone` reads the given local time.
- *
- * Returns null when that reading never happens — the hour skipped by
- * spring-forward. The caller decides what to do about it rather than being
- * handed a silently wrong instant.
- *
- * Two passes: the first guesses using the offset at the naive instant, the
- * second corrects it using the offset actually in force there. That converges
- * for every real zone, and the verification step catches the gap.
- */
-export function zonedLocalToInstant(
-  year: number, month: number, day: number, minutes: number, timezone: string,
-): Date | null {
-  const hour = Math.floor(minutes / 60);
-  const minute = minutes % 60;
-  const naive = Date.UTC(year, month - 1, day, hour, minute);
-  let ts = naive - offsetMsAt(new Date(naive), timezone);
-  ts = naive - offsetMsAt(new Date(ts), timezone);
-  const check = localPartsAt(new Date(ts), timezone);
-  const matches = check.year === year && check.month === month && check.day === day
-    && check.hour === hour && check.minute === minute;
-  return matches ? new Date(ts) : null;
-}
-
-/**
- * The instant for a local time, moved forward when that time does not exist.
- *
- * An ad set for 02:30 must still post on the morning the clocks jump from
- * 02:00 to 03:00 — at 03:00, the first moment that exists — rather than
- * vanishing for that day. Searching minute by minute is bounded by the largest
- * real DST jump and costs nothing at this cadence.
- */
-function instantForLocalTime(
-  year: number, month: number, day: number, minutes: number, timezone: string,
-): Date | null {
-  for (let m = minutes; m < MINUTES_PER_DAY; m += 1) {
-    const instant = zonedLocalToInstant(year, month, day, m, timezone);
-    if (instant) return instant;
-  }
-  return null;
-}
-
-/** Days in a month, so "the 31st" means the 28th/29th/30th where that is the end. */
-export function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
+// The wall-clock primitives now live in `lib/time/zoned.ts`: the assistant
+// bridge needs the same arithmetic, and a marketing module is the wrong place
+// for two subsystems to reach into. Re-exported here because this module's
+// public surface — and its tests — already name them.
+export {
+  isValidTimezone, localPartsAt, zonedLocalToInstant, daysInMonth,
+  instantForLocalTime, type LocalParts,
+} from '@/lib/time/zoned';
+import {
+  isValidTimezone, localPartsAt, zonedLocalToInstant, daysInMonth, instantForLocalTime,
+  MINUTES_PER_DAY,
+} from '@/lib/time/zoned';
 
 /** Day of week (0 = Sunday) for a local calendar date. */
 function dayOfWeekFor(year: number, month: number, day: number): number {

@@ -1,4 +1,5 @@
 'use client';
+import { shouldPersistOnUnmount, resumeFrom } from '@/lib/library/progress';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Play, Pause, Bookmark, BookmarkCheck, Download, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
@@ -24,12 +25,17 @@ export type PlayableItem = {
   positionSeconds: number;
   saved: boolean;
   offline: boolean;
+  /** Finished, so "play again" starts at the beginning rather than the credits. */
+  completed: boolean;
 };
 
 export function ItemRow({ item }: { item: PlayableItem }) {
   const { success, error } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSaved = useRef(item.positionSeconds);
+  // Whether this row's audio was actually played in this visit. See the unmount
+  // effect below — without it, opening the page was enough to lose your place.
+  const touched = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(item.positionSeconds);
   const [saved, setSaved] = useState(item.saved);
@@ -51,9 +57,20 @@ export function ItemRow({ item }: { item: PlayableItem }) {
 
   // Write the position on unmount as well as on the interval, so closing the
   // tab mid-episode does not lose the last stretch of listening.
+  //
+  // `touched` is what makes that safe. `lastSaved` starts at the position the
+  // person had already reached, while an <audio> element that has never been
+  // played reports currentTime 0 — so for every part-listened episode on the
+  // page, the difference was the whole of their progress and unmount wrote a 0
+  // over it. Opening the library and walking away was enough to lose every
+  // bookmark in the house, silently, and the next visit started them at the top
+  // of each episode with nothing to say why.
   useEffect(() => () => {
     const audio = audioRef.current;
-    if (!audio || Math.abs(audio.currentTime - lastSaved.current) < 5) return;
+    if (!audio) return;
+    if (!shouldPersistOnUnmount({
+      touched: touched.current, currentTime: audio.currentTime, lastSaved: lastSaved.current,
+    })) return;
     void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
   }, [item.id]);
 
@@ -62,7 +79,8 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     if (!audio) return;
     if (audio.paused) {
       // Resume where this person left off, not where the last person did.
-      if (item.positionSeconds > 0 && audio.currentTime < 1) audio.currentTime = item.positionSeconds;
+      if (audio.currentTime < 1) audio.currentTime = resumeFrom(item);
+      touched.current = true;
       void audio.play().then(() => setPlaying(true)).catch(() => error('That audio could not be played.'));
     } else {
       audio.pause();
@@ -75,6 +93,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     const audio = audioRef.current;
     if (!audio) return;
     setPosition(audio.currentTime);
+    touched.current = true;
     if (audio.currentTime - lastSaved.current >= SAVE_EVERY_SECONDS) {
       lastSaved.current = audio.currentTime;
       void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });

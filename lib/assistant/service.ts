@@ -15,7 +15,10 @@ import {
   agendaSpeech, forgettingSpeech, nextSpeech,
   CAPTURE_NOT_ALLOWED_SPEECH, type AgendaEvent, type AgendaTask,
 } from './answers';
-import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, type AssistantIntent } from './intent';
+import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, boundText, type AssistantIntent } from './intent';
+import type { VoiceRoute } from '@/lib/voice/command-router';
+import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
+import { instantForLocalTime } from '@/lib/time/zoned';
 
 type Client = SupabaseClient<Database>;
 
@@ -30,6 +33,9 @@ export type AssistantLink = {
 
 export type AssistantOutcome = 'answered' | 'captured' | 'refused' | 'error';
 export type AssistantReply = { speech: string; outcome: AssistantOutcome; intent: string };
+
+/** Most items one spoken sentence can add, so a stuck microphone cannot fill a list. */
+const MAX_SPOKEN_ITEMS = 20;
 
 /** Longest utterance worth storing on the audit row. */
 const UTTERANCE_LOG_CHARS = 240;
@@ -80,25 +86,32 @@ export function dayKey(now: Date, timezone: string): string {
 
 /** Start and end instants of a local day, so "today" means the family's today. */
 export function dayWindow(now: Date, timezone: string, offsetDays = 0): { from: string; to: string } {
-  const base = new Date(now.getTime() + offsetDays * 86_400_000);
-  const key = dayKey(base, timezone);
-  const [year, month, day] = key.split('-').map(Number);
-  // Midnight local, resolved through the zone the same way the recurring-ads
-  // scheduler does: a fixed UTC offset would drift an hour across a DST change
-  // and quietly show the wrong day's events twice a year.
-  const guess = Date.UTC(year, month - 1, day);
-  const offsetAt = (instant: number) => {
-    const p: Record<string, string> = {};
-    const f = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    });
-    for (const part of f.formatToParts(new Date(instant))) p[part.type] = part.value;
-    return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour) % 24, Number(p.minute)) - instant;
-  };
-  let start = guess - offsetAt(guess);
-  start = guess - offsetAt(start);
-  return { from: new Date(start).toISOString(), to: new Date(start + 86_400_000).toISOString() };
+  // The day runs from local midnight to the NEXT local midnight — not from
+  // midnight plus 24 hours. A day with a DST change in it is 23 or 25 hours
+  // long, so the fixed span ran an hour into tomorrow every spring (reading out
+  // tomorrow's first appointment as today's) and stopped an hour short every
+  // autumn (silently dropping the last hour of the evening).
+  //
+  // The calendar arithmetic is done on the DATE PARTS, for the same reason:
+  // adding 86,400,000ms to an instant to mean "tomorrow" lands back on the same
+  // local date on a 25-hour day.
+  const today = dayKey(now, timezone).split('-').map(Number);
+  const shifted = new Date(Date.UTC(today[0], today[1] - 1, today[2] + offsetDays));
+  const next = new Date(Date.UTC(today[0], today[1] - 1, today[2] + offsetDays + 1));
+
+  // Midnight itself does not exist in a handful of zones that change at 00:00,
+  // so take the first minute that does rather than returning nothing.
+  const startOf = (d: Date) => instantForLocalTime(
+    d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), 0, timezone,
+  );
+  const from = startOf(shifted);
+  const to = startOf(next);
+  if (!from || !to) {
+    // Unreachable for any real zone; a bad timezone string is the only way here.
+    const fallback = new Date(Date.UTC(today[0], today[1] - 1, today[2] + offsetDays));
+    return { from: fallback.toISOString(), to: new Date(fallback.getTime() + 86_400_000).toISOString() };
+  }
+  return { from: from.toISOString(), to: to.toISOString() };
 }
 
 async function readEvents(
@@ -171,8 +184,12 @@ export async function answerAssistant(
     }
 
     case 'next': {
-      const window = dayWindow(now, link.timezone);
-      const events = await readEvents(supabase, link.family_id, window);
+      // "What's next" must be able to cross midnight. Looking only at today
+      // meant every evening answered "nothing", at exactly the hour a family is
+      // most likely to ask what the morning holds.
+      const today = dayWindow(now, link.timezone);
+      const tomorrow = dayWindow(now, link.timezone, 1);
+      const events = await readEvents(supabase, link.family_id, { from: today.from, to: tomorrow.to });
       const upcoming = events.filter((e) => e.all_day || new Date(e.starts_at).getTime() >= now.getTime());
       return { speech: nextSpeech(upcoming, link.timezone), outcome: 'answered', intent: 'next' };
     }
@@ -189,9 +206,9 @@ export async function answerAssistant(
       if (!link.scopes.includes('capture')) {
         return { speech: CAPTURE_NOT_ALLOWED_SPEECH, outcome: 'refused', intent: 'capture' };
       }
-      const saved = await saveAssistantCapture(supabase, link, intent.route.kind, intent.route.text, now);
+      const saved = await saveAssistantCapture(supabase, link, intent.route, now);
       if (!saved) throw new Error('capture write failed');
-      return { speech: captureSpeech(intent.route), outcome: 'captured', intent: `capture:${intent.route.kind}` };
+      return { speech: captureSpeech(intent.route, link.timezone, now), outcome: 'captured', intent: `capture:${intent.route.kind}` };
     }
 
     default:
@@ -208,15 +225,26 @@ export async function answerAssistant(
  * and failing for exactly the households who would most use it.
  */
 async function saveAssistantCapture(
-  supabase: Client, link: AssistantLink, kind: string, text: string, now: Date,
+  supabase: Client, link: AssistantLink, route: VoiceRoute, now: Date,
 ): Promise<boolean> {
-  const title = boundSpeech(text, 200);
+  const { kind } = route;
+  // boundText, not boundSpeech: what is stored is the family's words, not a
+  // version rewritten for a speaker.
+  const title = boundText(route.text, 200);
   if (!title) return false;
 
   if (kind === 'event') {
+    // The time the person actually said. `route.startsAt` is null only when no
+    // date or time was in the utterance, and `now` is the honest reading of
+    // "schedule a parent teacher conference" with nothing else given.
+    //
+    // This used to be `starts_at: now` unconditionally, with the parsed date
+    // thrown away a layer earlier — so "add soccer practice on Friday at 4pm"
+    // put soccer practice in the calendar at the moment you said it.
+    const startsAt = route.startsAt ?? now;
     const { error } = await supabase.from('calendar_events').insert({
-      family_id: link.family_id, title, starts_at: now.toISOString(),
-      all_day: false, category: 'general', created_by: link.user_id,
+      family_id: link.family_id, title, starts_at: startsAt.toISOString(),
+      all_day: route.allDay, category: 'general', created_by: link.user_id,
     } as never);
     if (error) { console.error('[assistant] event insert failed', error); return false; }
     return true;
@@ -237,17 +265,38 @@ async function saveAssistantCapture(
   if (kind === 'shopping') {
     const listId = await ensureList(supabase, link, 'grocery_lists', 'Groceries');
     if (!listId) return false;
-    const { error } = await supabase.from('grocery_items').insert({
-      family_id: link.family_id, list_id: listId, name: title, created_by: link.user_id,
-    } as never);
+
+    // People do not dictate one item at a time. "Add milk, eggs and bread to
+    // the shopping list" was becoming a single line reading "Milk, eggs and
+    // bread", which is not a shopping list — you cannot tick off the eggs.
+    //
+    // splitItems only breaks on "and" when a comma is already present, so
+    // "macaroni and cheese" survives as one thing; parseGroceryItem pulls a
+    // count out of "2 pints of milk" and leaves "2% milk" alone. Both have been
+    // in lib/capture/parse.ts all along, used by the typed capture box and not
+    // by the speaker.
+    const items = splitItems(title)
+      .slice(0, MAX_SPOKEN_ITEMS)
+      .map((raw) => parseGroceryItem(raw))
+      .filter((item) => item.name.trim().length > 0);
+    if (items.length === 0) return false;
+
+    const { error } = await supabase.from('grocery_items').insert(items.map((item) => ({
+      family_id: link.family_id, list_id: listId,
+      name: boundText(item.name, 200), quantity: item.quantity, created_by: link.user_id,
+    })) as never);
     if (error) { console.error('[assistant] grocery insert failed', error); return false; }
     return true;
   }
 
   const listId = await ensureList(supabase, link, 'todo_lists', 'To do');
   if (!listId) return false;
+  // "Remind me to renew the passports on Friday" is a task that is due on
+  // Friday. Dropping the day made it a task due whenever someone noticed it,
+  // which is the thing the person was asking not to have to do.
   const { error } = await supabase.from('todo_items').insert({
     family_id: link.family_id, list_id: listId, title,
+    ...(route.dueDate ? { due_date: route.dueDate } : {}),
   } as never);
   if (error) { console.error('[assistant] task insert failed', error); return false; }
   return true;

@@ -85,6 +85,7 @@ export default async function LibraryPage() {
       positionSeconds: mine?.position_seconds ?? 0,
       saved: mine?.saved ?? false,
       offline: mine?.offline ?? false,
+      completed: Boolean(mine?.completed_at),
     };
   };
 
