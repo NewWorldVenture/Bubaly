@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
+import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 import { settle } from '@/lib/supabase/settle';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateChannelResult } from '@/lib/contact-center/server';
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 // phone) plus the unified inbox everything the AI concierge handles routes into.
 export default async function ContactCenterPage() {
   const t = await getTranslations();
-  const ctx = await requirePlanLevel(2);
+  const ctx = await requirePlanLevel(FAMILY_EMAIL_MIN_PLAN_LEVEL);
   const familyId = ctx.active.familyId;
   const admin = createServiceClient();
 
