@@ -51,8 +51,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const eventClaimed = await claimGuardianCallback(supabase, 'inbound_voice', callSid);
-  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlHangup()));
+  const claim = await claimGuardianCallback(supabase, 'inbound_voice', callSid);
+  // Hanging up is right for a duplicate and wrong for an outage: it ends a real
+  // call and tells Twilio the callback succeeded. A 503 lets Twilio apply its
+  // own fallback for the call instead of this route silently dropping it.
+  if (claim === 'unavailable') return new NextResponse('', { status: 503 });
+  if (claim !== 'claimed') return twimlResponse(wrapTwiml(twimlHangup()));
   const finish = async (xml: string) => {
     await markGuardianCallbackProcessed(supabase, callSid);
     return twimlResponse(xml);
