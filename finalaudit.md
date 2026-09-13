@@ -1103,6 +1103,22 @@ That coupling introduced one hazard worth pinning: the matcher is `=== p` or
 | Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
 | Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
 
+### Checked during the entitlement sweeps, and sound
+
+These were examined because they were the *next plausible instance* of a shape
+this audit kept finding. None of them was one. Recording that matters: an audit
+that lists only defects says nothing about what was actually looked at, and the
+next person needs to know which stones were already turned.
+
+| Area | What was checked | Why it is sound |
+|---|---|---|
+| **Payment webhooks** | `/api/webhooks/stripe`, `/money`, `/resend` | All three verify signatures before touching anything — Stripe via `constructEvent`, Resend via HMAC with `timingSafeEqual`. All fail **closed** when the secret is unset (503, not "allow"). Stripe additionally bounds the body and dedupes by event id under a claim token. This matters more than it looks: every plan gate in F15–F18 rests on `subscriptions`, and this is what writes it |
+| **SSRF on user-supplied URLs** | `public-calendar-fetch`, `public-document-fetch`, `public-media-fetch` | Textbook-correct, including the case most implementations miss. Private/loopback/link-local CIDRs blocked; DNS resolved once and the address **pinned** into a per-request agent, so neither a rebinding race nor a pooled connection nor an environment proxy can reach an address that was never validated; `autoSelectFamily: false` so Happy Eyeballs cannot pick an unchecked one; https only |
+| **Public write surface** | 15 unauthenticated API routes | Every one that accepts a body bounds it and rate-limits by IP, most through `enforceRequestRateLimit` (durable, cross-instance) rather than memory alone. The two without a limiter are a token-keyed idempotent GET and a small CDN-cached read — neither has anything to abuse |
+| **AI memory read privacy** | "what Bubaly worked out about each person" | The panel tells a non-manager *"Only a parent or adult can see…"*, and for once the claim is kept where it should be: `listMemoryProfile` returns `traits: []` to anyone who is not a manager, so the empty state is the only state they can reach. Its comment reasons about the exact harm — *"A reliability score about a sibling is not a child's business"* |
+| **Notification recipients** | `notify()` → `resolveRecipients` | Scoped to `family_id = scope.familyId` and `is_active`, so no member can address a notification outside their own family |
+| **Role checks that looked missing** | `setLocationSharing`, `saveAISettingsAction`, the locator's place writes | All correct. The first writes only the caller's own row; the second is refused a layer down in `updateAISettings`; the third was already `isManager`-gated. Three of the four candidates in that sweep were already right — only the chore board (F20) was not |
+
 ## What remains, and who owns it
 
 Nothing here is unexamined. Each item is closed with a decision or assigned to
