@@ -4,12 +4,13 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 // The five generated inventories below are not carried in the working tree.
-// Together they were 982,328 lines — 91 percent of the audit branch's diff, and
-// enough that GitHub Actions created no check suite for the pull request at all,
-// so the branch could not be verified by CI. Git history is the archive; every
-// file is one `git show` away, and finalaudit.md's "Where the discovery dumps
-// live" records the command. Name the absent file and how to restore it, rather
-// than failing with a bare ENOENT that says only that a path does not exist.
+// Together they were 982,328 lines — 91 percent of the audit branch's diff, which
+// no reviewer can read. They are output, not source: nothing in the repository
+// generates them and only this script consumes them. Git history is the archive;
+// every file is one `git show` away, and finalaudit.md's "Where the discovery
+// dumps live" records the command. Name the absent file and how to restore it,
+// rather than failing with a bare ENOENT that says only that a path does not
+// exist.
 const ARCHIVED_AT = '79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9';
 const restoreHint = (name) =>
   `docs/final-audit/${name} is not in the working tree.\nRestore it with:\n` +

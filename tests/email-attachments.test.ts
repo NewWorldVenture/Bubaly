@@ -44,6 +44,10 @@ beforeEach(() => {
   });
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'America/New_York' }]);
   db.seed('family_contact_channels', [{ family_id: FAMILY, email_local: 'household', ai_concierge_enabled: false }]);
+  // The family @bubaly.com address is Family+ (FAMILY_EMAIL_MIN_PLAN_LEVEL), and
+  // the inbound route checks it. Seeded as a real subscription row rather than
+  // mocked away, so this suite still runs the actual entitlement resolution.
+  db.seed('subscriptions', [{ family_id: FAMILY, plan: 'plus', status: 'active' }]);
   state.db = db;
   transcribe = vi.fn(async (input: StructuredCompletionInput) => {
     const message = input.messages[0];

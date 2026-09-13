@@ -29,6 +29,9 @@ beforeEach(() => {
   mocks.submit.mockResolvedValue({ ok: true, data: { requestId: 'request-1', runId: 'run-1', planId: null, outcome: 'plan', summary: 'Ready', redirect: null } });
   db.seed('families', [{ id: 'ours', name: 'Ours', timezone: 'UTC' }]);
   db.seed('family_contact_channels', [{ id: 'channel', family_id: 'ours', email_local: 'ours', ai_concierge_enabled: false }]);
+  // Family+ is required to receive at a family address; seeded as a real
+  // subscription so the route's entitlement check runs for real here.
+  db.seed('subscriptions', [{ family_id: 'ours', plan: 'plus', status: 'active' }]);
   db.seed('family_facts', [{ id: 'school-contact', family_id: 'ours', category: 'contact', source: 'user', label: 'Oak School', value: 'office@oak.example', expires_at: null }]);
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });

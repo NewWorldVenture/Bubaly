@@ -4,8 +4,26 @@
 **This baseline is stale — see "Migrations added since this document's stated
 baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
 it, three of which gate features already deployed in the app.**
-All four GitHub Production secrets exist and connectivity works. The secret
-names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
+**Connectivity NO LONGER works, as of 2026-09-13.** The `Supabase production
+migrations` workflow fails before it reads anything, at `supabase link`:
+
+```
+Authorization failed for the access token and project ref pair:
+"Your account does not have the necessary privileges to access this endpoint."
+```
+
+Every apply and verify step after it is **skipped**, so no migration reaches
+production and the audit below cannot refresh itself. This is a regression, not
+the long-standing ledger gate: the 2026-09-07 run got *past* `link` and read the
+real catalogue (441 tables, 978 policies). Something changed for
+`SUPABASE_ACCESS_TOKEN` or `SUPABASE_PROJECT_REF` between those dates — the
+token was rotated or revoked, or its account lost access to the project.
+
+Fixing that alone is **not sufficient**: the baseline gate below still throws by
+design until `0004` is recorded, and repairing the ledger is a credentialed
+operator action (§4). Expect two steps, in that order.
+
+The secret names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
 `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
 in this document, logs, or reports. Production's migration ledger records only
 `0001-0003` despite existing schema. A missing ledger entry does **not** establish

@@ -28,6 +28,14 @@ import {
   MAX_ADDRESS, MAX_BODY as MAX_RECEIPT_BODY, MAX_PROVIDER_REF, MAX_SUBJECT,
   captureInboundWithUrgency, attemptUrgentDelivery,
 } from '@/lib/contact-center/urgent-delivery';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
+// main gated its inline urgent SMS on shouldNotifyFamily(intent), which is
+// routeInbound(intent) === 'escalate' and therefore exactly intent === 'urgent'.
+// captureInboundWithUrgency makes that same call one level down — it mints an
+// urgent receipt only when aiIntent is 'urgent' — and attemptUrgentDelivery
+// carries the send, with a retry and a 503 instead of a swallowed catch. The
+// decision did not move; the import did, so it is not re-added here.
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
 export const runtime = 'nodejs';
@@ -108,6 +116,29 @@ export async function POST(req: NextRequest) {
   }
   const familyId = routed.familyId;
   if (!familyId) return NextResponse.json({ ok: true, skipped: 'unknown address' });
+
+  // Family+ only, from the same constant the Contact Center screen and
+  // onboarding provisioning read. Provisioning is gated too, so in practice a
+  // family below the line has no address for anything to arrive at; this covers
+  // the one case that leaves — an address issued while the family was Family+
+  // and still resolvable after they downgraded.
+  //
+  // resolveFamilyPlanLevel THROWS when the subscription read fails, and that
+  // distinction is the whole point of catching it here: an unreadable plan is
+  // not an unentitled family. Answering 200 would tell the provider the message
+  // was handled and there would be no retry and no copy of it anywhere, so a
+  // failed read answers 503 exactly as the other reads in this route do.
+  let familyPlanLevel: number;
+  try {
+    familyPlanLevel = await resolveFamilyPlanLevel(admin, familyId);
+  } catch (error) {
+    console.error('[contact-center] email plan read failed', error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
+  if (familyPlanLevel < FAMILY_EMAIL_MIN_PLAN_LEVEL) {
+    console.warn('[contact-center] inbound email for a family below the email plan level', { familyId, familyPlanLevel });
+    return NextResponse.json({ ok: true, skipped: 'plan' });
+  }
 
   const [channelResult, familyResult] = await Promise.all([
     getOrCreateChannelResult(admin, familyId),
