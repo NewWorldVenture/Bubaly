@@ -13,6 +13,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { describeActionError } from '@/lib/supabase/errors';
 import { knowledgeGraphTarget, toCanonicalGraphRow } from '@/lib/twin/project';
+import { logAudit } from '@/lib/server/audit';
 
 // Tables a member may write through these generic actions, with the columns
 // each accepts. family_id / created_by / updated_by are always set server-side.
@@ -92,9 +93,9 @@ export async function createFamilyRecord(
     : writer.insert(payload);
   const { data, error } = await query.select('id').single();
   if (error) return actionFailure('create that record', error);
-  await supabase.from('audit_logs').insert({
-    family_id: ctx.active.familyId, actor_id: ctx.user.id,
-    action: 'create', resource: target, resource_id: data?.id ?? null,
+  await logAudit(supabase, {
+    familyId: ctx.active.familyId, actorId: ctx.user.id,
+    action: 'create', resource: target, resourceId: data?.id ?? null,
   });
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id: data?.id };
@@ -174,10 +175,10 @@ export async function resolveAutomationRun(
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
   if (error) return actionFailure('resolve that automation', error);
-  await supabase.from('audit_logs').insert({
-    family_id: ctx.active.familyId, actor_id: ctx.user.id,
+  await logAudit(supabase, {
+    familyId: ctx.active.familyId, actorId: ctx.user.id,
     action: decision === 'approved' ? 'approve' : 'skip',
-    resource: 'family_automation_runs', resource_id: id,
+    resource: 'family_automation_runs', resourceId: id,
   });
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };

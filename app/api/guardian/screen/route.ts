@@ -285,8 +285,11 @@ async function notifyFamily(
   memberProfile: { member_id: string } | null,
   opts: { commId: string; callerName: string; summary: string; urgency: string },
 ) {
+  // Non-fatal, but not invisible: the insert RESOLVES with an error rather than
+  // throwing, so this catch never saw a failed write and a screened emergency
+  // call could reach nobody with nothing logged.
   try {
-    await supabase.from('notifications').insert({
+    const { error } = await supabase.from('notifications').insert({
       family_id: familyId,
       user_id: null,
       type: 'system',
@@ -297,7 +300,10 @@ async function notifyFamily(
       related_type: 'guardian_communications',
       related_id: opts.commId,
     });
-  } catch { /* non-fatal */ }
+    if (error) console.error('[guardian] screening notification write failed', error);
+  } catch (error) {
+    console.error('[guardian] screening notification write threw', error);
+  }
 }
 
 function twimlResponse(xml: string): NextResponse {
