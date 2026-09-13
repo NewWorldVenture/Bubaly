@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
@@ -74,6 +74,75 @@ describe('the assistant bridge is reachable by the devices that speak to it', ()
     for (const path of ['/api/contact-center/sms', '/api/guardian/inbound/sms', '/api/cron/library-feeds']) {
       expect(await reaches(path, 'POST'), path).toBe(true);
     }
+  });
+});
+
+/**
+ * The ways a route can prove who is calling WITHOUT a browser session.
+ *
+ * A route that carries one of these has a caller that is not a person: a
+ * scheduler, a provider's webhook, a speaker in a kitchen. None of them has a
+ * Supabase cookie, so every one of them is answered by middleware with a 307 to
+ * the HTML login page unless the path is public — and the route, with all of
+ * its own careful authentication, never runs at all.
+ */
+const SELF_AUTHENTICATING = [
+  'hasCronAuthorization', 'hasInternalSecret',
+  'validateTwilioSignature', 'x-twilio-signature',
+  'readPresentedToken', 'looksLikeAssistantToken', 'verifyAlexaRequest',
+  'CONTACT_CENTER_INBOUND_SECRET',
+  'stripe-signature', 'svix-signature',
+];
+
+function selfAuthenticatingRoutes(dir = 'app/api', url = '/api'): { url: string; file: string; marker: string }[] {
+  const out: { url: string; file: string; marker: string }[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const next = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) {
+      // A dynamic segment still has to be routable; any concrete value will do.
+      const segment = /^\[.+\]$/.test(entry.name) ? 'x' : entry.name;
+      out.push(...selfAuthenticatingRoutes(next, `${url}/${segment}`));
+    } else if (entry.name === 'route.ts') {
+      const source = readFileSync(next, 'utf8');
+      const marker = SELF_AUTHENTICATING.find((m) => source.includes(m));
+      if (marker) out.push({ url, file: next, marker });
+    }
+  }
+  return out;
+}
+
+describe('a route that authenticates itself can be reached to do it', () => {
+  // THE GUARD FOR THE CLASS, not for the two paths that happened to be missing.
+  //
+  // This exact defect has now landed twice: once on the Family Contact Center's
+  // four inbound webhooks, and once on the assistant bridge — where it made the
+  // capability-token check and the whole Amazon signature verification
+  // unreachable code in production. Both times every test passed, because every
+  // test started inside the handler. Both times it presented as a provider or
+  // device problem rather than a routing one.
+  //
+  // Derived from disk rather than from a list, so the next route to carry a
+  // cron secret or a provider signature is covered on the day it is written.
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('finds the routes to check, rather than quietly finding none', () => {
+    // A scan that matches nothing is indistinguishable from a clean result.
+    expect(selfAuthenticatingRoutes().length).toBeGreaterThan(30);
+  });
+
+  it('answers every one of them without a session', async () => {
+    const unreachable: string[] = [];
+    for (const route of selfAuthenticatingRoutes()) {
+      // Either verb: the scheduled jobs export GET, the webhooks and the
+      // assistant export POST.
+      if (await reaches(route.url, 'POST') || await reaches(route.url, 'GET')) continue;
+      unreachable.push(`${route.url} (${route.file}, authenticates with ${route.marker})`);
+    }
+    expect(unreachable, 'these routes 307 to /login and can never run').toEqual([]);
   });
 });
 
