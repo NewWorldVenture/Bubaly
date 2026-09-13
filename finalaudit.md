@@ -6,7 +6,7 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 19 | `F1`–`F19` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
 
 **Where they touch, stated plainly.** Only two places:
@@ -33,19 +33,19 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F19)
+# Pass A — Public surface (F1–F20)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Nineteen findings, and the
+**Audit status: reopened, then complete again.** Twenty findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **13** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -90,6 +90,7 @@ Nothing is left unexamined or unassigned.
 | F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
 | F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
+| F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
 
 ---
 
@@ -865,6 +866,90 @@ they are the assistant itself (`ai`, `ai/chat`). For those, metering — not
 entitlement — is the right instrument, which is exactly the decision above.
 
 The numbers an owner needs are here; the choice is theirs.
+
+## F20 — A child could clear the chore board *(High, fixed)*
+
+The plan sweeps asked who may use a feature. This one asks who may use it
+*within* a family, and it is the same shape with a different subject.
+
+The chores board has four manager-only writes. Two were defended and two were
+manager-only on the screen alone:
+
+| Board action | UI | Server |
+|---|---|---|
+| Approve a submission | `manager &&` | ✅ trigger `chore_assignment_decision_guard` (0223) |
+| Pay a chore reward | `manager &&` | ✅ `isManager` in `payChoreRewardAction` + manager-only wallet RLS (0217) |
+| **Add a chore** | `manager &&` | ❌ nothing |
+| **Delete an assignment** | `manager &&` | ❌ nothing |
+
+Nothing behind the screen agreed. The actions took any signed-in member,
+`createChore` and `deleteChoreAssignment` scope by family and not by role, and
+the RLS on `chore_assignments` is `is_family_member` for **all four**
+operations (migration 0004 applies one membership-only policy set across 21
+family tables). So a child could delete any chore on the board — including one
+assigned to them — and mint chores assigned to a sibling, with points.
+
+### Why this is the gap and not the design
+
+The team had already reasoned about exactly this class. Migration 0223 closed
+`update chore_assignments set status='approved'` by a child, and its own header
+calls it "an accountability/integrity forgery, not a money-minting one", the
+sibling of the `chore_submissions` forge closed in 0222.
+
+Deleting the assignment reaches the same end from the other direction. A child
+who cannot forge *completion* can simply remove the row: the chore is gone from
+the board, and so is the record that it was ever owed. Closing one and not the
+other is not a decision anyone made — 0223 enumerates the statuses a member may
+drive and never mentions the delete.
+
+### The fix, and where it sits
+
+`isManager` in the two server actions, refusing before the service is reached.
+
+The action layer rather than the service, for two reasons. It is where the
+screen's claim lives; and it is where `payChoreRewardAction` — the board's third
+manager-only write, and the one that moves money — already puts it, so the
+board's writes now check in one consistent place. The service stays reachable by
+the assistant's path, which the Trust Engine governs separately and which this
+audit did not examine.
+
+**Defence in depth is the right follow-up and is deliberately not in this
+change.** The repo's own pattern (0222, 0223) is a database trigger alongside the
+code check, and a `can_manage_family()` guard on delete would be its natural
+sibling. But the migration ledger is the subject of F5: the baseline is
+unrepaired and the workflow cannot authenticate, so adding a migration that
+cannot be applied would enlarge a backlog that is already blocked. It belongs
+with the operator who fixes F5, and is recorded here rather than half-done.
+
+### The open half: who may advance a status
+
+`ChoreRow` carried the comment *"Assignee can advance their own chore's status;
+managers can act on any."* Neither half was true. The control renders for every
+member regardless of assignee, and `setChoreProgress` scopes by family only — so
+any member can advance any chore, including submitting a sibling's chore they
+did not do.
+
+That comment is now corrected to say what the code does, rather than the rule
+being implemented quietly. Enforcing "assignee, or a manager" is a product
+decision: it is a real restriction on a board families may drive
+collaboratively, and unlike the delete there is no screen-level claim being
+violated — the UI and the server already agree. It needs an owner's call, not a
+patch.
+
+### Three candidates checked and cleared
+
+Run against every component that gates UI on `isManager`, the same sweep also
+looked at:
+
+- `setLocationSharing` — no role check, and **correct**: it writes only the
+  caller's own `member_locations` row. A member turning their own sharing off is
+  the point.
+- `saveAISettingsAction` — no role check in the action, and **correct**:
+  `updateAISettings` refuses a non-manager in the service, one layer down.
+- `savePlace` / `deletePlace` / `setGeofenceEnabled` — already `isManager`-gated.
+
+Recording what the sweep cleared matters as much as what it caught: three of the
+four plausible instances were already right.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
