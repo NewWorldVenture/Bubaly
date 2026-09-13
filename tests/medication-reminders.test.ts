@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { medicationDueReminders, type MedLite, type DoseLogLite } from '@/lib/notifications/medication-reminders';
 import type { ScheduleLike } from '@/lib/medications/adherence';
+import { asWallClockIn } from '@/lib/time/zoned';
 
 // 2026-06-21 is a Sunday.
 const now = new Date(2026, 5, 21, 11, 0);
@@ -45,5 +46,39 @@ describe('medicationDueReminders', () => {
     expect(medicationDueReminders([med({})], [], [], userByMember, managers, now)).toHaveLength(0);
     // Schedule only on Mondays(1); 2026-06-21 is Sunday(0)
     expect(medicationDueReminders([med({})], [sched({ days_of_week: [1] })], [], userByMember, managers, now)).toHaveLength(0);
+  });
+});
+
+// The reminder cron runs on the server's clock, which is UTC. A dose slot is a
+// reading on the FAMILY's clock: a New York household's 08:00 pill is stored by
+// the browser at 12:00Z. Resolve that slot on the runtime's clock instead and
+// it lands at 08:00Z, matches no logged dose at all, and the family is told to
+// take a pill it swallowed four hours ago.
+describe('medicationDueReminders in a family zone', () => {
+  const zone = 'America/New_York';
+  const utcNow = new Date('2026-06-21T15:00:00.000Z'); // 11:00 Sunday in New York
+  const takenAtEight: DoseLogLite[] = [{ schedule_id: 's1', scheduled_for: '2026-06-21T12:00:00.000Z', status: 'taken' }];
+
+  it('recognises a dose the browser logged against the family clock', () => {
+    const out = medicationDueReminders(
+      [med({})], [sched({})], takenAtEight, userByMember, managers, asWallClockIn(utcNow, zone), zone,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('still reminds when that family clock has a dose genuinely outstanding', () => {
+    const schedules = [sched({ id: 's1', time_of_day: '08:00' }), sched({ id: 's2', time_of_day: '20:00' })];
+    const out = medicationDueReminders(
+      [med({})], schedules, takenAtEight, userByMember, managers, asWallClockIn(utcNow, zone), zone,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].body).toContain('1 dose today');
+    expect(out[0].body).toContain('next at 20:00');
+  });
+
+  it('reads the runtime clock and nags for the taken dose when no zone is passed', () => {
+    // The defect this zone argument exists to close — pinned so a caller that
+    // drops the zone fails here rather than in a household's notification tray.
+    expect(medicationDueReminders([med({})], [sched({})], takenAtEight, userByMember, managers, utcNow)).toHaveLength(1);
   });
 });

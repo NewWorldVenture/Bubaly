@@ -32,6 +32,11 @@ export interface MedReminder {
  * (not taken/skipped) dose scheduled for `now`'s local day. Member-specific
  * meds notify that member; whole-family meds fan out to every manager (or a
  * single family-wide row when there are none).
+ *
+ * `now` must already read as the family's wall clock (`asWallClockIn`) and
+ * `timezone` must be the family's zone, or the day, the weekday and the instant
+ * each logged dose is matched against are the runtime's — UTC on the cron — and
+ * a household outside UTC is reminded about doses it has already taken.
  */
 export function medicationDueReminders(
   meds: MedLite[],
@@ -40,6 +45,7 @@ export function medicationDueReminders(
   userByMember: Map<string, string | null>,
   managers: { user_id: string | null }[],
   now: Date,
+  timezone?: string | null,
 ): MedReminder[] {
   const schedulesByMed = new Map<string, ScheduleLike[]>();
   for (const s of schedules) {
@@ -54,7 +60,7 @@ export function medicationDueReminders(
     const medSchedules = schedulesByMed.get(med.id) ?? [];
     if (medSchedules.length === 0) continue;
 
-    const due = dosesForDay(medSchedules, doses, now);
+    const due = dosesForDay(medSchedules, doses, now, timezone);
     const pending = due.filter((d) => d.status === 'pending');
     if (pending.length === 0) continue;
 

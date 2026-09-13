@@ -72,7 +72,11 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 
 export function MedicationsModule() {
   const t = useTranslations();
-  const { familyId, userId, members, role } = useApp();
+  const { familyId, userId, members, role, family } = useApp();
+  // A dose slot is the family's 08:00, not the viewer's. Resolving it in the
+  // family's zone is what lets the reminder cron recognise a dose this
+  // browser logged; for a member sitting in that zone nothing changes.
+  const familyZone = family.timezone || 'UTC';
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
 
@@ -236,8 +240,8 @@ export function MedicationsModule() {
   const todayDoses = useMemo(
     () => dosesForDay(scheduleLikes, doses.filter((d) => d.family_id === familyId
       && meds.some((m) => m.id === d.medication_id && m.member_id === d.member_id))
-      .map((d) => ({ schedule_id: d.schedule_id, scheduled_for: d.scheduled_for, status: d.status })), today),
-    [scheduleLikes, doses, today, meds, familyId],
+      .map((d) => ({ schedule_id: d.schedule_id, scheduled_for: d.scheduled_for, status: d.status })), today, familyZone),
+    [scheduleLikes, doses, today, meds, familyId, familyZone],
   );
 
   const windowDoseLogs = useMemo(() => {
@@ -259,12 +263,12 @@ export function MedicationsModule() {
     }
     const med = latest.current.meds.find((m) => m.id === due.medicationId && m.family_id === familyId && m.is_active);
     const schedule = latest.current.schedules.find((s) => s.id === due.scheduleId && s.medication_id === med?.id && s.family_id === familyId);
-    const currentSlot = schedule && dosesForDay([schedule], [], new Date()).find((slot) => slot.slotKey === due.slotKey);
+    const currentSlot = schedule && dosesForDay([schedule], [], new Date(), familyZone).find((slot) => slot.slotKey === due.slotKey);
     if (!med || !currentSlot || (med.member_id && !latest.current.members.some((m) => m.id === med.member_id && m.family_id === familyId))) {
       toastError(t('medicationsModule.doseChanged'));
       return;
     }
-    const scheduledFor = doseSlotInstant(due.slotKey);
+    const scheduledFor = doseSlotInstant(due.slotKey, familyZone);
     if (!scheduledFor) return;
 
     // Find the exact unique slot, preserving a prior dose if its schedule time
@@ -441,7 +445,7 @@ export function MedicationsModule() {
                 const med = medById.get(due.medicationId);
                 if (!med) return null;
                 const key = due.scheduleId + due.slotKey;
-                const instant = doseSlotInstant(due.slotKey);
+                const instant = doseSlotInstant(due.slotKey, familyZone);
                 const targetUnavailable = !instant || (med.member_id && !members.some((member) => member.id === med.member_id && member.family_id === familyId))
                   || doses.some((dose) => dose.schedule_id === due.scheduleId && new Date(dose.scheduled_for).getTime() === new Date(instant).getTime()
                     && (dose.medication_id !== med.id || dose.member_id !== med.member_id));
