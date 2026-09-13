@@ -6,6 +6,7 @@ import { isSuperAdmin } from '@/lib/supabase/auth';
 import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
 import { SessionKeeper } from '@/components/auth/session-keeper';
+import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. It does two things: mounts the SessionKeeper so
@@ -14,7 +15,20 @@ import { SessionKeeper } from '@/components/auth/session-keeper';
 // whole app is gated behind the lock screen (not just the dashboard). It
 // intentionally does NOT enforce auth/redirects — each section's own layout
 // still does that — so this can never change sign-in behavior.
+// The authenticated app keeps the WHOLE catalogue. Its client components reach
+// 3,791 keys across 368 namespaces and call t() with a non-literal argument in
+// 96 places, so no static subset can be proved complete — and behind a login
+// there is no crawler and no first-visit cost to pay for it. The public
+// surfaces, which is where the bytes mattered, narrow instead.
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ScopedLocaleProvider namespaces="all">
+      <AuthenticatedShell>{children}</AuthenticatedShell>
+    </ScopedLocaleProvider>
+  );
+}
+
+async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;

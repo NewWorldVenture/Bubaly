@@ -5,6 +5,7 @@ import { ToastProvider } from '@/components/ui/toast';
 import { AndroidBackHandler } from '@/components/app/android-back-handler';
 import { LAUNCH_SCREENS, launchScreenHref, launchScreenMedia } from '@/lib/pwa/launch-screens';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
+import { ROOT_CHROME_SCOPE, scopeMessages } from '@/lib/i18n/scopes';
 import { getLocaleContext } from '@/lib/i18n/server';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
@@ -63,6 +64,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // paint is already in the visitor's language. Doing this in the browser would
   // flash English on every load for everyone outside the US.
   const { locale, source, messages } = await getLocaleContext();
+  // Only what the root chrome below renders. Every route group nests its own
+  // ScopedLocaleProvider, because this object is serialised into the RSC payload
+  // of every page — see lib/i18n/scopes.ts for what that was costing.
+  const chrome = scopeMessages(messages, ROOT_CHROME_SCOPE);
 
   return (
     <html lang={locale.code} dir={locale.dir} suppressHydrationWarning>
@@ -85,7 +90,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans antialiased">
         <AndroidBackHandler />
-        <LocaleProvider locale={locale} source={source} messages={messages}>
+        <LocaleProvider locale={locale} source={source} messages={chrome}>
           <ToastProvider>{children}</ToastProvider>
         </LocaleProvider>
       </body>
