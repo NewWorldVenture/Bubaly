@@ -5,7 +5,7 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: complete.** Thirteen findings. Seven fixed and shipped, one
+**Audit status: complete.** Fourteen findings. Seven fixed and shipped, one
 disproved and withdrawn, five closed as decisions or operator actions with the
 evidence and the next step recorded against each. Nothing is left unexamined or
 unassigned.
@@ -34,6 +34,7 @@ unassigned.
 | F11 | Five public pages had no `<h1>` at all | Medium | **Fixed** |
 | F12 | The 404 page ships no server-rendered markup | Low | **Closed — recorded, not worth the fix** |
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
+| F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Open — handled in #526, not duplicated here** |
 
 ---
 
@@ -438,6 +439,47 @@ so the trade-off is known rather than rediscovered.
 | Unresolved work markers | 38 `TODO`/`FIXME` in source; the substantive ones are migration-gated and explicitly marked "owner approval required", i.e. blocked behind F5. None independently closeable |
 | Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
 | Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
+
+## F14 — Nine sitemap URLs declare themselves non-canonical *(Low, handled elsewhere)*
+
+**Not my find.** A parallel audit session raised it on
+[#526](https://github.com/NewWorldVenture/Bubaly/pull/526); I verified it
+independently before recording it:
+
+```
+GET /blog?category=Parenting          -> 200
+     <link rel="canonical" href="https://www.bubaly.com/blog"/>
+```
+
+`app/sitemap.ts` emits one entry per blog category — 9 of them. Each answers 200
+but names `/blog` as its canonical, so the sitemap asks Google to index URLs the
+pages themselves declare are not the canonical version. A sitemap entry and a
+canonical pointing elsewhere are a contradiction; the entries are dropped from
+the index and the crawl budget is spent anyway.
+
+Same family as F1 — the sitemap claiming something the site does not support —
+and it is in this audit's scope. I missed it: I checked whether sitemap URLs
+**resolved**, which they do, and never checked whether they were **indexable**.
+Worth naming as a gap in my method, not just a gap in the sitemap.
+
+**Deliberately not fixed here.** #526 rewrites the same file with a broader
+`canonicalUrl()` — trailing-slash normalisation, per-segment percent-encoding,
+and refusal of query strings, fragments, non-relative paths and anything
+`robots.txt` disallows, reading that disallow list from `robots.ts` so the two
+cannot drift. That is a better fix than a second patch of mine would be, and two
+PRs rewriting `app/sitemap.ts` in different directions helps nobody.
+
+### Overlap with #526, stated plainly
+
+#526 independently found and fixed F1 (the 435 dead seed URLs) and F3 (the
+duplicate homepage). Its approach is broader on URL hygiene; mine has one
+property worth preserving in whichever lands second — `isAdvertisablePlatformPath()`
+applies **the same predicate the renderer uses** (`isSyntheticBlogSeedSlug`), so
+the sitemap and the blog page cannot drift apart again, which is the root cause
+F1 actually had.
+
+The rest of this branch — robots coverage, the seeded customer stories, the
+missing `<h1>`s, the brand-doubled titles — does not overlap #526 at all.
 
 ---
 
