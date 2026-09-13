@@ -10,14 +10,47 @@ import { expect, test, type Page } from '@playwright/test';
 const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
-const sources = Object.fromEntries([
+// Everything the loader below will be asked for that is not mocked. It throws
+// on any id it was not given, so a module missing here does not fail as a
+// missing module: the component never mounts, and all nine tests in this file
+// time out waiting for a textbox that was never going to render.
+//
+// That is exactly what happened when `lib/voice/command-router` gained an
+// import of `@/lib/time/zoned` for family-timezone arithmetic. Thirty seconds
+// of waiting, nine times, and nothing naming the cause.
+//
+// The list stays explicit — an E2E harness should say what it loads — but
+// `covers the module under test's real import graph` below now walks the
+// imports and fails immediately, by name, when this drifts again.
+const SOURCE_FILES = [
   'components/modules/voice-module.tsx', 'lib/capture/save.ts', 'lib/capture/parse.ts',
   'lib/voice/command-router.ts', 'lib/voice/transcript.ts', 'lib/supabase/errors.ts',
-].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(
+  'lib/time/zoned.ts',
+];
+const MOCKED = [
+  '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
+  '@/components/ui/button', '@/components/ui/input', '@/components/ui/states',
+  '@/components/app/page-header', '@/lib/utils/cn', '@/lib/analytics/use-journey',
+  '@/components/i18n/locale-provider', '@/lib/hooks/use-realtime-query',
+  '@/lib/hooks/use-speech-recognition', '@/lib/database.types',
+];
+const sources = Object.fromEntries(SOURCE_FILES.map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(
   process.env.CAPTURE_VOICE_BASELINE === '1' && file === 'components/modules/voice-module.tsx'
     ? execFileSync('git', ['show', `608c9307:${file}`], { encoding: 'utf8' }) : fs.readFileSync(file, 'utf8'),
   { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } },
 ).outputText]));
+
+/** Resolve an import the way the loader's id scheme does, or null if it is bare. */
+function resolveAlias(specifier: string, importer: string): string | null {
+  const relative = specifier.startsWith('./') || specifier.startsWith('../')
+    ? path.join(path.dirname(importer), specifier)
+    : specifier.startsWith('@/') ? specifier.slice(2) : null;
+  if (relative === null) return null;
+  for (const extension of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
+    if (fs.existsSync(`${relative}${extension}`)) return `${relative}${extension}`;
+  }
+  return null;
+}
 const catalogue = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
 const FAMILY = '11111111-1111-4111-8111-111111111111';
 const OTHER_FAMILY = '22222222-2222-4222-8222-222222222222';
@@ -107,6 +140,37 @@ async function fixture(page: Page) {
 }
 
 test.afterEach(async ({ page }) => { expect(await page.evaluate(() => window.__voiceCapture?.errors ?? [])).toEqual([]); });
+
+test('covers the module under test\'s real import graph', () => {
+  // Fails BY NAME when the app gains an import this harness does not provide,
+  // instead of nine tests timing out on a textbox that never rendered. Walks
+  // from the module under test through every `@/` import that resolves to a
+  // real file, and requires each one to be either loadable or deliberately
+  // mocked.
+  const queue = ['components/modules/voice-module.tsx'];
+  const seen = new Set(queue);
+  const missing: string[] = [];
+  while (queue.length) {
+    const file = queue.shift()!;
+    const id = `@/${file.replace(/\.tsx?$/, '')}`;
+    const provided = id in sources || MOCKED.includes(id);
+    if (!provided) { missing.push(`${id}  (add '${file}' to SOURCE_FILES, or mock it)`); continue; }
+    // Only follow what actually executes. A mocked id replaces the real module
+    // wholesale, so its own imports are never reached.
+    if (!(id in sources)) continue;
+    // Value imports only. `import type ... from` is erased by transpilation and
+    // never reaches the loader, so requiring the harness to provide those would
+    // be asking it to load modules that are not there at runtime.
+    for (const match of fs.readFileSync(file, 'utf8').matchAll(/^import\s+(?!type\s)[^;]*?from '([^']+)'/gm)) {
+      const next = resolveAlias(match[1], file);
+      if (!next || seen.has(next)) continue;
+      seen.add(next);
+      queue.push(next);
+    }
+  }
+  expect(missing, 'the fixture loader will throw on these and nothing will mount').toEqual([]);
+});
+
 
 test('confirmed capture and explicit earlier-family Undo use the checked original receipt', async ({ page }) => {
   const state = await fixture(page);
