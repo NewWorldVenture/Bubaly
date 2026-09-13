@@ -1,5 +1,334 @@
 # Bubaly — Final Audit
 
+# Executive Summary
+
+**87 findings across six passes.** This document is the consolidated record.
+The sections below are an **index**: each entry names a finding and links it to
+the pass that holds its evidence. The passes themselves follow, in full, and are
+never rewritten — a finding's detail, method and caveats live there.
+
+| Pass | Surface | Findings |
+|---|---|---:|
+| A | Public surface: marketing, SEO, crawler contract, entitlements | 21 |
+| B | Data layer: RLS, grants, nightly jobs, query plans, money concurrency | 20 |
+| C | Delivery and integration: page weight, routing, env contract, workflows | 10 |
+| D | Frontend and accessibility: the authenticated app | 14 |
+| E | Backend, auth and security: catalogue-verified RLS, 141 routes, storage | 9 |
+| F | QA, flows, performance, edge cases | 13 |
+
+**Where the project actually stands.**
+
+Most of what was found has been fixed. Passes A and B closed the large majority
+of their findings, and Pass C shipped and verified five changes in production on
+the day it ran. The public surface is in good shape: headers, structured data,
+image alt text, redirects, canonical URLs and the sitemap are all now correct
+and covered by tests that fail when they regress.
+
+Three things are not fine, and they compound:
+
+1. **There is no working path to apply a migration to production.** The
+   migrations workflow cannot authenticate (**F5**), and the forward-release
+   mechanism is pinned 38 migrations in the past (**F-C08**). Every migration
+   from `0255` to `0296` is written, reviewed, merged — and unapplied. This is
+   the single most important item in this document, because it is also what
+   blocks the fix for the next one.
+2. **A child can read the family password vault** (**F-E01**). Fixed by
+   migration `0296` with a probe CI runs, and inert until item 1 is resolved.
+3. **Authorization has a pattern of being drawn on the screen rather than in the
+   database.** F16, F18, F20, F21, F-003, F-006, F-E01 and F-E02 are the same
+   mistake in eight places: a control the UI enforces and the data layer does
+   not. Most are now fixed; **F-E02** (step-up MFA that no policy knows about)
+   is not.
+
+**What has not been examined**, stated plainly so the gaps are not mistaken for
+clean bills: no browser was run, so colour contrast, real tab order and
+screen-reader output are unverified (Pass D); migrations `0237`, `0239` and
+`0292` did not replay without the `vector` extension, so the marketing platform
+spine tables were not checked (Pass E); and every Pass E finding describes the
+committed migrations as replayed locally — if **F-001** holds, production may
+not carry even the policies verified correct.
+
+---
+
+# Critical Issues
+
+| | Finding | Status |
+|---|---|---|
+| **F-E01** | Every child can read, edit and delete the family password vault; `secret` is plaintext | **Fixed by `0296` + a CI probe — cannot reach production until F5/F-C08** |
+
+---
+
+# High Priority
+
+| | Finding | Status |
+|---|---|---|
+| F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
+| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **OPEN — owner** |
+| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
+| F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
+| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
+| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
+| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
+| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
+| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
+| F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
+| F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
+| F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
+
+---
+
+# Medium Priority
+
+F2, F4, F6, F7, F11, F17, F19 (Pass A) · F-002, F-004, F-005, F-007, F-008,
+F-009, F-010, F-011, F-012, F-013, F-014, F-015, F-016, F-018, F-019, F-020
+(Pass B) · F-C04, F-C07, F-C10 (Pass C) · F-D04–F-D10 (Pass D) · F-E04–F-E07
+(Pass E) · F-F04–F-F09 (Pass F).
+
+Still open among them: **F-C07** (19 undocumented env vars, including one whose
+absence silently rejects every inbound email), **F-C10** (the Expo app has no
+tests), **F19** (unmetered AI endpoints — a pricing decision), **F6** (family
+email built but not routed), and the Pass D/E/F entries listed in their own
+sections below.
+
+---
+
+# Low Priority
+
+F3, F8, F12, F13, F14 (Pass A) · F-C06, F-C09 (Pass C) · F-D11–F-D14 (Pass D) ·
+F-E08, F-E09 (Pass E) · F-F10–F-F13 (Pass F).
+
+---
+
+# Architecture
+
+- **F-C09** — Supabase credentials fail at first use, not at boot; a
+  misconfigured deploy degrades into scattered 500s. OPEN.
+- **Verified clean**: the server/client boundary holds (no client module
+  imports `createServiceClient` or the service-role key); the CSP matches every
+  host the browser actually calls; `npm audit --production` reports zero
+  advisories at every severity.
+
+---
+
+# Frontend
+
+Pass D in full. The root cause is **F-D10**: `.eslintrc.json` is
+`next/core-web-vitals` alone, which enables none of the `jsx-a11y` rules that
+describe F-D02, F-D03 and F-D06 — so `next lint` runs clean over ~1,000 files
+and the gap reads as a green light. Fixing the config is worth more than fixing
+any single finding beneath it.
+
+Also here: **F-D05** (19 authenticated pages render no `<h1>`; 11 render no
+heading at all), **F-D08** (all 354 authenticated pages share one loading
+skeleton), **F-D09** (ten components set state from an un-cancelled async
+effect), **F-D12** (two admin links point at routes that exist only at runtime).
+
+---
+
+# Backend
+
+**F-F01** (a capped read reporting success) is the most consequential, because
+it produces a *confidently wrong* answer about money rather than an error.
+**F-E09** (an authorization failure answering 500 rather than 403) and
+**F-F08** (`addFundsAction` writing the balance directly) sit alongside it.
+
+Pass B's twenty findings are the bulk of this area and are almost entirely
+closed.
+
+---
+
+# Database
+
+- **F-001 / F5** — the production ledger. The blocker everything else waits on.
+- **F-E01** — the vault policies. Fixed by `0296`.
+- **F-003** (`anon` held write grants on all five money tables), **F-006**
+  (cross-household AI job claiming), **F-018** (nine sequential scans),
+  **F-013** (fifty-nine over-sized reads) — all fixed.
+- **Verified**: no table is actually missing RLS once the catalogue is read
+  rather than grepped. A text scan claims 216 are; the catalogue says none.
+  Recorded because the grep result is a trap a later pass would fall into.
+
+---
+
+# Security/Auth
+
+| | Finding | Status |
+|---|---|---|
+| F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
+| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
+| F-E03 | `family-media` is a public bucket | OPEN |
+| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | OPEN |
+| F-E05 | `feedback-attachments` is a public bucket | OPEN |
+| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | OPEN |
+| F-E07 | Twilio signature verification is off outside production | OPEN |
+| F-E08 | Shared-secret comparisons are not constant time | OPEN |
+| F16, F18, F20, F21, F-003, F-006 | authorization drawn on screen rather than in the database | fixed |
+
+---
+
+# UX/Accessibility
+
+Pass D. **F-D01** (the lightbox) is the one a keyboard user hits first.
+**F-D07** — 92 destructive actions guarded only by `window.confirm()` — is the
+one with the widest blast radius. **F-F11** (a discarded signing error showing a
+parent a blank frame rather than a reason) belongs here too.
+
+**Unverified, not clean**: contrast, tab order and screen-reader output.
+
+---
+
+# Performance
+
+- **F-C03** — the i18n catalogue on every public page. Fixed: `/cookies`
+  266 KB → 20 KB gzipped, `/` 291 → 45 KB.
+- **F-C04** — `/blog` shipped all 1,048 posts to the browser. Fixed:
+  89 → 40 KB gzipped, verified in production.
+- **F-F03** — up to 240 sequential storage round trips on `/missions`. OPEN.
+- **F-F09** — unbounded concurrent fan-out to an external drive-time API. OPEN.
+- **F-018** — nine family-scoped reads doing sequential scans. Fixed.
+
+---
+
+# Mobile/Responsive
+
+**F-C10** — the Expo app is 42 TypeScript files with **zero** tests, behind a CI
+job that installs, typechecks and validates config. No lint, no unit tests, no
+build. Nothing audits its dependency tree either: `npm audit` there reports 14
+moderate advisories while the web tree reports none.
+
+Responsive behaviour of the web app was checked by reading source only; the
+device matrix in CI covers the public routes.
+
+---
+
+# Integrations
+
+- **F-C07** — 19 undocumented environment variables. `CONTACT_CENTER_INBOUND_SECRET`
+  is the sharpest: the endpoint is correctly fail-closed, so unset it silently
+  rejects every inbound email. Apple calendar sync is configured by two
+  undocumented variables and is simply off until someone reads the source.
+- **F6** — family email is built but not routed. Operator config.
+- **F-E07** — Twilio signature verification depends on `NEXT_PUBLIC_APP_URL`
+  being exactly right.
+- **Workflow health**: `cron-dispatch`, `supabase-schema-audit`,
+  `finance-transaction-operation-runtime` and `travel-confirmation-runtime` are
+  all healthy. `supabase-forward-release` and `supabase-production-migrations`
+  are not — see F-C08 and F5.
+
+---
+
+# Testing/QA
+
+- **F-F05** — 96 tests across 12 files share the shape of the known
+  `api-ai-runs` 5-second timeout, and no `testTimeout` is configured anywhere.
+- **F-F04** — a genuine DST bug, found by running the suite under
+  `TZ=America/Los_Angeles`. The suite pins no `TZ` at all.
+- **F-F06** — one test named "fails closed" that only forbids two shapes, so
+  deleting the error check makes it greener.
+- **F-F07** — 37 of 51 money, kids, economy and missions server actions have no
+  test.
+- **F4, F-004, F-015, F-019** — tests and probes that could not observe what
+  they were named for. All fixed.
+- **Worth recording as a positive**: the sweep for tests-that-cannot-fail came
+  back *mostly clean*. This suite's grep-style guards mostly carry explicit
+  non-vacuity blocks, which is unusual. The four above were the exception, not
+  the pattern.
+
+---
+
+# Broken/Incomplete Features
+
+- **F-F10** — two buttons in the message header exist only to say the feature is
+  unavailable.
+- **F6** — family email: built, not routed.
+- **F-D12** — two admin links point at routes that exist only at runtime.
+- **F-E03 / F-E05** — two storage buckets public by a decision that was recorded
+  as a follow-up and never followed up.
+
+---
+
+# Technical Debt
+
+- **F-D10** — the lint config that permits the whole accessibility class.
+- **F-F12** — the vitest config's JSX block is dead under vitest 4.
+- **F-F13** — sixty-nine test blocks assert only the absence of a pattern.
+- **F-D13** — 172 index-derived React keys.
+- **F-C09** — no central environment validation.
+- **The release process itself** — two mechanisms, both non-functional, one
+  pinned to a release 38 migrations old. This is debt that has become a blocker.
+
+---
+
+# Recommended Fix Order
+
+Ordered by what unblocks the most, not by severity alone.
+
+1. **Restore a path to production for migrations** (F5 / F-001 / F-C08). Until
+   this is done, `0296` and every other schema fix is inert. Needs a Supabase
+   access token with project privileges, and a decision on whether to re-pin the
+   forward-release manifest or retire it.
+2. **Apply `0296`** the moment step 1 lands, and confirm the boundary probe
+   passes against production. This closes the only CRITICAL.
+3. **F-F01** — the capped read that reports success. It makes reconciliation
+   confidently wrong about money, which is worse than an error.
+4. **F-E02** — step-up MFA. Either enforce `aal` in policy or stop presenting it
+   as a control.
+5. **F-E03 / F-E05** — decide on the public buckets. They are known and
+   deliberate; what is missing is the decision, not the discovery.
+6. **F-F02** — the eleven server-rendered surfaces still on server midnight, and
+   widen F-017's guard so it can see `setHours` against `timestamptz`.
+7. **F-D10** — turn on the `jsx-a11y` rules, then fix what they surface
+   (F-D02, F-D03, F-D06). Config first: it stops the class from growing.
+8. **F-D01** — the lightbox. Small, self-contained, and the file already imports
+   the right component.
+9. **F-C07** — document the environment contract. Cheap, and it un-breaks two
+   integrations nobody knows are off.
+10. **F-F03, F-F09** — the N+1 and the unbounded fan-out.
+11. **F-C10** — give the mobile app a gate worth the name.
+12. Everything remaining in Low.
+
+---
+
+# Verification Checklist
+
+Each item is a thing to *run or observe*, not a box to tick from reading.
+
+**Blockers**
+- [ ] `supabase link` succeeds against the production project ref.
+- [ ] The migration ledger lists every version through `0296`, not `0001–0003`.
+- [ ] `supabase-forward-release` completes, or is retired and the workflow removed.
+
+**The critical finding**
+- [ ] `docs/audit/family-credentials-boundary-check.sql` passes against
+      production, not only against a local replay.
+- [ ] A real child account, signed in, sees zero rows on the vault page.
+- [ ] A parent *and* a non-parent adult can both still read and edit it.
+
+**Regression guards already in place** (these should fail if the fix is reverted)
+- [ ] `tests/sitemap-lastmod-is-content-dated.test.ts`
+- [ ] `tests/sitemap-urls.test.ts`
+- [ ] `tests/i18n-client-scope.test.ts`
+- [ ] `tests/route-access-is-total.test.ts`
+- [ ] `tests/catalogue-holds-language-only.test.ts`
+- [ ] `tests/blog-search-index-is-fetched-not-shipped.test.ts`
+- [ ] Every `docs/audit/*-check.sql` probe, via the Database CI job.
+
+**Production observations**
+- [ ] `/sitemap.xml` — no URL dated with the build time; no 404s; ~1,063 URLs.
+- [ ] `/cookies` under 25 KB gzipped.
+- [ ] `/nope` returns 404 with `noindex`; `/dashboard` still 307s to `/login`.
+- [ ] Blog `lastmod` values spread across real dates rather than all
+      `2026-07-18` — this is the observable proof that `0286` applied.
+
+**Gaps to close before this audit can be called complete**
+- [ ] Run a browser: contrast, tab order, screen-reader output (Pass D).
+- [ ] Replay `0237`, `0239`, `0292` with the `vector` extension and audit the
+      marketing platform spine tables (Pass E).
+- [ ] Re-verify Pass E's findings against production once the ledger is current.
+
+---
+
+
 Two audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and neither supersedes the other:

@@ -13,15 +13,16 @@ are verifying or contradicting it.
 ---
 
 ## Claude-1
-CURRENT: all four workers done; passes C, D, E, F merged into finalaudit.md
+CURRENT: complete — all six passes merged and the consolidated index built
 COMPLETED: scaffolding; workers dispatched; architecture+integration sweep
   (CSP vs real outbound hosts, server/client boundary, env contract, workflow
   health, dependency audit, mobile gate); Pass C written into finalaudit.md as
   F-C01–F-C10 with all 41 prior findings preserved; #526/#540/#543/#544/#546
   shipped and verified in production
-NEXT: the category index the goal asks for (Critical/High/Medium/Low,
-  Frontend/Backend/Security/UX/Performance/…) across all six passes, and a
-  recommended fix order
+NEXT: nothing outstanding in the audit itself. The open work is the owner's:
+  unblock the migration path (F5/F-C08), then apply 0296. Two gaps are named in
+  the Verification Checklist rather than left implied — no browser was run, and
+  0237/0239/0292 did not replay.
 FILES-TOUCHED: audit/status.md, audit/claude-1.md, finalaudit.md,
   supabase/migrations/0296_family_credentials_manager_only.sql,
   docs/audit/family-credentials-boundary-check.sql,
