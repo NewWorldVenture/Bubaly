@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Twelve audits of bubaly.com, kept in one file because one file is the record.
+Thirteen audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -18,6 +18,7 @@ They ran over **different surfaces** and none supersedes another:
 | **J — What the AI may do** | the 94-tool registry: does a tool that declares it cannot write actually not write, given that the write gate believes the declaration | 0 | — |
 | **K — Tenant scope on the request path** | the step after D: a handler that has authenticated its caller and then takes an id out of the request body — is that id checked against the household the request is about | 2 | `K-01`, `K-02` |
 | **L — Offer versus gate** | the published plans in `lib/constants/plans.ts` against the catalog that opens a page and the allowance that meters a request: is a family served what it was sold | 3 | `L-01`–`L-03` |
+| **M — State that outlives its request** | the three places a value produced by one request is read by another — module scope on a warm instance, `unstable_cache` keys, and shared HTTP caches — where the boundary has already been evaluated and cannot be evaluated again | 1 | `M-01` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -3576,3 +3577,123 @@ different one, or one whose session carried no email. Production is at
 `fef35f1c`, which is **exactly `main`**, so it is not a stale deploy. Worth
 confirming which account was signed in; the defect above is real either way and
 affected every free family, super-admin or not.
+
+---
+
+# Pass M — State that outlives its request (M-01)
+
+Every boundary this audit has checked so far is evaluated **during** a request:
+RLS runs on the query, `requireFeature` runs on the page, `assertAIAccess` runs
+on the call. Pass M asks about the places where a value is produced by one
+request and read by another — because in every one of them, the boundary has
+already been evaluated and cannot be evaluated again.
+
+Three such places exist. Two are clean.
+
+- **Module-scope mutable state in server modules.** On a warm serverless
+  instance, module scope survives between requests and therefore between users.
+  **15** bindings across `app/`, `lib/` and `shared/` are mutated inside a
+  function rather than only at load. **0 findings.**
+- **`unstable_cache`.** A cache key that omits the tenant serves one family's
+  data to another, and the second reader never touches the database at all.
+  **6** cached functions in 4 modules. **0 findings.**
+- **Shared HTTP caches.** A response held by Vercel's edge or any proxy is
+  served with no session, no RLS and no token lookup. **3** routes send a
+  `public` header with an `s-maxage`. **1 finding.**
+
+## The 15 module bindings, and why none of them holds a family
+
+A count is not a result, so here is what they are. Nine hold configuration or
+process facts — `MERGED` (locale catalogues), `partsCache`
+(`Intl.DateTimeFormat` per timezone), `REGISTRY`/`LOOKUP` (the AI tool registry,
+built at load), `vapidReady`, `warned`, `anchorsBySubject`/`anchorSource`,
+`shared` (the scripted stub provider), `chainCache` (Alexa certificate chains,
+by URL — public certificates, and it exports `clearAlexaCertCache` so tests
+cannot inherit one another's). Three are browser-side — `nowPlaying`,
+`touchInFlight`, `conversionInFlight` — where module scope is one tab. One is
+the in-memory rate limiter, deliberate and paired with a durable DB counter.
+
+The one worth naming is `SCOPE_CACHE` in `lib/ai/actions.ts`, because it is the
+only one that caches **tenant data** and it is the one that is keyed correctly:
+
+```ts
+const SCOPE_CACHE = new WeakMap<SupabaseClient<Database>, Map<string, ScopeIdentity>>();
+```
+
+The outer key is the **Supabase client instance** — one per request — and the
+inner key is `familyId:userId`. So a hit requires the same request and the same
+family and the same user, and the entry is collected with the client. Its own
+comment explains the second layer and that only successes are cached. That is
+what a per-request memo has to look like, and it is what the other fourteen
+would have to look like if they ever held a row.
+
+## The 6 cached functions
+
+`getPublishedTestimonials`, `getPublishedCaseStudies`, `getPublicStats`, the
+social-links read and the two AEO reads. Every one takes **no argument** except
+a locale or a content category, reads `is_published = true` or an aggregate with
+a service client, and is invalidated by `revalidateTag` from an admin action. No
+request input reaches a key, so there is no tenant to omit from one.
+
+## M-01 — A revoked calendar feed kept being served *(Medium, fixed)*
+
+`/api/sync/feeds/<token>` is a family's calendar — event titles, descriptions,
+locations, times — served to anyone holding an unguessable token. That is the
+design and it is sound: Apple Calendar, Outlook and Alexa cannot log in, so the
+token is the authorization. `lib/sync/feed-token.ts` says so, and states the
+control that follows from it: the token is *"revocable (rotate the column to
+revoke)"*. The route repeats it: *"Revoke by rotating feed_token or setting
+feed_enabled = false."*
+
+It sent `Cache-Control: public, max-age=900, s-maxage=900`.
+
+`s-maxage` is everyone else's cache. For fifteen minutes after a revocation,
+Vercel's edge — and any proxy between a subscriber and it — kept serving that
+calendar to anyone with the old URL, without the route running at all, so
+neither the rotated token nor `feed_enabled = false` was ever consulted. A
+family that rotates the token *because the URL leaked* is told the feed is gone
+while it is still being handed out.
+
+Nothing crosses tenants here: a shared cache keys on the full path, which is the
+token. The defect is that a documented revocation control does not take effect
+when it says it does — the same shape as every other finding in this file where
+the system claims more than it can support.
+
+**Fixed by separating the two caches rather than removing them.** `max-age`
+stays at **900**: that is the subscriber's own calendar client, and they are the
+one who held the token. `s-maxage` drops to **60**, which still absorbs a client
+polling in a loop — the ICS body itself asks for a 60-**minute** refresh
+interval, so nothing legitimate re-fetches inside a minute — while cutting the
+revocation window from fifteen minutes to one. The route also holds a 60/min IP
+rate limit and a durable DB limiter, which is what actually protects the
+database.
+
+## How Pass M is kept closed
+
+`tests/shared-caches-do-not-outlive-revocation.test.ts` — **5 cases**.
+
+| what it holds | how |
+|---|---|
+| It is reading headers at all | floors on the number found; a sweep matching nothing passes everything |
+| No shared cache holds a non-public response longer than 60s | every `public` + `s-maxage` header in `app/api` |
+| A route exempted as public content says why | reason > 40 characters, checkable against the handler |
+| An exemption for a route that no longer caches fails | stale entries are how an allowlist stops being review |
+| The feed keeps its subscriber cache and loses everyone else's | `s-maxage ≤ 60` **and** `max-age === 900`, named |
+
+Load-bearing both ways: restoring `s-maxage=900` fails 2 cases naming the file
+and the value; adding a new route with `s-maxage=3600` fails the sweep naming
+that route.
+
+**And the sweep found its own hole the way it should.** It first matched only a
+`'Cache-Control': '…'` literal at the call site. `app/api/blog/search-index/route.ts`
+lifts its header into `const CACHE_CONTROL = '…'`, so the sweep did not see it —
+and what surfaced that was the **stale-exemption** case failing, because an
+allowlist entry existed for a route the sweep reported as setting no header at
+all. A guard whose allowlist is checked against its own findings reports its own
+blind spots. The sweep now resolves a same-file constant too.
+
+## Verification
+
+- Full suite: **1,187 files, 13,633 tests, all passing**
+- `tsc --noEmit` clean · `eslint` clean on every changed file
+- **No migration.**
