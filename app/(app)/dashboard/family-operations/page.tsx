@@ -4,7 +4,7 @@ import {
   Calendar, CheckCircle2, ListChecks, Stethoscope, GraduationCap,
   Trophy, CreditCard, Activity, Sparkles, ArrowRight, ShieldAlert,
 } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { gatherSignalsResult } from '@/lib/family/signals';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, ScoreRing, LevelBadge, MiniEmpty } from '@/components/family/shell';
@@ -34,7 +34,7 @@ async function ReadFailure() {
 
 export default async function FamilyOperationsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-operations');
   const result = await gatherSignalsResult(ctx.active.familyId);
   if (result.error || !result.data) {
     console.error('[dashboard-family-operations] required read failed', result.error);

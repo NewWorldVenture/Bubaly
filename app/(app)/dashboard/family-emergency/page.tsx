@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
 import { Phone, ShieldAlert, MapPin, UserCheck, HeartPulse, FileText } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function FamilyEmergencyPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-emergency');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   // Emergency + medical data is gated to managers.

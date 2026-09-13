@@ -1,4 +1,4 @@
--- Bubaly :: 0289 notifications.related_id is a dedupe KEY, not a uuid
+-- Bubaly :: 0293 notifications.related_id is a dedupe KEY, not a uuid
 -- ----------------------------------------------------------------------------
 -- Notification generation fails outright for any household with an upcoming
 -- "moment" or a schedule conflict:
@@ -40,7 +40,7 @@ begin
   if (select data_type from information_schema.columns
       where table_schema = 'public' and table_name = 'notifications'
         and column_name = 'related_id') <> 'text' then
-    raise exception '0289 FAILED: notifications.related_id is still not text';
+    raise exception '0293 FAILED: notifications.related_id is still not text';
   end if;
-  raise notice '0289 OK: notifications.related_id is text and can hold a dedupe key.';
+  raise notice '0293 OK: notifications.related_id is text and can hold a dedupe key.';
 end $$;

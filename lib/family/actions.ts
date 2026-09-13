@@ -10,6 +10,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isSuperAdminEmail } from '@/lib/constants/super-admins';
+import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { isManager } from '@/lib/constants/roles';
 import { describeActionError } from '@/lib/supabase/errors';
 import { knowledgeGraphTarget, toCanonicalGraphRow } from '@/lib/twin/project';
@@ -31,6 +33,28 @@ const WRITABLE: Record<string, string[]> = {
   family_milestones: ['member_id', 'title', 'description', 'milestone_date', 'category'],
 };
 
+// The feature each whitelisted table belongs to. Writing one of these rows IS
+// use of that feature, so the write is gated exactly as its page is — through
+// the same resolver, so the two cannot drift.
+//
+// `family_ai_recommendations` and `family_milestones` are deliberately absent.
+// Each is rendered by several pages that are not catalog features at all
+// (`/dashboard/needs-you`, `/dashboard/planning`, `/dashboard/grandparent-portal`,
+// `/home`), so there is no one feature a write to them belongs to. Guessing one
+// would gate a surface nobody decided to gate, so they stay open and this says
+// why.
+const FEATURE_BY_TABLE: Record<string, string> = {
+  family_routines:               '/dashboard/family-digital-twin',
+  family_digital_twin_profiles:  '/dashboard/family-digital-twin',
+  family_knowledge_nodes:        '/dashboard/family-digital-twin',
+  family_knowledge_edges:        '/dashboard/family-digital-twin',
+  family_stress_signals:         '/dashboard/family-stress',
+  family_automation_rules:       '/dashboard/family-automation',
+  family_emergency_contacts:     '/dashboard/family-emergency',
+  family_emergency_plans:        '/dashboard/family-emergency',
+  family_memories:               '/dashboard/memories',
+};
+
 // Sensitive surfaces only managers (parent/adult) may modify.
 const MANAGER_ONLY = new Set([
   'family_automation_rules',
@@ -40,6 +64,36 @@ const MANAGER_ONLY = new Set([
 ]);
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+
+/**
+ * Refuses a write to a table whose feature this family does not have, and
+ * answers `null` when the write may proceed.
+ *
+ * Applied to create and update, NOT to delete: a family that drops a tier keeps
+ * the right to remove rows they made, and a gate on delete would strand their
+ * own data behind an upgrade.
+ *
+ * The two refusals say different things on purpose. "Not part of your plan" is
+ * a fact about the family; a failed plan read is a fact about Bubaly, and
+ * reporting it as the first would tell a paying family to buy what they already
+ * own because a database call blipped.
+ */
+async function refuseIfUnentitled(
+  table: string,
+  ctx: Awaited<ReturnType<typeof requireUserContext>>,
+  supabase: Awaited<ReturnType<typeof createServer>>,
+): Promise<ActionResult | null> {
+  const href = FEATURE_BY_TABLE[table];
+  if (!href || isSuperAdminEmail(ctx.user.email)) return null;
+  try {
+    const entitlement = await resolveFeatureEntitlement(supabase, ctx.active.familyId, href);
+    if (entitlement.allowed) return null;
+  } catch (error) {
+    console.error('[family-action] plan read failed', error);
+    return { ok: false, error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+  return { ok: false, error: 'That is not part of your plan.' };
+}
 
 function actionFailure(operation: string, error: unknown): ActionResult {
   console.error(`[family-action] ${operation} failed:`, error);
@@ -78,6 +132,8 @@ export async function createFamilyRecord(
     return { ok: false, error: 'Only parents and adults can change this.' };
   }
   const supabase = await createServer();
+  const unentitled = await refuseIfUnentitled(table, ctx, supabase);
+  if (unentitled) return unentitled;
   const { target, payload: mapped } = graphWrite(table, values);
   const payload: Record<string, unknown> = {
     ...mapped,
@@ -112,6 +168,8 @@ export async function updateFamilyRecord(
     return { ok: false, error: 'Only parents and adults can change this.' };
   }
   const supabase = await createServer();
+  const unentitled = await refuseIfUnentitled(table, ctx, supabase);
+  if (unentitled) return unentitled;
   const { target, payload: mapped } = graphWrite(table, values);
   // graph_entities / graph_edges have no `updated_by` column (0129); every other
   // whitelisted table does.

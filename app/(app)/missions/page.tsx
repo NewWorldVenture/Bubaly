@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClipboardCheck, Sparkles, AlertTriangle, Trophy, Plus } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
@@ -16,7 +16,7 @@ const REVIEW_STATUSES = ['pending', 'ai_reviewed', 'needs_improvement', 'parent_
 
 export default async function MissionsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/missions');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

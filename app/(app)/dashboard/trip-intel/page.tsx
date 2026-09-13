@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Trip Intelligence | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function TripIntelPage() {
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/trip-intel');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

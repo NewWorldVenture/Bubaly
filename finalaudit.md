@@ -36,12 +36,12 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Fifteen findings, and the
+**Audit status: reopened, then complete again.** Seventeen findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **10** — F2, F4, F7, F8, F10, F11, F15 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **12** — F2, F4, F7, F8, F10, F11, F15, F16, F17 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Closed without a code change** | **3** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -53,8 +53,10 @@ Nothing is left unexamined or unassigned.
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
 - **Reopened:** 2026-09-13 — F7 was not a one-off but a *shape*: an entitlement
-  stated on a screen and absent from the pipeline behind it. Every paid feature
-  was re-checked for that shape. It recurred (F15)
+  stated where a user can see it and absent where it is enforced. Every paid
+  feature was re-checked for that shape. It recurred three more times: in a
+  nightly cron (F15), across 24 pages and their shared write path (F16), and in
+  the documentation that describes the tiers (F17)
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
@@ -79,6 +81,8 @@ Nothing is left unexamined or unassigned.
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
 | F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Fixed on main by #526** |
 | F15 | Family Autopilot (Plus) ran nightly for *every* family — both things that run it had no plan check | High | **Fixed** |
+| F16 | 24 of 62 paid features were enforced only by the sidebar padlock — the URL was the bypass | High | **Fixed** |
+| F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
 
 ---
 
@@ -640,6 +644,102 @@ assertions bite — the cron gate, the route gate, "unreadable plan → skip", a
 one source-reading case in the file is the one claim that *is* about source:
 that `requireFeature` no longer holds its own copy of the comparison.
 
+## F16 — Paid features enforced only by the sidebar padlock *(High, fixed)*
+
+The sidebar already refuses every paid feature to a family below its tier.
+`featureAccessByTier` returns `'locked'`, and `NavEntry` then renders a padlock
+and an upgrade prompt **instead of a link** — never a dead link, deliberately.
+So the product tells a Free family, in the UI, that they do not have these.
+
+**24 of the 62 paid features did not check on the server.** Each page called
+`requireUserContext()` and rendered. Typing the URL was the entire bypass.
+
+| Tier | Pages |
+|---|---|
+| Plus | `/dashboard/family-automation`, `family-cfo`, `family-coo`, `family-digital-twin`, `family-emergency`, `family-health`, `family-operations`, `family-school`, `family-stress`, `/missions` |
+| Basic | `/dashboard/activity`, `announcements`, `assistant`, `concierge`, `concierge/runs`, `insurance`, `kitchen`, `memories`, `migrate`, `pets`, `readiness`, `social`, `trip-intel`, `/referrals` |
+
+Part of this was already known and written down — `docs/AI_FAMILY_OS_IMPLEMENTATION_MAP.md`
+records "Tier/allowance enforcement for AI | **missing** | … no `requireFeature`
+on either page" — but only for the two AI pages, and it had not been connected
+to the other 22.
+
+### It was not only reading
+
+`lib/family/actions.ts` is the generic write path for eleven family tables. It
+checked the signed-in user and, for sensitive tables, the member's role. It did
+not check the plan. So a Free family could **write** Plus-feature data:
+automation rules, emergency plans and contacts, stress signals, and behavioural
+profiles in `family_digital_twin_profiles`.
+
+Nine of those eleven tables now resolve to a feature and are gated through the
+same `resolveFeatureEntitlement` the pages use. Two are not, and the omission is
+deliberate and commented rather than silent: `family_ai_recommendations` and
+`family_milestones` are each rendered by several pages that are not catalog
+features at all, so there is no one feature a write to them belongs to, and
+guessing would gate a surface nobody decided to gate.
+
+Three further choices worth stating, because each could reasonably have gone the
+other way:
+
+- **Delete is not gated.** A family that drops a tier keeps the right to remove
+  rows they made. Access is gated; ownership is not.
+- **`setRecommendationStatus` and `resolveAutomationRun` are not gated.** Both
+  resolve an item that already exists rather than create new use of the feature,
+  and gating them would strand a downgraded family's pending items.
+- **Super-admins bypass**, exactly as they do on the page, so preview still
+  works.
+
+### Two tiers that may themselves be the mistake
+
+`/dashboard/migrate` ("Switch to Bubaly", the competitor-import wizard) and
+`/referrals` (refer-a-friend) are both Basic in the catalog, so both are now
+refused to a Free family — which is what the sidebar has always told them. But
+an on-ramp and a referral programme are odd things to sell, and if the intent is
+for Free families to have them, **the fix is the tier, not the gate**: one line
+in `FEATURE_CATALOG`, or an override on the admin's Tier & Features page. That
+is a one-line change in one place now, which is precisely what it was not
+before.
+
+### Proof
+
+`tests/paid-features-enforced-server-side.test.ts`. The sweep is derived from
+the catalog rather than a list, so a new paid feature added without a guard
+fails it. Comments are stripped before matching — a JSDoc mentioning the guard
+is how the F11 sweep went vacuous once already — and one case proves the
+detector itself by pointing it at a page that genuinely has no guard. The write
+path is exercised for real against an in-memory database: a Free family is
+refused and nothing is written, a Plus family's identical write lands, and an
+unreadable plan produces a *different* message, because telling a paying family
+to buy what they already own is the failure mode that matters.
+
+Three mutations were applied and each failed the suite before being reverted.
+
+## F17 — The documented tier map disagreed with the enforced one *(Medium, fixed)*
+
+`ROUTE_PLAN_LEVEL` in `lib/constants/plans.ts` maps 58 routes to a minimum plan
+level. Nothing reads it — `docs/AGENT_HANDOFF.md` says so outright
+("`ROUTE_PLAN_LEVEL` is documentation only"). It was maintained by hand.
+
+Of the 55 routes it shares with the enforced catalog, **19 disagreed** — a third
+of the table. Not marginally, either: it documented `/dashboard/rewards`,
+`/dashboard/sports`, `/dashboard/home` and `/dashboard/briefing` as *cheaper*
+than they are enforced, and `/dashboard/chores`, `/dashboard/meals`,
+`/dashboard/school` and six others as *dearer*.
+
+That matters because three other documents cite it as fact —
+`MARKET_DOMINATION_AUDIT.md` twice, `STRATEGY_WORK_QUEUE.md` once, and
+`AI_FAMILY_OS_IMPLEMENTATION_MAP.md` builds an argument on
+`ROUTE_PLAN_LEVEL['/dashboard/assistant']=0`. A stale table nothing executes is
+still read by people, and by whoever writes the next audit.
+
+The catalog routes are now **derived** from `FEATURE_CATALOG`, so they cannot
+drift again. Only the five routes that are not catalog features at all
+(`/dashboard`, `/dashboard/settings`, `/dashboard/billing`, `/dashboard/trust`,
+`/dashboard/relationship`) are still stated by hand, because the catalog has
+nothing to say about them. A test pins that the derivation stays derived: adding
+a hand-written entry that contradicts the catalog fails it.
+
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
 #526 merged to `main` as `61ad4bb0` while this branch was open, and it rewrote
@@ -782,8 +882,8 @@ page demonstrates it, and wherever a fix is claimed the check was also run
 against the broken state to prove it was not passing vacuously.
 
 - **Audit head:** `ed85df8a` (main, after Pass A's fixes) + this pass
-- **Scope:** 395 pages · 140 API routes · 305 migrations · 1,150 unit-test files
-- **Environment:** full local Supabase stack (all 305 migrations replayed), seeded
+- **Scope:** 395 pages · 140 API routes · 306 migrations · 1,170 unit-test files
+- **Environment:** full local Supabase stack (all 306 migrations replayed), seeded
   anchor household, real browser sign-in.
 
 Two entries in this file record the audit correcting *itself*: F-011 (the helper
@@ -800,13 +900,13 @@ F-002 records reasoning that was wrong and what replaced it.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,108 tests |
+| Unit tests | `vitest run` | ✅ 13,464 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
-| Migration names | `db:audit:migrations` | ✅ 305 files, no collisions |
-| Migration replay | fresh DB, 0 → 305 | ✅ all applied, 0 failed |
+| Migration names | `db:audit:migrations` | ✅ 306 files, no collisions |
+| Migration replay | fresh DB, 0 → 306 | ✅ all applied, 0 failed |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 13 probes, fresh replay, run 3× | ✅ 13/13 each time (F-015 made it repeatable) |
+| RLS boundaries | 13 probes, fresh 306-migration replay, run 3× | ✅ 13/13 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
@@ -841,7 +941,7 @@ Historical replay is blocked... Repairing it is a credentialed operator action.
 The guard is correct — it is what keeps the held `0240–0254` bundle
 (`docs/PENDING_PROD_MIGRATIONS.md`, unresolved requester-privacy findings) from
 auto-applying. **Consequence:** every migration from `0276` on, including
-**`0286` below**, replays cleanly in the repo but is *not applied to
+**`0290` below**, replays cleanly in the repo but is *not applied to
 production*. Needs an operator following `docs/runbooks/LB-016-…md` §4.
 
 F-001 is the only finding still open. Everything else in this file closed with a
@@ -879,7 +979,7 @@ rather than asserted: `tests/no-limit-above-the-row-cap.test.ts` fails on any
 
 ### F-003 · `anon` held INSERT/UPDATE/DELETE on all five money tables
 
-**Severity:** high (defence-in-depth) · **Status:** CLOSED — migration `0286`
+**Severity:** high (defence-in-depth) · **Status:** CLOSED — migration `0290`
 
 `docs/audit/wallet-write-rls-check.sql` invariant 6 failed against a real
 Supabase database:
@@ -896,7 +996,7 @@ closing that path, and it had never been closed: Supabase's default privileges
 grant `arwdDxt` on every new `public` table to `anon`, and no migration revoked
 it. All five money tables carried it.
 
-**Not exploitable as found, and `0286` does not claim otherwise.** The only
+**Not exploitable as found, and `0290` does not claim otherwise.** The only
 permissive INSERT policy is also `TO authenticated`, so an anon insert is
 refused for want of any permissive policy. Verified directly:
 
@@ -905,7 +1005,7 @@ set role anon; insert into public.wallet_transactions (...) values (...);
 ERROR:  new row violates row-level security policy for table "wallet_transactions"
 ```
 
-What `0286` restores is the layer that makes that robust: one future permissive
+What `0290` restores is the layer that makes that robust: one future permissive
 policy written `TO public` — the exact stray shape `0275` had to sweep away —
 would otherwise open an anonymous mint path no restrictive guard would catch.
 Reads are deliberately left alone; the public gift flow writes through
@@ -922,7 +1022,7 @@ probe asserted something true of the shim and false of every real database.
 
 The shim now reproduces Supabase's real default privileges, and does it *before*
 migrations run, which is when they take effect on a real project — granting
-after the migrations would have re-granted exactly what `0286` revokes and
+after the migrations would have re-granted exactly what `0290` revokes and
 silently undone it.
 
 Proven non-vacuous end to end: re-granting `insert` to `anon` on the shim
@@ -956,7 +1056,7 @@ means. A sweep confirms no other `revalidate` route reads cookies.
 
 ### F-006 · Any signed-in user could claim another household's AI jobs
 
-**Severity:** high (cross-tenant) · **Status:** CLOSED — migration `0288`
+**Severity:** high (cross-tenant) · **Status:** CLOSED — migration `0292`
 
 `claim_ai_runs` is `SECURITY DEFINER` and scoped to the whole platform, not to a
 family. `authenticated` held EXECUTE on it. Acting as an ordinary member of
@@ -983,7 +1083,7 @@ anon and authenticated, so a later `create or replace` (`0263` re-creates
 **its own moment**, not the final state — which is the only state a database
 runs in.
 
-`0288` re-asserts all five at the end of the chain. Verified after the fix: a
+`0292` re-asserts all five at the end of the chain. Verified after the fix: a
 member and anon both get `42501 permission denied` through PostgREST, and
 `service_role` still executes. The gated E2E journey that asserts exactly this
 (`authenticated.spec.ts:150`, "Only the server worker may claim AI jobs") now
@@ -994,7 +1094,7 @@ passes, having failed before.
 **Severity:** low · **Status:** CLOSED
 
 `tests/migrations-are-additive.test.ts` scans for a bare `\btruncate\b`, so
-`revoke insert, update, delete, truncate … from anon` in `0286` read as
+`revoke insert, update, delete, truncate … from anon` in `0290` read as
 destructive DDL — though it *removes* the ability to truncate. The guard already
 masked one legitimate TRUNCATE (the trigger-event declaration); it now masks the
 privilege list of a GRANT/REVOKE too. Both directions are pinned: a revoke is
@@ -1078,7 +1178,7 @@ Five unit tests pin it, including the exact `TypeError` shape.
 
 ### F-010 · Notification generation failed outright for affected households
 
-**Severity:** high · **Status:** CLOSED — migration `0289`
+**Severity:** high · **Status:** CLOSED — migration `0293`
 
 `notifications.related_id` was typed `uuid`, but three subsystems deliberately
 store a **composite dedupe key** in it — that is what the column is for, since
@@ -1105,7 +1205,7 @@ moment reminder. Five of sixteen seeded families hit it on one pass.
 
 The column was the outlier: polymorphic, qualified by `related_type`, with no
 foreign key and no index, and a read-side helper (`entityIdFrom`) whose job is
-to pick the uuid back out of a colon-delimited string. `0289` widens it to
+to pick the uuid back out of a colon-delimited string. `0293` widens it to
 `text` — lossless. Measured before and after on the same cron run:
 
 | | before | after |
@@ -1282,7 +1382,7 @@ Found by reading the server log after exercising the cron routes:
 [service:approvals] reminder dedupe read failed { familyId: …, error: { message: 'URI too long\n' } }
 ```
 
-A PostgREST filter travels in the **query string**. Since `0289` (F-010) these
+A PostgREST filter travels in the **query string**. Since `0293` (F-010) these
 ids are no longer uuids — `related_id` carries a composite dedupe key such as
 `moment:<eventId>:<date>` — and a few hundred of them build a request line past
 the gateway's limit. Measured, by binary search against the live project:
@@ -1330,7 +1430,7 @@ grant execute on all functions in schema public to authenticated;
 ```
 
 so that one call below it could run as `authenticated`. It never revoked it. That
-single statement undoes the deliberate revokes in `0204`/`0253`/`0288` and hands
+single statement undoes the deliberate revokes in `0204`/`0253`/`0292` and hands
 `authenticated` EXECUTE on `claim_ai_runs` and the four loyalty RPCs — **the exact
 cross-tenant hole F-006 closed.**
 
@@ -1432,13 +1532,13 @@ $ git check-ignore -v cookies.json
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 1 warning |
-| `vitest run` | 13,108 tests passed |
+| `vitest run` | 13,464 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
-| `db:audit:migrations` | passed, next version 0287 |
+| `db:audit:migrations` | passed, next version 0291 |
 | `i18n:gate` | clean |
 | fresh-DB migration replay | 302/302 applied, 0 failed |
-| `run-probes.sh` (fresh replay, ×3) | 13/13 every run; the five privileged RPCs still service-role-only afterwards |
+| `run-probes.sh` (fresh 306-migration replay, ×3) | 13/13 every run; the five privileged RPCs still service-role-only afterwards |
 | 353-route authenticated crawl | 351 ok · 1 gate redirect · 0 failures |
 | unknown-slug probe, 16 public routes | all degrade correctly after F-005 |
 | API guard sweep | 140/140 guarded or declared public |

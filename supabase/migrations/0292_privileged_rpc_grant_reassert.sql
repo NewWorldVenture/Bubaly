@@ -1,4 +1,4 @@
--- Bubaly :: 0288 Re-assert the privileged-RPC lockdowns, at the end of the chain
+-- Bubaly :: 0292 Re-assert the privileged-RPC lockdowns, at the end of the chain
 -- ----------------------------------------------------------------------------
 -- Three migrations already locked these functions to the service role. On a
 -- freshly replayed database today, `authenticated` can execute all of them
@@ -79,5 +79,5 @@ begin
   if array_length(v_open, 1) is not null then
     raise exception 'client roles still hold EXECUTE on privileged RPC(s): %', v_open;
   end if;
-  raise notice '0288 OK: the five privileged RPCs are service-role only.';
+  raise notice '0292 OK: the five privileged RPCs are service-role only.';
 end $$;

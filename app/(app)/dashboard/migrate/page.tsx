@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Import, ShieldCheck, Zap, History } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { MigrateWizard } from '@/components/migrate/migrate-wizard';
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function MigratePage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/migrate');
   const supabase = await createServer();
   const { data: imports, error: importsError } = await supabase
     .from('audit_logs')

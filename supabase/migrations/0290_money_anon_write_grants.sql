@@ -1,4 +1,4 @@
--- Bubaly :: 0286 Close the anon grant on the money tables
+-- Bubaly :: 0290 Close the anon grant on the money tables
 -- ----------------------------------------------------------------------------
 -- `docs/audit/wallet-write-rls-check.sql` invariant 6 asserts that `anon` holds
 -- no INSERT on `wallet_transactions`, and it says why: the restrictive manager
@@ -58,5 +58,5 @@ begin
   if open_tables is not null then
     raise exception 'anon still holds INSERT on money table(s): %', open_tables;
   end if;
-  raise notice '0286 OK: anon holds no write privilege on any money table.';
+  raise notice '0290 OK: anon holds no write privilege on any money table.';
 end $$;

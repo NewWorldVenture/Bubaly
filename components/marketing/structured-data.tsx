@@ -136,6 +136,7 @@ type BlogPostSchemaInput = {
   author: string;
   category: string;
   date: string;
+  updatedAt?: string;
   heroImageUrl?: string;
   keywords?: string[];
   wordCount?: number;
@@ -161,7 +162,11 @@ export async function BlogPostStructuredData(post: BlogPostSchemaInput) {
     ...(post.wordCount ? { wordCount: post.wordCount } : {}),
     ...(post.heroImageUrl ? { image: [post.heroImageUrl] } : {}),
     datePublished: post.date,
-    dateModified: post.date,
+    // When the writing last changed, not when it was published — the same claim
+    // the sitemap's lastmod makes, answered from the same column so the two
+    // cannot disagree. A post never edited since publication falls back to its
+    // publication date, which is the truth for it.
+    dateModified: post.updatedAt ?? post.date,
     author: { '@type': post.author.includes('Team') ? 'Organization' : 'Person', name: post.author },
     publisher: {
       '@type': 'Organization',

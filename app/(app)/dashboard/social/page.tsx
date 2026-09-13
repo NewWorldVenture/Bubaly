@@ -4,7 +4,7 @@ import {
   Plug, Newspaper, PenSquare, CalendarClock, BarChart3, Inbox as InboxIcon,
   CheckCircle2, AlertTriangle, FileEdit, Send,
 } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { getSocialOverview } from '@/lib/social/queries';
 import { getSocialAccess } from '@/lib/social/access';
 import { PLATFORMS, isProviderConfigured } from '@/lib/social/capabilities';
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function SocialOverviewPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/social');
   const familyId = ctx.active.familyId;
   const [overview, access] = await Promise.all([
     getSocialOverview(familyId),

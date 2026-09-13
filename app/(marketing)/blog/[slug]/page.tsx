@@ -86,7 +86,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       description: post.excerpt,
       authors: [post.author],
       publishedTime: post.date,
-      modifiedTime: post.date,
+      modifiedTime: post.updatedAt ?? post.date,
       section: post.category,
       tags: keywords,
       ...(post.heroImageUrl
@@ -135,6 +135,7 @@ export default async function BlogPostPage({ params }: Params) {
         author={post.author}
         category={post.category}
         date={post.date}
+        updatedAt={post.updatedAt}
         heroImageUrl={post.heroImageUrl}
         keywords={articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''))}
         wordCount={wordCount}

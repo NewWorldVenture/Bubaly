@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Stethoscope, Pill, CalendarHeart, ShieldPlus, AlertTriangle, Syringe } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function FamilyHealthPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-health');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date().toISOString();

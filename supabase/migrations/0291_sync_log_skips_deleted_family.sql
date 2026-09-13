@@ -1,4 +1,4 @@
--- Bubaly :: 0287 A family with sync data can be deleted again
+-- Bubaly :: 0291 A family with sync data can be deleted again
 -- ----------------------------------------------------------------------------
 -- `sync_log_change()` is an AFTER-trigger on `sync_calendar_events`,
 -- `sync_notes` and `sync_reminders`. On DELETE it writes a row to

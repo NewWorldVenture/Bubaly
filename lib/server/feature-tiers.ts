@@ -43,10 +43,22 @@ export async function getResolvedFeatureTiers(supabase: DB): Promise<Record<stri
 }
 
 /**
+ * `cache` dedupes the settings read across one render, which is where it pays:
+ * a layout and the route guard resolve tiers in the same pass. It only exists
+ * inside a React runtime, and this module is now reached from places that have
+ * none — a cron route, a server action, and every test that imports one of them
+ * — where the import resolves `cache` to undefined and calling it throws. The
+ * fallback is the identity wrapper: no dedupe, same answer. Behaviour inside
+ * the app is unchanged, because there `cache` is always a function.
+ */
+const dedupeAcrossRender: <A extends unknown[], R>(fn: (...args: A) => R) => (...args: A) => R =
+  typeof cache === 'function' ? cache : (fn) => fn;
+
+/**
  * Effective tiers keyed by ROUTE href (drives nav gating + `requireFeature`).
  * Request-`cache`d so a layout + the route guard share one query per render.
  */
-export const getFeatureTiersByHref = cache(async (supabase: DB): Promise<Record<string, FeatureTier>> => {
+export const getFeatureTiersByHref = dedupeAcrossRender(async (supabase: DB): Promise<Record<string, FeatureTier>> => {
   return tiersByHref(await getResolvedFeatureTiers(supabase));
 });
 
