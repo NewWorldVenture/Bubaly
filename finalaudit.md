@@ -61,8 +61,8 @@ PRODUCTION READY: NO
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
-- PUSH-003: Single post-send pushed_at column cannot prevent duplicate device delivery from partial retries or concurrent workers.
-- EMAIL-002: Read-modify-write counters can lose concurrent events or double-count after failed receipt finalization.
+- PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
+- EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
 - INT-002: Urgent receipt/notification/claim/drain repairs pass locally. Live provider/scheduler deployment, unknown-attempt reconciliation and ordinary automatic-reply replay durability remain open.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
@@ -15049,19 +15049,51 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Single post-send pushed_at column cannot prevent duplicate device delivery from partial retries or concurrent workers.
+Two ways the same notification reaches a device twice, and they are not the same
+problem.
+
+The first is two overlapping dispatch runs. The cursor was read, the batch was
+selected, and the cursor was written back with a plain upsert — so two workers
+read the same cursor, both advanced it, both kept their rows, and every device in
+the batch buzzed twice. The source said as much: "Concurrent workers may still
+read the same cursor and repeat delivery."
+
+The second is a partial retry inside one run, and it is a genuine schema limit. A
+row is selected on `pushed_at is null`, sent, and only then stamped. Claiming it
+before the send would close that window, but `pushed_at` is a single nullable
+timestamp with no status beside it, so a claim and a delivery are the same value
+and cannot be told apart. Claim-first would therefore trade a duplicate buzz for
+a LOST notification whenever a worker dies mid-send — and a missed medication
+reminder is worse than a repeated one.
 
 #### Fixes Applied
-Pending
+The concurrent-worker half is fixed. Once a cursor exists the write is a
+compare-and-set against the value that run read; the loser matches no row and
+returns having sent nothing, so the winner owns the batch. The distinction
+matters and is kept explicit in the code: on the guarded path a missing row is
+the expected answer for the loser, while on the first-ever write for a scope —
+which has no prior value to compare against — a missing row is still an
+unconfirmed write and still refuses to send, as tests/push-cursor-fairness.test.ts
+already required.
+
+The partial-retry half is NOT fixed, deliberately. Closing it needs the claim and
+the delivery to be distinguishable, which means a status column or a claim
+timestamp beside `pushed_at` on `notifications`. That is SQL, which this audit is
+not authorised to author, and the only alternative available without it trades
+duplicate delivery for lost delivery.
 
 #### Retest Results
-Pending
+All 178 cases across the thirteen push test files pass. Two cases added to
+tests/push-cursor-fairness.test.ts: the run that loses the cursor claim sends
+nothing and stamps nothing new, and an unconfirmed first write still throws
+rather than sending. Reverting to the plain upsert fails the first of those.
 
 #### Evidence
 Source/reproduction evidence in discovery findings; execution verification pending.
 
 #### Final Status
-🔄 IN PROGRESS
+🔄 IN PROGRESS — concurrent-worker duplication fixed and pinned; per-row claim
+durability needs a schema change and stays open.
 
 ### EMAIL-002 — Transactional campaign webhook metrics
 
@@ -15081,19 +15113,57 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Read-modify-write counters can lose concurrent events or double-count after failed receipt finalization.
+Two defects, and only one of them is fixable without SQL.
+
+The first is a lost update, and it is the systematic one. The counter did
+`select` then `update` with the value it had read. The webhook claim serialises
+by `svix_id` — one EVENT — not by campaign, so two deliveries for the same
+campaign run concurrently by design: both read 5, both write 6, and one open or
+click never happened as far as the campaign's numbers go. This is the ordinary
+case during a send, not a rare race.
+
+The second is a double count, and it is the rare one. The counter is incremented
+before the receipt is finalised. If finalisation fails, the catch releases the
+claim to `error`, the provider retries, the retry re-claims a row that is
+neither `processed` nor `processing`, and the counter moves a second time for a
+single event.
 
 #### Fixes Applied
-Pending
+The lost update is fixed. The counter write is now conditional on the value that
+was read — `eq(field, stored)`, or `is(field, null)` for a column that has never
+been counted, since `eq(field, 0)` does not match NULL. A worker that loses the
+compare-and-set re-reads and retries from the value the winner left behind,
+bounded by COUNTER_ATTEMPTS so contention cannot spin for the length of a send.
+Exhausting the attempts fails the event back to the provider rather than
+silently dropping it, and an unknown campaign is left alone without failing the
+event.
+
+The double count is NOT fixed, and reordering does not fix it — it only trades a
+double count on a failed finalisation for an under-count on a failed counter
+write. Making it correct needs the counter application to be idempotent per
+event, which means either a transaction or a marker column on
+`resend_webhook_events` (for example `counter_applied boolean not null default
+false`, set in the same guarded write that finalises the receipt). Both are SQL,
+which this audit is not authorised to author, so it is recorded rather than
+attempted.
 
 #### Retest Results
-Pending
+Four cases added to tests/resend-webhook-execution.test.ts; all 37 in the file
+pass. The interleaving case reproduces the defect: with the fix reverted it
+fails with `expected 6 to be 7`, one open lost, and passes at 7 with the fix.
+
+Getting that test honest took two attempts. The first version held the losing
+worker BEFORE its read, so it simply re-read whatever the winner had left and
+the lost update never occurred — it passed against the unfixed code and proved
+nothing. The worker has to be held after its read and before its write.
 
 #### Evidence
-Source/reproduction evidence in discovery findings; execution verification pending.
+tests/resend-webhook-execution.test.ts — concurrent interleaving, NULL column,
+exhausted contention, unknown campaign. app/api/webhooks/resend/route.ts.
 
 #### Final Status
-🔄 IN PROGRESS
+🔄 IN PROGRESS — lost update fixed and pinned; the per-event idempotency needed
+to close the double count requires a schema change and stays open.
 
 ### INT-002 — Durable Contact Center outbound escalation and replies
 
@@ -20127,8 +20197,8 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
-- PUSH-003: Single post-send pushed_at column cannot prevent duplicate device delivery from partial retries or concurrent workers.
-- EMAIL-002: Read-modify-write counters can lose concurrent events or double-count after failed receipt finalization.
+- PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
+- EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
 - INT-002: Urgent receipt/notification/claim/drain repairs pass locally. Live provider/scheduler deployment, unknown-attempt reconciliation and ordinary automatic-reply replay durability remain open.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.

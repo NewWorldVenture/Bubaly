@@ -239,11 +239,38 @@ export async function dispatchPendingPushes(
   if (!nextCursor) throw new Error('Push notification cursor fields are invalid.');
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
-  // Concurrent workers may still read the same cursor and repeat delivery.
-  const { data: saved, error: cursorWriteError } = await supabase.from('app_settings')
-    .upsert({ key: cursorKey, value: nextCursor, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    .select('key').maybeSingle();
-  if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
+  //
+  // Once a cursor exists the write is a compare-and-set against the value THIS
+  // run read, which is what stops two overlapping workers delivering the same
+  // batch. The plain upsert took the last writer, so both advanced the cursor,
+  // both kept their rows, and every device in the batch buzzed twice. The loser
+  // now matches no row and returns having sent nothing; the winner owns the batch.
+  //
+  // The very first run for a scope has no cursor to compare against and still
+  // upserts. Two workers racing that one batch remains possible exactly once per
+  // scope, before any cursor exists; after that the guard holds.
+  const stamp = new Date().toISOString();
+  if (stored) {
+    const { data: claimed, error: claimError } = await supabase.from('app_settings')
+      .update({ value: nextCursor, updated_at: stamp })
+      .eq('key', cursorKey).eq('value', stored.value as never)
+      .select('key').maybeSingle();
+    if (claimError) throw new Error('Push cursor write failed.');
+    if (claimed?.key !== cursorKey) {
+      // Lost the claim: another worker advanced the cursor after this run read
+      // it, so it owns these rows. Send nothing rather than deliver them twice.
+      // Distinct from an unconfirmed write below — here a missing row is the
+      // expected answer for the loser, not an unverified write to assume away.
+      return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
+    }
+  } else {
+    const { data: saved, error: cursorWriteError } = await supabase.from('app_settings')
+      .upsert({ key: cursorKey, value: nextCursor, updated_at: stamp }, { onConflict: 'key' })
+      .select('key').maybeSingle();
+    // No prior value to compare against, so a missing row here is an unconfirmed
+    // write. Nothing may be sent on the strength of one.
+    if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
+  }
 
   // Cache family member user ids for whole-family notifications.
   const familyMembers = new Map<string, string[]>();

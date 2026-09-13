@@ -55,6 +55,9 @@ function fixture() {
       const query = {
         select(columns: string) { builder.select(columns); return query; },
         eq(column: string, value: unknown) { builder.eq(column, value); return query; },
+        // The counter write guards on the value it read, and a never-counted
+        // column is NULL rather than 0, so both comparisons must reach the fake.
+        is(column: string, value: unknown) { builder.is(column, value); return query; },
         insert(value: Row) { operation = 'insert'; payload = value; builder.insert(value); return query; },
         update(value: Row) { operation = 'update'; payload = value; builder.update(value); return query; },
         upsert(value: Row) {
@@ -347,5 +350,73 @@ describe('signed Resend suppression and durable receipt execution', () => {
     expect(f.event()).toEqual(newReceipt);
     expect(f.event().status).toBe('processed');
     expect(f.suppressions()).toHaveLength(1);
+  });
+});
+
+// EMAIL-002. The claim above serialises by svix_id — one EVENT — so two
+// deliveries for the SAME campaign run concurrently by design. Read-modify-write
+// then loses one: both read 5, both write 6, and an open or a click simply never
+// happened as far as the campaign's numbers are concerned.
+describe('campaign counters survive concurrent events', () => {
+  const campaign = 'campaign-under-contention';
+
+  function withCampaign(counters: Row) {
+    const f = fixture();
+    f.db.seed('marketing_email_campaigns', [{ id: campaign, ...counters }]);
+    return f;
+  }
+
+  it('counts both of two events that interleave on the same campaign', async () => {
+    const f = withCampaign({ opens: 5 });
+    // The interleaving has to be exact. Worker A must be held AFTER it has read 5
+    // and BEFORE it writes; holding it any earlier just makes it re-read whatever
+    // B left and the lost update never happens. Only A's first write is held, so
+    // its guarded retry can proceed.
+    const reachedWrite = deferred();
+    const release = deferred();
+    let firstUpdate = true;
+    f.intercept(async (attempt) => {
+      if (attempt.table === 'marketing_email_campaigns' && attempt.operation === 'update' && firstUpdate) {
+        firstUpdate = false;
+        reachedWrite.resolve();
+        await release.promise;
+      }
+      return null;
+    });
+
+    const slow = POST(signedRequest('email.opened', { id: 'msg_a', campaign }));
+    await reachedWrite.promise;                 // A has read 5 and is about to write.
+    const quick = await POST(signedRequest('email.opened', { id: 'msg_b', campaign }));
+    expect(quick.status).toBe(200);
+    expect(f.db.table('marketing_email_campaigns')[0].opens, 'B counted').toBe(6);
+
+    release.resolve();                          // A writes against a row that moved.
+    expect((await slow).status).toBe(200);
+
+    const row = f.db.table('marketing_email_campaigns')[0];
+    expect(row.opens, 'two opens must count as two; 6 here means one was lost').toBe(7);
+  });
+
+  it('counts an event against a column that has never been counted', async () => {
+    const f = withCampaign({ opens: null });
+    expect((await POST(signedRequest('email.opened', { id: 'msg_null', campaign }))).status).toBe(200);
+    expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(1);
+  });
+
+  it('fails the event back to the provider rather than dropping an uncountable one', async () => {
+    const f = withCampaign({ opens: 5 });
+    // Every guarded write misses, as it would under unbounded contention.
+    f.intercept((attempt) => (attempt.table === 'marketing_email_campaigns' && attempt.operation === 'update'
+      ? { data: null, error: null } as never : null));
+    const response = await POST(signedRequest('email.opened', { id: 'msg_lost', campaign }));
+    expect(response.status, 'a 200 here would tell the provider to stop retrying').toBe(503);
+    expect(f.event().status).toBe('error');
+  });
+
+  it('leaves an unknown campaign alone without failing the event', async () => {
+    const f = fixture();
+    const response = await POST(signedRequest('email.opened', { id: 'msg_none', campaign: 'no-such-campaign' }));
+    expect(response.status).toBe(200);
+    expect(f.event().status).toBe('processed');
   });
 });

@@ -46,6 +46,14 @@ function verify(body: string, headers: Headers, nowMs = Date.now()): boolean {
   });
 }
 
+/**
+ * How many times a counter write may lose its compare-and-set before the event
+ * is failed back to the provider. Contention here is between webhook deliveries
+ * for one campaign, so a handful of retries clears any realistic burst, while an
+ * unbounded loop would spin for as long as the send lasts.
+ */
+const COUNTER_ATTEMPTS = 8;
+
 const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
   'email.opened': 'opens',
   'email.clicked': 'clicks',
@@ -153,14 +161,35 @@ export async function POST(req: NextRequest) {
     }
 
     if (field && campaignId) {
-      const { data: row, error: campaignReadError } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
-      if (campaignReadError) throw new Error('Campaign lookup failed');
-      if (row) {
-        const current = (row as Record<string, number>)[field] ?? 0;
-        const { data: updated, error: counterError } = await supabase.from('marketing_email_campaigns')
-          .update({ [field]: current + 1 } as never).eq('id', campaignId).select('id').maybeSingle();
-        if (counterError || !updated) throw new Error('Counter persistence failed');
+      // Read-modify-write loses an event whenever two land for the same campaign
+      // at once: both workers read 5, both write 6, and one open or click never
+      // happened as far as the campaign is concerned. The claim above serialises
+      // by svix_id — one EVENT — not by campaign, so concurrent events for one
+      // campaign are the ordinary case during a send, not a rare race.
+      //
+      // The write is therefore conditional on the value that was read. If another
+      // worker moved the counter first no row matches, and this re-reads and
+      // tries again from the value that worker left behind.
+      let applied = false;
+      let campaignExists = true;
+      for (let attempt = 0; attempt < COUNTER_ATTEMPTS && !applied && campaignExists; attempt += 1) {
+        const { data: row, error: campaignReadError } = await supabase
+          .from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
+        if (campaignReadError) throw new Error('Campaign lookup failed');
+        if (!row) { campaignExists = false; break; }
+        const stored = (row as Record<string, number | null>)[field] ?? null;
+        const guarded = supabase.from('marketing_email_campaigns')
+          .update({ [field]: (stored ?? 0) + 1 } as never).eq('id', campaignId);
+        // A never-counted column is NULL, and eq(field, 0) does not match NULL.
+        const { data: updated, error: counterError } = await (stored === null
+          ? guarded.is(field, null)
+          : guarded.eq(field, stored)).select('id').maybeSingle();
+        if (counterError) throw new Error('Counter persistence failed');
+        applied = !!updated;
       }
+      // Losing every attempt is sustained contention, not a missing campaign, so
+      // fail the claim and let the provider retry rather than drop the event.
+      if (campaignExists && !applied) throw new Error('Counter persistence failed');
     }
 
     // Engagement workflows retain their existing best-effort contract. Their

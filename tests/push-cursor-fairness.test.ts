@@ -148,3 +148,33 @@ describe('bounded pending-push traversal', () => {
     expect(f.calls).toEqual([]);
   });
 });
+
+// PUSH-003, the concurrent-worker half. The cursor read and the cursor write
+// used to be separated by nothing: two overlapping runs both read the same
+// cursor, both advanced it, both kept their rows, and every device in the batch
+// buzzed twice. The write is now conditional on the value the run read.
+describe('two overlapping dispatch runs do not deliver the same batch twice', () => {
+  it('sends nothing from the run that loses the cursor claim', async () => {
+    const f = fixture([row(1), row(2)]);
+    // Establish a cursor so the guarded write is the path under test.
+    expect((await dispatchPendingPushes(f.db, { now: NOW, limit: 1 })).result.sent).toBe(1);
+    provider.send.mockClear();
+    const stampedBefore = f.stamps.length;
+
+    // The guarded update matching no row IS a lost claim: another worker moved
+    // the cursor between this run's read and its write.
+    f.emptyWrites.add('app_settings:update');
+    const lost = await dispatchPendingPushes(f.db, { now: NOW, limit: 1 });
+
+    expect(lost, 'the loser claims no rows').toMatchObject({ notifications: 0 });
+    expect(provider.send, 'and sends nothing — the winner owns the batch').not.toHaveBeenCalled();
+    expect(f.stamps.length, 'and stamps nothing new as delivered').toBe(stampedBefore);
+  });
+
+  it('still refuses to send on an unconfirmed first write, which is not a lost claim', async () => {
+    const f = fixture([row(1)]);
+    f.emptyWrites.add('app_settings:upsert');
+    await expect(dispatchPendingPushes(f.db, { now: NOW })).rejects.toThrow();
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+});
