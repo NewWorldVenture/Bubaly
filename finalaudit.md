@@ -27,7 +27,9 @@ deliberately breaking the thing being guarded.
 
 # 1. Executive Summary
 
-Fifteen passes (A–O) over fifteen surfaces. **63 named findings.** The codebase
+Fifteen passes (A–O) over fifteen surfaces, plus the four-worker parallel
+audit now running. **63 named findings from the passes, and counting from the
+workers.** The codebase
 is in good structural health; the defects cluster in one recognisable shape.
 
 **The shape.** Nearly every serious finding here is the same defect wearing
@@ -87,7 +89,15 @@ ledger is repaired, **both defects are live in production.**
 # 3. High Priority
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
-F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03.
+F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**.
+
+| id | finding | found by | state |
+|---|---|---|---|
+| **P-01** | **Vacation Planner and Weekend Planner gated on hrefs the catalog did not contain**, so `resolveFeatureEntitlement` returned `allowed: true` for every family at all 21 call sites. The sidebar rendered both as unlocked (it reads the resolved tier, not `minLevel`), and `/api/vacations/ai` and `/api/weekend/discover` — a model call and a Ticketmaster/SeatGeek fan-out on the deployment's own keys — were open to Free. Neither feature appeared on the published `/pricing` grid, which is generated from the same catalog: the product sold neither and the code gave both away | **Claude-4**, verified by Claude-1 | **Fixed** |
+
+**P-01 is the mirror of L-01.** L-01 gated a feature the plans sell; P-01 gave
+away two the plans never mention. Same file, opposite direction, and both
+invisible because three declarations disagreed and nothing compared them.
 
 **Open, and owner-owned:**
 
@@ -143,6 +153,35 @@ UI layer and not in the layer that enforces it.
 page, a cron, a webhook and an API route all call, so "the gate was real on the
 screen and absent in the pipeline behind it" cannot recur by omission. It is not
 yet used everywhere.
+
+**Two implementations of one concept, found by sweeping the anti-drift helpers.**
+Adoption is good — `settleAll` 155 files, `notify` 70, `readAll` 27, `logAudit`
+13 — with one exception at the exact place the helper was written for.
+`lib/server/ai-access.ts` says `authenticateAI` mirrors `app/api/ai/route.ts`
+*"so the two AI edges cannot drift in what they accept"*; that route still has a
+private `authenticate()` and never adopted it. The authorization logic has not
+drifted — read side by side, every branch and code matches. The **copy** has: the
+route translates, the shared helper hardcodes six English strings, and ten route
+handlers serve them. It lands hardest on the Expo client, which sends a bearer
+token and no cookie, so `Accept-Language` is its only locale signal. Invisible
+because `GATED_SURFACES` in `scripts/i18n-scan.mjs` covers the marketing surface
+and the app shell and nothing under `app/api` or `lib/server` — not a rule broken,
+a surface the rule was never pointed at.
+
+**Scheduling.** Every `/api/cron/*` route has a schedule and every schedule names
+a route that exists — verified by set-comparing the routes on disk against
+`vercel.json` and `scripts/cron-dispatch.mjs`. All 24 are scheduled **twice**,
+deliberately: Vercel Hobby fails a deployment scheduling anything finer than
+daily, so `vercel.json` carries daily-safe schedules and the real cadences live
+in the dispatcher. The design rests on one sentence — *"the routes are idempotent,
+so a Vercel daily run and a GitHub run of the same route never conflict"* — which
+is load-bearing for all 24 and which nothing verifies. It has already been false
+once: **F-014**. Recommended fix in `audit/claude-1.md`: run each route twice
+against the replayed database and assert the second run writes nothing new.
+
+**Layering is clean.** `grep -rn "from '@/app/" lib shared` returns 0, so the
+dependency direction is one-way and Pass N's RPC-boundary reasoning holds without
+exception.
 
 **Known structural debt:** `middleware.ts` carried a hand-maintained PUBLIC list
 until it was lifted into `lib/auth/route-access.ts` with a totality test; the
@@ -250,7 +289,47 @@ public middleware prefixes — middleware answered the provider's POST with a 30
 to the HTML login page, so the route's own authentication never ran. The same
 defect had hidden the assistant bridge's two entry points.
 
-*Further findings consolidated from `audit/claude-1.md` as the architecture sweep proceeds.*
+**Provider degradation, checked.** `twilioFetch` throws on any non-2xx and on an
+unconfigured account, so Twilio fails loud rather than no-op. `hasEncryptionKey()`
+guards both sync OAuth callbacks and redirects rather than storing a plaintext
+token. `isAIConfigured()` gates the assistant with a 503 and a code. One provider
+path is not clean, and it is the one that matters most.
+
+### Guardian scam screening cannot say that it did not run *(High, open)*
+
+`lib/guardian/scam-ai.ts` falls back to deterministic pattern matching down
+**three** paths — no API key, an unparseable model reply, a thrown provider error
+— and `ScamDetectionResult` (`{ isScam, scamType, confidence, signals,
+recommendation }`) has **no field distinguishing them**. A regex verdict and a
+model verdict are the same object, `confidence` included.
+
+The consumers are the Guardian inbound SMS and WhatsApp handlers: the surface
+that tells a family whether a message reaching their child is a scam. With no key
+configured — the state of any deployment that has not set one — every inbound
+message is screened by a word list and reported with a number that reads as
+analysis. The provider error is swallowed by a bare `catch {}`.
+
+The codebase already names this class, in a comment on
+`app/api/behavior/insight/route.ts`: *"the sharpest silence on this list… it
+answers 200 with a warm sentence that is indistinguishable from coaching."* The
+recognition did not reach this file. **Fix:** add `source: 'ai' | 'patterns'` and
+a `degradedReason`, record it on the screening row, and show the family
+"screened by pattern matching" rather than a confidence.
+
+### An emergency escalation records parents as notified who were not *(Medium, open)*
+
+`app/api/guardian/escalate/route.ts:112` pushes a member onto `notifiedIds`
+**before** attempting anything, and writes the row with
+`notified_member_ids: notifiedIds`. `smsSent` itself is correct — set only after
+`sendSms` resolves, which is C-02's fix applied properly — but `notifiedIds` is
+the same defect one level down and C-02 did not reach it. `pushSent` comes from a
+single family-wide `notifications` row (`user_id: null`), so it cannot stand in
+for an individual; `smsSent` is one boolean for the whole loop. If the first
+parent's SMS succeeds and the second's throws, the row reads `sms_sent: true`
+with **both** listed as notified. The bare `catch { /* non-fatal */ }` is the only
+send path in the codebase that discards the error without logging — the three
+Contact Center callers all `console.error` — so there is no way to reconstruct
+who was actually reached.
 
 ---
 
@@ -274,12 +353,21 @@ only by reverting a fix to confirm the guard went red:
 | `failures := failures || 'text'` parses the literal as an **array literal**; the probe failed with a type error instead of naming the boundary | the negative control printed the wrong error |
 | A probe granted itself privileges and left them, so the suite's answer depended on what ran before it (**F-015**) | running the suite twice |
 | The money-safety probe asserted a concurrency it never tested (**F-019**) | reading what it actually did |
+| `tests/route-plan-gate.test.ts` asserts each route's **source text** — that `refuseUnlessEntitled(` was typed, not that it refuses anyone. Three of its twenty rows named hrefs the catalog did not contain, so the gate they assert returned `allowed: true` for every family. Green on all three, and would stay green with the catalog emptied | **Claude-4**, from the behavioural side |
+| A route-level scan for cron idempotency reported **11 of 24 routes with none** — including `notifications`, the one route **F-014** already proved idempotent. It dedupes inside `generateFamilyNotifications` on `related_id`; the mechanism is not visible at the route's own level | reading the helper, before the number was written down |
 
 ---
 
 # 16. Broken / Incomplete Features
 
-*Consolidated from `audit/claude-4.md` — worker running.*
+**P-01 — two features the product does not sell and the code gives away.**
+`/dashboard/vacations` (a 13-tab trip workspace) and `/dashboard/weekend` gated
+on hrefs absent from `FEATURE_CATALOG`. `resolveFeatureEntitlement` returns
+`{ allowed: true }` for an href it cannot find — deliberately, so routes
+predating the catalog keep working — so both were free to every family while the
+nav advertised them as Basic+ and the pricing grid listed neither. Found by
+**Claude-4**; verified and fixed by Claude-1, with two guards. Details in
+`audit/claude-4.md`.
 
 Established: the AI Assistant (**L-01**) — a permanently pinned sidebar button
 that produced a billing upsell for a feature the Free plan sells. `AI_MONTHLY_ALLOWANCE`
@@ -333,7 +421,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,191 files / 13,677 tests
+npx vitest run                         # 1,192 files / 13,684 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 310 migrations, 0 failed

@@ -102,6 +102,22 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('renewals', 'Renewals', 'Family & Home', 'basic', '/dashboard/renewals'),
   F('scan-center', 'Scan Center', 'Family & Home', 'basic', '/dashboard/scan'),
   F('trips', 'Trips', 'Family & Home', 'basic', '/dashboard/trips'),
+  // Vacation Planner and Weekend Planner gate on these two hrefs — 21 call
+  // sites between them — and neither was in this catalog. An href absent here
+  // is NOT GATED: `resolveFeatureEntitlement` returns `{ allowed: true }` for a
+  // tier it cannot find, deliberately, so that routes predating the catalog keep
+  // working. So both features were free to every family on every plan, the nav
+  // rendered them unlocked (it reads the resolved tier, not `minLevel`), and
+  // /api/vacations/ai and /api/weekend/discover — which call a model and
+  // Ticketmaster/SeatGeek on the deployment's own keys — were open to Free.
+  //
+  // `basic` is what `lib/constants/navigation.ts` has always claimed for both
+  // (`minLevel: 1`), so this makes the runtime agree with the two declarations
+  // that were already there rather than inventing a price. It also puts both on
+  // the published /pricing grid, which is generated from this catalog and has
+  // never listed either.
+  F('vacations', 'Vacation Planner', 'Family & Home', 'basic', '/dashboard/vacations'),
+  F('weekend-planner', 'Weekend Planner', 'Family & Home', 'basic', '/dashboard/weekend'),
   F('group-voting', 'Group Voting', 'Family & Home', 'free', '/dashboard/voting'),
   F('trip-memories', 'Trip Memories', 'Family & Home', 'basic', '/dashboard/trip-memories'),
   F('medications', 'Medications', 'Family & Home', 'basic', '/dashboard/medications'),
