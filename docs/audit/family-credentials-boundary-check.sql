@@ -67,11 +67,15 @@ begin
     raise exception '0296: a child can DELETE a credential';
   end if;
 
+  -- Catch ONLY the RLS refusal. `when others` would also swallow a typo in
+  -- this probe — a wrong column name would raise, be caught, and report the
+  -- boundary as held. A probe that passes because it is broken is worse than
+  -- no probe, and this file exists to prove a boundary, not to reach its end.
   refused := false;
   begin
     insert into public.family_credentials (family_id, category, label, secret, created_by)
     values (fam, 'pin', 'Child-added', 'x', child_uid);
-  exception when insufficient_privilege or others then refused := true;
+  exception when insufficient_privilege then refused := true;
   end;
   if not refused then
     raise exception '0296: a child can INSERT a credential';
