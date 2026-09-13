@@ -12,7 +12,12 @@ describe('marketing sitemap closed loop', () => {
   });
 
   it('emits public landing-page URLs without making sitemap generation fatal', () => {
-    expect(source).toContain('`' + '${SITE_URL}/lp/${encodeURIComponent(page.slug)}`');
+    // Minted through canonicalUrl(), which percent-encodes each segment and
+    // rejects anything that cannot be a canonical, indexable address. It is the
+    // only thing in this file allowed to produce a <loc>.
+    expect(source).toContain("import { canonicalUrl, isRegistryRenderedPath } from '@/lib/marketing/sitemap-urls'");
+    expect(source).toContain('canonicalUrl(`/lp/${page.slug}`)');
+    expect(source).not.toContain('${SITE_URL}');
     expect(source).toContain("console.error('[sitemap] published landing-page read failed'");
     expect(source).toContain('const byUrl = new Map');
     expect(source).toContain('return [...byUrl.values()]');
