@@ -5,12 +5,12 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Fifteen findings, and the
+**Audit status: reopened, then complete again.** Seventeen findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **10** — F2, F4, F7, F8, F10, F11, F15 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **12** — F2, F4, F7, F8, F10, F11, F15, F16, F17 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Closed without a code change** | **3** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -22,8 +22,10 @@ Nothing is left unexamined or unassigned.
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
 - **Reopened:** 2026-09-13 — F7 was not a one-off but a *shape*: an entitlement
-  stated on a screen and absent from the pipeline behind it. Every paid feature
-  was re-checked for that shape. It recurred (F15)
+  stated where a user can see it and absent where it is enforced. Every paid
+  feature was re-checked for that shape. It recurred three more times: in a
+  nightly cron (F15), across 24 pages and their shared write path (F16), and in
+  the documentation that describes the tiers (F17)
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
@@ -48,6 +50,8 @@ Nothing is left unexamined or unassigned.
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
 | F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Fixed on main by #526** |
 | F15 | Family Autopilot (Plus) ran nightly for *every* family — both things that run it had no plan check | High | **Fixed** |
+| F16 | 24 of 62 paid features were enforced only by the sidebar padlock — the URL was the bypass | High | **Fixed** |
+| F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
 
 ---
 
@@ -608,6 +612,102 @@ assertions bite — the cron gate, the route gate, "unreadable plan → skip", a
 "unreadable plan → 403" — and each failed the suite before being reverted. The
 one source-reading case in the file is the one claim that *is* about source:
 that `requireFeature` no longer holds its own copy of the comparison.
+
+## F16 — Paid features enforced only by the sidebar padlock *(High, fixed)*
+
+The sidebar already refuses every paid feature to a family below its tier.
+`featureAccessByTier` returns `'locked'`, and `NavEntry` then renders a padlock
+and an upgrade prompt **instead of a link** — never a dead link, deliberately.
+So the product tells a Free family, in the UI, that they do not have these.
+
+**24 of the 62 paid features did not check on the server.** Each page called
+`requireUserContext()` and rendered. Typing the URL was the entire bypass.
+
+| Tier | Pages |
+|---|---|
+| Plus | `/dashboard/family-automation`, `family-cfo`, `family-coo`, `family-digital-twin`, `family-emergency`, `family-health`, `family-operations`, `family-school`, `family-stress`, `/missions` |
+| Basic | `/dashboard/activity`, `announcements`, `assistant`, `concierge`, `concierge/runs`, `insurance`, `kitchen`, `memories`, `migrate`, `pets`, `readiness`, `social`, `trip-intel`, `/referrals` |
+
+Part of this was already known and written down — `docs/AI_FAMILY_OS_IMPLEMENTATION_MAP.md`
+records "Tier/allowance enforcement for AI | **missing** | … no `requireFeature`
+on either page" — but only for the two AI pages, and it had not been connected
+to the other 22.
+
+### It was not only reading
+
+`lib/family/actions.ts` is the generic write path for eleven family tables. It
+checked the signed-in user and, for sensitive tables, the member's role. It did
+not check the plan. So a Free family could **write** Plus-feature data:
+automation rules, emergency plans and contacts, stress signals, and behavioural
+profiles in `family_digital_twin_profiles`.
+
+Nine of those eleven tables now resolve to a feature and are gated through the
+same `resolveFeatureEntitlement` the pages use. Two are not, and the omission is
+deliberate and commented rather than silent: `family_ai_recommendations` and
+`family_milestones` are each rendered by several pages that are not catalog
+features at all, so there is no one feature a write to them belongs to, and
+guessing would gate a surface nobody decided to gate.
+
+Three further choices worth stating, because each could reasonably have gone the
+other way:
+
+- **Delete is not gated.** A family that drops a tier keeps the right to remove
+  rows they made. Access is gated; ownership is not.
+- **`setRecommendationStatus` and `resolveAutomationRun` are not gated.** Both
+  resolve an item that already exists rather than create new use of the feature,
+  and gating them would strand a downgraded family's pending items.
+- **Super-admins bypass**, exactly as they do on the page, so preview still
+  works.
+
+### Two tiers that may themselves be the mistake
+
+`/dashboard/migrate` ("Switch to Bubaly", the competitor-import wizard) and
+`/referrals` (refer-a-friend) are both Basic in the catalog, so both are now
+refused to a Free family — which is what the sidebar has always told them. But
+an on-ramp and a referral programme are odd things to sell, and if the intent is
+for Free families to have them, **the fix is the tier, not the gate**: one line
+in `FEATURE_CATALOG`, or an override on the admin's Tier & Features page. That
+is a one-line change in one place now, which is precisely what it was not
+before.
+
+### Proof
+
+`tests/paid-features-enforced-server-side.test.ts`. The sweep is derived from
+the catalog rather than a list, so a new paid feature added without a guard
+fails it. Comments are stripped before matching — a JSDoc mentioning the guard
+is how the F11 sweep went vacuous once already — and one case proves the
+detector itself by pointing it at a page that genuinely has no guard. The write
+path is exercised for real against an in-memory database: a Free family is
+refused and nothing is written, a Plus family's identical write lands, and an
+unreadable plan produces a *different* message, because telling a paying family
+to buy what they already own is the failure mode that matters.
+
+Three mutations were applied and each failed the suite before being reverted.
+
+## F17 — The documented tier map disagreed with the enforced one *(Medium, fixed)*
+
+`ROUTE_PLAN_LEVEL` in `lib/constants/plans.ts` maps 58 routes to a minimum plan
+level. Nothing reads it — `docs/AGENT_HANDOFF.md` says so outright
+("`ROUTE_PLAN_LEVEL` is documentation only"). It was maintained by hand.
+
+Of the 55 routes it shares with the enforced catalog, **19 disagreed** — a third
+of the table. Not marginally, either: it documented `/dashboard/rewards`,
+`/dashboard/sports`, `/dashboard/home` and `/dashboard/briefing` as *cheaper*
+than they are enforced, and `/dashboard/chores`, `/dashboard/meals`,
+`/dashboard/school` and six others as *dearer*.
+
+That matters because three other documents cite it as fact —
+`MARKET_DOMINATION_AUDIT.md` twice, `STRATEGY_WORK_QUEUE.md` once, and
+`AI_FAMILY_OS_IMPLEMENTATION_MAP.md` builds an argument on
+`ROUTE_PLAN_LEVEL['/dashboard/assistant']=0`. A stale table nothing executes is
+still read by people, and by whoever writes the next audit.
+
+The catalog routes are now **derived** from `FEATURE_CATALOG`, so they cannot
+drift again. Only the five routes that are not catalog features at all
+(`/dashboard`, `/dashboard/settings`, `/dashboard/billing`, `/dashboard/trust`,
+`/dashboard/relationship`) are still stated by hand, because the catalog has
+nothing to say about them. A test pins that the derivation stays derived: adding
+a hand-written entry that contradicts the catalog fails it.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 

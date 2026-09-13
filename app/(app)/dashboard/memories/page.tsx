@@ -4,7 +4,7 @@ import {
   Plus, Upload, FolderPlus, MoreHorizontal, Search, Filter, ChevronRight, Camera,
   Sparkles, Image as ImageIcon, Video, BookOpen, LayoutGrid, GraduationCap, Plane, Cake,
 } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -53,7 +53,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? 'highlights') as TabKey;
   const q = (sp.q ?? '').trim();
 
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/memories');
   const familyId = ctx.active.familyId;
   const myUserId = ctx.user.id;
   const supabase = await createServer();

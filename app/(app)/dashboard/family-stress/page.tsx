@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Activity, AlertTriangle, Lightbulb, Gauge } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { gatherSignalsResult } from '@/lib/family/signals';
@@ -29,7 +29,7 @@ async function ReadFailure() {
 export default async function FamilyStressPage() {
   const tr = await getTranslations();
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-stress');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

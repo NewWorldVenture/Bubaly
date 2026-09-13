@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Gift } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfig } from '@/lib/referrals/server';
 import { summarizeReferrals, referralLink } from '@/lib/referrals/core';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ReferralsPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/referrals');
   const familyId = ctx.active.familyId;
 
   const service = createServiceClient();
