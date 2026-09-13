@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { deliverNotificationEmails } from '@/lib/server/notification-emails';
@@ -23,7 +24,11 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const { data: families, error } = await supabase.from('families').select('id');
+  // Every household — see lib/supabase/read-all.ts for why an unbounded select
+  // silently stops at PostgREST's row ceiling.
+  const { rows: families, error } = await readAll<{ id: string }>(
+    (from, to) => supabase.from('families').select('id').order('id').range(from, to),
+  );
   if (error) {
     console.error('Notification cron read failed:', error);
     return NextResponse.json({ error: t('notifications.notificationProcessingFailed') }, { status: 500 });

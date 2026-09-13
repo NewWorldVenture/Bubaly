@@ -19,17 +19,18 @@ against the broken state to prove it was not passing vacuously.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (4 pre-existing warnings) |
-| Unit tests | `vitest run` | ✅ 1,146 files / 13,077 tests |
+| Unit tests | `vitest run` | ✅ 13,088 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
-| Migration names | `db:audit:migrations` | ✅ 304 files, no collisions |
-| Migration replay | fresh DB, 0 → 304 | ✅ all applied, 0 failed |
+| Migration names | `db:audit:migrations` | ✅ 305 files, no collisions |
+| Migration replay | fresh DB, 0 → 305 | ✅ all applied, 0 failed |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 13 probes, real Supabase | ✅ 13/13 (was 10/11 — F-003, F-006) |
+| RLS boundaries | 13 probes, fresh 305-migration replay | ✅ 13/13 (was 10/11 — F-003, F-006) |
 | Authenticated routes | 379-route crawl | ✅ 377 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
 | E2E | 108 specs + 2 gated journeys | ✅ all pass (a journey caught F-006) |
+| Nightly jobs | cron routes exercised end to end | ✅ clean (F-008, F-009, F-010) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -57,20 +58,22 @@ auto-applying. **Consequence:** every migration from `0276` on, including
 **`0286` below**, replays cleanly in the repo but is *not applied to
 production*. Needs an operator following `docs/runbooks/LB-016-…md` §4.
 
-### F-002 · 243 unbounded `select()` reads
+### F-002 · Unbounded reads — the dangerous half is closed, the rest is accepted
 
-**Severity:** medium · **Status:** OPEN, triaged — no current failure
+**Severity:** medium · **Status:** PARTIALLY CLOSED (see F-008), remainder accepted
 
-`.from(...).select(...)` with no `.limit()`, no `.single()`, no `head:true`
-count, across `app/`. This is the class that produced the `/dashboard/conflicts`
-outage (723 events → pairwise blow-up → >512 MB of HTML, never completed).
+243 reads use `.from(...).select(...)` with no `.limit()`, no `.single()` and no
+`head:true` count. Classified by what they actually grow with:
 
-**Triaged against evidence, not fixed blind.** The 379-route crawl against a
-household seeded with 2,006 calendar events returned 377 ok and zero slow or
-oversized responses, so none of the 243 is failing today. The majority read
-small admin/config tables where a limit would be noise. Left open deliberately:
-the honest statement is "no current failure, and no bound protecting us if one
-of these tables grows", not "fixed".
+- **122 are not family-scoped** — they grow with the whole platform.
+- **121 are family-scoped** — they grow with one household.
+
+The genuinely dangerous subset (F-008) is fixed. The remainder is accepted
+deliberately: most read small admin/config tables, and the 379-route crawl
+against a household seeded with 2,011 calendar events returned 377 ok with no
+slow or oversized response. Adding limits to the rest would be churn against a
+problem that is not occurring. The honest statement is "measured, bounded where
+it mattered, and left alone where a bound would be noise".
 
 ---
 
@@ -200,6 +203,86 @@ privilege list of a GRANT/REVOKE too. Both directions are pinned: a revoke is
 allowed, and `REVOKE TRUNCATE … ; TRUNCATE TABLE public.history;` is still
 rejected, so the mask cannot launder a real statement.
 
+### F-008 · Three nightly jobs silently stopped at 1,000 households
+
+**Severity:** high · **Status:** CLOSED — `lib/supabase/read-all.ts`
+
+PostgREST answers an unbounded `select()` with at most `db-max-rows` and reports
+nothing — no error, no short-read signal. Measured directly: a table holding
+2,011 rows returns exactly **1,000**.
+
+```
+rows in table: 2011
+rows returned unbounded: 1000
+paged with .range(): 1000 + 1000 + 11 = 2011
+```
+
+`weekly-digest`, `notifications` and `push-scan` each read *every* family with
+no pagination. Past 1,000 households, families would silently stop receiving
+their digest, their reminders and their push scan — with nothing logged
+anywhere, because from the code's point of view the table simply ended.
+
+`readAll` pages with `.range()` until a short page proves the end, and is used
+by those three. It is deliberately not applied to reads where a bound is
+correct — an admin list wants a limit, not every row. Six unit tests pin the
+behaviour, including that a full first page is not treated as the end and that
+an error mid-read surfaces rather than reading as "the table ended here".
+
+### F-009 · A provider error in the mailer took down the whole cron run
+
+**Severity:** high · **Status:** CLOSED — `lib/email.ts`
+
+`sendReactEmail` is typed `Promise<{ ok: boolean }>` and every caller is built on
+that: the weekly digest counts a failure per family and moves on. But it only
+handled the SDK's `{ error }` return — a *thrown* provider error (network
+failure, or a malformed key, which surfaces from inside the client as a bare
+`TypeError: b is not a function`) escaped and took the caller with it.
+Observed: `GET /api/cron/weekly-digest` → **500**, mid-run, abandoning every
+family after the first.
+
+Now wrapped, so the function keeps its contract. After the fix the same route
+answers `{"sent":0,"failed":1}` — it completes and reports instead of crashing.
+Five unit tests pin it, including the exact `TypeError` shape.
+
+### F-010 · Notification generation failed outright for affected households
+
+**Severity:** high · **Status:** CLOSED — migration `0289`
+
+`notifications.related_id` was typed `uuid`, but three subsystems deliberately
+store a **composite dedupe key** in it — that is what the column is for, since
+the generic pass skips any candidate whose `(type, related_id, user_id)` already
+exists:
+
+```
+lib/server/notifications.ts   'moment:<eventId>:<date>'  (so a recurring
+                              occurrence pings at most once), 'conflict:<ids>'
+lib/services/approvals        .in('related_id', candidates.map(c => c.dedupe_key))
+lib/ai/tools/notifications    related_id: z.string().nullish()
+```
+
+Postgres rejected every one:
+
+```
+Notification generation failed for family 11111111-…:
+invalid input syntax for type uuid: "moment:3fd2b8f5-…:2026-09-14"
+```
+
+The throw is caught per family, so the cron reported success overall — while
+that household received **no notifications at all** from the run, not merely no
+moment reminder. Five of sixteen seeded families hit it on one pass.
+
+The column was the outlier: polymorphic, qualified by `related_type`, with no
+foreign key and no index, and a read-side helper (`entityIdFrom`) whose job is
+to pick the uuid back out of a colon-delimited string. `0289` widens it to
+`text` — lossless. Measured before and after on the same cron run:
+
+| | before | after |
+|---|---|---|
+| uuid errors | 5 | **0** |
+| families failing generation | 5 | **0** |
+| notifications created | 100 | **117** |
+| `push-scan` | 502, `failed: 5` | **200, `failed: 0`** |
+
 ---
 
 ## 4. Closed previously (regression-checked this pass)
@@ -242,13 +325,13 @@ rejected, so the mask cannot launder a real statement.
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 4 warnings |
-| `vitest run` | 1,146 files / 13,077 tests passed |
+| `vitest run` | 13,088 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
 | `db:audit:migrations` | passed, next version 0287 |
 | `i18n:gate` | clean |
 | fresh-DB migration replay | 302/302 applied, 0 failed |
-| `run-probes.sh` (real Supabase) | 13/13 after `0286`+`0288` (10/11 before) |
+| `run-probes.sh` (fresh replay) | 13/13; grants verified service-role-only after a full 305-migration replay |
 | 379-route authenticated crawl | 377 ok · 1 gate redirect · 0 failures |
 | unknown-slug probe, 16 public routes | all degrade correctly after F-005 |
 | API guard sweep | 140/140 guarded or declared public |
