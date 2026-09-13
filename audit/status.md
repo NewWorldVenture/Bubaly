@@ -17,7 +17,7 @@ Findings go in `audit/claude-<N>.md`. Only Claude-1 edits `finalaudit.md`.
 ---
 
 ## Claude-1
-CURRENT: Architecture/integration seams. Next: env/config contract, cron auth consistency, workspace boundaries.
+CURRENT: Architecture/integration seams. Done: env/config contract + cron auth. Next: push/APNs, calendar feeds, AI provider fallbacks.
 COMPLETED:
   - F-020 migration-idempotency defect: found, fixed (18 migrations + 0226), made a permanent CI gate. On main.
   - Version collision 0295 between main (#542) and #541; renumbered to 0296.
@@ -27,11 +27,16 @@ COMPLETED:
   - Service-role boundary probed by planting a violating client page: boundary HOLDS,
     key value absent from all client chunks. Declared the boundary explicitly in the
     two modules that inherited it. LOW / hardening, not a vulnerability.
+  - HIGH: /api/health reported `ok` while a missing CRON_SECRET silently 401'd all 24
+    scheduled jobs, and a missing CHILD_LOGIN_SECRET disabled child sign-in. Added a
+    FEATURE_ENV tier reported as degraded/200 (never 503), with 10 tests proved
+    load-bearing by reverting.
 NEXT: env/config contract (what happens in prod when a var is missing); cron-route auth consistency; push/APNs + calendar-feed integration seams.
 FILES-TOUCHED:
   - finalaudit.md (Claude-1 owns exclusively), audit/claude-1.md, audit/status.md
   - docs/audit/rehearse-ledger-repair.sh, .github/workflows/ci.yml
   - lib/supabase/server.ts, lib/network/benchmarks-server.ts  (server-only declarations)
+  - lib/health/status.ts, app/api/health/route.ts, tests/health-feature-secrets.test.ts
   - supabase/migrations/* (idempotency guards — landed on main, do not re-edit)
 BLOCKERS:
   - F-001: applying migrations to production needs operator credentials. Agents must not

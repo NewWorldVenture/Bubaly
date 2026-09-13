@@ -248,3 +248,42 @@ made this finding honest. Had I stopped at "build fails with the guard", I would
 have reported a vulnerability I had closed, when the truth is that it was never
 open and I added a seatbelt. Running the *negative* case is the same discipline
 this audit recommends for every guard — it just cuts the other way here.
+
+### [CLAUDE-1][HIGH][INTEGRATION] The health endpoint reported `ok` while every scheduled job was dead
+
+- **File/path:** `lib/health/status.ts`, `app/api/health/route.ts`,
+  `lib/server/cron-auth.ts`, `vercel.json`
+- **Problem:** `REQUIRED_ENV` holds three names — the Supabase triple. Six
+  secrets that gate entire shipped subsystems were in no tier at all, so their
+  absence was invisible to the one endpoint whose job is to say whether the
+  deployment is working.
+- **Evidence:**
+  - `vercel.json` declares **24** cron jobs. All 24 routes call
+    `hasCronAuthorization`, and all 24 branch on it (verified per-file, after a
+    first scan of mine returned 22 false positives because my pattern omitted the
+    real helper name — the Pass D trap, committed by the person who wrote it up).
+  - `hasCronAuthorization` is correctly fail-closed: `!!secret && …`. With
+    `CRON_SECRET` unset, every job answers **401** — not 503, not an exception.
+  - `childSignInAction` returns `kidSignInIsnT` before reading anything when
+    `CHILD_LOGIN_SECRET` is unset: no child in any family can sign in.
+  - `summarizeHealth` had no branch for any of this, so `/api/health` answered
+    `ok` / 200 in both cases.
+- **Impact:** A production deployment missing one env var loses nightly
+  notifications, wallet allowance, chore reminders, the weekly digest, autopilot
+  scan, return reminders, calendar feeds and marketing sends — or child sign-in
+  entirely — and every monitor watching `/api/health` reports green. The failure
+  is silent at exactly the layer built to make failures loud.
+- **Recommended fix:** applied. A `FEATURE_ENV` tier, reported as
+  **`degraded` / 200**, never 503. The existing comment was right that a disabled
+  feature must not pull an instance from rotation — the gap was reporting, not
+  severity. `degraded` already exists for precisely this ("signal it in the body
+  for alerting"), and the file already used it for a present-but-invalid
+  service-role key, whose comment describes this same shape.
+- **Status:** FIXED. `tsc` clean; 13,603 tests pass; the 222 existing health
+  tests unchanged.
+- **Proved load-bearing:** `tests/health-feature-secrets.test.ts` (10 cases).
+  Removing only the `degraded` branch fails exactly the two cases that assert it
+  and leaves the other eight passing. Two cases exist to stop the fix drifting:
+  one asserts feature secrets stay OUT of `REQUIRED_ENV` (so nobody turns this
+  into a 503), one asserts every name in `FEATURE_ENV` is actually read by the
+  codebase (so the list cannot go stale and decorative).
