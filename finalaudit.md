@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Four audits of bubaly.com, kept in one file because one file is the record.
+Five audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -10,6 +10,7 @@ They ran over **different surfaces** and none supersedes another:
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
 | **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
 | **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
+| **E — Read honesty** | the mirror of C: a read whose error is discarded, where something downstream then treats the absence it returns as a fact | 1 | `E-01` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -2326,3 +2327,147 @@ codebase. So each was proved load-bearing against the real code:
 
 Both mutations were reverted; `git status` and `tsc --noEmit` confirm the tree is
 unchanged apart from the new test.
+
+---
+
+# Pass E — Read honesty (E-01)
+
+Pass C asked, of every write: *when this is refused, does anything notice?* This
+asks the same question of **reads**, and it is the same library fact in the other
+direction. A PostgREST read also resolves with `{ data, error }`, so
+
+```ts
+const { data } = await supabase.from('trust_policies').select('id')…;
+```
+
+cannot fail visibly. `data` comes back `null` — which is exactly what "there is
+no such row" looks like. The two are indistinguishable to the code that follows.
+
+- **Audit head:** `2608b556` (the branch, after Passes A–D)
+- **Surface:** 210 reads across 101 tables discard their error
+- **What promotes a hit to a finding** — narrower than Pass C's, deliberately:
+  a rendered empty state is usually a survivable degradation, so a hit counts
+  only when the absence is treated as a **fact** and something is decided on it.
+  Most of the 210 render; one decides.
+
+Two were checked closely and are correct as they stand. `resolveEntitlement`
+(`lib/server/entitlement.ts`) drops the error on its `family_members` read and
+falls back to *unlocked, level 0* — and says so in its doc comment. That is the
+free tier, the least privilege it can grant, so the failure direction is
+conservative. `submitReviewAction` drops the error on `reputation_settings` and
+therefore leaves `autoMin` null, which sends the review to **pending**
+moderation rather than publishing it. Both fail in the safe direction.
+
+## Status summary
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| E-01 | Turning Autopilot off could leave it on, and every retry made it worse | High | **Fixed** — this branch |
+
+---
+
+## E-01 — The autopilot dial could report success without taking effect *(High, fixed)*
+
+`setConciergeAutopilotAction` is the family-facing switch for whether Bubaly acts
+on its own: `auto` → `allow`, `ask` → `require_approval`, `off` → `deny`. Its
+doc comment says it writes **ONE** system trust policy. It did not enforce that.
+
+```ts
+const { data: existing } = await sb
+  .from('trust_policies').select('id')
+  .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle();
+
+if (existing?.id) { /* update that row */ } else { /* INSERT a new policy */ }
+```
+
+The read's error was discarded, so a refused read returned `data: null` and the
+`else` branch ran. Four facts compound from there, each verified rather than
+assumed:
+
+1. **Nothing in the schema stops a duplicate.** `0093_trust_engine.sql` gives
+   `trust_policies` two indexes, `idx_trust_policies_family` and
+   `idx_trust_policies_domain` — both non-unique. There is no unique key on
+   `(family_id, name)`.
+2. **Two rows change the answer.** The insert hard-codes `priority: 10`, so a
+   duplicate ties with the original. `lib/trust/engine.ts:283` filters the
+   matching policies, sorts by `b.priority - a.priority`, and takes
+   `matching[0]`. `Array.prototype.sort` is stable, so a tie is resolved by
+   **list position**.
+3. **List position was undefined.** `loadTrustInputs` selected the policies with
+   no `ORDER BY`, and a Postgres select without one has no guaranteed row order.
+   So which of the two governed could differ between two identical requests.
+4. **It ratcheted.** Once two rows exist, `.maybeSingle()` *itself* fails. From
+   postgrest-js's own source:
+
+   ```js
+   if (this.isMaybeSingle && Array.isArray(data)) {
+     if (data.length > 1) {
+       error = { code: 'PGRST116', ... };
+       data = null;
+   ```
+
+   `data` is set to null **and** an error is set. With the error discarded, every
+   later save read null again and inserted yet another policy. The dial could
+   never take effect again through the UI — and returned `{ ok: true }` each time.
+
+The consequence is the reason this is High rather than Medium. A parent who set
+Autopilot to **off** could be left with a stale `allow` still deciding whether
+Bubaly executes accepted plans unattended. This is proved rather than asserted:
+the guard evaluates the real engine with the two policies in each order and gets
+`allow` one way and `deny` the other, from the same two rows.
+
+### The fix, and why it is shaped this way
+
+The read is gone. The update is keyed on the **filter** rather than on an id read
+back, and the insert runs only if the update matched nothing:
+
+```ts
+const { data: updated, error: updateError } = await sb.from('trust_policies')
+  .update({ effect, enabled: true })
+  .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
+  .select('id');
+if (updateError) { …log…; return { ok: false, error: updateError.message }; }
+if ((updated ?? []).length === 0) { /* insert */ }
+```
+
+This is both the fix and the **repair**. It moves every row of that name, so any
+duplicates already in a family's database converge to the same effect and the
+engine's choice between them stops mattering. That property is required, not
+incidental: the production migration ledger is gated (Pass A **F5** / Pass B
+**F-001**), so a corrective unique index cannot currently be applied there, and
+the fix has to work on unmigrated data.
+
+`loadTrustInputs` now also orders the policies —
+`.order('priority', …).order('created_at', { ascending: false })` — so a tie
+between any two policies resolves the same way twice, newest first. That closes
+the general case behind E-01 rather than only the autopilot instance of it.
+
+A unique index on `(family_id, name)` remains the right belt-and-braces once the
+ledger is repaired. It is **not** required for the fix above to hold.
+
+## How Pass E is kept closed
+
+`tests/autopilot-dial-takes-effect.test.ts` — **9 cases**.
+
+| what it holds | how |
+|---|---|
+| Every policy of that name is moved, not one id read back | asserts the update's filters carry `family_id` + `name` and **no** `id`, with two rows present |
+| A refused write reports failure | the decisive case: the dial returned `ok: true` on a write nobody checked |
+| A refused read is never read as "no policy yet" | asserts no insert follows a failed update |
+| Each dial position maps to the effect the engine obeys | `auto`/`ask`/`off` → `allow`/`require_approval`/`deny` |
+| Non-managers are refused before any write | no update, no insert |
+| **Why a leftover row mattered** | drives the real `evaluateAction` with both orderings and shows the same two rows give opposite answers — then shows convergence makes order irrelevant |
+| The load is ordered | fails if the `.order()` calls are dropped from `lib/trust/server.ts` |
+
+Proved load-bearing by reverting each fix: restoring the original
+read-then-branch fails **5 of the 9**, and dropping the `.order()` calls fails
+the ordering case alone.
+
+One correction worth recording, because it nearly became a wrong finding. The
+first version of the engine fixture returned `deny` for *both* orderings, which
+would have read as "deny always wins" — a safe engine and no finding. It was
+neither: the fixture used an actor of kind `'ai'`, and `policyApplies` matches a
+`subject_kind: 'ai'` policy against an actor of kind **`'ai_agent'`**. Both
+policies were being filtered out and the result was the *fallback* deny, which
+the decision's `basis: 'fallback'` said plainly. The fixture was wrong, not the
+engine. Checking `basis` rather than `effect` is what separated the two.

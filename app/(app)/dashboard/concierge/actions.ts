@@ -284,24 +284,53 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
   const familyId = ctx.active.familyId;
   const effect = dialEffect(level);
 
-  const { data: existing } = await sb
-    .from('trust_policies').select('id')
-    .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle();
+  // Update EVERY policy of this name, then insert only if none existed.
+  //
+  // This used to read the policy first and branch on what came back, with the
+  // read's error discarded. A PostgREST read RESOLVES with { data, error }, so a
+  // refused read handed back `data: null` — indistinguishable from "no policy
+  // yet" — and the else branch inserted a SECOND autopilot policy.
+  //
+  // Nothing in the schema stops that: 0093_trust_engine.sql gives trust_policies
+  // only two non-unique indexes, no unique key on (family_id, name). And two
+  // rows change the answer, because both carry priority 10 and the engine takes
+  // the highest-priority match (lib/trust/engine.ts) from a list loaded without
+  // an ORDER BY (lib/trust/server.ts) — so which one governs was decided by
+  // whatever order Postgres happened to return. A parent who set this to `off`
+  // could be left with the stale `allow` still deciding whether Bubaly acts on
+  // its own.
+  //
+  // It also ratcheted. Once two rows exist, `.maybeSingle()` itself fails —
+  // postgrest-js returns PGRST116 with `data: null` for more than one row — so
+  // every later save read null again and inserted yet another policy. The dial
+  // could never take effect again, and reported success every time.
+  //
+  // Updating on the FILTER rather than on an id read back is both the fix and
+  // the repair: it converges any duplicates already in the database to the same
+  // effect, so the engine's choice between them stops mattering. That is what
+  // this needs to do, because the production migration ledger is gated and a
+  // corrective unique index cannot currently be applied there.
+  const { data: updated, error: updateError } = await sb.from('trust_policies')
+    .update({ effect, enabled: true })
+    .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
+    .select('id');
+  if (updateError) {
+    console.error('[concierge] autopilot policy update failed', { familyId, effect, error: updateError });
+    return { ok: false, error: updateError.message };
+  }
 
-  if (existing?.id) {
-    const { error } = await sb.from('trust_policies')
-      .update({ effect, enabled: true })
-      .eq('id', existing.id).eq('family_id', familyId);
-    if (error) return { ok: false, error: error.message };
-  } else {
-    const { error } = await sb.from('trust_policies').insert({
+  if ((updated ?? []).length === 0) {
+    const { error: insertError } = await sb.from('trust_policies').insert({
       family_id: familyId, name: AUTOPILOT_POLICY_NAME,
       description: 'Governs whether Bubaly executes accepted concierge plans on its own (allow), asks first (require_approval), or stays hands-off (deny).',
       domain: AUTOPILOT_DOMAIN, capability: AUTOPILOT_CAPABILITY,
       subject_kind: 'ai', effect, priority: 10, enabled: true, is_system: true,
       created_by: ctx.user.id,
     });
-    if (error) return { ok: false, error: error.message };
+    if (insertError) {
+      console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
+      return { ok: false, error: insertError.message };
+    }
   }
 
   revalidatePath(PATH);
