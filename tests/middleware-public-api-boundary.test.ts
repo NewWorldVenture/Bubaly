@@ -22,6 +22,25 @@ describe('middleware public API boundary', () => {
     }
   });
 
+  it('keeps a family\'s downloaded episodes behind a session', () => {
+    // /library/media/[itemId] streams podcast bytes from Bubaly's own origin so
+    // that `cache.add()` — which answers to connect-src, not media-src — is
+    // allowed to store them. It lives OUTSIDE /api on purpose, because sw.js
+    // skips that prefix entirely and a media route there could never be cached.
+    //
+    // Being outside /api is exactly why this test exists: a future '/library'
+    // entry in PUBLIC, added for some marketing page, would make every family's
+    // episodes streamable by anyone holding an item id. The route also calls
+    // requireUserContext() and reads through the user's own client, so RLS is
+    // the real boundary — this is the outer one, and it should not be the first
+    // thing to quietly go.
+    const block = middleware.slice(middleware.indexOf('const PUBLIC = ['));
+    const entries = [...block.slice(0, block.indexOf('];')).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    const path = '/library/media/00000000-0000-4000-8000-000000000001';
+    const matching = entries.filter((entry) => path === entry || path.startsWith(`${entry}/`));
+    expect(matching, `PUBLIC must not cover ${path}`).toEqual([]);
+  });
+
   it('keeps the Family Contact Center inbound webhooks reachable', () => {
     // Found in production: /api/contact-center was missing from PUBLIC, so a
     // POST to the inbound-email webhook answered 307 -> /login and the route
