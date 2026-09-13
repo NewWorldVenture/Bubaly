@@ -144,3 +144,69 @@ describe('every wallet audit write goes through the one helper', () => {
     expect(offenders, 'use logWalletAudit so the failure is reported once, correctly').toEqual([]);
   });
 });
+
+// The same dead catch, in the highest-stakes place in the product.
+//
+// Four emergency-notification writes wrapped their insert in try/catch and
+// logged from the catch — a Guardian escalation, a Guardian screening call, an
+// urgent Contact Center message and an urgent voicemail. Same reason as above:
+// the insert resolves with { data, error }, so the catch never saw a refused
+// write and the family simply did not get told.
+//
+// The escalation route was worse than silent. It set `pushSent = true` on the
+// line after the insert, INSIDE the try — so a failed write still marked the
+// push as sent, and `push_sent: pushSent` is written into the
+// guardian_escalations row and returned to the caller. An emergency was
+// permanently recorded as having alerted the parents when nothing was written.
+describe('an emergency notification that was not written says so', () => {
+  const ROUTES = [
+    'app/api/guardian/escalate/route.ts',
+    'app/api/guardian/screen/route.ts',
+    'app/api/contact-center/sms/route.ts',
+    'app/api/contact-center/voice/transcription/route.ts',
+  ];
+
+  it.each(ROUTES)('%s takes the error from its notifications insert', async (file) => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(file, 'utf8');
+    const takesError = /const \{[^}]*\berror[^}]*\} = await [\w.]*\.from\('notifications'\)\.insert/.test(source);
+    expect(takesError, 'the insert result is discarded, so a refused write is invisible').toBe(true);
+  });
+
+  it('the escalation claims a push only when the row landed', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('app/api/guardian/escalate/route.ts', 'utf8');
+    // `pushSent = true` must sit on the no-error branch, never as the next
+    // statement after an insert whose outcome nobody checked.
+    expect(source).toMatch(/if \(notifyError\)[\s\S]{0,200}else pushSent = true;/);
+    expect(source, 'push_sent is persisted, so it has to mean the write landed')
+      .toContain('push_sent: pushSent');
+  });
+});
+
+// audit_logs has the same shape as wallet_audit_logs and the same helper. Three
+// call sites wrote it longhand and discarded the error, which the wallet-only
+// sweep above could not see.
+describe('no audit_logs write discards its error', () => {
+  it('leaves no call site inserting the row without reading the outcome', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (['node_modules', '.next', '.git', '.claude', 'mobile'].includes(entry.name)) continue;
+        if (entry.isDirectory()) walk(`${dir}/${entry.name}`, out);
+        else if (/\.tsx?$/.test(entry.name)) out.push(`${dir}/${entry.name}`);
+      }
+      return out;
+    };
+    // Longhand is fine where the error is READ — lib/ai/runs/controls.ts and
+    // lib/services/activity/index.ts both destructure it and act on it, and
+    // both carry table-specific context logAudit does not model. What must not
+    // come back is the shape that started this: an awaited insert whose result
+    // goes nowhere, so the pattern requires `await` with nothing destructured
+    // in front of it.
+    const discards = /(?:^|\n)\s*await\s+[\w.]*\.from\(\s*'audit_logs'\s*\)\s*\.insert/;
+    const offenders = [...walk('app'), ...walk('lib')]
+      .filter((file) => discards.test(readFileSync(file, 'utf8')));
+    expect(offenders, 'read the error — use logAudit, or destructure it here').toEqual([]);
+  });
+});
