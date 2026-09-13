@@ -9,6 +9,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { isAnswered } from '@/lib/marketplace/questions';
@@ -23,7 +24,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
 
-  const { data: questions } = useRealtimeQuery<Question>({
+  const { data: questions, error: readError, refresh } = useRealtimeQuery<Question>({
     table: 'marketplace_questions', familyId, deps: [familyId, listingId],
     fetcher: (sb) => sb.from('marketplace_questions').select('*').eq('family_id', familyId).eq('listing_id', listingId).order('created_at', { ascending: false }),
   });
@@ -70,7 +71,11 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
         </form>
       )}
 
-      {rows.length === 0 ? (
+      {readError ? (
+        // A seller who reads "No questions yet" stops checking. The question a
+        // buyer did ask is still there; only the read failed.
+        <ErrorState message={t('listingQuestions.couldNotLoadQuestions')} onRetry={() => { void refresh(); }} />
+      ) : rows.length === 0 ? (
         <p className="text-sm text-muted">{t('listingQuestions.noQuestionsYet')}{isOwner ? ' — buyers can ask here.' : '. Be the first to ask.'}</p>
       ) : (
         <ul className="space-y-3">
