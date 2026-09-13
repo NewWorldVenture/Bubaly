@@ -25,6 +25,7 @@ inferred from a filename or a comment.
 | F7 | Family email address provisioning is not plan-gated | Low | **Open — decision** |
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
 | F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Open — needs decision** |
+| F10 | Seeded placeholder records shown as real customer stories on the homepage and /pricing | High | **Fixed** |
 
 ---
 
@@ -256,6 +257,48 @@ would close it.
 
 Only then is pruning safe. Happy to do all three — it needs a decision first,
 because step 3 will likely find dynamic keys that need restructuring.
+
+## F10 — Seeded records presented as real customer stories *(High, fixed)*
+
+Found by crawling the internal links on the live public pages.
+
+The **homepage** and **/pricing** both rendered a section headed **"Family
+stories"**, introducing its contents as quotes *"In the family's own words"* —
+and the contents were three database seed rows:
+
+```
+Seed Case Studies #450   Seed Summary value 450   Seed Result Metric value 450
+Seed Case Studies #180   Seed Summary value 180   Seed Result Metric value 180
+Seed Case Studies #90    Seed Summary value 90    Seed Result Metric value 90
+```
+
+Each linked to a detail page that answered **200** with
+`<h1>Seed Case Studies #450</h1>` at `/customers/seed-case_studies-450`.
+
+This is the same class as F1 — seeded rows reaching a public surface — but worse
+in kind: F1 published dead links, while this published *invented customers* under
+a heading that explicitly claims they are real families.
+
+**Why `is_published` could not have caught it.** The seeder sets `is_published`
+true; that flag is exactly what made them public. The rows are identifiable only
+by the seeder's slug convention, `seed-<table>-<n>`.
+
+**Fix.** `isSyntheticSeedSlug()` joins `publishedOnly()` in the shared reputation
+helpers, so the list readers on both pages exclude them, and
+`loadPublishedCaseStudy()` refuses one **before touching the database** so a link
+surviving in a cache or a search index cannot still render one. The list and the
+detail page agreeing is the whole point — F1 existed precisely because two
+readers of the same content did not.
+
+Deliberately narrow: testimonials have no `slug` column at all, so they pass
+through untouched, and the guard requires the marker at the *start* of the slug
+so a genuine story like `seeds-of-change` or `seed-starting-with-kids` is not
+swept up. Both are pinned.
+
+**Still worth doing separately:** the rows remain in the database. The site no
+longer renders them, which is the visible outcome, but deleting them is an admin
+action (Super Admin → Marketing, or SQL) that this session has no credentials
+for.
 
 ---
 
