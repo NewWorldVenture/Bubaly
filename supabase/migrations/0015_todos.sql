@@ -41,8 +41,10 @@ create index if not exists todo_items_family_idx on public.todo_items(family_id)
 alter table public.todo_lists enable row level security;
 alter table public.todo_items enable row level security;
 
+drop policy if exists "family member access" on public.todo_lists;
 create policy "family member access" on public.todo_lists for all
   using (family_id in (select family_id from public.family_members where user_id = auth.uid()));
 
+drop policy if exists "family member access" on public.todo_items;
 create policy "family member access" on public.todo_items for all
   using (family_id in (select family_id from public.family_members where user_id = auth.uid()));

@@ -57,10 +57,10 @@ CREATE INDEX IF NOT EXISTS call_logs_contact_idx    ON call_logs(contact_id) WHE
 -- ─── Triggers ──────────────────────────────────────────────────────────────
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'front_desk_settings_updated_at') THEN
-    CREATE TRIGGER front_desk_settings_updated_at BEFORE UPDATE ON front_desk_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger front_desk_settings_updated_at BEFORE UPDATE ON front_desk_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'call_logs_updated_at') THEN
-    CREATE TRIGGER call_logs_updated_at BEFORE UPDATE ON call_logs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger call_logs_updated_at BEFORE UPDATE ON call_logs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
 END $$;
 
@@ -69,30 +69,47 @@ ALTER TABLE front_desk_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE call_logs           ENABLE ROW LEVEL SECURITY;
 
 -- Settings: any active member can read; only owner/admin can write.
+drop policy if exists "front_desk_select" on front_desk_settings;
 CREATE POLICY "front_desk_select" ON front_desk_settings FOR SELECT USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = front_desk_settings.family_id AND user_id = auth.uid() AND is_active)
 );
+drop policy if exists "front_desk_insert" on front_desk_settings;
 CREATE POLICY "front_desk_insert" ON front_desk_settings FOR INSERT WITH CHECK (
   public.can_manage_family(front_desk_settings.family_id)
 );
+drop policy if exists "front_desk_update" on front_desk_settings;
 CREATE POLICY "front_desk_update" ON front_desk_settings FOR UPDATE USING (
   public.can_manage_family(front_desk_settings.family_id)
 );
 
 -- Call logs: any active member can read/write their family's calls.
+drop policy if exists "call_logs_select" on call_logs;
 CREATE POLICY "call_logs_select" ON call_logs FOR SELECT USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = call_logs.family_id AND user_id = auth.uid() AND is_active)
 );
+drop policy if exists "call_logs_insert" on call_logs;
 CREATE POLICY "call_logs_insert" ON call_logs FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = call_logs.family_id AND user_id = auth.uid() AND is_active)
 );
+drop policy if exists "call_logs_update" on call_logs;
 CREATE POLICY "call_logs_update" ON call_logs FOR UPDATE USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = call_logs.family_id AND user_id = auth.uid() AND is_active)
 );
+drop policy if exists "call_logs_delete" on call_logs;
 CREATE POLICY "call_logs_delete" ON call_logs FOR DELETE USING (
   public.can_manage_family(call_logs.family_id)
 );
 
 -- ─── Realtime ──────────────────────────────────────────────────────────────
-ALTER PUBLICATION supabase_realtime ADD TABLE front_desk_settings;
-ALTER PUBLICATION supabase_realtime ADD TABLE call_logs;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'front_desk_settings') then
+    alter publication supabase_realtime add table front_desk_settings;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'call_logs') then
+    alter publication supabase_realtime add table call_logs;
+  end if;
+end $pub$;

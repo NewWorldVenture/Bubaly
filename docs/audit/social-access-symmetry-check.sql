@@ -8,7 +8,7 @@
 --
 -- 0034 required admin (or manage_access) to create or change such a row, but
 -- allowed any family member to DELETE one — and deleting restores the higher
--- default. 0295 makes delete match. This proves it behaviourally, and proves it
+-- default. 0296 makes delete match. This proves it behaviourally, and proves it
 -- can still see the old state.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
@@ -113,7 +113,7 @@ begin
   ) select count(*) into gone from removed;
   perform set_config('role','postgres', true);
   if gone <> 1 then
-    raise exception 'A-17 FAIL: the pre-0295 policy was restored and the member still could NOT delete — this probe proves nothing';
+    raise exception 'A-17 FAIL: the pre-0296 policy was restored and the member still could NOT delete — this probe proves nothing';
   end if;
   raise notice 'A-17 OK: with 0034''s delete policy restored the member CAN remove their restriction — not decoration';
 end $$;

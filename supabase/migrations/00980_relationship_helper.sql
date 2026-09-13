@@ -67,13 +67,13 @@ CREATE INDEX IF NOT EXISTS relationship_gift_ideas_status_idx ON relationship_gi
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'relationship_profile_updated_at') THEN
-    CREATE TRIGGER relationship_profile_updated_at BEFORE UPDATE ON relationship_profile FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger relationship_profile_updated_at BEFORE UPDATE ON relationship_profile FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'relationship_dates_updated_at') THEN
-    CREATE TRIGGER relationship_dates_updated_at BEFORE UPDATE ON relationship_dates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger relationship_dates_updated_at BEFORE UPDATE ON relationship_dates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'relationship_gift_ideas_updated_at') THEN
-    CREATE TRIGGER relationship_gift_ideas_updated_at BEFORE UPDATE ON relationship_gift_ideas FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+    create or replace trigger relationship_gift_ideas_updated_at BEFORE UPDATE ON relationship_gift_ideas FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
 END $$;
 
@@ -81,24 +81,42 @@ ALTER TABLE relationship_profile    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE relationship_dates      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE relationship_gift_ideas ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "relationship_profile_family" on relationship_profile;
 CREATE POLICY "relationship_profile_family" ON relationship_profile FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_profile.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_profile.family_id AND user_id = auth.uid() AND is_active)
 );
 
+drop policy if exists "relationship_dates_family" on relationship_dates;
 CREATE POLICY "relationship_dates_family" ON relationship_dates FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_dates.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_dates.family_id AND user_id = auth.uid() AND is_active)
 );
 
+drop policy if exists "relationship_gift_ideas_family" on relationship_gift_ideas;
 CREATE POLICY "relationship_gift_ideas_family" ON relationship_gift_ideas FOR ALL USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_gift_ideas.family_id AND user_id = auth.uid() AND is_active)
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = relationship_gift_ideas.family_id AND user_id = auth.uid() AND is_active)
 );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE relationship_profile;
-ALTER PUBLICATION supabase_realtime ADD TABLE relationship_dates;
-ALTER PUBLICATION supabase_realtime ADD TABLE relationship_gift_ideas;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'relationship_profile') then
+    alter publication supabase_realtime add table relationship_profile;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'relationship_dates') then
+    alter publication supabase_realtime add table relationship_dates;
+  end if;
+end $pub$;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'relationship_gift_ideas') then
+    alter publication supabase_realtime add table relationship_gift_ideas;
+  end if;
+end $pub$;

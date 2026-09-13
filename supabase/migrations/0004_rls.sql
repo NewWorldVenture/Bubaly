@@ -51,7 +51,9 @@ create policy profiles_select_self on public.profiles for select
     )
   );
 drop policy if exists profiles_upsert_self on public.profiles;
+drop policy if exists profiles_insert_self on public.profiles;
 create policy profiles_insert_self on public.profiles for insert with check (id = auth.uid());
+drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles for update using (id = auth.uid());
 
 -- ---------- families ----------
@@ -73,10 +75,13 @@ drop policy if exists fm_select on public.family_members;
 create policy fm_select on public.family_members for select
   using (public.is_family_member(family_id));
 drop policy if exists fm_manage on public.family_members;
+drop policy if exists fm_insert on public.family_members;
 create policy fm_insert on public.family_members for insert
   with check (public.can_manage_family(family_id));
+drop policy if exists fm_update on public.family_members;
 create policy fm_update on public.family_members for update
   using (public.can_manage_family(family_id) or user_id = auth.uid());
+drop policy if exists fm_delete on public.family_members;
 create policy fm_delete on public.family_members for delete
   using (public.can_manage_family(family_id));
 
@@ -94,11 +99,14 @@ create policy invites_select on public.invites for select
     or lower(email) = lower(coalesce(auth.jwt()->>'email',''))
   );
 drop policy if exists invites_manage on public.invites;
+drop policy if exists invites_insert on public.invites;
 create policy invites_insert on public.invites for insert
   with check (public.can_manage_family(family_id));
+drop policy if exists invites_update on public.invites;
 create policy invites_update on public.invites for update
   using (public.can_manage_family(family_id)
          or lower(email) = lower(coalesce(auth.jwt()->>'email','')));
+drop policy if exists invites_delete on public.invites;
 create policy invites_delete on public.invites for delete
   using (public.can_manage_family(family_id));
 

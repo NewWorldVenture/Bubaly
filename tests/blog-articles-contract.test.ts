@@ -40,15 +40,28 @@ describe('0226 blog seed — 500+ unique, on-brand articles', () => {
     }
   });
 
-  it('gives every article a free hero photo', () => {
-    const withImg = rows.filter((r) => /loremflickr\.com\/1600\/900\//.test(r) && /'LoremFlickr \(CC\)'/.test(r));
-    expect(withImg.length).toBe(rows.length);
+  // These two assertions used to require the OPPOSITE: that every row carried a
+  // loremflickr.com hero credited 'LoremFlickr (CC)', described as "a free hero
+  // photo". It is not free — it is a proxy serving MIXED-license Flickr photos,
+  // which is why `0231` nulls every one of them out, `next.config.mjs` dropped
+  // the host, and `0238` installs a trigger that REFUSES a hero whose licence it
+  // cannot identify. The seed and the product disagreed, and the seed only
+  // survived because a from-scratch replay inserts the rows before the trigger
+  // exists. Replayed against a database that already has the schema — which is
+  // what repairing production's ledger does — the trigger rejected all 525 and
+  // the repair stopped dead (F-020). The rows are now seeded NULL, reaching the
+  // same end state `0231` produced anyway.
+  it('seeds NO hero image with an unverified licence', () => {
+    expect(MIGRATION).not.toMatch(/'https:\/\/loremflickr\.com/);
+    expect(MIGRATION).not.toMatch(/'LoremFlickr \(CC\)'/);
+    const withHero = rows.filter((r) => /'https?:\/\//.test(r));
+    expect(withHero).toEqual([]);
   });
 
-  it('gives every article a UNIQUE hero photo (no repeats)', () => {
-    const urls = rows.map((r) => r.match(/(https:\/\/loremflickr\.com\/1600\/900\/[^']+)/)![1]);
-    expect(urls.length).toBe(rows.length);
-    expect(new Set(urls).size).toBe(urls.length); // every image URL is distinct
+  it('leaves the hero triple NULL so the licence trigger accepts a replay', () => {
+    // (hero_image_url, hero_image_alt, hero_image_credit) — all three, every row.
+    const nulled = rows.filter((r) => r.includes('NULL, NULL, NULL,'));
+    expect(nulled.length).toBe(rows.length);
   });
 
   it('places every article under a known category tab', () => {

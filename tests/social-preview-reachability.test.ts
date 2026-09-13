@@ -17,7 +17,11 @@ import { readFileSync } from 'node:fs';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
 
 describe('the social preview images are reachable without a session', () => {
-  const middleware = readFileSync('middleware.ts', 'utf8');
+// The public allowlist moved to lib/auth/route-access.ts when middleware
+// gained a PROTECTED list (so an unrouted path 404s instead of being sent
+// to /login). Both files are read here: the routing LOGIC is still in
+// middleware.ts, the allowlist entries are in the other.
+  const middleware = readFileSync('middleware.ts', 'utf8') + readFileSync('lib/auth/route-access.ts', 'utf8');
   const publicList = /const PUBLIC = \[([\s\S]*?)\];/.exec(middleware);
 
   it.each(['/opengraph-image', '/twitter-image'])('%s is public', (path) => {

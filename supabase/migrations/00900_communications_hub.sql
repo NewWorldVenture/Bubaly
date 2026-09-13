@@ -42,7 +42,7 @@ $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'family_communications_updated_at') THEN
-    CREATE TRIGGER family_communications_updated_at
+    create or replace trigger family_communications_updated_at
       BEFORE UPDATE ON family_communications
       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   END IF;
@@ -51,25 +51,34 @@ END $$;
 -- ─── RLS ─────────────────────────────────────────────────────────────────
 ALTER TABLE family_communications ENABLE ROW LEVEL SECURITY;
 
+drop policy if exists "comms_family_select" on family_communications;
 CREATE POLICY "comms_family_select" ON family_communications
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM family_members WHERE family_id = family_communications.family_id AND user_id = auth.uid() AND is_active)
   );
 
+drop policy if exists "comms_family_insert" on family_communications;
 CREATE POLICY "comms_family_insert" ON family_communications
   FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM family_members WHERE family_id = family_communications.family_id AND user_id = auth.uid() AND is_active)
   );
 
+drop policy if exists "comms_family_update" on family_communications;
 CREATE POLICY "comms_family_update" ON family_communications
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM family_members WHERE family_id = family_communications.family_id AND user_id = auth.uid() AND is_active)
   );
 
+drop policy if exists "comms_family_delete" on family_communications;
 CREATE POLICY "comms_family_delete" ON family_communications
   FOR DELETE USING (
     public.can_manage_family(family_communications.family_id)
   );
 
 -- ─── Realtime ─────────────────────────────────────────────────────────────
-ALTER PUBLICATION supabase_realtime ADD TABLE family_communications;
+do $pub$ begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'family_communications') then
+    alter publication supabase_realtime add table family_communications;
+  end if;
+end $pub$;

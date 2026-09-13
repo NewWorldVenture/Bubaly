@@ -6,7 +6,7 @@ They ran over **different surfaces** and none supersedes another:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 | **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
 | **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
@@ -73,19 +73,20 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F20)
+# Pass A — Public surface (F1–F21)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Twenty findings, and the
+**Audit status: reopened, then complete again.** Twenty-one findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
 | **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Written, proven, not yet live** | **1** — F21's durable half. The trigger can only land as a migration, and the migration workflow is F5's blocker; CI replays and probes it on every pull request. Its client-side half — the app no longer deciding status, decider or price — *is* live |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -131,6 +132,7 @@ Nothing is left unexamined or unassigned.
 | F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Partly closed by Pass L** — the assistant is metered (the plans had already decided it); the other 35 remain an owner decision |
 | F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
+| F21 | A child could self-approve a reward redemption — the third decision forgery, and the only one left unguarded | High | **Half fixed and live; the durable half awaits the F5 operator** |
 
 ---
 
@@ -991,6 +993,92 @@ looked at:
 Recording what the sweep cleared matters as much as what it caught: three of the
 four plausible instances were already right.
 
+## F21 — A child could grant themselves a reward *(High; half fixed and live, half awaiting the operator)*
+
+F20 found one gap the team's own `0222`/`0223` work had left. Looking for the
+rest of that family found the other, and it is the more direct of the two.
+
+`reward_redemptions` shipped in `0028` with a single policy —
+`FOR ALL … USING is_family_member(family_id) WITH CHECK is_family_member(family_id)`
+— and no trigger. Both of its write paths were **direct browser writes** that
+chose `status`, `decided_by` *and* `cost_points` client-side:
+
+| Path | Write |
+|---|---|
+| `chores-module.tsx` → `redeem()` | insert; `status` = `'approved'` when the client believed the member was a manager |
+| `rewards-module.tsx` → `requestReward()` | insert; the same choice |
+| `rewards-module.tsx` → `decide()` | update; `status` straight from the caller |
+
+**The choice was the client's.** A child could insert a redemption already
+marked `approved` with `decided_by` pointing at themselves, or approve one
+sitting in the queue — and set `cost_points` to whatever they liked in the same
+request.
+
+This is the **third** of three decision surfaces in the chores and rewards
+economy. `0222` closed the submission forge, `0223` the assignment-status forge,
+and this was the only one left open. Like them it **mints no money**: the points
+economy is separate from the wallet, which is manager-only under `0217`. It is
+an accountability forgery, in the exact words `0223`'s own header uses.
+
+### The half that ships without the migration
+
+Both write paths go through `app/(app)/dashboard/rewards/actions.ts`. The role is
+resolved from the session rather than asserted by the caller, `decided_by` is the
+session's own member, and `reward_title` and `cost_points` are read from the
+reward instead of accepted from the request.
+
+That last one is the quieter half of the finding: `cost_points` is a deliberate
+snapshot so history survives the reward being edited (`0028`), and a snapshot the
+spender supplies is not a snapshot — a child could ask for an expensive reward at
+a cost of zero points, and the balance the board renders would never know.
+
+Reads stay in the client. Both screens subscribe to the table through
+`useRealtimeQuery`, which is the point of a live board; it is the writes that had
+to move, and the test forbids those specifically rather than any mention of the
+table.
+
+This does **not** close the finding. `reward_redemptions` is reachable from
+PostgREST whatever these actions do, so the forgery is now a hand-crafted API
+call rather than a browser console. A smaller door, not a shut one.
+
+### The half that shuts it, and cannot be applied
+
+Migration `0295` is the sibling of `0222` and `0223`:
+
+- **Guarded**: `approved`, `rejected`, `fulfilled` — the three a parent decides.
+- **Left to the member**: `requested` and `pending` (asking), and `cancelled`
+  (withdrawing your own ask, which needs no parent). A guard that blocked those
+  would break the queue it exists to protect.
+- **Allowed through**: the service role, an unauthenticated migration or seed,
+  and `can_manage_family()`.
+
+No legitimate flow breaks: the only code that sets a guarded status is a
+manager's own click in the two modules above, and the service role.
+
+### Proven before it was written down
+
+`docs/audit/reward-redemption-decision-check.sql` runs as a real `authenticated`
+session under RLS and asserts **both** directions — child insert-as-approved,
+approve-from-queue and mark-fulfilled all refused; child request and child cancel
+allowed; parent approve and fulfil allowed.
+
+It was run against a local PostgreSQL 16 with the trigger present (six assertions
+pass) and with it dropped, where it fails on the first case: *"a child inserted
+an APPROVED reward redemption"*. CI replays it against the fully bootstrapped
+schema on every pull request — `run-probes.sh` globs rather than lists, so it
+runs without anyone registering it.
+
+### What is not done
+
+**The migration is not applied, and cannot be.** That is F5: the workflow cannot
+authenticate and the ledger baseline is unrepaired, in that order. Until an
+operator clears both, the direct-to-PostgREST forgery is live in production and
+the guard sits in the repository, replayed and probed by CI, waiting.
+`docs/PENDING_PROD_MIGRATIONS.md` records it alongside the others, so it is
+visible rather than inferred from the absence of a row.
+
+This is the one finding in this audit whose fix I could write but not land.
+
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
 #526 merged to `main` as `61ad4bb0` while this branch was open, and it rewrote
@@ -1150,14 +1238,15 @@ F-002 records reasoning that was wrong and what replaced it.
 | Area | Check | Result |
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
-| Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,518 tests |
+| Lint | `next lint` | ✅ 0 errors (4 pre-existing `react-hooks/exhaustive-deps` warnings) |
+| Unit tests | `vitest run` | ✅ 13,537 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
 | Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
 | Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
+| Migration **re**-apply | populated DB, replay from `0004` | ✅ 0 failed (was 18 — F-020) |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 14 probes, fresh 307-migration replay, run 2× | ✅ 14/14 each time (F-015 made it repeatable) |
+| RLS boundaries | 15 probes, fresh 307-migration replay, run 2× | ✅ 15/15 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
@@ -1217,6 +1306,15 @@ The `Supabase production migrations` workflow fails on every push for the reason
 Pass A's F5 records, so this is not a matter of waiting — it needs the operator
 action in both F5 and F-001. Agents must not apply migrations to production
 (`docs/PENDING_PROD_MIGRATIONS.md`), and this one did not.
+
+**What changed for the operator this pass.** The repair procedure in
+`LB-016 §4` would not have worked. Replayed against a database that already
+carries the schema — production's actual condition — `supabase db push` stopped
+on the *first* file it tried, and left `0004` unrecorded, so the guard would not
+have cleared either. That is now fixed and rehearsed end to end: see **F-020**.
+The finding stays open because the credentials are the operator's and applying
+migrations is not an agent action, but it is no longer open on top of a
+procedure that does not run.
 
 ---
 
@@ -1953,6 +2051,133 @@ two teaches people to ignore red.
 
 Verified: 15/15 probes on a pristine 307-migration replay, and 15/15 twice in a
 row on a used one.
+
+### F-020 · The documented production-recovery procedure did not work
+
+**Severity:** high · **Status:** closed — 18 migrations made re-appliable, and
+the rehearsal is now a CI gate
+
+`LB-016 §4.1` is the procedure an operator follows to unblock production. Its
+whole basis is one sentence:
+
+> Every migration in this repository is **additive and idempotent** … So the
+> ledger does not need to be *told* what is applied; it repairs itself by letting
+> `supabase db push` run from `0004`, where the already-applied migrations no-op
+> and the genuinely missing ones land.
+
+It cited two things as proof. **Neither one showed what it was cited for.**
+
+- `tests/migrations-are-additive.test.ts` bans `DROP TABLE` / `DROP COLUMN` /
+  `TRUNCATE` / `DROP TYPE`. That is *additive*. It says nothing about applying
+  anything twice.
+- The CI replay applies all 307 migrations to an **empty** database. On an empty
+  database `create policy` has nothing to collide with, so the replay cannot
+  observe idempotency even in principle.
+
+Additive is not idempotent, and nothing in the repository had ever asserted the
+property the recovery depends on. The one situation that exercises it is the one
+situation it had never been run in: a database that *already carries the schema*
+— which is precisely production.
+
+**What the evidence said.** `docs/audit/rehearse-ledger-repair.sh` reproduces
+production's condition exactly — full schema, ledger holding only `0001`–`0003`
+— and replays from `0004` the way `db push` does: version order, each file in
+its own transaction, a ledger row per success. Against the history as it stood:
+
+```
+re-applied cleanly (no-op as claimed): 286
+FAILED:                               18
+The operator's push would STOP at:
+  0004_rls.sql :: ERROR: policy "profiles_insert_self" for table "profiles"
+                         already exists
+0004 recorded: 0  -> requiresBaselineReview would still be TRUE
+```
+
+It stopped on the **first file it tried**. And because `0004` never recorded,
+`hasUnrecordedBaseline` would still have been true afterwards: the operator
+would have spent the maintenance window and come out with the ledger no more
+repaired than when they went in, the release still blocked, and no indication
+of which of the remaining 17 files would have stopped them next.
+
+**Why it broke.** Five ordinary Postgres statements are not idempotent and had
+no guard: `create policy`, `create trigger`, `create table`, `create index`, and
+`alter publication supabase_realtime add table`. Worth naming: **`create policy`
+has no `IF NOT EXISTS` form in any Postgres version**, so there is no way to
+write one that is safe to re-run — it must be preceded by a `drop policy if
+exists`. `0004` already did that for three of its policies and not for the
+others, which is the clearest possible sign this was an oversight rather than a
+decision.
+
+**The fix.** Each of the 18 follows the convention its own neighbours already
+used — `drop policy if exists` first, `create or replace trigger`, `create index
+if not exists`, `create table if not exists`, `add column if not exists`,
+`create or replace function`, and a `pg_publication_tables` existence check
+around the publication adds. Two needed more than a substitution:
+
+- **`0018`** creates its policies inside `execute format(...)` over a table
+  list. A static `drop policy if exists` cannot name a table that only exists as
+  `%I` at run time, so the drop had to go *inside* the loop as its own
+  `execute format`.
+- **`0226`** failed for an entirely different reason, and it is the interesting
+  one. It seeds 525 blog posts whose hero images are credited `LoremFlickr (CC)`.
+  `0238` later installs a trigger that refuses any hero image whose licence it
+  cannot identify, and `0231` nulls every LoremFlickr hero out. Replayed from
+  scratch that ordering is fine — the rows go in before the trigger exists. But
+  replayed against a populated schema the trigger is **already installed** when
+  `0226` runs, and it rejects all 525 rows. So the seed was re-introducing
+  exactly the data the product had decided to remove, and only the accident of
+  ordering hid it. Seeding those three columns `NULL` reaches the identical end
+  state (`0231`'s update now matches nothing; `0232`/`0235` still attach the
+  real Unsplash covers) without ever putting an unverified licence in the table.
+
+`0112` was left alone: it already had the publication guard, and the blanket
+transform had nested a second, redundant one inside it. Reverted.
+
+**After:**
+
+```
+re-applied cleanly (no-op as claimed): 304
+FAILED:                               0
+0004 recorded: 1
+requiresBaselineReview would now be FALSE — the guard clears on its own
+```
+
+A from-scratch replay is unchanged at **307 applied / 0 failed**, checked after
+every stage of the change rather than once at the end.
+
+**It cannot silently break again.** The rehearsal is now the last step of the
+`Database (migration replay · RLS boundary probes)` CI job. It runs last because
+it rewrites the ledger and replays everything, so nothing may depend on the
+database after it — and it is valuable *because* the job's earlier step already
+applied every migration once, which means the rehearsal applies each of them a
+**second** time. A migration added tomorrow is checked for idempotency on the
+pull request that introduces it, not in a maintenance window years later.
+
+I confirmed the gate actually fails rather than assuming it would, by adding a
+deliberately unguarded `create policy` as `0999` and running the job's two steps
+in order:
+
+```
+== migrations applied: 308, failed: 0 ==      <- the existing replay is happy
+FAILED: 1
+  0999_tmp_regression_probe.sql :: ERROR: policy "tmp_regression_probe" for
+                                          table "profiles" already exists
+REHEARSAL EXIT=1
+```
+
+The existing from-scratch replay passes it without complaint, which is the whole
+point: the new step catches a class of defect the old one structurally could
+not. The probe was then deleted and both runs re-verified clean.
+
+The script refuses any `PGHOST` that is not a unix socket or the loopback
+interface. That is a reachability test rather than a name allowlist — production
+is a remote host, and neither a unix socket nor loopback can reach it from
+anywhere — so it holds regardless of what a host is called.
+
+**What this does not do.** It does not apply anything to production. F-001 is
+still open and still an operator action. What changed is that the procedure the
+operator will follow has now been executed end to end against a faithful
+reproduction of production's condition, instead of being asserted.
 
 ## 4. Closed previously (regression-checked this pass)
 
@@ -3043,7 +3268,7 @@ duplicate a check the database already enforces.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| I-01 | A social restriction could be removed by the person it restricted | **Critical** (their rating; mine was Medium — see below) | **Fixed** — `0295`, this branch |
+| I-01 | A social restriction could be removed by the person it restricted | **Critical** (their rating; mine was Medium — see below) | **Fixed** — `0296`, this branch |
 
 ---
 
@@ -3078,7 +3303,7 @@ from the app — and why it did not matter. Every member holds a JWT and can iss
 the delete straight to PostgREST. `access.ts` says as much in its own header:
 *"RLS is the backstop."*
 
-`0295_social_access_delete_matches_grant.sql` makes delete carry the same
+`0296_social_access_delete_matches_grant.sql` makes delete carry the same
 condition as insert and update. Nothing else changes: members keep `SELECT`, and
 an admin can still remove an override.
 
@@ -3119,7 +3344,7 @@ Three corrections to what this pass wrote above, in their favour:
 What is new here is the repair, not the finding. They were working under a
 standing no-new-SQL constraint and wrote, correctly, that *"app-only error
 handling cannot repair it"* — so the finding stayed open for want of a
-migration. `0295` is that migration, and **A-17** is the behavioural proof, which
+migration. `0296` is that migration, and **A-17** is the behavioural proof, which
 their cycle could not produce for the same reason.
 
 This is the second duplicate across the whole document, after C-08's push prune

@@ -682,6 +682,7 @@ alter table public.sync_settings             enable row level security;
 
 -- Provider catalog: any authenticated user may read; nobody writes via RLS
 -- (service role / migrations manage it).
+drop policy if exists "providers readable" on public.sync_providers;
 create policy "providers readable" on public.sync_providers
   for select using (auth.role() = 'authenticated');
 
@@ -699,6 +700,11 @@ begin
       'sync_audit_logs','sync_settings','sync_webhook_events'
     ])
   loop
+    -- Dynamic, so it needs its own guard: a static `drop policy if exists`
+    -- cannot name a table that only exists as %I at run time.
+    execute format($f$
+      drop policy if exists "family member access" on public.%I;
+    $f$, t);
     execute format($f$
       create policy "family member access" on public.%I for all
         using (public.is_family_member(family_id))
@@ -710,6 +716,7 @@ end $$;
 -- sync_tokens is the credential store: no client access at all. Only the
 -- service role (which bypasses RLS) may read/write. The locked-down policy makes
 -- the intent explicit and denies the anon/authenticated roles.
+drop policy if exists "tokens service only" on public.sync_tokens;
 create policy "tokens service only" on public.sync_tokens
   for all using (false) with check (false);
 

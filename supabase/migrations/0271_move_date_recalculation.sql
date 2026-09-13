@@ -3,10 +3,10 @@
 -- UNPUBLISHED: schema rollout and parent integration remain separate work.
 
 ALTER TABLE public.move_tasks
-  ADD COLUMN date_mode text NOT NULL DEFAULT 'fixed'
+  add column if not exists date_mode text NOT NULL DEFAULT 'fixed'
     CONSTRAINT move_tasks_date_mode_check CHECK (date_mode IN ('fixed', 'relative'));
 
-CREATE TABLE public.move_date_recalculations (
+create table if not exists public.move_date_recalculations (
   request_id         uuid PRIMARY KEY,
   family_id          uuid NOT NULL,
   move_id            uuid NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE public.move_date_recalculations (
 -- Provenance IDs intentionally have no cascading/SET NULL foreign keys:
 -- deleting a source move, membership, or account must not rewrite the record
 -- or erase a successful request's idempotency identity.
-CREATE INDEX idx_move_date_recalculations_family_move_created
+create index if not exists idx_move_date_recalculations_family_move_created
   ON public.move_date_recalculations (family_id, move_id, created_at DESC);
 
 ALTER TABLE public.move_date_recalculations ENABLE ROW LEVEL SECURITY;
@@ -34,6 +34,7 @@ REVOKE ALL ON TABLE public.move_date_recalculations
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.move_date_recalculations TO authenticated;
 
+drop policy if exists move_date_recalculations_parent_read on public.move_date_recalculations;
 CREATE POLICY move_date_recalculations_parent_read
   ON public.move_date_recalculations
   FOR SELECT TO authenticated
@@ -51,7 +52,7 @@ CREATE POLICY move_date_recalculations_parent_read
 
 -- No family-wide write policy, mutable audit columns, or privileged rewrite
 -- path. These triggers also prevent accidental maintenance DML/TRUNCATE.
-CREATE FUNCTION public.move_date_recalculations_reject_mutation()
+create or replace function public.move_date_recalculations_reject_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
@@ -66,17 +67,17 @@ $function$;
 REVOKE ALL ON FUNCTION public.move_date_recalculations_reject_mutation()
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE TRIGGER move_date_recalculations_immutable_rows
+create or replace trigger move_date_recalculations_immutable_rows
   BEFORE UPDATE OR DELETE ON public.move_date_recalculations
   FOR EACH ROW
   EXECUTE FUNCTION public.move_date_recalculations_reject_mutation();
 
-CREATE TRIGGER move_date_recalculations_immutable_truncate
+create or replace trigger move_date_recalculations_immutable_truncate
   BEFORE TRUNCATE ON public.move_date_recalculations
   FOR EACH STATEMENT
   EXECUTE FUNCTION public.move_date_recalculations_reject_mutation();
 
-CREATE FUNCTION public.move_recalculate_date(
+create or replace function public.move_recalculate_date(
   p_family_id uuid,
   p_move_id uuid,
   p_member_id uuid,
@@ -396,7 +397,7 @@ GRANT EXECUTE ON FUNCTION public.move_recalculate_date(uuid, uuid, uuid, date, j
 -- lock that conflicts with both FOR UPDATE and ordinary move-date updates.
 -- Reject a stale client date; never silently change its reviewed/user-entered
 -- value, infer legacy intent, or rewrite an existing out-of-sync task.
-CREATE FUNCTION public.move_task_relative_date_guard()
+create or replace function public.move_task_relative_date_guard()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -468,7 +469,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.move_task_relative_date_guard()
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE TRIGGER move_tasks_relative_date_guard
+create or replace trigger move_tasks_relative_date_guard
   BEFORE INSERT OR UPDATE OF move_id, family_id, date_mode, offset_days, due_date
   ON public.move_tasks
   FOR EACH ROW EXECUTE FUNCTION public.move_task_relative_date_guard();
@@ -476,7 +477,7 @@ CREATE TRIGGER move_tasks_relative_date_guard
 -- Ordinary authenticated metadata edits cannot bypass reviewed recalculation.
 -- The invoker is the RPC owner while its SECURITY DEFINER body updates moves.
 -- Do not use a caller-settable GUC as an authorization capability.
-CREATE FUNCTION public.move_date_reviewed_write_guard()
+create or replace function public.move_date_reviewed_write_guard()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -500,6 +501,6 @@ $function$;
 REVOKE ALL ON FUNCTION public.move_date_reviewed_write_guard()
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE TRIGGER moves_reviewed_date_write_guard
+create or replace trigger moves_reviewed_date_write_guard
   BEFORE UPDATE OF move_date ON public.moves
   FOR EACH ROW EXECUTE FUNCTION public.move_date_reviewed_write_guard();
