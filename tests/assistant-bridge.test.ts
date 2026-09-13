@@ -242,8 +242,14 @@ describe('the endpoints refuse before they look anything up', () => {
   });
 
   it('bounds the request body', () => {
+    // Either spelling is fine — what matters is that neither route hands the
+    // platform an unbounded body. Alexa's reads BYTES rather than parsed JSON
+    // because Amazon's signature covers exactly what arrived; re-serialising a
+    // parsed envelope changes whitespace and key order and the signature would
+    // never verify again.
     expect(generic).toContain('readBoundedRequestJson');
-    expect(alexa).toContain('readBoundedRequestJson');
+    expect(alexa).toContain('readBoundedRequestBytes');
+    for (const source of [generic, alexa]) expect(source).toMatch(/MAX_BODY_BYTES/);
   });
 
   it('answers unknown and revoked tokens identically', () => {
@@ -253,9 +259,25 @@ describe('the endpoints refuse before they look anything up', () => {
 
   it('speaks its failures to Alexa instead of returning an error status', () => {
     // A non-200 becomes "there was a problem with the requested skill's
-    // response", which tells the person nothing about what to fix.
-    expect(alexa).not.toMatch(/status:\s*(4|5)\d\d/);
+    // response", which tells the person nothing about what to fix. So every
+    // failure that a DEVICE can reach is 200 with speech in it.
+    //
+    // The exception, and the reason this is not simply "no 4xx anywhere": a
+    // request that cannot be proven to come from Amazon is not a device in
+    // somebody's kitchen. There is nobody to speak to, speech would confirm to
+    // the sender that the endpoint is live, and Amazon's own certification
+    // requires a non-2xx there. So the property is checked as: every status
+    // this route returns is either 200 or one of the three that only an
+    // unverifiable request can reach.
+    const statuses = [...alexa.matchAll(/status: (\d{3})/g)].map((match) => match[1]);
+    expect(statuses.length).toBeGreaterThan(0);
+    expect(statuses.every((status) => ['400', '403', '413'].includes(status))).toBe(true);
+    // And none of them carries speech.
+    expect(alexa).not.toMatch(/alexaSpeechResponse\([^)]*\)[^;]*status:/);
     expect(alexa).toContain('ALEXA_NOT_LINKED_SPEECH');
+    // The spoken failures are still spoken.
+    expect(alexa).toMatch(/return NextResponse\.json\(alexaSpeechResponse\(ALEXA_NOT_LINKED_SPEECH\)\)/);
+    expect(alexa).toMatch(/alexaSpeechResponse\(ERROR_SPEECH\)/);
   });
 
   it('scopes every read to the family the token resolved to', () => {
