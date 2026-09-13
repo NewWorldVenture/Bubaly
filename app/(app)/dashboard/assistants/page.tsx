@@ -56,8 +56,8 @@ export default async function AssistantsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Assistants</h1>
         <p className="mt-1 text-sm text-muted">
-          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, or what you are
-          forgetting — and add things to your lists without opening the app.
+          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, what you are
+          forgetting, or what is on the shopping list — and add things to your lists without opening the app.
         </p>
       </div>
 
@@ -111,8 +111,13 @@ export default async function AssistantsPage() {
                 <p>
                   Point a custom skill&apos;s endpoint at
                   {' '}<code className="text-xs">https://www.bubaly.com/api/assistant/alexa</code> and put the key in
-                  account linking. One intent with an <code className="text-xs">AMAZON.SearchQuery</code> slot is enough —
+                  account linking. One intent with an <code className="text-xs">AMAZON.SearchQuery</code> slot is enough &mdash;
                   Bubaly works out what you meant from the words.
+                </p>
+                <p className="mt-1">
+                  Bubaly checks Amazon&apos;s request signature on every call, so the endpoint only answers
+                  Alexa. Set <code className="text-xs">ALEXA_SKILL_ID</code> to your skill&apos;s application id as
+                  well, and it will only answer <em>your</em> skill.
                 </p>
               </div>
               <div>

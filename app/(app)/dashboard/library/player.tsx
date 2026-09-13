@@ -1,5 +1,7 @@
 'use client';
-import { shouldPersistOnUnmount, resumeFrom, LIBRARY_CACHE } from '@/lib/library/progress';
+import {
+  shouldPersistOnUnmount, resumeFrom, claimPlayback, releasePlayback, LIBRARY_CACHE,
+} from '@/lib/library/progress';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Play, Pause, Bookmark, BookmarkCheck, Download, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
@@ -95,10 +97,37 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       // Resume where this person left off, not where the last person did.
       if (audio.currentTime < 1) audio.currentTime = resumeFrom(item);
       touched.current = true;
-      void audio.play().then(() => setPlaying(true)).catch(() => error('That audio could not be played.'));
+      // Stop whatever else was playing BEFORE asking this one to start, so the
+      // two never overlap even for the moment the promise takes to settle.
+      claimPlayback(audio);
+      void audio.play().catch(() => {
+        releasePlayback(audio);
+        error('That audio could not be played.');
+      });
     } else {
       audio.pause();
-      setPlaying(false);
+    }
+  }
+
+  // `playing` follows the ELEMENT, not the click. A row can stop for reasons
+  // this component never hears about — another row claiming playback, the
+  // browser interrupting for a call, the operating system's media controls —
+  // and a button that only tracked its own clicks showed Pause over silence.
+  function onPlay() {
+    const audio = audioRef.current;
+    if (audio) claimPlayback(audio);
+    touched.current = true;
+    setPlaying(true);
+  }
+
+  function onPause() {
+    const audio = audioRef.current;
+    setPlaying(false);
+    if (!audio) return;
+    releasePlayback(audio);
+    // Whatever stopped it, this is where they got to.
+    if (touched.current) {
+      lastSaved.current = audio.currentTime;
       void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
     }
   }
@@ -192,10 +221,18 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       </div>
       {item.mediaUrl && (
         <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
-          onEnded={() => { setPlaying(false); void saveProgressAction({ itemId: item.id, completed: true }); }} />
+          onPlay={onPlay} onPause={onPause}
+          onEnded={() => { void saveProgressAction({ itemId: item.id, completed: true }); }} />
       )}
       {offline && cached === false && (
         <p className="mt-1.5 text-xs text-warning">Marked for offline, but not stored on this device yet.</p>
+      )}
+      {!item.mediaUrl && !item.pageUrl && (
+        // A title with nothing attached renders as a row with no play button,
+        // no download and no link — and said nothing about why. It is a
+        // perfectly reasonable thing to keep (a book you mean to read), so the
+        // row explains itself rather than the buttons vanishing silently.
+        <p className="mt-1.5 text-xs text-muted">Title only — add a link or an audio file to play or open it.</p>
       )}
     </li>
   );

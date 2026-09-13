@@ -24,6 +24,8 @@ export type AssistantIntentKind =
   | 'next'
   /** The proactive "what am I forgetting" check. */
   | 'forgetting'
+  /** Read a list back: the shopping list, the to-do list. */
+  | 'list'
   /** Save something: task, note, event or shopping item. */
   | 'capture'
   /** Tell the person what they can say. */
@@ -35,6 +37,7 @@ export type AssistantIntent =
   | { kind: 'agenda'; day: 'today' | 'tomorrow' }
   | { kind: 'next' }
   | { kind: 'forgetting' }
+  | { kind: 'list'; list: 'shopping' | 'tasks' }
   | { kind: 'capture'; route: VoiceRoute }
   | { kind: 'help' }
   | { kind: 'unknown'; utterance: string };
@@ -45,6 +48,38 @@ const TOMORROW_RE = /\btomorrow\b/i;
 const NEXT_RE = /\b(what(?:'?s| is)?\s+next|next up|coming up next|what do i do now)\b/i;
 const FORGETTING_RE = /\b(forget|forgetting|missing|miss(ed)?\s+anything|overlook)/i;
 const HELP_RE = /\b(help|what can (you|i) (do|say)|how does this work|commands?)\b/i;
+
+/**
+ * Reading a list back.
+ *
+ * Bubaly could be told to put milk ON the shopping list and had no way to say
+ * what was on it — which is half a feature, and the missing half is the one you
+ * want standing in a shop.
+ *
+ * Two conditions, both required. A list NOUN, because "what do we need" is not
+ * specific enough to answer without guessing which list; and a READ cue,
+ * because "milk for the shopping list" names a list while plainly asking for
+ * something to be added to it.
+ */
+const SHOPPING_LIST_RE = /\b(shopping|grocery|groceries)\s+list\b/i;
+const TASK_LIST_RE = /\b(to-?\s?dos?|todos?|tasks?)\s+list\b|\bto-?do\s+list\b/i;
+const LIST_READ_RE = /\b(what(?:'?s| is| are)?\s+(?:on|in|left|still)|read|tell me|say|check)\b/i;
+
+/**
+ * An opener that makes the whole utterance a question.
+ *
+ * A question Bubaly cannot answer is not a to-do item, and until this was here
+ * every one of them became one: "what is the capital of France" was filed as a
+ * task called "What is the capital of france", "what's for dinner" as another,
+ * "did I feed the dog" as another. The person got no answer AND a list filling
+ * up with things nobody asked for — which is the failure mode that makes a
+ * speaker feel broken rather than merely limited.
+ *
+ * Checked LAST among the question rules, so everything Bubaly can actually
+ * answer has already had its say, and only inside the non-imperative branch,
+ * so a command is never mistaken for a question.
+ */
+const INTERROGATIVE_RE = /^(what|whats|who|whose|where|when|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|shall|has|have|had)\b/i;
 
 /**
  * Openers that mean "do this". When an utterance starts with one, the words
@@ -83,12 +118,22 @@ export function classifyAssistantUtterance(
   // calendar entry called "what's on" instead of answering.
   const commanded = IMPERATIVE_RE.test(utterance);
   if (!commanded) {
+    // Most specific first. "What's on the shopping list" matches AGENDA_RE
+    // ("what's on"), so anything less specific asked before it would read the
+    // calendar and answer a question nobody asked.
+    if (LIST_READ_RE.test(utterance)) {
+      if (SHOPPING_LIST_RE.test(utterance)) return { kind: 'list', list: 'shopping' };
+      if (TASK_LIST_RE.test(utterance)) return { kind: 'list', list: 'tasks' };
+    }
     if (HELP_RE.test(utterance)) return { kind: 'help' };
     if (FORGETTING_RE.test(utterance)) return { kind: 'forgetting' };
     if (NEXT_RE.test(utterance)) return { kind: 'next' };
     if (AGENDA_RE.test(utterance)) {
       return { kind: 'agenda', day: TOMORROW_RE.test(utterance) ? 'tomorrow' : 'today' };
     }
+    // Nothing above could answer it, and it is still a question. Say so rather
+    // than filing it.
+    if (INTERROGATIVE_RE.test(utterance)) return { kind: 'unknown', utterance };
   }
 
   const route = classifyVoiceCommand(utterance, now, timezone);
@@ -163,15 +208,21 @@ export function boundSpeech(text: string, limit = MAX_SPEECH_CHARS): string {
 }
 
 export const HELP_SPEECH = toSpeakable(
-  'You can ask what is on today, what is next, or what you are forgetting. '
+  'You can ask what is on today, what is next, what you are forgetting, '
+  + 'or what is on the shopping list. '
   + 'You can also say things like add milk to the shopping list, or remind me to call the dentist.',
 );
 
-/** What to say when the words arrived but meant nothing actionable. */
+/**
+ * What to say when the words arrived but meant nothing actionable.
+ *
+ * Naming what was heard is the point: a speaker that mishears is the common
+ * case, and "I heard X" is what lets a person work out that it did.
+ */
 export function unknownSpeech(utterance: string): string {
   const heard = boundSpeech(utterance, 80);
   return heard
-    ? `I heard "${heard}", but I am not sure what to do with it. ${HELP_SPEECH}`
+    ? `I heard "${heard}", but I cannot answer that one. ${HELP_SPEECH}`
     : HELP_SPEECH;
 }
 

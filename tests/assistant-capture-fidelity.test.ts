@@ -149,8 +149,21 @@ function fakeDb(writes: Write[]) {
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: () => chain,
+      // `neq`, `is`, `or`, `gte` and `lt` are here because the code under test
+      // uses them, not for decoration: `ensureList` asks BOTH archive columns
+      // (`.is('archived_at', null)`), and a filter the fake does not implement
+      // is a TypeError, not a passing test.
+      neq: () => chain,
+      is: () => chain,
+      or: () => chain,
+      gte: () => chain,
+      lt: () => chain,
+      not: () => chain,
       order: () => chain,
       limit: () => chain,
+      // A terminal await with no .single()/.maybeSingle() — how the event reads
+      // finish. Empty, which is the honest answer for a family with no rows.
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve),
       // ensureList's "does a list already exist?" — say no, so it creates one.
       maybeSingle: async () => ({ data: null, error: null }),
       single: async () => ({ data: { id: `${table}-1` }, error: null }),

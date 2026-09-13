@@ -119,7 +119,10 @@ describe('the call sites this check is meant to cover', () => {
   });
 
   it.each([
-    ['app/(app)/dashboard/library/actions.ts', 'library_items'],
+    // Moved out of app/(app)/dashboard/library/actions.ts when the nightly
+    // refresh needed the same ingest: a 'use server' module may only export
+    // async functions, and every export it has is callable from the browser.
+    ['lib/library/ingest.ts', 'library_items'],
     ['lib/server/calendar-feeds.ts', 'calendar_events'],
     ['lib/marketing/automation-events.ts', 'marketing_automation_runs'],
     ['lib/contact-center/server.ts', 'family_inbox_messages'],

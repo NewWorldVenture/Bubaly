@@ -120,6 +120,48 @@ export const CAPTURE_NOT_ALLOWED_SPEECH = toSpeakable(
   + 'You can change that in Bubaly under Settings, Assistants.',
 );
 
+/** A list read back, and how many of it there is. */
+export type SpokenList = { names: readonly string[]; total: number };
+
+/** How many items a list names before falling back to "and N more". */
+export const SPOKEN_LIST_LIMIT = 10;
+
+/**
+ * "Four things on the shopping list: milk, eggs, bread and butter."
+ *
+ * A longer cap than the calendar's three on purpose. Three events is a day and
+ * a listener can hold it; a shopping list is read standing in a shop, where the
+ * whole point is to hear all of it. Ten is where a person stops being able to
+ * keep up, and past that the count still tells them there is more.
+ */
+export function listSpeech(list: 'shopping' | 'tasks', items: SpokenList): string {
+  const label = list === 'shopping' ? 'the shopping list' : 'your to-do list';
+  if (items.total === 0) {
+    return boundSpeech(list === 'shopping'
+      ? 'There is nothing on the shopping list.'
+      : 'There is nothing on your to-do list.');
+  }
+  const shown = items.names.slice(0, SPOKEN_LIST_LIMIT);
+  const rest = items.total - shown.length;
+  const named = speakList(shown);
+  const tail = rest > 0 ? `, and ${rest} more` : '';
+  const count = `${items.total} ${plural(items.total, 'thing', 'things')}`;
+  return boundSpeech(`${count} on ${label}: ${named}${tail}.`);
+}
+
+/**
+ * What a speaker says when the family has switched Bubaly off.
+ *
+ * Settings → Bubaly AI makes the promise in these words: "Bubaly is switched
+ * off: it will still answer questions, but it will not change anything for your
+ * family." A speaker IS Bubaly, so the reading half keeps working and this is
+ * the half that has to stop.
+ */
+export const BUBALY_SWITCHED_OFF_SPEECH = toSpeakable(
+  'Bubaly is switched off for your family, so I can tell you what is on but I cannot add anything. '
+  + 'A parent can switch it back on in Bubaly under Settings, Bubaly AI.',
+);
+
 /** What any link hears when something genuinely broke on our side. */
 export const ERROR_SPEECH = toSpeakable(
   'Something went wrong on my side, so I have not changed anything. Please try again in a moment.',
