@@ -71,8 +71,11 @@ describe('every paid feature is enforced on the server, not only in the nav', ()
 
   it('counts enough features that the sweep is actually sweeping', () => {
     // A resolution bug that silently matched nothing would pass the case above
-    // with an empty list. 24 of these were unguarded when this was written.
-    expect(paidHrefs.length).toBeGreaterThanOrEqual(60);
+    // with an empty list. 62 hrefs were paid when this was written and 24 of
+    // them were unguarded. The floor is well below that on purpose: moving a
+    // feature to the free tier is an ordinary pricing decision, and it must not
+    // read as this sweep breaking.
+    expect(paidHrefs.length).toBeGreaterThanOrEqual(40);
   });
 
   it('can tell a guarded page from an unguarded one', () => {
@@ -80,6 +83,39 @@ describe('every paid feature is enforced on the server, not only in the nav', ()
     const withoutGuard = 'app/(app)/dashboard/needs-you/page.tsx';
     expect(fs.existsSync(path.join(process.cwd(), withoutGuard))).toBe(true);
     expect(/require(Feature|PlanLevel)\(/.test(stripComments(READ(withoutGuard)))).toBe(false);
+  });
+});
+
+describe('the two acquisition surfaces are free', () => {
+  // Decided 2026-09-13, after #534 made the catalog's tiers actually bite.
+  // Both were Basic, which the sidebar had always shown as locked, but nothing
+  // enforced it until then — so the day enforcement arrived, a Free family lost
+  // the wizard that imports their data from a competitor and the page that
+  // refers a friend. Neither is a thing to sell: an on-ramp behind a paywall is
+  // not an on-ramp, and a referral programme switched off for everyone who has
+  // not paid refers nobody.
+  //
+  // This pins the decision rather than the mechanism. Changing it is allowed;
+  // changing it by accident is not.
+  const tierOf = (key: string) => FEATURE_CATALOG.find((f) => f.key === key)?.defaultTier;
+
+  it('keeps Switch to Family free', () => {
+    expect(tierOf('switch-to-family')).toBe('free');
+    expect(ROUTE_PLAN_LEVEL['/dashboard/migrate']).toBe(0);
+  });
+
+  it('keeps Refer a Friend free', () => {
+    expect(tierOf('refer-a-friend')).toBe('free');
+    expect(ROUTE_PLAN_LEVEL['/referrals']).toBe(0);
+  });
+
+  it('still guards both pages, so the tier stays the only thing that decides', () => {
+    // The `requireFeature` calls stay. At the free tier they pass everyone, and
+    // if the tier ever moves back, enforcement follows without anyone having to
+    // remember these two pages exist.
+    for (const page of ['app/(app)/dashboard/migrate/page.tsx', 'app/(app)/referrals/page.tsx']) {
+      expect(stripComments(READ(page))).toMatch(/requireFeature\(/);
+    }
   });
 });
 
