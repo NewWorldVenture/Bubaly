@@ -98,7 +98,7 @@ Nothing is left unexamined or unassigned.
 | F2 | `robots.txt` omitted 20 authenticated surfaces, `/admin` among them | Medium | **Fixed** — and #526 did *not* cover this |
 | F3 | Homepage published twice in the sitemap (`…com` and `…com/`) | Low | **Fixed on main by #526** |
 | F4 | The test named for F1's property only grepped source | Medium | **Fixed** |
-| F5 | Supabase production migration workflow cannot authenticate | High | **Operator — credentials** |
+| F5 | Supabase production migration workflow cannot authenticate | High | **Half closed** — the token reads production again (verified 2026-09-13); the ledger baseline gate remains. See *Production, read for real* |
 | F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Operator — config** |
 | F7 | Family email is gated on the screen only — inbound pipeline has no plan check | Medium | **Fixed** — owner chose Family+ |
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
@@ -2736,3 +2736,67 @@ The self-test is the part that matters. Every invariant in this pass currently
 reports clean, which is exactly the condition under which a broken check is
 indistinguishable from a healthy system — the same reason Pass D's guard carries
 four synthetic modules.
+
+---
+
+# Production, read for real (2026-09-13)
+
+F5's first blocker is gone. The owner restored the access token's privileges, and
+the **read-only** schema audit — `supabase-schema-audit.yml`, which applies
+nothing and is `workflow_dispatch` only — was run against production to check
+rather than assume. It had last succeeded on 2026-09-05, before the token broke.
+
+Run [34780188088](https://github.com/NewWorldVenture/Bubaly/actions/runs/34780188088),
+step *"Read catalog metadata and migration history"*: **success**. That is the
+exact step that previously died at `supabase link`. It returned:
+
+```json
+{"migrationVersions":["0001","0002","0003"],"tableCount":440,"policyCount":973,
+ "requiresBaselineReview":true,
+ "moneyWrites":{"openWrites":[],"unguarded":[],"rlsDisabled":[],"noWritePolicy":[],
+                "absent":[],"rlsKnown":true,"exploitable":false}}
+```
+
+## The wallet mint boundary is closed in production — verified, not inferred
+
+This document has carried the LB-016 finding with an explicit caveat: a
+production metadata audit reported that `wallet_transactions` might still hold a
+**permissive INSERT policy** beside the manager-only one — the shape that lets
+any family member, a child included, submit a `completed` `credit` and create
+spendable funds — and that *"the audit returned policy hashes rather than
+expressions, so the exact live condition is still unverified."*
+
+It is now verified. Against live production:
+
+- `exploitable: **false**`
+- `openWrites: []` · `unguarded: []` · `rlsDisabled: []` · `noWritePolicy: []`
+- all ten money tables — `family_wallets`, `child_wallets`, `wallet_buckets`,
+  `wallet_transactions`, `wallet_rules`, `financial_accounts`, `transactions`,
+  `budgets`, `bills`, `savings_goals` — return
+  **"CLOSED - every write is manager-gated"**
+- `rlsKnown: true`, so this is read state rather than an assumption
+
+The highest-severity open question about production money is answered, and the
+answer is that the boundary holds.
+
+## What the same read makes newly measurable
+
+Production reports **440 tables and 973 policies**. A clean replay of the repo's
+migrations — performed for Pass G on Postgres 16.13, 307 migrations, 0 failures —
+produces **491 tables**.
+
+That gap of roughly **50 tables** is the ledger blocker stated as a number rather
+than a caveat. `requiresBaselineReview` is still `true` and the recorded history
+is still `0001`–`0003`, so the schema has been hand-managed and has drifted
+behind the migration set. This document previously said only that *"a missing
+ledger entry does not establish that the corresponding schema or feature is
+absent"* — which remains true, and is why the direction matters: the count is
+what production actually has, so tables the repo defines and production lacks are
+features that cannot work there.
+
+**What this does not license.** Nothing here applies a migration or stamps the
+ledger; both remain human-owned per `docs/PENDING_PROD_MIGRATIONS.md`, and the
+baseline gate is still doing its job by refusing. The remaining F5 work is
+unchanged and is step 2 of two: reconcile the ledger against the live catalogue,
+verifying each migration's objects before stamping, because a missing entry is
+not proof the objects are missing.
