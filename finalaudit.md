@@ -20203,6 +20203,29 @@ Removing the derivation fails the first. Deployed re-probe pending.
 tests/marketing-pages-reachable.test.ts; unauthenticated production probes of the
 eleven prefixes against www.bubaly.com on 2026-09-13 (build f9c4d7a1).
 
+#### Deployed state, and what reachability does NOT buy
+Re-probed 2026-09-13 at 13:50 UTC, before the fix merged: the seven 307s are
+still 307, as expected — the repair is on claude/roadmap-implementation-ld8bon
+and has not reached main. This entry stays FIXED + PASS on the local proof and
+the deployed re-probe stays pending until that lands.
+
+Separately, and worth recording because reachability alone would have looked
+like a finished job: www.bubaly.com/sitemap.xml lists 1,063 URLs, of which 1,049
+are blog posts and the remaining 14 are the static marketing pages. Not one of
+the eleven published-page families appears. app/sitemap.ts is not at fault — it
+queries marketing_pages and marketing_landing_pages by path and folds both in.
+The likeliest reading is that production has no published rows yet, and two
+independent signals agree with it rather than with a failing build-time read:
+/lp/anything answers 404 (the prefix is public and the page correctly reported a
+missing slug), and the sitemap omits /resources/benchmarks while that page
+answers 404 — exactly the pair the code produces when the publication flag is
+off, which means the admin reads at build time ran and returned honest answers.
+
+So after SEO-003 the surface is reachable and empty. Publishing pages is a user
+action in Super Admin, not a code change; no defect is claimed here. Recorded so
+that a later "the marketing pages still get no traffic" is not mistaken for a
+regression of this fix.
+
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe pending.
 
