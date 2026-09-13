@@ -53,8 +53,25 @@ test.describe('Contact Center delivery status through signed HTTP, PostgreSQL an
       const familyId = account.familyId;
       // The real Contact Center requires Family+. This local-only entitlement
       // belongs to the fixture and performs no payment or provider operation.
-      const entitlement = await admin.from('subscriptions').insert({ family_id: familyId, plan: 'plus', status: 'active' }).select('id');
+      //
+      // UPSERT, not insert. Provisioning a family already creates its
+      // subscription row — `provision_family` in 0212 inserts a free/trialing
+      // one — so this used to add a SECOND row for the same family. It only
+      // appeared to work because nothing stopped it: 0285 added the unique
+      // index on `family_id` that `onConflict` infers here, and the insert
+      // started failing the moment that landed.
+      //
+      // The duplicate was never harmless. One row per family is an invariant
+      // the application already relies on: lib/hooks/use-billing-subscription
+      // reads it with `.maybeSingle()`, which errors outright on a second row.
+      // This fixture was manufacturing exactly the state that breaks billing
+      // for the family it was testing with.
+      const entitlement = await admin.from('subscriptions')
+        .upsert({ family_id: familyId, plan: 'plus', status: 'active' }, { onConflict: 'family_id' })
+        .select('id');
       expect(!entitlement.error && entitlement.data?.length === 1).toBe(true);
+      const rows = await admin.from('subscriptions').select('id').eq('family_id', familyId);
+      expect(rows.data?.length, 'exactly one subscription row per family').toBe(1);
       const suffix = BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 12)}`) % 10_000_000_000n;
       const phone = `+1${suffix.toString().padStart(10, '0')}`;
       const channel = await admin.from('family_contact_channels').insert({
