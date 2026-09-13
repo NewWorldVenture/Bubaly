@@ -24,6 +24,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { payChoreRewardAction } from '@/app/(app)/wallet/actions';
+import { requestRedemptionAction } from '@/app/(app)/dashboard/rewards/actions';
 import { formatCents } from '@/lib/wallet/ledger';
 import {
   topEarners, streaksByMember, groupByRecurrence, rewardsProgress, totalFamilyPoints,
@@ -192,20 +193,18 @@ export function ChoresModule() {
     success(tr('choresModule.choreRemoved')); void refresh();
   }
 
+  // Through the server action, which resolves the role from the session and
+  // reads the title and cost from the reward. This used to insert directly and
+  // let the CLIENT decide `status`, `decided_by` and `cost_points` — so anyone
+  // who could edit the request could grant themselves a reward at any price.
   async function redeem(r: Reward) {
     if (!selfMember) return toastError(tr('choresModule.noMemberProfileToRedeem'));
     if (busy) return;
     setBusy(r.id);
-    const supabase = createClient();
-    const instant = manager;
-    const { error } = await supabase.from('reward_redemptions').insert({
-      family_id: familyId, reward_id: r.id, member_id: selfMember.id, reward_title: r.title, cost_points: r.cost_points,
-      status: instant ? 'approved' : 'requested',
-      decided_by: instant ? selfMember.id : null, decided_at: instant ? new Date().toISOString() : null,
-    });
+    const result = await requestRedemptionAction({ rewardId: r.id, forMemberId: selfMember.id });
     setBusy(null);
-    if (error) return toastError(describeDbError(error));
-    success(instant ? 'Reward redeemed!' : 'Redemption requested');
+    if (!result.ok) return toastError(result.error);
+    success(manager ? 'Reward redeemed!' : 'Redemption requested');
   }
 
   if (loading) return <SkeletonList count={6} />;
