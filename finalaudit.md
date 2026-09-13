@@ -5,13 +5,19 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: complete.** Fourteen findings. **Eleven are fixed in code** —
-eight from this audit, and F1, F3 and F14 on `main` via #526, whose sitemap
-implementation superseded mine and which I withdrew in its favour. One finding
-was disproved and withdrawn after re-checking. **Two remain**, and both need
-credentials this session cannot hold: F5 (Supabase access token) and F6
-(`CONTACT_CENTER_INBOUND_SECRET` and MX records). Nothing is left unexamined or
-unassigned.
+**Audit status: complete.** Fourteen findings, and the arithmetic stated
+exactly rather than approximately:
+
+| | |
+|---|---|
+| **Fixed in code** | **9** — F2, F4, F7, F8, F10, F11 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Closed without a code change** | **3** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing) |
+| **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
+
+One further observation was **disproved and withdrawn** after re-checking: a
+reading that two pages shipped no metadata, which was my own extraction bug.
+
+Nothing is left unexamined or unassigned.
 
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
