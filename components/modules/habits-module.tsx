@@ -155,7 +155,11 @@ export function HabitsModule() {
   }
 
   if (habitsQ.loading) return <SkeletonList />;
-  if (habitsQ.error) return <ErrorState message={habitsQ.error} onRetry={habitsQ.refresh} />;
+  // A streak is computed entirely from logsQ. Losing that read and keeping the
+  // habits one renders every streak as broken — the one thing a habit tracker
+  // must never get wrong.
+  const readError = habitsQ.error || logsQ.error;
+  if (readError) return <ErrorState message={readError} onRetry={() => { void habitsQ.refresh(); void logsQ.refresh(); }} />;
 
   const habits = habitsQ.data;
   const doneTodayCount = habits.filter((h) => isDoneToday(logsByHabit.get(h.id) ?? [], today)).length;

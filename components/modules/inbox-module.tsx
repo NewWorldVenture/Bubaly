@@ -86,7 +86,7 @@ export function InboxModule() {
     },
   });
 
-  const { data: contacts, loading: contactsLoading } = useRealtimeQuery<Contact>({
+  const { data: contacts, loading: contactsLoading, error: contactsError, refresh: refreshContacts } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
     fetcher: async (supabase) => supabase.from('family_contacts').select('*').eq('family_id', familyId).order('name'),
   });
@@ -140,7 +140,10 @@ export function InboxModule() {
   }
 
   if (commsLoading) return <SkeletonList />;
-  if (commsError) return <ErrorState message={commsError} onRetry={refreshComms} />;
+  // contacts is what turns a phone number into a name. Without it the inbox
+  // still renders, but every sender is a stranger.
+  const readError = commsError || contactsError;
+  if (readError) return <ErrorState message={readError} onRetry={() => { void refreshComms(); void refreshContacts(); }} />;
 
   const TABS: { key: FilterTab; label: string }[] = [
     { key: 'all',      label: 'All' },
