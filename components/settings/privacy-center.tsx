@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/card';
 import { isManager } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import { sessionStrength, type Assurance } from '@/lib/auth/mfa';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 
 type AuditRow = {
   id: string;
@@ -267,9 +268,9 @@ export function PrivacyCenter() {
                   {sessionStrength(session.data.assurance) === 'stepped_up' ? t('privacyCenter.sessionAal2') : t('privacyCenter.sessionAal1')}
                 </p>
               </div>
-              <form action="/auth/signout" method="post">
-                <Button type="submit" size="sm" variant="outline">{t('privacyCenter.signOutThisDevice')}</Button>
-              </form>
+              <SignOutForm>
+                {({ signingOut }) => <Button type="submit" size="sm" variant="outline" loading={signingOut}>{t('privacyCenter.signOutThisDevice')}</Button>}
+              </SignOutForm>
             </div>
           )}
         </div>

@@ -13,6 +13,7 @@ import { BASIC_ANNUAL_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 
 const fmt = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
@@ -79,12 +80,9 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
           <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
           <span className="text-muted/40">·</span>
-          {/* A form, not a link: /auth/signout is POST-only, so an <a href> was
-              a GET the route answers 405 — leaving a paywalled user with no way
-              out of the gate at all. */}
-          <form action="/auth/signout" method="post" className="contents">
-            <button type="submit" className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>
-          </form>
+          <SignOutForm className="contents">
+            {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>}
+          </SignOutForm>
           <span className="text-muted/40">·</span>
           <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
             {t('trialPaywallGate.closeAccount')}

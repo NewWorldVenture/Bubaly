@@ -14,6 +14,7 @@ import {
 } from '@/lib/auth/child-throttle';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { createClient as createPasswordClient } from '@supabase/supabase-js';
 
 /** Where a just-signed-in user should land: the admin console for super
  *  admins, the Grandparent Portal for a guest (M28 — the role extended-family
@@ -70,10 +71,13 @@ export async function stitchIdentityAction(): Promise<void> {
 /**
  * Sign a child in with their username + 4-digit PIN (no email). Resolves the
  * username → the child's synthetic auth user via the service role, then signs in
- * through the cookie-bound server client (so the session is set), returning ok.
+ * with an isolated server client. The browser owns session adoption, so a late
+ * action response cannot replace a newer account through Set-Cookie headers.
  * Deliberately vague on failure so it can't be used to enumerate usernames.
  */
-export async function childSignInAction(input: { username: string; pin: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function childSignInAction(input: { username: string; pin: string }): Promise<
+  { ok: true; tokens: { access_token: string; refresh_token: string } } | { ok: false; error: string }
+> {
   const t = await getTranslations();
   const sec = process.env.CHILD_LOGIN_SECRET || null;
   if (!sec) return { ok: false, error: t('actions.kidSignInIsnT') };
@@ -113,7 +117,7 @@ export async function childSignInAction(input: { username: string; pin: string }
     return !error;
   };
 
-  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username').ilike('username', username).limit(1);
+  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username,user_id').ilike('username', username).limit(1);
   if (loginLookupError) {
     console.error('[child-login] login lookup failed', loginLookupError);
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };
@@ -124,18 +128,44 @@ export async function childSignInAction(input: { username: string; pin: string }
     return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
   }
 
-  const supabase = await createServer(); // cookie-bound → sets the session on success
-  const { error } = await supabase.auth.signInWithPassword({
-    email: syntheticChildEmail(row.username),
-    password: deriveChildPassword(sec, row.username, pin),
-  });
-  if (error) {
-    if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
-    return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
-  }
+  let passwordClient: ReturnType<typeof createPasswordClient> | null = null;
+  try {
+    const configuration = [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY].map(value => {
+      const trimmed = (value ?? '').trim();
+      return /^(["']).*\1$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
+    });
+    passwordClient = createPasswordClient(configuration[0], configuration[1], {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, skipAutoInitialize: true },
+    });
+    const { data, error } = await passwordClient.auth.signInWithPassword({
+      email: syntheticChildEmail(row.username),
+      password: deriveChildPassword(sec, row.username, pin),
+    });
+    if (error) {
+      if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+      return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
+    }
+    const session = data.session;
+    if (!session || !data.user || data.user.id !== row.user_id || session.user?.id !== data.user.id
+      || typeof session.access_token !== 'string' || !session.access_token.trim()
+      || typeof session.refresh_token !== 'string' || !session.refresh_token.trim()) {
+      return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+    }
+    // Reject an internally inconsistent receipt; provider authentication, not
+    // this decoded claim, established the credentials above.
+    const tokenPayload = session.access_token.split('.')[1];
+    if (!tokenPayload || tokenPayload.length > 64 * 1024
+      || JSON.parse(Buffer.from(tokenPayload, 'base64url').toString('utf8'))?.sub !== row.user_id) {
+      return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+    }
 
-  // Success: wipe the throttle so a genuine kid never carries a stale lock.
-  await admin.from('child_login_throttle').upsert(
-    { username, ...clearedState(now) }, { onConflict: 'username' });
-  return { ok: true };
+    // Success: wipe the throttle so a genuine kid never carries a stale lock.
+    await admin.from('child_login_throttle').upsert(
+      { username, ...clearedState(now) }, { onConflict: 'username' });
+    return { ok: true, tokens: { access_token: session.access_token, refresh_token: session.refresh_token } };
+  } catch {
+    // Provider/configuration failures never expose the derived password or any
+    // SDK diagnostic that may contain request details.
+    return { ok: false, error: t('actions.kidSignInIsTemporarily') };
+  } finally { await passwordClient?.auth.dispose(); }
 }

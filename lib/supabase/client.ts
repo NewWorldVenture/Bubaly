@@ -16,8 +16,10 @@
 //     background refresh are the whole feature, so a change to them should be
 //     a visible edit to this file.
 import { createBrowserClient } from '@supabase/ssr';
+import { processLock } from '@supabase/supabase-js';
 import { durableCookieOptions, isSecureOrigin } from '../auth/session';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
+import { createBrowserSessionStorage } from '../auth/browser-session-storage';
 import type { Database } from '../database.types';
 
 type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
@@ -26,6 +28,7 @@ let client: BrowserClient | null = null;
 
 function build(): BrowserClient {
   const secure = typeof window !== 'undefined' && isSecureOrigin(window.location.origin);
+  const storage = typeof window !== 'undefined' ? createBrowserSessionStorage(process.env.NEXT_PUBLIC_SUPABASE_URL!) : null;
   return createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -34,8 +37,13 @@ function build(): BrowserClient {
       // lifetime itself. `secure` is omitted off https so the localhost dev
       // server and a Capacitor LAN shell keep their cookies at all.
       cookieOptions: durableCookieOptions(secure),
-      global: { fetch: createSessionRefreshFetch(process.env.NEXT_PUBLIC_SUPABASE_URL!) },
+      global: { fetch: storage?.fetch ?? createSessionRefreshFetch(process.env.NEXT_PUBLIC_SUPABASE_URL!) },
+      ...(storage ? { cookies: storage.cookies } : {}),
       auth: {
+        // Serialize this browser's auth reads so a rejected obsolete storage
+        // write cannot strand another caller on the SDK's refresh promise.
+        // Cookie generation checks still protect changes made in other tabs.
+        ...(storage ? { lock: processLock } : {}),
         // Stay signed in until sign-out: keep the session across restarts,
         // refresh the access token in the background, and finish the PKCE
         // OAuth / magic-link handoff when the browser lands back on the app.

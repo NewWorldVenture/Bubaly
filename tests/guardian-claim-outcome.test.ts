@@ -80,9 +80,9 @@ describe('claimGuardianCallback says which of the two things happened', () => {
 });
 
 describe('every Guardian callback route acts on the distinction', () => {
+  // Five routes read the helper's outcome directly.
   const routes = [
     'app/api/guardian/escalate/route.ts',
-    'app/api/guardian/inbound/sms/route.ts',
     'app/api/guardian/inbound/whatsapp/route.ts',
     'app/api/guardian/inbound/voice/route.ts',
     'app/api/guardian/screen/route.ts',
@@ -95,5 +95,28 @@ describe('every Guardian callback route acts on the distinction', () => {
     expect(source).toContain("=== 'unavailable'");
     expect(source).toContain('503');
     expect(source, 'and still acknowledges a settled one').toContain("!== 'claimed'");
+  });
+
+  // The sixth reaches the same invariant by a different route, so it is checked
+  // on its own terms rather than on the helper's vocabulary. /inbound/sms now
+  // runs through receiveGuardianSms, which carries the distinction in its own
+  // return type — and carries it further than the helper does, because it also
+  // separates a malformed payload (400) from an intake that could not complete.
+  // What must hold is what mattered all along: the one answer Twilio never
+  // retries must be reserved for work that actually completed.
+  it('the SMS route keeps 200 for completed work only', () => {
+    const route = readFileSync('app/api/guardian/inbound/sms/route.ts', 'utf8');
+    const service = readFileSync('lib/guardian/sms-processing.ts', 'utf8');
+
+    expect(route, 'a truthiness check passes for every outcome').not.toMatch(/if \(!(eventClaimed|claimed)\)/);
+    expect(route).toContain('receiveGuardianSms');
+    // 200 only for 'completed'; anything else is 400 or 503.
+    expect(route).toMatch(/result === 'completed' \? 200/);
+    expect(route).toContain('503');
+    // Even failing to construct the service client answers 503 rather than 200.
+    expect(route).toMatch(/catch \{ return new NextResponse\('Intake unavailable', \{ status: 503 \}\); \}/);
+
+    // And the service's own type has somewhere to put "could not complete".
+    expect(service).toMatch(/GuardianSmsProcessingResult = 'completed' \| 'busy' \| 'unavailable'/);
   });
 });

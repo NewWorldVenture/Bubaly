@@ -76,6 +76,8 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <AppProvider
+      membershipId={ctx.active.member.id}
+      membershipUpdatedAt={ctx.active.member.updated_at}
       value={{
         userId: ctx.user.id,
         userEmail: ctx.user.email,

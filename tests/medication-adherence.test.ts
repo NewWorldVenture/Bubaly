@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  shortTime, localDateKey, scheduleCoversDay, dosesForDay,
+  shortTime, localDateKey, scheduleCoversDay, dosesForDay, doseSlotInstant,
   adherenceRate, doseStatusCounts, type ScheduleLike, type DoseLogLike,
 } from '@/lib/medications/adherence';
 
@@ -58,6 +58,20 @@ describe('dosesForDay', () => {
     expect(due.find((d) => d.scheduleId === 's1')!.status).toBe('skipped');
   });
 
+  it('matches logs by the family clock when a zone is given', () => {
+    // 08:00 in New York on that Sunday is 12:00Z. The runner is UTC, so this is
+    // exactly the browser/cron disagreement the zone argument closes.
+    const logs: DoseLogLike[] = [{ schedule_id: 's2', scheduled_for: '2026-06-21T12:00:00.000Z', status: 'taken' }];
+    expect(dosesForDay(schedules, logs, sunday, 'America/New_York').find((d) => d.scheduleId === 's2')!.status).toBe('taken');
+    expect(dosesForDay(schedules, logs, sunday).find((d) => d.scheduleId === 's2')!.status).toBe('pending');
+  });
+
+  it('falls back to the runtime clock for an unusable zone rather than losing the slot', () => {
+    const logs: DoseLogLike[] = [{ schedule_id: 's2', scheduled_for: '2026-06-21T08:00', status: 'taken' }];
+    expect(dosesForDay(schedules, logs, sunday, 'Not/AZone').find((d) => d.scheduleId === 's2')!.status).toBe('taken');
+    expect(dosesForDay(schedules, logs, sunday, null).find((d) => d.scheduleId === 's2')!.status).toBe('taken');
+  });
+
   it('includes Monday-only schedule on a Monday', () => {
     const monday = new Date(2026, 5, 22);
     const due = dosesForDay(schedules, [], monday);
@@ -82,5 +96,19 @@ describe('doseStatusCounts', () => {
     expect(doseStatusCounts([
       { status: 'taken' }, { status: 'taken' }, { status: 'skipped' }, { status: 'missed' },
     ])).toEqual({ taken: 2, skipped: 1, missed: 1 });
+  });
+});
+
+describe('doseSlotInstant', () => {
+  it('resolves a slot in the given zone, not the runtime one', () => {
+    expect(doseSlotInstant('2026-06-21T08:00', 'America/New_York')).toBe('2026-06-21T12:00:00.000Z');
+    expect(doseSlotInstant('2026-06-21T08:00')).toBe('2026-06-21T08:00:00.000Z'); // runner is UTC
+  });
+
+  it('refuses a slot that does not exist in that zone rather than moving it', () => {
+    // 2026-03-08 02:30 never happens in New York — the clocks jump 02:00 → 03:00.
+    expect(doseSlotInstant('2026-03-08T02:30', 'America/New_York')).toBeNull();
+    expect(doseSlotInstant('2026-02-30T08:00', 'America/New_York')).toBeNull();
+    expect(doseSlotInstant('not-a-slot', 'America/New_York')).toBeNull();
   });
 });

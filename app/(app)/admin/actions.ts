@@ -443,22 +443,51 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
 }
 
 /** Sends a password-reset email to an existing account (e.g. to help a locked-out user). */
-export async function adminSendPasswordResetAction(email: string): Promise<Result> {
+export async function adminSendPasswordResetAction(email: string): Promise<
+  | { ok: true; outcome: 'accepted'; audit: 'recorded' | 'unconfirmed'; warning?: string }
+  | { ok: false; outcome: 'failed' | 'uncertain'; error: string }
+> {
   const t = await getTranslations();
-  const guard = await assertSuperAdmin();
-  if (!guard.ok) return guard;
+  let dispatched = false;
+  const uncertain = () => ({ ok: false as const, outcome: 'uncertain' as const, error: t('userSecurityActions.resetUncertain') });
+  try {
+    const guard = await assertSuperAdmin();
+    if (!guard.ok) return { ...guard, outcome: 'failed' };
+    const parsedEmail = emailSchema.safeParse(email);
+    if (!parsedEmail.success) return { ok: false, outcome: 'failed', error: t('actions.enterAValidEmailAddress') };
 
-  const parsedEmail = emailSchema.safeParse(email);
-  if (!parsedEmail.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
+    const supabase = createServiceClient();
+    dispatched = true;
+    const response = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
+      redirectTo: `${APP_URL}/auth/recovery`,
+    });
+    if (response.error) {
+      const status = response.error.status;
+      // A request timeout or server failure cannot establish non-acceptance.
+      if (typeof status !== 'number' || status < 400 || status >= 500 || status === 408) return uncertain();
+      return { ok: false, outcome: 'failed', error: describeActionError(response.error, t('actions.couldNotSendThePassword')) };
+    }
+    if (response.error !== null || !response.data || typeof response.data !== 'object' || Array.isArray(response.data)) return uncertain();
 
-  const supabase = createServiceClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
-    redirectTo: `${APP_URL}/login`,
-  });
-  if (error) return actionFailure(error, t('actions.couldNotSendThePassword'));
-
-  await adminAuditLog({ familyId: null, action: 'password_reset', resource: 'users', metadata: { email: parsedEmail.data } });
-  return { ok: true };
+    // Provider acceptance survives a later actor/read/audit failure. This action
+    // needs a checked receipt; the shared best-effort helper returns no evidence.
+    try {
+      const actor = await getUser();
+      if (!actor?.id) throw new Error('Audit actor unavailable');
+      const { data, error } = await supabase.from('audit_logs').insert({
+        family_id: null, actor_id: actor.id, action: 'password_reset', resource: 'users', resource_id: null,
+        metadata: { email: parsedEmail.data, via: 'site_admin' },
+      }).select('id').abortSignal(AbortSignal.timeout(5000));
+      if (error || data?.length !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data[0].id)) {
+        throw new Error('Audit receipt unavailable');
+      }
+      return { ok: true, outcome: 'accepted', audit: 'recorded' };
+    } catch {
+      return { ok: true, outcome: 'accepted', audit: 'unconfirmed', warning: t('userSecurityActions.resetAuditUnconfirmed') };
+    }
+  } catch (error) {
+    return dispatched ? uncertain() : { ok: false, outcome: 'failed', error: describeActionError(error, t('actions.couldNotSendThePassword')) };
+  }
 }
 
 const TICKET_STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;

@@ -1,0 +1,854 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T20:20:05.698Z",
+  "baselineCommit": "0b1906593adee286e59a8330311e74ad43cdfef4",
+  "sourceCommit": "1bd04072cc99944c204cb3b0d4f2d19bc022fc44",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 22,
+    "newFiles": 9,
+    "production": 8,
+    "tests": 10,
+    "addedExportedFunctions": 11,
+    "newPageRoutes": []
+  },
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "61338011caa84fac3c275563759f0ee5ae0db11ab174e8ab0a39f6ec2ec9c8e0",
+      "sourceSha256": "1270a6f407bc2ccf926c1c9d197bb60c95b91925cd1a949af260017f1004c334",
+      "bytes": 13643,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DEPLOY-B803FCB7F17E",
+        "OPS-INT-022",
+        "PERF-002",
+        "TEST-002"
+      ]
+    },
+    {
+      "path": ".github/workflows/cron-dispatch.yml",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "a05bc479c68b5c17655c91e6a7b83e44591fd3d04213f2921463e38836bdfe70",
+      "sourceSha256": "8eb72fff838d6899d773e356aee280f7957012c05133fe28b260931e7ae3db2f",
+      "bytes": 2369,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DEPLOY-8122E8487BD8",
+        "JOB-001",
+        "OPS-INT-022"
+      ]
+    },
+    {
+      "path": "app/api/cron/guardian-sms-recovery/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "24e5f2ccc4579f6ee63106ace4f0ab99d98497955b784dec52bc8bbe8b51f93c",
+      "bytes": 778,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "maxDuration",
+          "line": 7,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "GET",
+          "line": 9,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/cron/guardian-sms-recovery",
+      "httpMethods": [
+        "GET"
+      ],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/api/guardian/inbound/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "77cd8589a30e278532e9a88e5edfd9fdcfd0382003f7e35d6b64e2cd74f58400",
+      "sourceSha256": "8a46af618b9f0b523b8a704cc442222c1fcd9cd75aa13d9b978b3ac548f6945f",
+      "bytes": 2474,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 12,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/guardian/inbound/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-BBD0A5DB630F",
+        "FLOW-DDE6E8974B46",
+        "CALLBACK-07F1FB3AED21",
+        "AUTHZ-004"
+      ]
+    },
+    {
+      "path": "lib/guardian/scam-ai.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "c02ad7f6e2fea988d442fe844da4f72be0445ad931ac5730fdf43d26ea1921a0",
+      "sourceSha256": "b056e02126f8bea414badd461e38e25dbbc47337780d04f0f2c4ec7afbd090a1",
+      "bytes": 7027,
+      "baselineExportedSymbols": [
+        {
+          "name": "validateResult",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "detectScamWithAI",
+          "line": 67,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "validateResult",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "detectScamWithAI",
+          "line": 67,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-1DA8D5CDE6D8",
+        "OPS-INT-015"
+      ]
+    },
+    {
+      "path": "lib/guardian/sms-deadline.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0258c95b0a193cbfefe3b93f46f4686384bca110a5c556808086284cf1009057",
+      "bytes": 865,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "smsStep",
+          "line": 4,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "smsStep",
+          "line": 4,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/guardian/sms-notification.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "da9fe202180ddc2e875c7d2b83136740eac5b3f5454180020b27aa4513426749",
+      "bytes": 5201,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "guardianSmsScope",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "notifyGuardianSms",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "guardianSmsScope",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "notifyGuardianSms",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/guardian/sms-processing.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3b14568228138d389bd6801464864b818ada9e22e5740f97c08fefdc12c2f516",
+      "bytes": 19821,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "GuardianSmsProcessingResult",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "receiveGuardianSms",
+          "line": 238,
+          "kind": "function"
+        },
+        {
+          "name": "resumeGuardianSms",
+          "line": 270,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "receiveGuardianSms",
+          "line": 238,
+          "kind": "function"
+        },
+        {
+          "name": "resumeGuardianSms",
+          "line": 270,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/guardian/sms-receipt.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "0c8773b11fdf56bc41ead9b888ba6faefcba67d2c12b647c87dd97fedcbcf03b",
+      "sourceSha256": "bf9ca3ad396bf8f2bf6c1de50aca7f0ae68bbddff73297ead6f56ede6ee91b93",
+      "bytes": 18591,
+      "baselineExportedSymbols": [
+        {
+          "name": "GuardianSmsReceiptInput",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsDecision",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceipt",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceiptUnavailableError",
+          "line": 36,
+          "kind": "class"
+        },
+        {
+          "name": "readGuardianSmsReceipt",
+          "line": 103,
+          "kind": "function"
+        },
+        {
+          "name": "captureGuardianSmsReceipt",
+          "line": 108,
+          "kind": "function"
+        },
+        {
+          "name": "saveGuardianSmsDecision",
+          "line": 131,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "GuardianSmsReceiptInput",
+          "line": 35,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsDecision",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceipt",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceiptUnavailableError",
+          "line": 41,
+          "kind": "class"
+        },
+        {
+          "name": "guardianSmsReceiptId",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "guardianSmsNotificationId",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "readGuardianSmsReceipt",
+          "line": 127,
+          "kind": "function"
+        },
+        {
+          "name": "readGuardianSmsReceiptById",
+          "line": 132,
+          "kind": "function"
+        },
+        {
+          "name": "captureGuardianSmsReceipt",
+          "line": 137,
+          "kind": "function"
+        },
+        {
+          "name": "saveGuardianSmsDecision",
+          "line": 160,
+          "kind": "function"
+        },
+        {
+          "name": "markGuardianSmsCompleted",
+          "line": 230,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "guardianSmsReceiptId",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "guardianSmsNotificationId",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "readGuardianSmsReceiptById",
+          "line": 132,
+          "kind": "function"
+        },
+        {
+          "name": "markGuardianSmsCompleted",
+          "line": 230,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-CBF6042C8BED",
+        "SERVICE-2C7B0A3AF62E",
+        "SERVICE-3F47C1686B3B",
+        "SERVICE-D12C246D2B53"
+      ]
+    },
+    {
+      "path": "lib/guardian/sms-recovery.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "e9119c52fbffa23b8afa61e401ce945dca99b8f20b287af1d3a29f5e7f1031e7",
+      "bytes": 9299,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "GuardianSmsRecoveryCounts",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "drainGuardianSmsReceipts",
+          "line": 125,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "drainGuardianSmsReceipts",
+          "line": 125,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "scripts/cron-dispatch.mjs",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "23b89911a6a061123b4449c486f9dde22007152cd213e16227dffb45d88c57fd",
+      "sourceSha256": "db3d88d787361bd3b87eb98dafff9d5b2832e23ea3d888f1f4108f4a1f80badc",
+      "bytes": 9925,
+      "baselineExportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 66,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 86,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 98,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 110,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 67,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 87,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 99,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 111,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "CRON_BASE_URL",
+        "CRON_SECRET"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DEPLOY-1ED5966CA454",
+        "JOB-001",
+        "SOCIAL-003"
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "7cdbacdf7a0ab24588b1c01fc2100aaa01ce8eb8da146276ac3f7fadd0b4a212",
+      "sourceSha256": "2f53cc3941a661e3c1ecbf2d22e53e87563d133b34aad53a6b8b63313f046001",
+      "bytes": 8186,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-104264503A45"
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "30bb6122cb39ade2060d7ff42dd87d591c732aae2613948b5d561c7461df4788",
+      "sourceSha256": "f77dff0d1150e31263bd1914d5e3558e2dc0be61775f1a08c648bc7daec9cd7e",
+      "bytes": 3371,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A0B42E783221"
+      ]
+    },
+    {
+      "path": "tests/e2e/guardian-receipt-authority.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "c6c8cafc9700b82051d8f0eccbedd6d792d284d7c4180eaaf6bbc96ef74ae716",
+      "sourceSha256": "29ab2ee1b405708f2151180bc37f0c750080fd7a7e8ae8f4af9d57bc0469ebac",
+      "bytes": 19886,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9E535E8F1909"
+      ]
+    },
+    {
+      "path": "tests/e2e/guardian-sms-recovery.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d3e8503e72322f69877939410ee490d40030071445f64c3c50dacf05f8fcc6f3",
+      "bytes": 11013,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "CRON_SECRET",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN"
+      ],
+      "addedEnvironmentNames": [
+        "ANTHROPIC_API_KEY",
+        "CRON_SECRET",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN"
+      ],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-callback-security.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "08db159ea1701e82d994a46767f0c96cf7046b13e62dcbb89fb866f7128b24fb",
+      "sourceSha256": "fa8f063e046e64aea5e58e26cdb305e132ec2e261132a19abba5f4c60165597e",
+      "bytes": 4393,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-4AECFBE14859"
+      ]
+    },
+    {
+      "path": "tests/guardian-sms-completion.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "2cbc23f6ddb27060b6669d7b2238161d3ec6eaf48c37efdd3b76c17b146ccc71",
+      "bytes": 17574,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-sms-intake-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "bbcd7e091f407cc682e22eaf607b7f939d9301e797fbf194c86536e445811120",
+      "sourceSha256": "a4cd180910b047ae727a80370d8ef5d7ce89b45d75cf38e875cb4732309d7d14",
+      "bytes": 67165,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-322C46B32414"
+      ]
+    },
+    {
+      "path": "tests/guardian-sms-recovery-route.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f8c298c5bcb77129ab828df9527fade846f31a3367af8b69be872d4b1239b7fd",
+      "bytes": 2891,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-sms-recovery.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "8713979d894d9405d07dce56360be0f54d2f72cfd5c9585b0a40a6dd3abc53f1",
+      "bytes": 15756,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/notification-write-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "38156a038290d40b12640048b2645757095c56e9b2c36a08c32e7509c600ed20",
+      "sourceSha256": "07dbdafc6c1db0c40575d76580564a0eb16ad351ea0890a2f4d2fb7efbdff97c",
+      "bytes": 10581,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-BBCED29E4B6D"
+      ]
+    },
+    {
+      "path": "vercel.json",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "836d6c6a749dc84a0073a2be39edce9699fffba10030d6f8cda3daf59df806ca",
+      "sourceSha256": "f28cbcfd4954a04fc81dd900987b927a1daf733b360ed7c0482daade502dca35",
+      "bytes": 2266,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A3265310F552",
+        "OPS-INT-022"
+      ]
+    }
+  ]
+}

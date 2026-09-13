@@ -1,0 +1,1031 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T17:15:02.178Z",
+  "baselineCommit": "f51bcd40b8d17072b92851facaf371e0ac5319c5",
+  "sourceCommit": "bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 29,
+    "newFiles": 11,
+    "production": 11,
+    "tests": 11,
+    "addedExportedFunctions": 10,
+    "newPageRoutes": [
+      "/auth/recovery"
+    ]
+  },
+  "files": [
+    {
+      "path": "app/(app)/admin/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d5acb2c61d2c0d653d4ac20e9022ad16682595d1cf90b4ebc9989f684ca3278f",
+      "sourceSha256": "b755bc08c1b77443fdc319d0609dad8568f3f6754c827ad4d1f28b747bbb573c",
+      "bytes": 25494,
+      "baselineExportedSymbols": [
+        {
+          "name": "adminCreateUserAction",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "adminCreateFamilyAction",
+          "line": 88,
+          "kind": "function"
+        },
+        {
+          "name": "adminRemoveMemberAction",
+          "line": 157,
+          "kind": "function"
+        },
+        {
+          "name": "adminUpdateMemberAction",
+          "line": 173,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetFamilyPlanAction",
+          "line": 199,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetSuperAdminAction",
+          "line": 240,
+          "kind": "function"
+        },
+        {
+          "name": "saveStripeSettingsAction",
+          "line": 275,
+          "kind": "function"
+        },
+        {
+          "name": "testStripeConnectionAction",
+          "line": 318,
+          "kind": "function"
+        },
+        {
+          "name": "adminResendInviteAction",
+          "line": 335,
+          "kind": "function"
+        },
+        {
+          "name": "adminRevokeInviteAction",
+          "line": 367,
+          "kind": "function"
+        },
+        {
+          "name": "adminGetDocumentUrlAction",
+          "line": 387,
+          "kind": "function"
+        },
+        {
+          "name": "adminDeleteDocumentAction",
+          "line": 399,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetUserBanAction",
+          "line": 427,
+          "kind": "function"
+        },
+        {
+          "name": "adminSendPasswordResetAction",
+          "line": 446,
+          "kind": "function"
+        },
+        {
+          "name": "TicketStatus",
+          "line": 465,
+          "kind": "type"
+        },
+        {
+          "name": "adminUpdateTicketStatusAction",
+          "line": 468,
+          "kind": "function"
+        },
+        {
+          "name": "adminToggleFeatureFlagAction",
+          "line": 485,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "adminCreateUserAction",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "adminCreateFamilyAction",
+          "line": 88,
+          "kind": "function"
+        },
+        {
+          "name": "adminRemoveMemberAction",
+          "line": 157,
+          "kind": "function"
+        },
+        {
+          "name": "adminUpdateMemberAction",
+          "line": 173,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetFamilyPlanAction",
+          "line": 199,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetSuperAdminAction",
+          "line": 240,
+          "kind": "function"
+        },
+        {
+          "name": "saveStripeSettingsAction",
+          "line": 275,
+          "kind": "function"
+        },
+        {
+          "name": "testStripeConnectionAction",
+          "line": 318,
+          "kind": "function"
+        },
+        {
+          "name": "adminResendInviteAction",
+          "line": 335,
+          "kind": "function"
+        },
+        {
+          "name": "adminRevokeInviteAction",
+          "line": 367,
+          "kind": "function"
+        },
+        {
+          "name": "adminGetDocumentUrlAction",
+          "line": 387,
+          "kind": "function"
+        },
+        {
+          "name": "adminDeleteDocumentAction",
+          "line": 399,
+          "kind": "function"
+        },
+        {
+          "name": "adminSetUserBanAction",
+          "line": 427,
+          "kind": "function"
+        },
+        {
+          "name": "adminSendPasswordResetAction",
+          "line": 446,
+          "kind": "function"
+        },
+        {
+          "name": "TicketStatus",
+          "line": 494,
+          "kind": "type"
+        },
+        {
+          "name": "adminUpdateTicketStatusAction",
+          "line": 497,
+          "kind": "function"
+        },
+        {
+          "name": "adminToggleFeatureFlagAction",
+          "line": 514,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ACTION-A0A8D880DCCC",
+        "ACTION-5E0CBCAA383B",
+        "ACTION-EB625E046D14",
+        "ACTION-8881B2A5193B",
+        "ACTION-E914CCCA9CD9",
+        "ACTION-7504CAD715C4",
+        "ACTION-B2348A63B8A8",
+        "ACTION-35689A210D3C",
+        "ACTION-DCCA3CE5F795",
+        "ACTION-EFA7ACE65F64",
+        "ACTION-C6D239741E62",
+        "ACTION-A6C51AE39D61",
+        "ACTION-120353088DD0",
+        "ACTION-00F500AE8E65",
+        "ACTION-B4CBE245E543",
+        "ACTION-0EB7DABC5253",
+        "FLOW-8C6976E5B541",
+        "UI-WF-027",
+        "AUTH-003"
+      ]
+    },
+    {
+      "path": "app/(app)/admin/marketing/sms/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e97c15f3a8fb028cfa3f4676124d244a52027f8271b703d7670cc9b8d914b3c8",
+      "sourceSha256": "b368460eb99735db860425cf54dd3831632774acda13532240379ae9a36fbb34",
+      "bytes": 4129,
+      "baselineExportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 15,
+          "kind": "value"
+        },
+        {
+          "name": "SmsPage",
+          "line": 19,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 13,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "SmsPage",
+          "line": 18,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": "/admin/marketing/sms",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "UI-ROUTE-0050",
+        "ROUTE-4FA1DCCD3B30",
+        "CONTROL-9D5112C7EC6D",
+        "CONTROL-0BEFF22EC6D1",
+        "CONTROL-692D265628CA",
+        "CONTROL-726CBE8B89A5",
+        "CONTROL-F21D8EA89794",
+        "INCOMPLETE-F439834931F9"
+      ]
+    },
+    {
+      "path": "app/(auth)/auth/recovery/actions.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f21a41cd750f27650008e833e361a405d967c6bcd32dcd9f44c2d6b86b113b7e",
+      "bytes": 3032,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "prepareRecoveryAction",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "consumeRecoveryAction",
+          "line": 34,
+          "kind": "function"
+        },
+        {
+          "name": "inspectRecoveryAction",
+          "line": 49,
+          "kind": "function"
+        },
+        {
+          "name": "saveRecoveryAction",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "prepareRecoveryAction",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "consumeRecoveryAction",
+          "line": 34,
+          "kind": "function"
+        },
+        {
+          "name": "inspectRecoveryAction",
+          "line": 49,
+          "kind": "function"
+        },
+        {
+          "name": "saveRecoveryAction",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(auth)/auth/recovery/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "367aed2dbb871a87f6f4d25664b5ae2790e8965b4aa16cdbd19e4d8074daeb66",
+      "bytes": 419,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "RecoveryPage",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "RecoveryPage",
+          "line": 8,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": "/auth/recovery",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/auth/callback/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "841f79abb76fe09713fb82e058559066efcfc66009e8a7e5a50fa6a623f45c76",
+      "sourceSha256": "3c75b0f79233aeb004f0ab523eea7905a43565462b8c906fa8e6a8afd37dad48",
+      "bytes": 9442,
+      "baselineExportedSymbols": [
+        {
+          "name": "GET",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "GET",
+          "line": 17,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [
+        "NODE_ENV"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ROLE-7394A5416880",
+        "API-9A739F355ACF",
+        "FLOW-B9D906284539",
+        "AUTH-003"
+      ]
+    },
+    {
+      "path": "components/admin/user-security-actions.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "aa70f91c2f0033ff73e73dec81d96b732bd2a2b1b19560660e3164cb6538513b",
+      "sourceSha256": "be65f343e90561339d451a6d57e38bb2811da2af0fad434c98f4a82763d96a90",
+      "bytes": 6394,
+      "baselineExportedSymbols": [
+        {
+          "name": "UserSecurityActions",
+          "line": 10,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "UserSecurityActions",
+          "line": 10,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-CF50929C616A",
+        "CONTROL-E371EF15DAB4",
+        "CONTROL-C5AD7C8E20C1",
+        "CONTROL-53FEF886BC16",
+        "CONTROL-78AD273474FC"
+      ]
+    },
+    {
+      "path": "components/auth/login-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ade106698dd93abf092ce0535fdaa5b6b3bd428bcbbef001038c403c7f949969",
+      "sourceSha256": "f39c35ef96b2dd423aa0cd20b686f9946a3f0e893e9e70c84349b922be453611",
+      "bytes": 5976,
+      "baselineExportedSymbols": [
+        {
+          "name": "LoginForm",
+          "line": 20,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "LoginForm",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-041133211BF5",
+        "CONTROL-B6E76255EF1A",
+        "CONTROL-B97CA9E526C4",
+        "CONTROL-3E520715382D",
+        "CONTROL-851D916CBB9F",
+        "CONTROL-6A7EE432009B",
+        "CONTROL-B64B856F5CCA",
+        "CONTROL-4D7C78AB02FD",
+        "CONTROL-6D6651CE3FBC",
+        "ROLE-041133211BF5",
+        "INCOMPLETE-5B74E48FFDEB",
+        "INCOMPLETE-C4D9169105DC",
+        "UI-WF-001",
+        "AUTH-003"
+      ]
+    },
+    {
+      "path": "components/auth/recovery-form.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "9eac8036027702b1739daebf2019e45de88a4f240beba757c533ebfd930ccf2d",
+      "bytes": 22688,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "RecoveryForm",
+          "line": 96,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "RecoveryForm",
+          "line": 96,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "components/auth/signup-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b20803f069180dc8094ec01bd03c03c390b7a1d5e8c9ca453662a7d609452447",
+      "sourceSha256": "e4bf5c85d19d4dc8e0da68d57341a1b509dc78f212dd785a7cbc0b63c3b6e5b7",
+      "bytes": 10821,
+      "baselineExportedSymbols": [
+        {
+          "name": "SignupForm",
+          "line": 22,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SignupForm",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-FF9788DC39FD",
+        "CONTROL-EA8C05AD98B0",
+        "CONTROL-E16A93B038A0",
+        "CONTROL-64F6D0A181CB",
+        "CONTROL-86A8B5905D82",
+        "CONTROL-0EBAC7C4D62C",
+        "CONTROL-6A16625C3448",
+        "CONTROL-95558D9B7672",
+        "CONTROL-AF52E1DE7367",
+        "CONTROL-5AD3B5FC5D7C",
+        "CONTROL-0B2F397BA1FE",
+        "CONTROL-2632817B34FE",
+        "ROLE-FF9788DC39FD",
+        "INCOMPLETE-41B07CEE48EC",
+        "INCOMPLETE-D6D0416A8C95",
+        "INCOMPLETE-78E6FC309665",
+        "UI-WF-001"
+      ]
+    },
+    {
+      "path": "lib/auth/recovery-server.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d772c867ce6dbed2bcf402c679351a39d8e9b901e38c13db5038604cb4f6263e",
+      "bytes": 19414,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "RecoveryError",
+          "line": 6,
+          "kind": "class"
+        },
+        {
+          "name": "RecoveryIdentity",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "RECOVERY_HANDOFF_COOKIE",
+          "line": 10,
+          "kind": "value"
+        },
+        {
+          "name": "createRecoveryGrant",
+          "line": 194,
+          "kind": "function"
+        },
+        {
+          "name": "verifyRecoveryGrant",
+          "line": 198,
+          "kind": "function"
+        },
+        {
+          "name": "prepareImplicitRecovery",
+          "line": 201,
+          "kind": "function"
+        },
+        {
+          "name": "updateRecoveryPassword",
+          "line": 230,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "createRecoveryGrant",
+          "line": 194,
+          "kind": "function"
+        },
+        {
+          "name": "verifyRecoveryGrant",
+          "line": 198,
+          "kind": "function"
+        },
+        {
+          "name": "prepareImplicitRecovery",
+          "line": 201,
+          "kind": "function"
+        },
+        {
+          "name": "updateRecoveryPassword",
+          "line": 230,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "732a120f98c9ecb69556a199f1a1f4f8c1b01b0dce62ca9762376de8b185836f",
+      "sourceSha256": "9e69553bd2fd1d61b2e0855e20b8ae8f3badb66bfdf0762eaae8a69710b80a04",
+      "bytes": 983744,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-88F1E3670486"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "2fa62cdaad282c6587be64d8df09541a9e317d45966a1e3511c52fc838a1f3d0",
+      "sourceSha256": "500add6246edcf76d580ffd31c170144187de777f9e87b42318b548bad222782",
+      "bytes": 878366,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C346841E8649"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "29a5515b719e8d37808d9614bc07c291c36b296885853e61d9e5d0b87f4fd2ff",
+      "sourceSha256": "a4f6d705287e069116921aa68aed675898f91d6fc6f8f10e9603c84053e1413f",
+      "bytes": 967529,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-DC666FC0E80F"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "79b0508cd4ce09b9721415202b036125d81c0315f492846ca3e34d64970deb1b",
+      "sourceSha256": "92186bdc45e04377b348572c17f7f675c6f591ce4187b7dae2ea68624e50b164",
+      "bytes": 992816,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-24D39068AF0B"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "f22054f26e019333266d8280800012a5e2548b743843933267600c136186718f",
+      "sourceSha256": "6ebd9d2ccfac09843fa7f234de942df8224dfde9935afc92fcc58597af1e40dd",
+      "bytes": 955206,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9E9B391BC4E5"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "0dc92588056e025c18cc654285a6119d39141eb712f68db16852bdf32ca0b94c",
+      "sourceSha256": "c7889155d635f43691e3231a8aec8693db6233abe15736f3652dcf1cee8dd11f",
+      "bytes": 939410,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-6F4C71EB2624"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "f0d44257245104964dbd2874f86100d2ab8f71b76ae545b683d107289a72eabc",
+      "sourceSha256": "506d03fb55c308d01f43078a78d0c89d972978b1377de0b649c58b6e41e78712",
+      "bytes": 969492,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-091D62717E32"
+      ]
+    },
+    {
+      "path": "shared/auth/refresh-fetch.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "67debae4ff330a045a0be0063790179e8e9dc705af5ca5fc0dc7850c9245d4d9",
+      "sourceSha256": "129dc38787c7a3263b2f542bf3e168b2478acd3e97e62e63babd9979d8f84b4b",
+      "bytes": 2834,
+      "baselineExportedSymbols": [
+        {
+          "name": "createSessionRefreshFetch",
+          "line": 3,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "createSessionRefreshFetch",
+          "line": 3,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ROLE-2C6D9A8BA5AC",
+        "AUTH-002"
+      ]
+    },
+    {
+      "path": "tests/admin-password-reset-execution.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "1238f2bbda12df2fb6669c8d67e6c9cc6bd57753a2714dfa379536fbb300c3fc",
+      "bytes": 8293,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/auth-recovery-actions.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "a19226ca6f5e268523c55d822248158829bf349d5e8af4b12aa917b3b7b0bf4b",
+      "bytes": 6488,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/auth-recovery-callback-execution.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "c368557c2e258a0d6846fa7fd3f22dde90d28859a1e5edfcfda0b77d6d4aab15",
+      "bytes": 9270,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/auth-recovery-server.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "e1a48aa81b46aacedc166a840316e3253d0e0106d6a8db1494eab5101f247824",
+      "bytes": 23482,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/auth-refresh-persistence.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "0173a978824fd7828eddfb3d5b4174501f82b1e89889f43084d30802cd86161f",
+      "sourceSha256": "082c46eb30586d1bcf5ecf72c6e3f9711ad6a8ae4a81155643a44eda4d8da423",
+      "bytes": 14675,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-51B0E11E13BA"
+      ]
+    },
+    {
+      "path": "tests/auth-review-selection-forms.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "f2426d685505987baa2307db94e08d22a3d9720a79e16cc2c9f93eacca6545b9",
+      "sourceSha256": "0944bf5fd3ca6a91ab766b81ca08cc635ccbb73932cb65160358278c12c4cb3d",
+      "bytes": 16135,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-11C68E6218DB"
+      ]
+    },
+    {
+      "path": "tests/e2e/admin-password-reset-control.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b7a979af570442b384ae165baaafbf2159e00fde6ffa4c7349713b062b8d9540",
+      "bytes": 11695,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/auth-recovery-ui.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "6eff81d89b4ced96f06ba9f5d0575313a4742e36517acf201674fbdbc7f52c6d",
+      "bytes": 35902,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/browser-session-storage.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "03b60c98649b071a8eb9cb3529e9a5dd1abd2cee661b035330385c6c90e4fbe0",
+      "sourceSha256": "1ae127c79acefd63634a984c90f9e64d7f53a4ae8e9493e41d06e44d1c169a14",
+      "bytes": 11728,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "PW_CHROMIUM_PATH"
+      ],
+      "addedEnvironmentNames": [
+        "PW_CHROMIUM_PATH"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-1177446EFB72"
+      ]
+    },
+    {
+      "path": "tests/e2e/signup-boundaries.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "6bb82d636fcd58022c70562136453025848176f3ce05de2781adfdd4c07bb759",
+      "bytes": 28624,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/persistent-login.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "54f670eb3f9947f94be4c7b0c02421f5f1860879047924981b9011c5946795fa",
+      "sourceSha256": "0f3795078a6e40442a90412f53e3d3397e2c63ad3b0179c41ce8dad5292fb419",
+      "bytes": 15115,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-45879E8D96C5"
+      ]
+    }
+  ]
+}

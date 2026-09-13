@@ -8,8 +8,9 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
-  PLAN_MEAL_TYPES, type PlannerRequest, type PlanAssignment,
+  PLAN_MEAL_TYPES, type PlannerRequest,
 } from '@/lib/meals/planner';
+import { isDayKey, planWeek, type PlanEntryInput } from '@/lib/services/meals';
 import { scoreWeekNights } from '@/lib/meals/week-context';
 import { expiringSoon } from '@/lib/pantry/logic';
 import type { MealType } from '@/lib/database.types';
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
   if (!boundedBody.ok) return NextResponse.json({ error: t('plan.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const weekStart = String(body.weekStart ?? '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+  if (!isDayKey(weekStart)) {
     return NextResponse.json({ error: t('plan.aValidWeekstartYyyyMm') }, { status: 400 });
   }
   const mealTypes = (Array.isArray(body.mealTypes) ? body.mealTypes : ['dinner'])
@@ -130,7 +131,7 @@ export async function POST(req: Request) {
         const completion = await (await resolveProvider()).complete({
           system: buildPlannerSystem(),
           messages: [{ role: 'user', content: buildPlannerUser(request) }],
-          tools: [], maxTokens: 2000,
+          tools: [], maxTokens: 4500,
         });
         obs.used(completion.model ?? 'unknown', completion.usage);
         return completion.text;
@@ -150,90 +151,28 @@ export async function POST(req: Request) {
   // Tuesday got a 20-minute dish, quoting the calendar rows it came from.
   if (!write) return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: false });
 
-  // Persist into meal_plans ----------------------------------------------
-  // Resolve every assignment to a concrete meals.id (meal_plans.meal_id → meals).
-  const mealByName = new Map<string, string>((meals ?? []).map((m) => [m.name.toLowerCase(), m.id]));
-  const recipeById = new Map<string, { name: string }>((recipes ?? []).map((r) => [r.id, { name: r.name }]));
-  const createdMealIds: string[] = [];
-  let persistenceError: unknown = null;
-
-  const cleanupCreatedMeals = async () => {
-    if (!createdMealIds.length) return;
-    const { error } = await supabase.from('meals').delete().eq('family_id', familyId).in('id', createdMealIds);
-    if (error) logDatabaseFailure('created meal rollback', error);
-  };
-
-  async function resolveMealId(a: PlanAssignment): Promise<string | null> {
-    if (persistenceError) return null;
-    const parts = refParts(a.ref);
-    if (parts?.table === 'meals') return parts.id;
-    // recipe or new → mirror into a meals row (reuse by name to avoid dupes)
-    const name = (parts?.table === 'recipes' ? recipeById.get(parts.id)?.name : a.name) || a.name;
-    if (!name) return null;
-    const existing = mealByName.get(name.toLowerCase());
-    if (existing) return existing;
-    const { data: created, error } = await supabase.from('meals')
-      .insert({ family_id: familyId, name, meal_type: a.meal_type, created_by: userId })
-      .select('id').single();
-    if (error || !created) {
-      persistenceError = error ?? new Error('Meal creation returned no row.');
-      return null;
-    }
-    createdMealIds.push(created.id);
-    if (created) mealByName.set(name.toLowerCase(), created.id);
-    return created?.id ?? null;
-  }
-
-  const dates = [...new Set(assignments.map((a) => a.date))];
-
-  const rows: { family_id: string; meal_id: string; plan_date: string; meal_type: MealType; created_by: string }[] = [];
-  for (const a of assignments) {
-    const mealId = await resolveMealId(a);
-    if (mealId) rows.push({ family_id: familyId, meal_id: mealId, plan_date: a.date, meal_type: a.meal_type, created_by: userId });
-  }
-  if (persistenceError || rows.length !== assignments.length) {
-    await cleanupCreatedMeals();
-    logDatabaseFailure('meal resolution', persistenceError ?? new Error('Meal plan contains unresolved assignments.'));
-    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
-  }
-
-  const { data: existingPlans, error: existingPlansError } = await supabase.from('meal_plans')
-    .select('family_id,meal_id,plan_date,meal_type,created_by')
-    .eq('family_id', familyId).in('plan_date', dates).in('meal_type', request.mealTypes);
-  if (existingPlansError) {
-    await cleanupCreatedMeals();
-    logDatabaseFailure('existing plan read', existingPlansError);
-    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
-  }
-
-  const restorePreviousPlans = async () => {
-    const { error: removeError } = await supabase.from('meal_plans').delete().eq('family_id', familyId)
-      .in('plan_date', dates).in('meal_type', request.mealTypes);
-    if (removeError) logDatabaseFailure('failed plan cleanup', removeError);
-    if (existingPlans?.length) {
-      const { error: restoreError } = await supabase.from('meal_plans').insert(existingPlans);
-      if (restoreError) logDatabaseFailure('previous plan restore', restoreError);
-    }
-    await cleanupCreatedMeals();
-  };
-
-  // Clear the targeted slots so re-planning replaces rather than duplicates.
-  const { error: deleteError } = await supabase.from('meal_plans').delete().eq('family_id', familyId)
-    .in('plan_date', dates).in('meal_type', request.mealTypes);
-  if (deleteError) {
-    await cleanupCreatedMeals();
-    logDatabaseFailure('targeted plan cleanup', deleteError);
-    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
-  }
-
-  if (rows.length) {
-    const { data: inserted, error } = await supabase.from('meal_plans').insert(rows).select('id');
-    if (error || !inserted || inserted.length !== rows.length) {
-      await restorePreviousPlans();
-      logDatabaseFailure('meal plan write', error ?? new Error('Meal plan insert returned an incomplete result.'));
+  // Use the same family-scoped write and verified receipt as the manual
+  // planner. Recipe IDs are resolved server-side with their ingredients;
+  // sparse assignments replace only their exact date/type pairs.
+  const entries: PlanEntryInput[] = assignments.map((assignment) => {
+    const source = refParts(assignment.ref);
+    const slot = { date: assignment.date, mealType: assignment.meal_type };
+    if (source?.table === 'meals') return { ...slot, mealId: source.id };
+    if (source?.table === 'recipes') return { ...slot, recipeId: source.id };
+    return { ...slot, mealName: assignment.name, ...(assignment.ingredients ? { ingredients: assignment.ingredients } : {}) };
+  });
+  try {
+    const saved = await planWeek(scope, entries);
+    if (!saved.ok) {
+      logDatabaseFailure('meal plan write', { code: saved.code });
       return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
     }
+    return NextResponse.json({
+      assignments, busyNights: weekContext.busyNights,
+      written: true, count: saved.data.planned.length, slots: saved.data.planned,
+    });
+  } catch (error) {
+    logDatabaseFailure('meal plan write', error);
+    return databaseUnavailable(t('plan.couldNotSaveTheMeal'));
   }
-
-  return NextResponse.json({ assignments, busyNights: weekContext.busyNights, written: true, count: rows.length });
 }

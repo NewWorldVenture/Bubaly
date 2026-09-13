@@ -61,8 +61,13 @@ function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
 
 /** Get-or-create the family's default grocery list. */
 async function ensureGroceryList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
+  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
+  // `archived_at` (0014) — and only `archived_at` is ever written, by the
+  // shopping module. Asking one of them calls an archived list open and
+  // quietly files the family's groceries where nobody is looking.
   const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).maybeSingle();
+    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
+    .order('created_at', { ascending: true }).limit(1).maybeSingle();
   if (lookupError) return { id: null, error: lookupError };
   if (existing?.id) return { id: existing.id };
   const { data, error: createError } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();

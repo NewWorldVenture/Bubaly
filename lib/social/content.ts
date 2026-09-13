@@ -172,8 +172,8 @@ export function derivePostStatus(targetStatuses: TargetStatus[]): PostStatus {
   const active = targetStatuses.filter((s) => s === 'publishing' || s === 'pending').length;
 
   if (active > 0) return 'publishing';
-  if (published > 0 && failed > 0) return 'partially_published';
-  if (published > 0 && failed === 0) return 'published';
+  if (published > 0 && published < targetStatuses.length) return 'partially_published';
+  if (published === targetStatuses.length) return 'published';
   if (failed > 0 && published === 0) return 'failed';
   if (targetStatuses.every((s) => s === 'canceled')) return 'canceled';
   return 'draft';

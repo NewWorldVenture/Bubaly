@@ -29,10 +29,9 @@ export type DeliveryChannel = 'push' | 'email';
  * is a decision — the same rule `settingsFromRow` applies to `enabled`. A family
  * that never opened the setting must not have its children silenced by it.
  *
- * A failed read returns an EMPTY set: delivery continues. This governs which
- * channel a notice takes, not whether a child may be told something, so failing
- * closed would silently drop notifications on a transient database error. The
- * quiet-hours window and the trust gate are the boundaries that fail closed.
+ * A failed read throws before delivery or acknowledgement. The notification
+ * remains pending for retry instead of treating an unavailable parental setting
+ * as permission to contact a child on a channel the family may have disabled.
  */
 export async function childrenBlockedOn(
   supabase: DB,
@@ -51,7 +50,7 @@ export async function childrenBlockedOn(
     .eq('is_active', true);
   if (membersError) {
     console.error('[child-channels] member read failed', { channel, error: membersError });
-    return blocked;
+    throw new Error('Child channel membership read failed.');
   }
   if (!members?.length) return blocked;
 
@@ -62,7 +61,7 @@ export async function childrenBlockedOn(
     .in('family_id', familyIds);
   if (settingsError) {
     console.error('[child-channels] settings read failed', { channel, error: settingsError });
-    return blocked;
+    throw new Error('Child channel settings read failed.');
   }
 
   const off = new Set<string>();

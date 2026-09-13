@@ -28,10 +28,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), setVapid: vi.fn() }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), setVapid: vi.fn(), blocked: vi.fn() }));
 vi.mock('web-push', () => ({
   default: { sendNotification: mocks.send, setVapidDetails: mocks.setVapid },
 }));
+// Consent resolution is a separate concern with its own tests; stub it so these
+// cases are about the prune counter and nothing else.
+vi.mock('@/lib/notifications/child-channels', () => ({ childrenBlockedOn: mocks.blocked }));
 
 type DeleteOutcome = { error: { code: string; message: string } | null };
 
@@ -43,15 +46,21 @@ function pushClient(outcome: DeleteOutcome) {
     endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: 'p'.repeat(20), auth: 'a'.repeat(20), token: null,
   };
   const client = {
-    from: () => {
+    // sendPushToUsers resolves consent for the whole batch before any send, so
+    // the client has to answer user_preferences as well as push_devices.
+    from: (table: string) => {
       const b: Record<string, unknown> = {};
       let mode: 'select' | 'delete' = 'select';
+      const rows = () => (table === 'user_preferences'
+        ? [{ user_id: 'user-1', push_enabled: true }]
+        : [device]);
       Object.assign(b, {
         select: () => { mode = 'select'; return b; },
         delete: () => { mode = 'delete'; return b; },
+        in: () => b,
         eq: (col: string, v: unknown) => { if (mode === 'delete' && col === 'id') deletes.push(String(v)); return b; },
         then: (resolve: (v: unknown) => void) =>
-          resolve(mode === 'delete' ? { data: null, ...outcome } : { data: [device], error: null }),
+          resolve(mode === 'delete' ? { data: null, ...outcome } : { data: rows(), error: null }),
       });
       return b;
     },
@@ -64,6 +73,7 @@ beforeEach(() => {
   logged = [];
   vi.resetModules();
   mocks.send.mockReset();
+  mocks.blocked.mockResolvedValue([]);
   vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'BPublicKeyForTestsOnly');
   vi.stubEnv('VAPID_PRIVATE_KEY', 'PrivateKeyForTestsOnly');
   vi.stubEnv('VAPID_SUBJECT', 'mailto:test@bubaly.test');

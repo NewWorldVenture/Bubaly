@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
-import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
+import { createMealAction, planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 
 const FAMILY = 'family-1';
 const OTHER = 'family-2';
@@ -24,7 +24,7 @@ const plans = (familyId = FAMILY) => db.table('meal_plans').filter((r) => r.fami
 beforeEach(() => {
   vi.clearAllMocks();
   db = createInMemorySupabase<SupabaseClient<Database>>({
-    defaults: { meal_plans: { meal_id: null, idempotency_key: null }, meals: { description: null } },
+    defaults: { meal_plans: { meal_id: null, idempotency_key: null }, meals: { description: null, ingredients: [], image_url: null, recipe_url: null } },
   });
   db.seed('meals', [
     { id: 'tacos', family_id: FAMILY, name: 'Tacos' },
@@ -75,6 +75,54 @@ describe('planning a meal into a slot', () => {
     expect((await planMealAction({ mealId: 'tacos', date: '', mealType: 'dinner' })).ok).toBe(false);
     expect(plans()).toHaveLength(0);
   });
+
+  it('converts a saved family recipe preserving fractional ingredients and links despite a same-name dish', async () => {
+    db.seed('family_recipes', [{ id: 'recipe-tacos', family_id: FAMILY, name: 'Tacos',
+      ingredients: [{ name: 'beans', quantity: '1 1/2', unit: 'cups' }, { name: 'salt', quantity: 'to taste', unit: null }],
+      source_url: 'https://example.com/tacos', photo_url: 'https://example.com/tacos.jpg',
+    }]);
+    const result = await planMealAction({ recipeId: 'recipe-tacos', date: '2026-09-08', mealType: 'dinner' });
+    expect(result.ok, result.ok ? '' : result.error).toBe(true);
+    if (!result.ok) return;
+    expect(result.slot).toMatchObject({ id: result.id, date: '2026-09-08', name: 'Tacos', ingredients: [
+      { name: 'beans', quantity: '1 1/2', unit: 'cups' }, { name: 'salt', quantity: 'to taste', unit: null },
+    ] });
+    expect(result.slot.mealId).not.toBe('tacos');
+    expect(db.table('meals').find((meal) => meal.id === result.slot.mealId)).toMatchObject({
+      recipe_url: 'https://example.com/tacos', image_url: 'https://example.com/tacos.jpg',
+      ingredients: [{ name: 'beans', qty: '1 1/2', unit: 'cups' }, { name: 'salt', qty: 'to taste', unit: null }],
+    });
+    expect(db.table('meals').find((meal) => meal.id === 'tacos')?.ingredients).toEqual([]);
+  });
+
+  it('saves a custom dish into its slot and retains ingredient strings through readback', async () => {
+    const result = await planMealAction({ mealName: 'Pasta', date: '2026-09-08', mealType: 'dinner',
+      ingredients: [{ name: 'tomatoes', quantity: '2–3', unit: null }, { name: 'basil', quantity: null, unit: 'handful' }],
+    });
+    expect(result).toMatchObject({ ok: true, slot: { name: 'Pasta', ingredients: [
+      { name: 'tomatoes', quantity: '2–3', unit: null }, { name: 'basil', quantity: null, unit: 'handful' },
+    ] } });
+  });
+
+  it('creates a library-only custom meal without planning it', async () => {
+    const result = await createMealAction({ name: 'Breakfast oats', mealType: 'breakfast',
+      ingredients: [{ name: 'oats', quantity: '1/2', unit: 'cup' }], imageUrl: 'https://example.com/oats.jpg',
+    });
+    expect(result).toMatchObject({ ok: true, meal: { family_id: FAMILY, name: 'Breakfast oats',
+      ingredients: [{ name: 'oats', qty: '1/2', unit: 'cup' }], image_url: 'https://example.com/oats.jpg',
+    } });
+    expect(plans()).toHaveLength(0);
+  });
+
+  it('refuses foreign meals and recipes without changing the existing slot', async () => {
+    await planMealAction({ mealId: 'tacos', date: '2026-09-08', mealType: 'dinner' });
+    db.seed('meals', [{ id: 'foreign-meal', name: 'Secret', family_id: OTHER }]);
+    db.seed('family_recipes', [{ id: 'foreign-recipe', name: 'Secret', family_id: OTHER, ingredients: [] }]);
+    for (const source of [{ mealId: 'foreign-meal' }, { recipeId: 'foreign-recipe' }]) {
+      expect((await planMealAction({ ...source, date: '2026-09-08', mealType: 'dinner' })).ok).toBe(false);
+    }
+    expect(plans()).toEqual([expect.objectContaining({ meal_id: 'tacos' })]);
+  });
 });
 
 describe('clearing a planned meal', () => {
@@ -105,6 +153,7 @@ describe('a caller who is not signed in', () => {
   it.each([
     ['plan', () => planMealAction({ mealId: 'tacos', date: '2026-09-08', mealType: 'dinner' })],
     ['remove', () => removeMealPlanAction('some-id')],
+    ['create', () => createMealAction({ name: 'Tacos' })],
   ])('is redirected on %s, not handed an error toast', async (_n, call) => {
     mocks.requireUserContext.mockRejectedValueOnce(
       Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/login;307;' }),

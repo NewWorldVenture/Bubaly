@@ -231,14 +231,16 @@ describe('sign-out is the only thing that ends a session', () => {
   it('ends this device only, so the phone stays signed in', () => {
     // supabase-js defaults to `global`, which revokes every refresh token the
     // user holds anywhere — the exact surprise logout this work removes.
-    expect(signout).toContain("auth.signOut({ scope })");
+    expect(signout).toContain('prepareSignOutBridge(scope)');
     expect(signout).toContain("return 'local'");
     expect(signout).toContain("form.get('scope') === 'global' ? 'global' : 'local'");
   });
 
-  it('expires the auth cookies on the response itself', () => {
-    expect(signout).toContain('isAuthCookieName(cookie.name)');
-    expect(signout).toContain("res.cookies.set(cookie.name, '', { path: '/', maxAge: 0 })");
+  it('leaves local deletion to the browser so a delayed response cannot clear another login', () => {
+    // Actual POST/cookie/provider execution is covered by signout-bridge.test.
+    expect(signout).toContain('res.cookies.set(SIGNOUT_BRIDGE_COOKIE');
+    expect(signout).not.toContain('isAuthCookieName');
+    expect(signout).not.toContain('createServer(');
   });
 
   it('is reachable — the route is POST-only, so nothing may link to it', () => {
@@ -280,13 +282,16 @@ describe('the browser holds exactly one auth client', () => {
     expect(client).toContain('durableCookieOptions');
   });
 
-  it('is the only place a browser client is constructed', () => {
-    // A second `createBrowserClient` call site anywhere in the app would
-    // reintroduce the competing-timer logout.
+  it('is the only regular browser client, apart from isolated recovery, signup and password operations', () => {
+    // The recovery and signup clients have no automatic refresh or URL detection;
+    // installed-SDK cookie ownership is exercised by their Chromium fixtures.
+    // All ordinary app callers must continue using the shared singleton.
     const sources = [
       'components', 'app', 'lib',
     ].flatMap((dir) => walk(dir));
-    const offenders = sources.filter((file) => file !== 'lib/supabase/client.ts'
+    const offenders = sources.filter((file) => file !== 'lib/supabase/client.ts' && file !== 'components/auth/recovery-form.tsx'
+      && file !== 'lib/auth/signup-client.ts'
+      && file !== 'lib/auth/password-client.ts'
       && readFileSync(file, 'utf8').includes('createBrowserClient'));
     expect(offenders).toEqual([]);
   });

@@ -10,8 +10,8 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
-import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { displayTimezone } from '@/lib/display/calendar';
 import {
   ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
@@ -29,14 +29,18 @@ import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weat
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
 import { HintsTicker } from './hints-ticker';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
-type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
+type Ev = { id: string; title: string; starts_at: string; ends_at?: string | null; all_day: boolean; location: string | null; assignee_id: string | null };
 type FeaturedItem = { name: string; category: string | null; imageUrl: string | null };
 
 export type DisplayData = {
   familyName: string;
+  timezone?: string;
+  dayKey?: string;
+  timezoneFallback?: boolean;
+  loadStatus?: { events: 'ok' | 'error'; upcoming: 'ok' | 'error'; monthEvents: 'ok' | 'error'; reminders: 'ok' | 'error' };
   members: { id: string; display_name: string; color: string | null; role: string }[];
   events: Ev[];
   upcoming: Ev[];
@@ -181,12 +185,24 @@ function ServiceTile({ href }: { href: string }) {
   );
 }
 
-function WidgetBody({ widget, size, data, memberById, now }: {
-  widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
+function displayTime(value: string, timezone: string, locale: string, clock24: boolean): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleTimeString(locale, { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: !clock24 });
+}
+
+function Unavailable({ text }: { text: string }) {
+  return <p role="status" className="text-sm text-amber-200">{text}</p>;
+}
+
+function WidgetBody({ widget, size, data, memberById, now, settings }: {
+  widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date; settings: DisplaySettings;
 }) {
   const tr = useTranslations();
+  const locale = useLocale().code;
+  const timezone = displayTimezone(data.timezone).timezone;
   switch (widget) {
-    case 'clock': return <AmbientClock clock24={false} seconds={false} />;
+    case 'clock': return <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />;
     case 'weather': return <WeatherTile size={size} />;
     case 'timers': return <KitchenTimers />;
     case 'featured': return <FeaturedWidget list={data.featured} familyName={data.familyName} />;
@@ -197,6 +213,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
     case 'handled_today': return <HandledTodayTile handled={data.handled} />;
 
     case 'schedule': {
+      if (data.loadStatus?.events === 'error') return <Unavailable text={tr('displayGrid.scheduleUnavailable')} />;
       const { current, next } = nowAndNext(data.events, now);
       return data.events.length ? (
         <ul className="space-y-2.5">
@@ -207,11 +224,11 @@ function WidgetBody({ widget, size, data, memberById, now }: {
             return (
               <li key={e.id} className={cn('flex items-center gap-3 rounded-xl px-2 py-1.5', isNow && 'bg-white/10')}>
                 <span className={cn('w-16 shrink-0 text-sm font-bold tabular-nums', isNow ? 'text-emerald-300' : 'text-violet-300')}>
-                  {e.all_day ? 'All day' : fmtTime(e.starts_at)}
+                  {e.all_day ? 'All day' : displayTime(e.starts_at, timezone, locale, settings.clock24)}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
                 {isNow && <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Now</span>}
-                {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/50">{countdownLabel(e.starts_at, now)}</span>}
+                {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/50">{countdownLabel(e.starts_at, now, timezone)}</span>}
                 {who && <Avatar name={who.display_name} color={who.color} size={24} />}
               </li>
             );
@@ -221,18 +238,22 @@ function WidgetBody({ widget, size, data, memberById, now }: {
     }
 
     case 'upcoming':
+      if (data.loadStatus?.upcoming === 'error') return <Unavailable text={tr('displayGrid.upcomingUnavailable')} />;
       return data.upcoming.length ? (
         <ul className="space-y-2">
           {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
             <li key={e.id} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: e.all_day ? 'UTC' : timezone })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
         </ul>
       ) : <Empty icon={Calendar} text={tr('displayGrid.noUpcomingEvents')} />;
 
-    case 'calendar': return <MonthCalendar cal={data.calendar} />;
+    case 'calendar': return <>
+      {data.loadStatus?.monthEvents === 'error' && <Unavailable text={tr('displayGrid.calendarUnavailable')} />}
+      <MonthCalendar cal={data.loadStatus?.monthEvents === 'error' ? { ...data.calendar, eventDays: [] } : data.calendar} />
+    </>;
 
     case 'chores':
       return data.chores.length ? (
@@ -291,6 +312,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
       );
 
     case 'reminders':
+      if (data.loadStatus?.reminders === 'error') return <Unavailable text={tr('displayGrid.remindersUnavailable')} />;
       return data.reminders.length ? (
         <ul className="space-y-2 text-sm">
           {data.reminders.slice(0, tileListLimit(size, 4)).map((r) => (
@@ -374,10 +396,11 @@ function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
 }
 
 // ── Now & Next strip ──────────────────────────────────────────────────────────
-function NowNextStrip({ events, memberById, now }: {
-  events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date;
+function NowNextStrip({ events, memberById, now, timezone, clock24 }: {
+  events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date; timezone: string; clock24: boolean;
 }) {
   const tr = useTranslations();
+  const locale = useLocale().code;
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -388,7 +411,7 @@ function NowNextStrip({ events, memberById, now }: {
         <div className="min-w-0 flex-1">
           <p className="truncate text-2xl font-black text-white">{ev.title}</p>
           <p className="text-sm text-white/60">
-            {ev.all_day ? 'All day' : `${fmtTime(ev.starts_at)} · ${countdownLabel(ev.starts_at, now)}`}
+            {ev.all_day ? 'All day' : `${displayTime(ev.starts_at, timezone, locale, clock24)} · ${countdownLabel(ev.starts_at, now, timezone)}`}
             {ev.location ? ` · ${ev.location}` : ''}
           </p>
         </div>
@@ -498,16 +521,29 @@ function PhotoBackdrop({ photos }: { photos: string[] }) {
 // ── Shell ─────────────────────────────────────────────────────────────────────
 const DRIFT_CSS = `@keyframes displayDrift{0%,100%{transform:translate(0,0)}25%{transform:translate(7px,5px)}50%{transform:translate(-5px,9px)}75%{transform:translate(-7px,-5px)}}`;
 
-export function DisplayShell({ initialTiles, initialSettings, data, familyId, userId }: {
+type DisplayShellProps = {
   initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
-}) {
+};
+
+export function DisplayShell(props: DisplayShellProps) {
+  // Ownership also bounds drafts, pending writes and setup dismissal. Keep the
+  // key here so direct consumers get the same isolation as the dynamic shell.
+  return <OwnedDisplayShell key={JSON.stringify([props.familyId, props.userId])} {...props} />;
+}
+
+function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, userId }: DisplayShellProps) {
   const t = useTranslations();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
   const [tiles, setTiles] = useState<Tile[]>(() => resolveTiles(initialTiles));
-  const [settings, setSettings] = useState<DisplaySettings>(initialSettings);
+  const [settings, setSettings] = useState<DisplaySettings>(() => normalizeSettings(initialSettings));
+  const [persisted, setPersisted] = useState(() => ({ tiles: resolveTiles(initialTiles), settings: normalizeSettings(initialSettings) }));
+  const incoming = useRef({ initialTiles, initialSettings });
+  const lifecycle = useRef({ active: false });
+  const pendingWrite = useRef<object | null>(null);
+  const draftRevision = useRef(0);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -520,6 +556,26 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
   // and re-acquired on visibilitychange inside the helper; on a browser without
   // the API this is `'unsupported'` and nothing was attempted or promised.
   const wakeLock = useWakeLock();
+
+  useEffect(() => {
+    const owner = { active: true };
+    lifecycle.current = owner;
+    return () => { owner.active = false; pendingWrite.current = null; };
+  }, []);
+
+  useEffect(() => {
+    if (incoming.current.initialTiles === initialTiles && incoming.current.initialSettings === initialSettings) return;
+    incoming.current = { initialTiles, initialSettings };
+    const next = { tiles: resolveTiles(initialTiles), settings: normalizeSettings(initialSettings) };
+    setPersisted(next);
+    // A refresh updates the cancel baseline, but must not replace an active
+    // editor draft. Closing after a local save must not reapply old props.
+    if (!editing) {
+      setTiles(next.tiles);
+      setSettings(next.settings);
+      setSetupDismissed(next.settings.setupDismissed);
+    }
+  }, [initialTiles, initialSettings, editing]);
 
   // Minute-granularity tick drives greeting, ambient theme, and now/next.
   useEffect(() => {
@@ -539,47 +595,75 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
     } catch { /* not supported / denied */ }
   }
 
-  const theme = ambientTheme(settings.theme, now);
-  const part = dayPart(now);
+  const timezone = displayTimezone(data.timezone).timezone;
+  const theme = ambientTheme(settings.theme, now, timezone);
+  const part = dayPart(now, timezone);
   // Photo surfaces never come up empty: real family photos win, the curated
   // ambient set stands in until the family uploads some.
   const ambientPhotos = data.photos.length ? data.photos : [...AMBIENT_FALLBACK_PHOTOS];
   const photoBg = settings.background === 'photos';
 
   // Echo-style bottom hints, recomputed as the clock ticks.
-  const { next: nextEv } = nowAndNext(data.events, now);
+  const eventsAvailable = data.loadStatus?.events !== 'error';
+  const remindersAvailable = data.loadStatus?.reminders !== 'error';
+  const { next: nextEv } = nowAndNext(eventsAvailable ? data.events : [], now);
   const hints = useMemo(() => buildHints({
     nextEvent: nextEv ? { title: nextEv.title, startsAt: nextEv.starts_at } : null,
     dinner: data.meals.find((m) => m.type === 'dinner')?.name ?? null,
     groceryCount: data.grocery.count,
     choresDue: data.chores.length,
     birthdays: data.birthdays,
-    remindersDue: data.reminders.length,
-  }, now), [nextEv, data.meals, data.grocery.count, data.chores.length, data.birthdays, data.reminders.length, now]);
+    remindersDue: remindersAvailable ? data.reminders.length : undefined,
+    availabilityKnown: eventsAvailable && remindersAvailable,
+  }, now, timezone), [nextEv, data.meals, data.grocery.count, data.chores.length, data.birthdays, data.reminders.length, eventsAvailable, remindersAvailable, now, timezone]);
 
-  const frameNextLine = nextEv ? `Next: ${nextEv.title} · ${countdownLabel(nextEv.starts_at, now)}` : null;
+  const frameNextLine = nextEv ? `Next: ${nextEv.title} · ${countdownLabel(nextEv.starts_at, now, timezone)}` : null;
 
-  function update(id: string, patch: Partial<Tile>) { setTiles((t) => t.map((x) => x.id === id ? { ...x, ...patch } : x)); }
-  function remove(id: string) { setTiles((t) => t.filter((x) => x.id !== id)); }
+  function update(id: string, patch: Partial<Tile>) { draftRevision.current += 1; setTiles((t) => t.map((x) => x.id === id ? { ...x, ...patch } : x)); }
+  function remove(id: string) { draftRevision.current += 1; setTiles((t) => t.filter((x) => x.id !== id)); }
   function move(id: string, dir: -1 | 1) {
+    draftRevision.current += 1;
     setTiles((t) => {
       const i = t.findIndex((x) => x.id === id); const j = i + dir;
       if (i < 0 || j < 0 || j >= t.length) return t;
       const next = [...t]; [next[i], next[j]] = [next[j], next[i]]; return next;
     });
   }
-  function add() { setTiles((t) => [...t, { id: uid(), widget: 'schedule', size: 'sm' }]); }
-  function resetDefault() { setTiles(DEFAULT_TILES.map((t) => ({ ...t, id: uid() }))); }
-  function cancel() { setTiles(resolveTiles(initialTiles)); setSettings(initialSettings); setEditing(false); }
+  function add() { draftRevision.current += 1; setTiles((t) => [...t, { id: uid(), widget: 'schedule', size: 'sm' }]); }
+  function resetDefault() { draftRevision.current += 1; setTiles(DEFAULT_TILES.map((t) => ({ ...t, id: uid() }))); }
+  function cancel() {
+    if (pendingWrite.current) return;
+    draftRevision.current += 1;
+    setTiles(persisted.tiles);
+    setSettings(persisted.settings);
+    setSetupDismissed(persisted.settings.setupDismissed);
+    setEditing(false);
+  }
 
   async function save() {
+    const owner = lifecycle.current;
+    if (!owner.active || pendingWrite.current) return;
+    // Both actions replace one stored row. Acquire synchronously, before React
+    // flushes a busy state, so a delayed dismissal cannot overwrite a save.
+    const write = {};
+    pendingWrite.current = write;
+    const revision = draftRevision.current;
     setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('display_layouts')
-      .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
-    setSaving(false);
-    if (error) { toastError(error.message); return; }
-    success(tr('displayGrid.displaySaved')); setEditing(false);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('display_layouts')
+        .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
+      if (!owner.active) return;
+      if (error) { toastError(error.message); return; }
+      setPersisted({ tiles, settings });
+      success(tr('displayGrid.displaySaved'));
+      if (draftRevision.current === revision) setEditing(false);
+    } catch (error) {
+      if (owner.active) toastError(error instanceof Error ? error.message : tr('displayGrid.saveFailed'));
+    } finally {
+      if (pendingWrite.current === write) pendingWrite.current = null;
+      if (owner.active) setSaving(false);
+    }
   }
 
   /**
@@ -592,19 +676,33 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
    * on the next load and look like a bug in the product rather than an outage.
    */
   async function dismissSetup() {
+    const owner = lifecycle.current;
+    if (!owner.active || pendingWrite.current) return;
+    const write = {};
+    pendingWrite.current = write;
     setDismissing(true);
     const nextSettings: DisplaySettings = { ...settings, setupDismissed: true };
-    const supabase = createClient();
-    const { error } = await supabase.from('display_layouts')
-      .upsert({ family_id: familyId, tiles: tiles as never, settings: nextSettings as never, updated_by: userId }, { onConflict: 'family_id' });
-    setDismissing(false);
-    if (error) {
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('display_layouts')
+        .upsert({ family_id: familyId, tiles: tiles as never, settings: nextSettings as never, updated_by: userId }, { onConflict: 'family_id' });
+      if (!owner.active) return;
+      if (error) {
+        console.error('[display] setup card dismissal write failed', error);
+        toastError(error.message);
+        return;
+      }
+      setSettings((current) => ({ ...current, setupDismissed: true }));
+      setPersisted((current) => ({ ...current, settings: { ...current.settings, setupDismissed: true } }));
+      setSetupDismissed(true);
+    } catch (error) {
+      if (!owner.active) return;
       console.error('[display] setup card dismissal write failed', error);
-      toastError(error.message);
-      return;
+      toastError(error instanceof Error ? error.message : tr('displayGrid.dismissFailed'));
+    } finally {
+      if (pendingWrite.current === write) pendingWrite.current = null;
+      if (owner.active) setDismissing(false);
     }
-    setSettings(nextSettings);
-    setSetupDismissed(true);
   }
 
   const dayIcon = part === 'night' || part === 'evening' ? Moon : Sun;
@@ -648,7 +746,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           </div>
           <div className="flex items-center gap-3">
             <WeatherChip />
-            <AmbientClock clock24={settings.clock24} seconds={settings.seconds} />
+            <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />
             <div className="flex items-center gap-1.5">
               <button onClick={toggleFullscreen} title={isFull ? 'Exit fullscreen' : 'Fullscreen'}
                 className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
@@ -670,10 +768,15 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           </div>
         </header>
 
+        {data.timezoneFallback && <p role="status" className="mt-3 text-xs text-amber-200">{tr('displayGrid.timezoneFallback')}</p>}
+        {data.loadStatus && Object.values(data.loadStatus).some((status) => status === 'error') && (
+          <p role="status" className="mt-3 text-sm text-amber-200">{tr('displayGrid.dataUnavailable')}</p>
+        )}
+
         {/* Now & Next */}
         <div className="mt-4 shrink-0">
           <WidgetBoundary label="now-next">
-            <NowNextStrip events={data.events} memberById={memberById} now={now} />
+            <NowNextStrip events={eventsAvailable ? data.events : []} memberById={memberById} now={now} timezone={timezone} clock24={settings.clock24} />
           </WidgetBoundary>
         </div>
 
@@ -681,19 +784,19 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
             while editing so the settings panel owns the screen. */}
         {!editing && !setupDismissed && (
           <WidgetBoundary label="setup-card">
-            <DisplaySetupCard wakeLock={wakeLock} onDismiss={() => void dismissSetup()} dismissing={dismissing} />
+            <DisplaySetupCard wakeLock={wakeLock} onDismiss={() => void dismissSetup()} dismissing={dismissing || saving} />
           </WidgetBoundary>
         )}
 
         {/* Editor toolbar */}
         {editing && (
           <div className="mt-5 space-y-4">
-            <SettingsPanel settings={settings} onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))} />
+            <SettingsPanel settings={settings} onChange={(patch) => { draftRevision.current += 1; setSettings((s) => ({ ...s, ...patch })); }} />
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><Plus className="h-4 w-4" /> {tr('displayGrid.addTile')}</button>
               <button onClick={resetDefault} className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10">{tr('displayGrid.resetLayout')}</button>
-              <button onClick={cancel} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><X className="h-4 w-4" /> {tr('displayGrid.cancel')}</button>
-              <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={cancel} disabled={saving || dismissing} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10 disabled:opacity-60"><X className="h-4 w-4" /> {tr('displayGrid.cancel')}</button>
+              <button onClick={save} disabled={saving || dismissing} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         )}
@@ -726,7 +829,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                 <WidgetBoundary label={tile.widget}>
                   {tile.widget === 'service'
                     ? <ServiceTile href={tile.href ?? '/dashboard'} />
-                    : <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} />}
+                    : <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} settings={settings} />}
                 </WidgetBoundary>
               </div>
 
@@ -793,6 +896,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
             photos={ambientPhotos}
             idleMinutes={settings.idleMinutes}
             clock24={settings.clock24}
+            timezone={timezone}
             nextLine={frameNextLine}
           />
         </WidgetBoundary>

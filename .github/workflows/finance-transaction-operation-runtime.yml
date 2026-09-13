@@ -41,10 +41,31 @@ jobs:
             --env POSTGRES_HOST_AUTH_METHOD=trust \
             --env POSTGRES_DB=bubaly_finance_operation_ci \
             postgres:17 -c listen_addresses='' > /dev/null
-          for attempt in $(seq 1 60); do
-            if docker exec "$container" pg_isready --quiet \
-              --host=/var/run/postgresql --username=postgres --dbname=bubaly_finance_operation_ci; then
-              exit 0
+          # Ready means "this database answers a query", not "a server is up".
+          #
+          # pg_isready does NOT connect — it asks whether a server is accepting
+          # connections and ignores --dbname. The postgres entrypoint runs initdb
+          # against a TEMPORARY server on this very socket before restarting the
+          # real one, so pg_isready goes green while POSTGRES_DB does not exist
+          # yet. The next step then ran psql and got
+          #   FATAL: database "bubaly_finance_operation_ci" does not exist
+          # one second after the image finished pulling. It normally passed only
+          # because a cached image left enough slack; a cold pull moved the
+          # timing and the job failed with nothing wrong in the code it tests.
+          #
+          # So: probe with a real query, and require three consecutive successes
+          # a second apart. One success can still land on the bootstrap server —
+          # three cannot, because the entrypoint shuts it down in between.
+          streak=0
+          for attempt in $(seq 1 90); do
+            if docker exec "$container" psql --quiet --no-password \
+              --host=/var/run/postgresql --username=postgres \
+              --dbname=bubaly_finance_operation_ci \
+              --set=ON_ERROR_STOP=1 --output=/dev/null --command='select 1' 2>/dev/null; then
+              streak=$((streak + 1))
+              if [ "$streak" -ge 3 ]; then exit 0; fi
+            else
+              streak=0
             fi
             sleep 1
           done

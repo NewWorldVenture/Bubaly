@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { pushConfigured } from '@/lib/server/push';
-import { summarizePush, canSendPush, deliveryRate } from '@/lib/marketing/push';
+import { summarizePush, canSendPush, canDeletePush, needsPushReview, pushDeliveryCounts, pushDeliveryPhase } from '@/lib/marketing/push';
 import { createPushCampaignAction, sendPushCampaignAction, deletePushCampaignAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -58,10 +58,10 @@ export default async function PushPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ['Opted-in devices', deviceCount ?? 0],
+          [t('marketingPush.enabledDevices'), deviceCount ?? 0],
           ['Campaigns', stats.campaigns],
-          ['Sent', stats.sentCampaigns],
-          ['Delivery rate', `${stats.deliveryRate}%`],
+          [t('marketingPush.accepted'), stats.totalSent],
+          [t('marketingPush.review'), stats.reviewCampaigns],
         ].map(([label, val]) => (
           <Card key={String(label)} className="py-3">
             <p className="text-xs text-muted">{label}</p>
@@ -84,30 +84,38 @@ export default async function PushPage() {
         <p className="py-8 text-center text-sm text-muted">{t('adminMarketingPush.noPushCampaignsYet')}</p>
       ) : (
         <div className="space-y-2">
-          {campaigns.map((c) => (
+          {campaigns.map((c) => {
+            const review = needsPushReview(c);
+            const phase = pushDeliveryPhase(c.metadata);
+            const counts = pushDeliveryCounts(c.metadata);
+            return (
             <Card key={c.id} className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 font-medium">{c.title} <Badge tone={STATUS_TONE[c.status] ?? 'neutral'} className="capitalize">{c.status}</Badge></p>
+                <p className="flex items-center gap-2 font-medium">{c.title} <Badge tone={review ? 'warning' : STATUS_TONE[c.status] ?? 'neutral'} className="capitalize">{review ? t('marketingPush.review') : c.status === 'sent' ? t('marketingPush.completed') : c.status}</Badge></p>
                 {c.body && <p className="mt-0.5 truncate text-xs text-muted">{c.body}</p>}
                 <p className="mt-1 text-xs text-muted">
-                  {c.status === 'sent'
-                    ? `${c.sent}/${c.recipients} delivered (${deliveryRate(c.sent, c.recipients)}%)${c.skipped ? ` · ${c.skipped} skipped` : ''}${c.failed ? ` · ${c.failed} failed` : ''} · ${c.sent_at ? fmtDate(c.sent_at) : ''}`
+                  {c.status === 'sending' ? t('marketingPush.unconfirmed')
+                    : phase === 'preflight_failed' ? t('marketingPush.notStarted')
+                    : c.status !== 'draft' ? counts
+                      ? t('marketingPush.outcomes', counts)
+                      : t('marketingPush.legacyCounts', { accepted: c.sent, failed: c.failed, skipped: c.skipped })
                     : c.url ? `→ ${c.url}` : 'Draft'}
+                  {c.sent_at && c.status !== 'sending' ? ` · ${fmtDate(c.sent_at)}` : ''}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-3 text-sm">
-                {canSendPush(c.status) && (
+                {canSendPush(c.status, c.metadata) && (
                   <form action={sendPushCampaignAction.bind(null, c.id)}>
                     <button type="submit" className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
                       <Send className="h-3.5 w-3.5" />{' '}{t('push.send')}</button>
                   </form>
                 )}
-                <form action={deletePushCampaignAction.bind(null, c.id)}>
+                {canDeletePush(c.status, c.metadata) && <form action={deletePushCampaignAction.bind(null, c.id)}>
                   <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('push.delete')}</button>
-                </form>
+                </form>}
               </div>
             </Card>
-          ))}
+          ); })}
         </div>
       )}
     </div>

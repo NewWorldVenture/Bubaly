@@ -24,7 +24,7 @@ export function SavingsView() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: goals, loading, error: readError, refresh } = useRealtimeQuery<Goal>({
+  const { data: goals, loading, error: readError, stale, refresh } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('savings_goals').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -53,9 +53,9 @@ export function SavingsView() {
       <PageHeader title={t('savings.savingsGoals')} description={t('savingsView.setTargetsAndWatchYour')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
 
-      {loading ? <SkeletonList /> : readError ? (
+      {readError ? (
         <ErrorState message={t('savingsView.couldNotLoadSavingsGoals')} onRetry={() => { void refresh(); }} />
-      ) : rows.length === 0 ? (
+      ) : loading || stale ? <SkeletonList /> : rows.length === 0 ? (
         <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description={t('savingsView.createAGoalToStart')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
       ) : (
