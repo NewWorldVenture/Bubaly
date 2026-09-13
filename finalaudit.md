@@ -93,6 +93,8 @@ PRODUCTION READY: NO
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 
+- SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
+
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -20066,6 +20068,78 @@ tests/social-preview-reachability.test.ts; `og:` tag census of /, /pricing, /log
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe pending.
 
+### SEO-003 — Published marketing page families reachable without a session
+
+Status: 🛠 FIXED + PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; lib/marketing/platform.ts PAGE_TYPES; lib/marketing/public-pages.tsx; app/(marketing)/{questions,guides,compare,alternatives,audiences,resources,glossary,p}/[slug]/page.tsx; marketing_pages
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+The marketing platform publishes eleven families of page, each under its own
+prefix in PAGE_TYPES. The middleware kept a separate hand-written list of which
+prefixes were public, and EIGHT of the eleven were missing from it: /questions,
+/guides, /compare, /alternatives, /audiences, /resources, /glossary and /p.
+
+Unauthenticated production probes, 2026-09-13, build f9c4d7a1:
+
+    /compare/cozi       -> 307 /login        /customers/anything -> 404
+    /alternatives/cozi  -> 307 /login        /blog/anything      -> 404
+    /guides/anything    -> 307 /login
+    /glossary/anything  -> 307 /login
+    /audiences/anything -> 307 /login
+    /questions/anything -> 307 /login
+    /p/anything         -> 307 /login
+
+The two 404s are the control and the tell. Those prefixes ARE public, so the
+request reached the page and the page correctly reported a missing slug. A 307
+means the request never reached the page at all. Every published comparison,
+alternative, guide, glossary entry, audience page, question and custom page was
+invisible to anonymous visitors and to search engines — an entire programmatic
+SEO surface, behind a login wall, silently.
+
+This is the fourth instance of one class in this audit, after the Contact Center
+callbacks, the assistant endpoints (API-C8B72ACE022A, API-A2C5302CAE88) and the
+social preview images (SEO-001): a route whose whole purpose is to answer an
+unauthenticated caller, sitting behind the session boundary. Four occurrences is
+not four mistakes; it is one design in which the list of public paths is
+maintained by hand, separately from the thing that defines them.
+
+#### Fixes Applied
+The prefixes are no longer restated in the middleware. PAGE_TYPES moved to
+lib/marketing/page-types.ts — a leaf module with no imports, because
+lib/marketing/platform.ts is server-only and reaches for node:crypto, which is
+exactly why the Edge middleware could not read it and the list was copied by
+hand in the first place. platform.ts imports and re-exports it so every existing
+caller is unchanged, and the middleware spreads MARKETING_PUBLIC_PREFIXES.
+
+A new page type is now reachable by construction rather than by remembering. The
+page remains the authorization boundary: it renders only rows with
+status = 'published' and no deleted_at, so these carry no family data.
+
+#### Retest Results
+tests/marketing-pages-reachable.test.ts: four cases pass — the middleware derives
+rather than copies, every declared page type is covered, every declared prefix
+has a route that can serve it, and nothing outside those prefixes was opened.
+Removing the derivation fails the first. Deployed re-probe pending.
+
+#### Evidence
+tests/marketing-pages-reachable.test.ts; unauthenticated production probes of the
+eleven prefixes against www.bubaly.com on 2026-09-13 (build f9c4d7a1).
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe pending.
+
 # Final Regression
 
 ## Build
@@ -20227,6 +20301,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
+- SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
 
 ## Production Readiness
 NO
