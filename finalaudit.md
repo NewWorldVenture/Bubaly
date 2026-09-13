@@ -9,6 +9,7 @@ They ran over **different surfaces** and neither supersedes the other:
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 | **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
+| **D — Frontend and accessibility** (2026-09-13) | the *authenticated* app, which A and B barely touched on the frontend: dialogs, labels, keyboard reachability, headings, loading and error states, React effect correctness | 14 | `F-D01`–`F-D14` |
 
 **Pass C changes the disposition of two Pass A findings.** Both are recorded
 below rather than edited in place, so the history stays readable:
@@ -2359,16 +2360,48 @@ Fix: add the operator-facing variables with a line each saying what breaks when
 unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
 under their own heading.
 
-## F-C08 — A second release workflow is failing *(Medium, open)*
+## F-C08 — The forward-release mechanism is pinned 38 migrations in the past *(High, open)*
 
 `.github/workflows/supabase-forward-release.yml` failed on its most recent run
-(34781290560, 2026-09-13T20:36Z) and on the one before that. It uploaded its
-`production-forward-release-audit` artifact successfully, so the failure is the
-audit's own verdict rather than a broken job.
+(34781290560, 2026-09-13T20:36Z) and the one before it. The cause is now
+established, not guessed.
 
-Together with F5 / F-001, this means **production database state is not being
-verified by anything that currently works**. The specific gap needs the run's
-artifact; it has not been read, and no cause is asserted here.
+The failing step is #4, "Release preview, read-only proof, or atomic apply",
+which runs `scripts/apply-production-forward-release.mjs` in preview mode. That
+script opens with:
+
+```js
+export function assertNoNewerMigrations(migrationNames) {
+  const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));   // 0254
+  const newer = migrationNames.filter(…);
+  if (newer.length) {
+    throw new Error('Production forward release is held: repository migrations '
+      + 'outside the pinned 0240-0254 release: ' + newer.join(', '));
+  }
+}
+```
+
+The repository now carries **38 migrations past 0254** — `0255_ai_runtime_lockdown`
+through `0295_reward_redemption_decision_guard`. The guard fires every time.
+
+Two things follow, and the second is the one that matters:
+
+1. **The workflow is not broken; it is correctly refusing.** It is a
+   deliberately pinned, checksum-reviewed release of exactly `0240`–`0254`, and
+   it holds the moment the repository moves past that. Step 6 ("Capture
+   metadata after release attempt") succeeded in the same run and uploaded its
+   artifact, which proves the credentials reach production — so this is a
+   verdict, not a connectivity failure, and it is a *different* wall from F5.
+
+2. **There is now no working path to apply a migration to production.** The
+   migrations workflow cannot authenticate (F5), and the forward-release
+   mechanism is pinned 38 migrations behind (this finding). Every migration
+   from `0255` onward — including `0286`, the `blog_posts.updated_at` backfill
+   merged today — is written, reviewed, merged, and unapplied.
+
+Fix: re-pin the release to the current head with fresh checksums, or retire the
+pinned-release mechanism in favour of the ledger-based one. Either is an owner
+decision about release process, not a code defect.
 
 ## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
 
@@ -2412,3 +2445,83 @@ Recorded so no later pass re-derives them:
   routes; each has exactly one `<h1>`, a description and an `og:image`.
 - **Web dependencies** — `npm audit --production` reports zero advisories at
   every severity.
+
+
+---
+
+# Pass D — Frontend and accessibility (F-D01–F-D14)
+
+Ran 2026-09-13 over `app/(app)/` (354 pages) and `components/` (456 files) —
+the authenticated surface, which Passes A and B examined from the data side and
+barely touched on the frontend. Working notes, with every file:line and the
+quoted code, are in `audit/claude-2.md`.
+
+**No browser was run.** Colour contrast, real tab order and screen-reader output
+are therefore *unverified* and are marked as such rather than asserted. Every
+finding below is from reading the source.
+
+**A note on method that changes how to read the counts.** The first scan used a
+regex of the shape `<input[^>]*>`, which terminates on the `>` of an inline
+arrow function (`onChange={(e) => …}`) and silently mis-reports attributes. That
+produced wrong numbers, was caught, and every count below comes from a
+brace-aware parser tracking label open/close depth. The `<h1>` scan likewise
+over-matched by following imports into a conditional heading in
+`trial-paywall-gate.tsx`; all 19 pages were confirmed by hand and 11 false
+positives dropped.
+
+## The three that matter most
+
+### F-D01 — The photo lightbox strands keyboard users *(High)*
+
+`components/modules/photos-module.tsx:407`. A hand-rolled full-screen overlay
+with no `role="dialog"`, no Escape handler (`grep -c Escape` → 0), no focus
+trap and no scroll lock. Its only dismissal is an `onClick` on a `<div>`.
+
+A keyboard user who opens a photo is stranded behind an opaque `bg-black/95`
+layer, operating UI they cannot see.
+
+The same file already imports the project's `<Modal>` component and uses it
+correctly elsewhere, so the fix is to use it here too.
+
+### F-D02 / F-D03 — Controls with no programmatic name *(High)*
+
+- **55 visible labels are detached from their control** across 22 files: a
+  sibling `<label>` with no `htmlFor`, a control with no `id`. Includes the
+  *public* survey form at `app/s/[slug]/survey-form.tsx:79`.
+- **65 of 145 `<select>` elements have no accessible name at all** — among them
+  the select that chooses *which child* a reward is redeemed for
+  (`rewards-module.tsx:324`, `economy-view.tsx:190`) and the one that sets a
+  member's role during onboarding.
+
+A screen-reader user hears "combo box" and must infer the rest from position.
+
+### F-D10 — The lint config enables none of the rules that would have caught them *(Medium — and the root cause)*
+
+`.eslintrc.json` is `next/core-web-vitals` alone, which enables none of
+`label-has-associated-control`, `click-events-have-key-events`,
+`no-static-element-interactions` or `control-has-associated-label` — precisely
+the rules describing F-D02, F-D03 and F-D06.
+
+`npx next lint` runs clean over ~1,000 files with 3 warnings, so the gap reads
+as a green light. **This is why the other findings accumulated**, and fixing it
+is worth more than fixing any single one of them.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-D04 | Four hand-rolled dialogs claim `aria-modal="true"` but never trap focus or handle Escape | Medium |
+| F-D05 | 19 authenticated pages render no `<h1>`; 11 render no heading at all | Medium |
+| F-D06 | Primary content rows across seven modules are clickable but not keyboard reachable | Medium |
+| F-D07 | 92 destructive actions are guarded only by native `window.confirm()` | Medium |
+| F-D08 | All 354 authenticated pages share one route-group loading skeleton | Medium |
+| F-D09 | Ten client components set state from an un-cancelled async effect | Medium |
+| F-D11 | Two icon-only buttons in the guardian contact list have no accessible name | Low |
+| F-D12 | Two admin links point at routes that exist only at runtime | Low |
+| F-D13 | 172 index-derived React keys; the reorderable cases are worth a second look | Low |
+| F-D14 | Three `exhaustive-deps` warnings, one a genuine ref-in-cleanup bug | Low |
+
+## Verified clean in Pass D
+
+Eight areas were checked and found sound; they are listed in `audit/claude-2.md`
+so a later pass does not re-derive them.
