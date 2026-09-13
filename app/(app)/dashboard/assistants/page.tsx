@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
 import { NewAssistantKey, RevokeAssistantKey } from './controls';
 
@@ -32,6 +33,18 @@ export default async function AssistantsPage() {
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: false });
   if (error) {
+    // Same reason as the library page: 0283 is applied by a person and the
+    // sidebar entry ships with the deploy, so "refresh and try again" would be
+    // advice that cannot work. Name the migration instead.
+    if (isMissingRelationError(error)) {
+      return (
+        <EmptyState
+          icon={Speaker}
+          title="Assistants aren't switched on yet"
+          description="Connecting a speaker needs database migration 0283_assistant_links.sql. Once an administrator applies it, you can create a key here and link Alexa, Siri, Google Assistant or Home Assistant."
+        />
+      );
+    }
     console.error('[assistants] list read failed', error);
     return <ErrorState message="Your assistant keys could not be read. Refresh and try again." />;
   }
