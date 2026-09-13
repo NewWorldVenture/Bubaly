@@ -6267,6 +6267,7 @@
   "independence.addAChildOrTeenTo": "Ajoutez un enfant ou un adolescent à la famille pour lancer son échelle d'autonomie.",
   "independence.ageAppropriateSkillsAchieved": "compétences adaptées à l'âge acquises.",
   "independence.ageMatchedSkillsToStartNext": "Compétences adaptées à l'âge à aborder ensuite — les bases d'abord.",
+  "independence.couldNotLoadYourFamily": "Impossible de charger votre famille. Actualisez et réessayez.",
   "independence.everyAgeAppropriateSkillIsOn": "Toutes les compétences adaptées à l'âge sont déjà sur l'échelle — bravo ! 🎉",
   "independence.independence": "Autonomie",
   "independence.level": "Niveau",

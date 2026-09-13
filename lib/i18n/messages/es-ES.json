@@ -6267,6 +6267,7 @@
   "independence.addAChildOrTeenTo": "Añade a un niño o adolescente a la familia para empezar su escalera de autonomía.",
   "independence.ageAppropriateSkillsAchieved": "habilidades propias de su edad conseguidas.",
   "independence.ageMatchedSkillsToStartNext": "Habilidades acordes a su edad para empezar a continuación: primero las bases.",
+  "independence.couldNotLoadYourFamily": "Error al cargar tu familia. Actualiza y vuelve a intentarlo.",
   "independence.everyAgeAppropriateSkillIsOn": "Todas las habilidades propias de su edad ya están en la escalera. ¡Genial! 🎉",
   "independence.independence": "Independencia",
   "independence.level": "Nivel",

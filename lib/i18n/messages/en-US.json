@@ -6267,6 +6267,7 @@
   "independence.addAChildOrTeenTo": "Add a child or teen to the family to start their independence ladder.",
   "independence.ageAppropriateSkillsAchieved": "age-appropriate skills achieved.",
   "independence.ageMatchedSkillsToStartNext": "Age-matched skills to start next — foundations first.",
+  "independence.couldNotLoadYourFamily": "Could not load your family. Refresh and try again.",
   "independence.everyAgeAppropriateSkillIsOn": "Every age-appropriate skill is on the ladder already — amazing! 🎉",
   "independence.independence": "Independence",
   "independence.level": "Level",

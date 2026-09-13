@@ -6267,6 +6267,7 @@
   "independence.addAChildOrTeenTo": "Fügen Sie ein Kind oder eine jugendliche Person zur Familie hinzu, um deren Selbstständigkeitsleiter zu starten.",
   "independence.ageAppropriateSkillsAchieved": "altersgerechte Fähigkeiten erreicht.",
   "independence.ageMatchedSkillsToStartNext": "Altersgerechte Fähigkeiten für den nächsten Schritt – Grundlagen zuerst.",
+  "independence.couldNotLoadYourFamily": "Fehler beim Laden: die Familie. Bitte aktualisieren und erneut versuchen.",
   "independence.everyAgeAppropriateSkillIsOn": "Jede altersgerechte Fähigkeit steht schon auf der Leiter – großartig! 🎉",
   "independence.independence": "Selbstständigkeit",
   "independence.level": "Stufe",
