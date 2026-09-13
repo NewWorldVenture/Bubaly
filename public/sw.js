@@ -9,6 +9,16 @@
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
    previous worker cached, via the activate-time cleanup.) */
 const CACHE = 'bubaly-v4';
+/* Episodes a family explicitly downloaded. Separate from the app-shell cache
+   and NOT version-bumped, because its contents are theirs rather than ours:
+   the activate sweep below used to delete it along with every other unknown
+   cache, so every download in the house was destroyed by the next deploy that
+   touched this file. It holds publisher audio fetched through /library/media,
+   never authenticated HTML, so it is outside the M-023 invariant rather than an
+   exception to it. Kept in step with LIBRARY_CACHE in lib/library/progress.ts,
+   which a worker cannot import. */
+const LIBRARY_CACHE = 'bubaly-library-v1';
+const KEEP = new Set([CACHE, LIBRARY_CACHE]);
 const APP_SHELL = ['/', '/offline'];
 const CACHEABLE_NAV = new Set(APP_SHELL);
 
@@ -19,7 +29,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
+      Promise.all(keys.filter((k) => !KEEP.has(k)).map((k) => caches.delete(k))),
     ).then(() => self.clients.claim()),
   );
 });

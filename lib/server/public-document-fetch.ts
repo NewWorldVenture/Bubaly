@@ -29,7 +29,14 @@ export function isPublicDocumentAddress(address: string): boolean {
   return family === 6 && globalV6.check(address, 'ipv6') && !blocked.check(address, 'ipv6');
 }
 
-async function resolveAddresses(host: string, signal: AbortSignal): Promise<Address[]> {
+/**
+ * Every address a host resolves to, with the unroutable ones rejected.
+ *
+ * Exported so the media proxy pins addresses exactly the way document fetching
+ * does. Two copies of an SSRF guard is two guards that drift, and the one that
+ * drifts is always the copy.
+ */
+export async function resolvePublicAddresses(host: string, signal: AbortSignal): Promise<Address[]> {
   const resolver = new Resolver({ timeout: 3_000, tries: 1 });
   const cancel = () => resolver.cancel();
   signal.throwIfAborted();
@@ -62,7 +69,7 @@ export const FEED_MEDIA_TYPES = [
 ] as const;
 
 type Options = {
-  signal?: AbortSignal; resolve?: typeof resolveAddresses; request?: typeof httpsRequest; timeoutMs?: number;
+  signal?: AbortSignal; resolve?: typeof resolvePublicAddresses; request?: typeof httpsRequest; timeoutMs?: number;
   /** Media types this call will take. Defaults to DOCUMENT_MEDIA_TYPES. */
   accept?: readonly string[];
   /**
@@ -166,7 +173,7 @@ export async function fetchPublicDocument(raw: string, options: Options = {}): P
       const url = new URL(normalized);
       if (isIP(url.hostname.replace(/^\[|\]$/g, '')) || seen.has(normalized)) throw new PublicDocumentError('blocked');
       seen.add(normalized);
-      const addresses = await (options.resolve ?? resolveAddresses)(url.hostname, signal);
+      const addresses = await (options.resolve ?? resolvePublicAddresses)(url.hostname, signal);
       signal.throwIfAborted();
       if (!addresses.length || addresses.some(({ address, family }) => isIP(address) !== family || !isPublicDocumentAddress(address))) throw new PublicDocumentError('blocked');
       const result = await readHop(url, addresses[0], signal, options.request ?? httpsRequest, options.accept ?? DOCUMENT_MEDIA_TYPES, options.verify ?? 'document');

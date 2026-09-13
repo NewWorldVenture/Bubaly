@@ -4,6 +4,16 @@
 // wrong in a way that quietly destroyed the feature's whole promise, so it is
 // stated here as a rule with a name rather than as a condition inside an effect.
 
+/**
+ * The Cache Storage bucket offline episodes live in.
+ *
+ * Named here because two files have to agree on it and one of them is
+ * `public/sw.js`, which cannot import: the worker's activate handler deletes
+ * every cache it does not recognise, and this one was not on the list, so a
+ * deploy quietly destroyed every download a family had made.
+ */
+export const LIBRARY_CACHE = 'bubaly-library-v1';
+
 /** How far playback must move before another write is worth making. */
 export const SAVE_EVERY_SECONDS = 15;
 
