@@ -83,17 +83,28 @@ test.afterEach(async ({ page }) => {
   expect(await page.evaluate(() => window.__financeReads.errors)).toEqual([]);
 });
 
-for (const [view, table, mode, empty] of [
-  ['budgets', 'budgets', 'all', 'budgets.noBudgetsYet'],
-  ['bills', 'bills', 'all', 'No bills yet'],
-  ['bills', 'bills', 'due', 'Nothing due'],
-  ['bills', 'bills', 'autopay', 'No Auto Pay bills'],
-  ['savings', 'savings_goals', 'all', 'savings.noSavingsGoals'],
-  ['payments', 'transactions', 'all', 'payments.noPayments'],
+// The failure message is the view's own catalogue key, not the raw error.
+// These views used to render the error string straight from useRealtimeQuery,
+// which is how this spec could probe for the fixture's own text — and which also
+// meant a member saw whatever PostgREST said. They now name a message per view,
+// so the assertion names it too: that is a stronger check than "some error text
+// reached the page", because it fails if a view renders another view's message
+// or falls back to the raw error again. The fixture's translator returns the key
+// it is given, exactly as the empty-state assertions below rely on.
+for (const [view, table, mode, empty, failure] of [
+  ['budgets', 'budgets', 'all', 'budgets.noBudgetsYet', 'budgetsView.couldNotLoadBudgets'],
+  ['bills', 'bills', 'all', 'No bills yet', 'billsView.couldNotLoadBills'],
+  ['bills', 'bills', 'due', 'Nothing due', 'billsView.couldNotLoadBills'],
+  ['bills', 'bills', 'autopay', 'No Auto Pay bills', 'billsView.couldNotLoadBills'],
+  ['savings', 'savings_goals', 'all', 'savings.noSavingsGoals', 'savingsView.couldNotLoadSavingsGoals'],
+  ['payments', 'transactions', 'all', 'payments.noPayments', 'paymentsView.couldNotLoadPayments'],
 ] as const) {
   test(`${view} ${mode} reports a failed read and retries to a verified empty result`, async ({ page }) => {
     await page.evaluate(({ view, table, mode, result }) => { window.__financeReads.set(table, result); window.__financeReads.mount(view, mode); }, { view, table, mode, result: failed() });
-    await expect(page.getByText('Fixture read unavailable')).toBeVisible({ timeout: 1500 });
+    await expect(page.getByText(failure, { exact: true })).toBeVisible({ timeout: 1500 });
+    // And the raw error must NOT be on the page: it is provider text, and the
+    // member is not the audience for it.
+    await expect(page.getByText('Fixture read unavailable')).toHaveCount(0);
     await expect(page.getByText(empty, { exact: true })).toHaveCount(0);
     if (view === 'payments') await expect(page.locator('.stat-card')).toHaveCount(0);
     await page.evaluate(({ table, result }) => { window.__financeReads.replies[table] = result; }, { table, result: loaded() });
@@ -113,7 +124,8 @@ for (const failure of [false, true]) {
     await expect(page.getByText('$500.00 left', { exact: true })).toHaveCount(0);
     await expect(page.getByText('$0.00', { exact: true })).toHaveCount(0);
     if (failure) {
-      await expect(page.getByText('Fixture read unavailable')).toBeVisible();
+      await expect(page.getByText('budgetsView.couldNotLoadBudgets', { exact: true })).toBeVisible();
+      await expect(page.getByText('Fixture read unavailable')).toHaveCount(0);
       await page.evaluate(result => { window.__financeReads.replies.transactions = result; }, loaded());
       await page.getByRole('button', { name: 'Try again' }).click();
       expect(await page.evaluate(() => window.__financeReads.retries)).toEqual(['budgets', 'transactions']);
