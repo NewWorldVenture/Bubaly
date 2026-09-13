@@ -170,11 +170,34 @@ async function readEvents(
     .map(({ title, starts_at, all_day }) => ({ title, starts_at, all_day }));
 }
 
+/**
+ * The lists a family still looks at.
+ *
+ * Every read below is scoped to these. A list the family archived is a list
+ * they have decided is done with, and counting its items as overdue — or
+ * reading them back in a shop — is the same defect as writing into it, which
+ * `ensureList` had. `grocery_lists` carries two archive columns and only
+ * `archived_at` is ever written (see lib/services/groceries); both are asked.
+ */
+async function liveListIds(
+  supabase: Client, familyId: string, table: 'todo_lists' | 'grocery_lists',
+): Promise<string[]> {
+  const { data, error } = table === 'todo_lists'
+    ? await supabase.from('todo_lists').select('id').eq('family_id', familyId).is('archived_at', null)
+    : await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
+      .eq('is_archived', false).is('archived_at', null);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.id);
+}
+
 async function readOpenTasks(supabase: Client, familyId: string): Promise<AgendaTask[]> {
+  const lists = await liveListIds(supabase, familyId, 'todo_lists');
+  if (lists.length === 0) return [];
   const { data, error } = await supabase
     .from('todo_items')
     .select('title, due_date')
     .eq('family_id', familyId)
+    .in('list_id', lists)
     .eq('is_done', false)
     .not('due_date', 'is', null)
     .order('due_date')
@@ -194,11 +217,7 @@ const MAX_LIST_READ = 40;
  * because it sounds authoritative.
  */
 async function readShoppingList(supabase: Client, familyId: string): Promise<SpokenList> {
-  const { data: lists, error: listError } = await supabase
-    .from('grocery_lists').select('id').eq('family_id', familyId)
-    .eq('is_archived', false).is('archived_at', null);
-  if (listError) throw listError;
-  const ids = (lists ?? []).map((row) => row.id);
+  const ids = await liveListIds(supabase, familyId, 'grocery_lists');
   if (ids.length === 0) return { names: [], total: 0 };
 
   const { data, error } = await supabase
@@ -219,10 +238,13 @@ async function readShoppingList(supabase: Client, familyId: string): Promise<Spo
 
 /** The open to-do items, oldest first, so the oldest is the one that gets said. */
 async function readTaskList(supabase: Client, familyId: string): Promise<SpokenList> {
+  const lists = await liveListIds(supabase, familyId, 'todo_lists');
+  if (lists.length === 0) return { names: [], total: 0 };
   const { data, error } = await supabase
     .from('todo_items')
     .select('title')
     .eq('family_id', familyId)
+    .in('list_id', lists)
     .eq('is_done', false)
     .order('created_at')
     .limit(MAX_LIST_READ);

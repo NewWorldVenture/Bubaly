@@ -66,6 +66,22 @@ const TASK_LIST_RE = /\b(to-?\s?dos?|todos?|tasks?)\s+list\b|\bto-?do\s+list\b/i
 const LIST_READ_RE = /\b(what(?:'?s| is| are)?\s+(?:on|in|left|still)|read|tell me|say|check)\b/i;
 
 /**
+ * An opener that makes the whole utterance a question.
+ *
+ * A question Bubaly cannot answer is not a to-do item, and until this was here
+ * every one of them became one: "what is the capital of France" was filed as a
+ * task called "What is the capital of france", "what's for dinner" as another,
+ * "did I feed the dog" as another. The person got no answer AND a list filling
+ * up with things nobody asked for — which is the failure mode that makes a
+ * speaker feel broken rather than merely limited.
+ *
+ * Checked LAST among the question rules, so everything Bubaly can actually
+ * answer has already had its say, and only inside the non-imperative branch,
+ * so a command is never mistaken for a question.
+ */
+const INTERROGATIVE_RE = /^(what|whats|who|whose|where|when|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|shall|has|have|had)\b/i;
+
+/**
  * Openers that mean "do this". When an utterance starts with one, the words
  * after it are the THING, not a question about it — so none of the question
  * matchers above get a say.
@@ -115,6 +131,9 @@ export function classifyAssistantUtterance(
     if (AGENDA_RE.test(utterance)) {
       return { kind: 'agenda', day: TOMORROW_RE.test(utterance) ? 'tomorrow' : 'today' };
     }
+    // Nothing above could answer it, and it is still a question. Say so rather
+    // than filing it.
+    if (INTERROGATIVE_RE.test(utterance)) return { kind: 'unknown', utterance };
   }
 
   const route = classifyVoiceCommand(utterance, now, timezone);
@@ -194,11 +213,16 @@ export const HELP_SPEECH = toSpeakable(
   + 'You can also say things like add milk to the shopping list, or remind me to call the dentist.',
 );
 
-/** What to say when the words arrived but meant nothing actionable. */
+/**
+ * What to say when the words arrived but meant nothing actionable.
+ *
+ * Naming what was heard is the point: a speaker that mishears is the common
+ * case, and "I heard X" is what lets a person work out that it did.
+ */
 export function unknownSpeech(utterance: string): string {
   const heard = boundSpeech(utterance, 80);
   return heard
-    ? `I heard "${heard}", but I am not sure what to do with it. ${HELP_SPEECH}`
+    ? `I heard "${heard}", but I cannot answer that one. ${HELP_SPEECH}`
     : HELP_SPEECH;
 }
 

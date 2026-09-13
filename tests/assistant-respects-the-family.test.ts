@@ -304,15 +304,31 @@ describe('a list you can put things on is a list you can ask about', () => {
 
   it('reads the to-do list too', async () => {
     const { reply } = await say("what's on my to-do list", {
+      todo_lists: [{ id: 'live', family_id: 'fam-1', archived_at: null, created_at: '2020-01-01' }],
       todo_items: [
-        { family_id: 'fam-1', title: 'Renew the passports', is_done: false, created_at: '2026-01-01' },
-        { family_id: 'fam-1', title: 'Book the boiler service', is_done: false, created_at: '2026-01-02' },
-        { family_id: 'fam-1', title: 'Already done', is_done: true, created_at: '2026-01-03' },
+        { family_id: 'fam-1', list_id: 'live', title: 'Renew the passports', is_done: false, created_at: '2026-01-01' },
+        { family_id: 'fam-1', list_id: 'live', title: 'Book the boiler service', is_done: false, created_at: '2026-01-02' },
+        { family_id: 'fam-1', list_id: 'live', title: 'Already done', is_done: true, created_at: '2026-01-03' },
       ],
     });
     expect(reply.intent).toBe('list:tasks');
     expect(reply.speech).toContain('Renew the passports');
     expect(reply.speech).not.toContain('Already done');
+  });
+
+  it('leaves out tasks on a list the family archived', async () => {
+    const { reply } = await say("what's on my to-do list", {
+      todo_lists: [
+        { id: 'live', family_id: 'fam-1', archived_at: null, created_at: '2020-01-01' },
+        { id: 'done-with', family_id: 'fam-1', archived_at: '2026-01-01T00:00:00Z', created_at: '2019-01-01' },
+      ],
+      todo_items: [
+        { family_id: 'fam-1', list_id: 'live', title: 'Renew the passports', is_done: false, created_at: '2026-01-01' },
+        { family_id: 'fam-1', list_id: 'done-with', title: 'Paint the shed', is_done: false, created_at: '2026-01-02' },
+      ],
+    });
+    expect(reply.speech).toContain('Renew the passports');
+    expect(reply.speech).not.toContain('Paint the shed');
   });
 
   it('is still a command when it is phrased as one', async () => {
@@ -332,5 +348,75 @@ describe('a list you can put things on is a list you can ask about', () => {
     });
     expect(reply.intent).toBe('agenda');
     expect(reply.speech).toContain('Dentist');
+  });
+});
+
+describe('a question Bubaly cannot answer is not a to-do item', () => {
+  // Every one of these was filed as a task. The person got no answer AND a list
+  // filling up with things nobody asked for, which is the failure that makes a
+  // speaker feel broken rather than merely limited.
+  it.each([
+    'what is the capital of france',
+    'who won the world cup',
+    'what time is it',
+    "what's for dinner",
+    'how tall is the eiffel tower',
+    'is it going to rain',
+    'do we have any milk',
+    'did i feed the dog',
+  ])('says it cannot answer "%s" and writes nothing', async (utterance) => {
+    const { reply, writes } = await say(utterance, {});
+    expect(reply.intent).toBe('unknown');
+    expect(writes.filter((w) => w.table !== 'assistant_link_events')).toEqual([]);
+    expect(reply.speech).toContain('cannot answer that one');
+  });
+
+  it.each([
+    ["what's on today", 'agenda'],
+    ['what am i forgetting', 'forgetting'],
+    ['what is next', 'next'],
+    ["what's on the shopping list", 'list:shopping'],
+    ['what can you do', 'help'],
+  ])('but still answers "%s"', async (utterance, intent) => {
+    const { reply } = await say(utterance, {});
+    expect(reply.intent).toBe(intent);
+  });
+
+  it.each([
+    'add milk to the shopping list',
+    'remind me to call the dentist',
+    'soccer practice tomorrow at 4pm',
+  ])('and still saves "%s"', async (utterance) => {
+    const { reply } = await say(utterance, {});
+    expect(reply.outcome).toBe('captured');
+  });
+});
+
+describe('what you are forgetting is not what you already put away', () => {
+  it('does not count tasks on an archived list as overdue', async () => {
+    const { reply } = await say('what am i forgetting', {
+      todo_lists: [
+        { id: 'live', family_id: 'fam-1', archived_at: null, created_at: '2020-01-01' },
+        { id: 'done-with', family_id: 'fam-1', archived_at: '2026-01-01T00:00:00Z', created_at: '2019-01-01' },
+      ],
+      todo_items: [
+        { family_id: 'fam-1', list_id: 'done-with', title: 'Paint the shed', is_done: false, due_date: '2026-01-05' },
+      ],
+    });
+    // Archiving a list is a family saying they are done with it. Reading it
+    // back as overdue every morning is the same defect as writing into it.
+    expect(reply.speech).not.toContain('Paint the shed');
+    expect(reply.speech).toContain('on top of it');
+  });
+
+  it('still counts what is on a live list', async () => {
+    const { reply } = await say('what am i forgetting', {
+      todo_lists: [{ id: 'live', family_id: 'fam-1', archived_at: null, created_at: '2020-01-01' }],
+      todo_items: [
+        { family_id: 'fam-1', list_id: 'live', title: 'Renew the passports', is_done: false, due_date: '2026-09-01' },
+      ],
+    });
+    expect(reply.speech).toContain('Renew the passports');
+    expect(reply.speech).toContain('overdue');
   });
 });
