@@ -7,7 +7,7 @@ They ran over **different surfaces** and none supersedes another:
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
+| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 | **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
 | **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
 | **E — Read honesty** | the mirror of C: a read whose error is discarded, where something downstream then treats the absence it returns as a fact | 1 | `E-01` |
@@ -1105,7 +1105,7 @@ risk surface is hydration, which is precisely what could not be exercised here.
 
 ---
 
-# Pass B — Data layer (F-001–F-018)
+# Pass B — Data layer (F-001–F-019)
 
 A running, evidence-based audit of bubaly.com. Every entry records what was
 checked, **how**, and what the check actually returned. Nothing is marked closed
@@ -1150,6 +1150,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Public sitemap | 1,049 published posts vs the served file | ✅ 1,049 listed (was 1,048 — F-012) |
 | Calendar-day correctness | day keys vs DATE columns, 9 zones | ✅ family zone on every user-facing surface (F-017) |
 | Query plans | family-scoped reads at 700k rows | ✅ index scan, was a full scan (F-018) |
+| Money under concurrency | 2 simultaneous auths vs one balance | ✅ exactly 1 approves (F-019) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -1885,6 +1886,55 @@ confirms the assertion notices, and rolls back — because a check that cannot
 detect the state it forbids is decoration. Verified: 14/14 probes on a fresh
 307-migration replay, twice, with the dropped index still present afterwards.
 
+### F-019 · The money-safety probe asserted concurrency it never tested
+
+**Severity:** medium (instrument) · **Status:** CLOSED — `docs/audit/wallet-concurrency-check.sql`
+
+The product is correct. The *check* was not, and after F-015 that is a finding in
+its own right.
+
+`wallet-overspend-check.sql` says it proves `wallet_reserve_card_auth` "counts a
+pending hold against the balance (so concurrent auths serialize under its FOR
+UPDATE lock)". It runs a fixed **sequential** sequence. Nothing in it ever runs
+two authorizations at once, so the single property most worth knowing about a
+child's wallet — *you cannot spend the same dollar twice by tapping twice* — was
+inferred from the presence of a lock rather than demonstrated.
+
+Raced for real, two `$8` authorizations against a `$10` balance on separate
+connections:
+
+```
+with FOR UPDATE (the shipped function)
+  A-15 OK: 1 of 2 simultaneous $8 authorizations approved against $10; $8.00 held
+
+with FOR UPDATE removed
+  A-15 FAIL: 2 of 2 simultaneous $8 authorizations approved against $10 (a=t, b=t)
+```
+
+Two approvals is a child spending **$16 of a $10 balance**. So the lock is
+load-bearing, the shipped behaviour is right, and that is now evidence instead
+of an assumption.
+
+Two things about the probe itself are worth recording, because both are mistakes
+I made and then had to correct:
+
+- **The seed cannot live in the `do $$` block.** That block is one transaction,
+  its writes stay uncommitted, and a dblink session taking `FOR UPDATE` on those
+  rows waits on it forever. The first draft hung exactly that way. The seed is
+  now plain top-level statements, which psql commits one at a time.
+- **Two plain `dblink()` calls are not a race.** They run one after the other,
+  each in its own committed transaction — which proves a hold is counted *across*
+  transactions, a weaker claim, and the same kind of overclaim this finding is
+  about. It now uses `dblink_send_query` / `dblink_get_result` so both are
+  genuinely in flight before either is collected.
+
+Where `dblink` is unavailable the probe SKIPs with a notice rather than failing:
+a check that cannot run is not a check that found a problem, and conflating the
+two teaches people to ignore red.
+
+Verified: 15/15 probes on a pristine 307-migration replay, and 15/15 twice in a
+row on a used one.
+
 ## 4. Closed previously (regression-checked this pass)
 
 | ID | Finding | Still closed by |
@@ -1956,6 +2006,9 @@ detect the state it forbids is decoration. Verified: 14/14 probes on a fresh
 | `sync_job_runs` at 700k rows / 2,000 households | 38,258 buffers · 46 ms → 54 buffers · 0.30 ms |
 | 27 further tables checked against `pg_index` | 23 already indexed via UNIQUE/PK; 4 covered by another index |
 | A-14 probe, index dropped in a rolled-back txn | the check detects it — not decoration |
+| 2 overlapping $8 auths vs a $10 wallet | 1 approved, $8 held — the lock serializes them |
+| the same race with `FOR UPDATE` removed | 2 of 2 approved ($16 of $10) — the probe catches it |
+| `run-probes.sh`, pristine replay and used DB | 15/15, and 15/15 twice in a row |
 
 ---
 
