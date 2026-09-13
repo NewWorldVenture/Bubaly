@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { MARKETING_PUBLIC_PREFIXES } from '@/lib/marketing/page-types';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
   shouldForwardAuthCode,
@@ -42,8 +43,9 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public gift-link AI assistant; the gift token and durable IP limiter are
   // the authorization boundary for this narrowly scoped read path.
   '/api/ai/gift',
-  // Public marketing landing pages + their metric beacon.
-  '/lp',
+  // The landing-page metric beacon. The page prefixes themselves come from
+  // MARKETING_PUBLIC_PREFIXES below, which is the same list the platform
+  // publishes them under.
   '/api/lp/track',
   // Public marketing forms (lead capture) + their submit endpoint.
   '/f',
@@ -82,7 +84,14 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
   '/api/webhooks',
-  '/api/marketing/unsubscribe'];
+  '/api/marketing/unsubscribe',
+  // Every prefix a published marketing page can live under, read from the same
+  // list the platform builds those paths with. Hand-copying them here is how
+  // /questions, /guides, /compare, /alternatives, /audiences, /resources,
+  // /glossary and /p came to answer 307 to /login for every anonymous visitor
+  // and every search engine — eight of the eleven families, invisible. The page
+  // is the authorization boundary: it renders only published, non-deleted rows.
+  ...MARKETING_PUBLIC_PREFIXES];
 
 // The assistant bridge's two entry points.
 //
