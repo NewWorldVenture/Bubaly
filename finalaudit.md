@@ -2800,3 +2800,41 @@ baseline gate is still doing its job by refusing. The remaining F5 work is
 unchanged and is step 2 of two: reconcile the ledger against the live catalogue,
 verifying each migration's objects before stamping, because a missing entry is
 not proof the objects are missing.
+
+## F5 step 2, asked of production rather than guessed (2026-09-13)
+
+With the token working, the repo's own sanctioned path was run in its
+**read-only** mode — `supabase-forward-release.yml` with `apply: false`, which
+executes `apply-production-forward-release.mjs` with no flags and skips the
+verify step entirely. Nothing was applied and nothing was stamped.
+
+It refuses, and names the reason
+([run 34781290560](https://github.com/NewWorldVenture/Bubaly/actions/runs/34781290560)):
+
+```
+Production forward release is held: repository migrations outside the pinned
+0240-0254 release: 00260_display_layouts.sql, … 0294_family_scoped_read_indexes.sql
+```
+
+**71 migrations** sit outside the reviewed window. The release manifest was
+pinned when `0240`–`0254` was the frontier; `main` is now at `0294`. So the
+blocker has moved: it is no longer the access token, and it is no longer only
+the baseline gate. The sanctioned apply path is pinned to a release that no
+longer describes the repository.
+
+That is the gate working as designed rather than a fault — `assertPreflight`
+also refuses on a partially-applied ledger, on a release table that exists
+without its migration, and on any boundary drift. But it means **step 2 cannot
+be performed by running the existing workflow**. Someone has to re-pin the
+manifest, in reviewed tranches, across those 71 migrations. That is a review
+decision about what may touch production data, which is precisely the decision
+this repository reserves for a human, and it is why nothing here attempted it.
+
+**Worth noticing in that list:** the migrations interleave two numbering
+schemes — five-digit names (`00260_display_layouts.sql`,
+`01050_calendar_events_rls_repair.sql`) among four-digit ones (`0255`–`0294`).
+Lexically `00260` sorts *before* `0255`, so the two families do not order the way
+their numbers suggest. Recorded as an observation, not a finding: the five-digit
+names appear to be the older scheme and sorting first may well be historically
+correct. Anyone re-pinning the manifest should confirm that rather than assume
+it, because the apply order is what a replay depends on.
