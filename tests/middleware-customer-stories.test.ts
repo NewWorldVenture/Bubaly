@@ -6,6 +6,7 @@ vi.mock('@supabase/ssr', () => ({
 }));
 
 import { middleware } from '@/middleware';
+import { PROTECTED, PUBLIC, matchesPrefix } from '@/lib/auth/route-access';
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
@@ -27,13 +28,23 @@ describe('public customer story routing', () => {
     }
   });
 
-  it('keeps the admin editor and similarly prefixed routes protected', async () => {
-    for (const path of ['/admin/marketing/reputation', '/customers-private/story', '/dashboard']) {
+  it('keeps the admin editor protected', async () => {
+    for (const path of ['/admin/marketing/reputation', '/dashboard']) {
       const response = await middleware(new NextRequest(`https://bubaly.com${path}`));
       expect(response.status, path).toBe(307);
       const target = new URL(response.headers.get('location')!);
       expect(target.pathname).toBe('/login');
       expect(target.searchParams.get('redirect')).toBe(path);
     }
+  });
+
+  it('does not let a similarly prefixed path inherit /customers', () => {
+    // /customers is public; /customers-private must not be. This was checked by
+    // asserting a 307, which distinguished nothing once unlisted paths began
+    // falling through to a 404 instead of a login redirect. The list is the
+    // real subject, and a startsWith that ignored the separator would fail it.
+    expect(matchesPrefix('/customers-private/story', PUBLIC)).toBe(false);
+    expect(matchesPrefix('/customers-private/story', PROTECTED)).toBe(false);
+    expect(matchesPrefix('/customers/acme', PUBLIC)).toBe(true);
   });
 });
