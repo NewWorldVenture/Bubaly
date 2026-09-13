@@ -101,6 +101,7 @@ PRODUCTION READY: NO
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 - DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
+- DATA-009: logAudit's try/catch could never fire — PostgREST resolves with { data, error } rather than throwing, so the line written to notice a failed audit write had never run, and all fourteen callers lost their audit rows silently. Ten wallet-audit writes discarded the error the same way, including the credit and debit paths.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -20388,6 +20389,87 @@ tests/read-error-surfaced.test.ts; tests/vacations-views-read-boundary.test.ts
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe pending.
 
+### DATA-009 — An audit write that did not land must be noticeable
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: lib/server/audit.ts; lib/wallet/server.ts; app/(app)/wallet/actions.ts; app/(app)/money/actions.ts; app/api/ai/wallet/route.ts; app/api/ai/wallet/child/[childId]/route.ts; app/api/ai/invest/route.ts; audit_logs; wallet_audit_logs
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+logAudit wrapped its insert in try/catch and logged from the catch:
+
+    try {
+      await supabase.from('audit_logs').insert({ ... });   // result discarded
+    } catch (e) {
+      console.error('[audit] failed to write log', e);     // unreachable
+    }
+
+That reads as error handling and is not. A PostgREST call RESOLVES with
+{ data, error } and rejects only under .throwOnError(). The installed library's
+own source settles it — shouldThrowOnError defaults to false, and:
+
+    if (!this.shouldThrowOnError) res = res.catch((fetchError) => { ... });
+
+Without .throwOnError(), even a FETCH-LEVEL failure is caught inside the builder
+and turned into a resolved error. So the catch could not see an RLS denial, a
+constraint violation, a column mismatch or a dead connection: all of them
+resolve. The line written to notice a failed audit write had never run and could
+not run, and every failure across all fourteen callers was silent by
+construction — a child login created, a PIN reset, an admin action, an
+onboarding step, none recorded and nobody told.
+
+Nothing about it was visible to tsc: awaiting a promise and ignoring its value
+is legal. Only reading the library settles which way it fails.
+
+The same shape appeared longhand at ten wallet_audit_logs call sites, including
+the credit and debit paths in lib/wallet/server.ts, so a transfer, a card spend,
+a card issue or a claimed Pay-ID could complete with no audit row at all.
+app/(app)/money/actions.ts already did this correctly through a local helper —
+which is the shape the other ten should have had.
+
+#### Fixes Applied
+logAudit now reads the resolved error and reports it, keeping the catch only for
+the one path that can still reach it: a synchronous throw while the query is
+built. money/actions.ts's local helper is promoted to a shared logWalletAudit
+and all fourteen wallet sites go through it, so there is one implementation
+rather than two idioms and eight silent copies.
+
+It deliberately does NOT fail the caller. By the time it runs the money has
+already moved, and refusing a completed transfer because its log failed would
+turn a bookkeeping problem into a financial one. Being loud is the fix; being
+fatal is not.
+
+#### Retest Results
+tests/audit-write-failures-are-visible.test.ts: 8 cases on Node 24.15.0, built
+on a fake client that RESOLVES with an error the way PostgREST does — a fixture
+that threw would have passed against the broken code, which is the trap this
+whole record is about. Against the original, the case that matters fails with
+"a refused audit write produced no output at all". A success stays silent, a
+synchronous throw still reaches the catch, and neither helper ever rejects. A
+final case walks app/ and lib/ and fails if a wallet audit row is written
+longhand again, so the helper cannot be bypassed.
+
+tests/wallet-money-action-boundaries.test.ts had pinned the local helper BY
+NAME; it now pins the invariant instead — the shared helper is used, a failed
+audit row does not return, and nothing writes the insert longhand.
+
+#### Evidence
+tests/audit-write-failures-are-visible.test.ts; node_modules/@supabase/postgrest-js/dist/index.mjs (shouldThrowOnError default and the catch that converts a fetch failure into a resolved error); PR #531.
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe not applicable; the failure is observable in server logs rather than over HTTP.
+
 # Final Regression
 
 ## Build
@@ -20552,6 +20634,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 - DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
+- DATA-009: logAudit's try/catch could never fire — PostgREST resolves with { data, error } rather than throwing, so the line written to notice a failed audit write had never run, and all fourteen callers lost their audit rows silently. Ten wallet-audit writes discarded the error the same way, including the credit and debit paths.
 
 ## Production Readiness
 NO
