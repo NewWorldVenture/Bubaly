@@ -1206,3 +1206,10 @@ were bundled with esbuild and run. No source file was modified.
   security; nobody has walked what a second parent actually sees on arrival.
 - A family of 12 against the per-member fan-out surfaces beyond notifications
   (the approvals queue, the activity feed, the family map).
+
+---
+
+## Note on the merge
+
+A second session created `# Claude-4 — QA / Features / Flows / Performance / Edge Cases` as an empty template on `main`. It carried
+no findings, so this file keeps the worker output above; nothing was lost.

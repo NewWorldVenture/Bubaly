@@ -695,3 +695,10 @@ live migration ledger (F5/F-001), whether `CHILD_LOGIN_SECRET`,
 production (every one of them fails closed if not, which is the right direction
 but means the feature is silently off), and whether the production edge
 normalizes `x-forwarded-for` the way Vercel's does.
+
+---
+
+## Note on the merge
+
+A second session created `# Claude-3 — Backend / API / Database / Auth / Security` as an empty template on `main`. It carried
+no findings, so this file keeps the worker output above; nothing was lost.

@@ -878,3 +878,10 @@ Every number that remains above survived being checked against the file.
 
 **No source file was modified.** Everything here is a recommendation for
 Claude-1 to apply.
+
+---
+
+## Note on the merge
+
+A second session created `# Claude-2 — Frontend / UI / UX / Responsive / Accessibility` as an empty template on `main`. It carried
+no findings, so this file keeps the worker output above; nothing was lost.

@@ -40,7 +40,10 @@ export async function createChildLoginAction(input: {
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
   if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
 
-  const { data: taken } = await admin.from('child_logins').select('id').ilike('username', username).limit(1);
+  // `eq` for the same reason the sign-in lookup uses it: `_` is a LIKE wildcard
+  // and the username grammar allows it, so `ilike` made this check answer about
+  // a DIFFERENT login than the one being created.
+  const { data: taken } = await admin.from('child_logins').select('id').eq('username', username).limit(1);
   if (taken && taken.length > 0) return { ok: false, error: t('childLoginActions.thatUsernameIsTakenTry') };
 
   const email = syntheticChildEmail(username);

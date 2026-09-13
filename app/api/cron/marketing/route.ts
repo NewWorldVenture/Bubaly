@@ -15,7 +15,14 @@ export async function GET(req: NextRequest) {
   try {
     const limit = Math.min(25, Math.max(1, Number(req.nextUrl.searchParams.get('limit') ?? 10) || 10));
     const summary = await processMarketingGenerationJobs(createServiceClient(), limit);
-    return NextResponse.json({ ok: true, ...summary });
+  // A failed run must be visible in the status code: nothing in this directory
+  // writes a durable run record, so Vercel Cron's status is the only signal, and
+  // a 200 with a non-zero failure count reads as a clean run.
+    // persistenceFailed already throws inside the worker, so it arrives as a 500.
+    // `failed` is a job that failed and whose failure WAS recorded — handled, but
+    // still a failed run.
+    const ok = summary.failed === 0;
+    return NextResponse.json({ ...summary, ok }, { status: ok ? 200 : 502 });
   } catch (error) {
     console.error('[marketing-worker] failed', error);
     return NextResponse.json({ error: t('marketing.marketingWorkerFailed') }, { status: 500 });
