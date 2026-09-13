@@ -16,7 +16,16 @@ describe('wallet and Stripe money action boundaries', () => {
   it('checks required reads and keeps audit loss best-effort', () => {
     expect(moneyActions).toContain("if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);");
     expect(moneyActions).toContain("if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);");
-    expect(moneyActions).toContain('logAuditFailure');
+    // Audit loss stays best-effort — by the time it runs the money has moved,
+    // so refusing the action would turn a bookkeeping problem into a financial
+    // one. The local logAuditFailure that used to carry this is now the shared
+    // logWalletAudit, which also covers the ten sites that were discarding the
+    // error entirely; the invariant is unchanged and the name is not.
+    expect(moneyActions).toContain('logWalletAudit');
+    expect(moneyActions, 'a failed audit row must not fail the action')
+      .not.toMatch(/if \(auditError\) return/);
+    expect(moneyActions, 'and must not be written longhand again')
+      .not.toMatch(/from\('wallet_audit_logs'\)\.insert/);
   });
 
   it('keeps wallet hub deletion allowlisted and family-scoped', () => {

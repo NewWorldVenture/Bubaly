@@ -22,16 +22,13 @@ import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { getStripe } from '@/lib/stripe';
 import { effectivePublishableKey } from '@/lib/stripe/settings';
 import { describeActionError } from '@/lib/supabase/errors';
+import { logWalletAudit } from '@/lib/server/audit';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
 function actionFailure<T = unknown>(operation: string, message: string, error: unknown): Result<T> {
   console.error(`[money-action] ${operation} failed`, error);
   return { ok: false, error: describeActionError(error, message) };
-}
-
-function logAuditFailure(operation: string, error: unknown): void {
-  console.error(`[money-audit] ${operation} was not recorded`, error);
 }
 
 async function origin(): Promise<string> {
@@ -151,11 +148,10 @@ export async function issueCardAction(input: {
       accountId: acct.stripe_account_id, type: input.type,
       spendLimitCents: input.spendLimitCents, spendWindow: input.spendWindow, userId: ctx.user.id,
     });
-    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
+    await logWalletAudit(svc, {
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
       entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
-    });
-    if (auditError) logAuditFailure('card issuance', auditError);
+    }, 'card issuance');
     revalidatePath('/wallet');
     return { ok: true, data: { cardId: rowId } };
   } catch (e) {
@@ -182,11 +178,10 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
       familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
       accountId: acct.stripe_account_id, frozen: input.frozen,
     });
-    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
+    await logWalletAudit(svc, {
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: input.frozen ? 'card_frozen' : 'card_unfrozen',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
-    });
-    if (auditError) logAuditFailure('card freeze change', auditError);
+    }, 'card freeze change');
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
@@ -224,12 +219,11 @@ export async function updateCardControlsAction(input: {
       familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
       accountId: acct.stripe_account_id, spendLimitCents, spendWindow, blockedCategories,
     });
-    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
+    await logWalletAudit(svc, {
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_controls_updated',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
       metadata: { spendLimitCents, spendWindow, blockedCount: blockedCategories.length },
-    });
-    if (auditError) logAuditFailure('card controls update', auditError);
+    }, 'card controls update');
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
@@ -274,11 +268,10 @@ export async function createCardRevealAction(input: {
       { issuing_card: card.stripe_card_id, nonce: input.nonce },
       { apiVersion: '2026-05-27.dahlia', stripeAccount: acct.stripe_account_id },
     );
-    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
+    await logWalletAudit(svc, {
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_revealed',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
-    });
-    if (auditError) logAuditFailure('card reveal', auditError);
+    }, 'card reveal');
     return {
       ok: true,
       data: {

@@ -8,6 +8,7 @@ import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { logWalletAudit } from '@/lib/server/audit';
 
 type DB = SupabaseClient<Database>;
 
@@ -207,11 +208,11 @@ export async function debitCardSpend(supabase: DB, params: {
     .single();
   if (error) return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: null, action: 'card_spend',
     entity_type: 'child_wallets', entity_id: params.childWalletId,
     detail: `${params.description} (${amount}c)`, metadata: { stripeRef: params.stripeRef },
-  });
+  }, 'card spend');
   return { ok: true, txnId: row.id };
 }
 
@@ -266,11 +267,11 @@ export async function creditChildWallet(supabase: DB, params: {
   const { error } = await supabase.from('wallet_transactions').insert(rows);
   if (error) return { ok: false, error: walletFailure(error, 'Could not credit that wallet.'), credited: 0 };
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: params.createdBy, action: `credit_${params.type}`,
     entity_type: 'child_wallets', entity_id: params.childWalletId,
     detail: `${params.description} (${amount}c)`, metadata: { split, parts, type: params.type },
-  });
+  }, `wallet credit (${params.type})`);
 
   return { ok: true, credited: amount };
 }
@@ -330,10 +331,10 @@ export async function debitSpendBucket(supabase: DB, params: {
   }).select('id').single();
   if (error) return { ok: false, error: walletFailure(error, 'Could not post that wallet debit.') };
 
-  await supabase.from('wallet_audit_logs').insert({
+  await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: params.createdBy, action: `debit_${params.type}`,
     entity_type: 'child_wallets', entity_id: params.childWalletId,
     detail: `${params.description} (${amount}c)${params.requiresApproval ? ' — pending approval' : ''}`,
-  });
+  }, `wallet debit (${params.type})`);
   return { ok: true, txnId: data.id };
 }
