@@ -14,6 +14,7 @@ import { benchmarksPageIsPublished } from '@/lib/network/benchmarks-server';
 import type { ConsentScope } from '@/lib/network/insights';
 import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server';
 import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Intelligence Network | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -25,10 +26,13 @@ export default async function IntelligencePage() {
   const supabase = await createServer();
 
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
-  const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+  // Day keys resolved in the family's zone: these are compared against DATE
+  // columns, which hold the day on the family's wall rather than an instant.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const weekEndKey = addDaysToDayKey(todayKey, 7);
   const weekEndIso = new Date(now.getTime() + 7 * 86_400_000).toISOString();
-  const spendStartKey = new Date(now.getTime() - SPEND_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const spendStartKey = addDaysToDayKey(todayKey, -SPEND_WINDOW_DAYS);
 
   // The family's OWN data → the coarse buckets they'd contribute (shown only to
   // them; nothing shared or stored). The same sources and the same bands as the

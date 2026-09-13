@@ -20,6 +20,7 @@ import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
 import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -116,11 +117,17 @@ async function loadDisplay(
   familyName: string,
   now: Date,
   untitledRun: string,
+  tz: string,
 ): Promise<LoadedDisplay> {
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
-  const todayDate = start.toISOString().slice(0, 10);
+  // This screen hangs on a wall in the family's kitchen, so its day has to turn
+  // over at THEIR midnight. `setHours(0,0,0,0)` is the SERVER's midnight, which
+  // on a UTC host is 17:00 in California — the display would flip to tomorrow's
+  // schedule in the middle of the afternoon, every day.
+  const todayDate = dayKeyInTz(now, tz);
+  const bounds = zonedDayBoundsMs(todayDate, tz);
+  const start = new Date(bounds.start);
+  const end = new Date(bounds.end);
+  const in14 = new Date(zonedDayBoundsMs(addDaysToDayKey(todayDate, 14), tz).start);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
@@ -301,7 +308,7 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now, t('displayHandled.untitledRun'));
+    loaded = await loadDisplay(supabase, familyId, familyName, now, t('displayHandled.untitledRun'), ctx.active.family.timezone || 'UTC');
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any

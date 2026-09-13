@@ -7,7 +7,7 @@ They ran over **different surfaces** and neither supersedes the other:
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 17 | `F1`–`F17` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, and the audit's own probes | 16 | `F-001`–`F-016` |
+| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, and the audit's own probes | 17 | `F-001`–`F-017` |
 
 **Where they touch, stated plainly.** Only two places:
 
@@ -988,7 +988,7 @@ risk surface is hydration, which is precisely what could not be exercised here.
 
 ---
 
-# Pass B — Data layer (F-001–F-016)
+# Pass B — Data layer (F-001–F-017)
 
 A running, evidence-based audit of bubaly.com. Every entry records what was
 checked, **how**, and what the check actually returned. Nothing is marked closed
@@ -1015,7 +1015,7 @@ F-002 records reasoning that was wrong and what replaced it.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,464 tests |
+| Unit tests | `vitest run` | ✅ 13,515 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
 | Migration names | `db:audit:migrations` | ✅ 306 files, no collisions |
@@ -1031,6 +1031,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Row-ceiling honesty | scan of `app/` + `lib/` | ✅ 0 limits above the cap (was 59 — F-013) |
 | Notification dedupe | 5 cron runs, duplicate-group count | ✅ no new duplicates (F-014) |
 | Public sitemap | 1,049 published posts vs the served file | ✅ 1,049 listed (was 1,048 — F-012) |
+| Calendar-day correctness | day keys vs DATE columns, 9 zones | ✅ family zone on every user-facing surface (F-017) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -1624,6 +1625,93 @@ $ git check-ignore -v cookies.json
 .gitignore:36:cookies.json	cookies.json
 ```
 
+### F-017 · A family's "today" was Greenwich's today, on every surface that shows a day
+
+**Severity:** high · **Status:** CLOSED — `dayKeyInTz` adopted across the
+user-facing surfaces; the background remainder is allowlisted with reasons
+
+A DATE column in this schema holds the day on the family's kitchen wall.
+`new Date().toISOString().slice(0, 10)` answers the day at Greenwich. Nineteen
+files compared one against the other.
+
+This is not an edge case. Measured across every minute of a day:
+
+```
+America/Los_Angeles   420 min/day wrong   (29.2%)
+America/New_York      240 min/day wrong   (16.7%)
+Asia/Tokyo            540 min/day wrong   (37.5%)
+Australia/Sydney      600 min/day wrong   (41.7%)
+```
+
+For a Californian household that is **every evening from 5pm**.
+
+Proven end to end against the database, at 18:30 on a Sunday in Los Angeles:
+
+```
+instant                : 2026-09-14T01:30:00Z
+family wall clock      : Sunday, September 13, 2026 at 6:30 PM
+the family's today     : 2026-09-13
+page's today (UTC)     : 2026-09-14   ← what meal_plans was queried with
+
+  the page rendered  →  "Monday pasta — tomorrow"
+  the family was eating →  "Sunday roast — eaten TONIGHT"
+```
+
+The same instant rolled `weekStart` forward too, so **"this week" silently became
+next week every Sunday evening**.
+
+Three findings within the class were worse than a wrong list:
+
+- **The family display.** A wall-mounted kitchen screen took the *server's*
+  midnight (`setHours(0,0,0,0)`), which on a UTC host is 17:00 in California —
+  the screen turned over to tomorrow's schedule in the middle of the afternoon,
+  every day. It now uses the family's day bounds.
+- **Medication reminders.** `generateFamilyNotifications` bounded "doses already
+  logged today" at UTC midnight. In California that window opens at 17:00 local,
+  so the morning dose looked untaken and the family was reminded again; in Tokyo
+  it opens at 09:00 the *previous* local day, so yesterday's dose was mistaken
+  for today's and **the reminder never fired**. A missed medication reminder is
+  the worse of the two.
+- **Allowance scheduling.** A parent setting up an allowance on Sunday evening
+  in California had `next_run_on` dated from Monday.
+
+The fix was already written and documented. `lib/services/scope.ts` has carried
+`dayKeyInTz` / `zonedDayBoundsMs` all along, and its own header names this exact
+bug — *"a household in America/Los_Angeles sees tomorrow's day key for the last
+seven hours of every day"*. Four surfaces used it; nineteen never adopted it.
+This finding is about adoption, not about inventing a mechanism.
+
+Two helpers were missing and are added: `addDaysToDayKey` and `weekStartDayKey`,
+both string-in/string-out so they never touch an instant and cannot be knocked
+off by a DST transition. Measured: from local midnight on 26 Oct 2026, adding
+seven *fixed* days lands at 23:00 on 1 Nov — a day short of the calendar answer.
+The window where that bites is 26–31 Oct, which is precisely why spot-checking
+one date misses it.
+
+**Converted:** kitchen, readiness, agents, intelligence, planning, moments,
+family-cfo, food, display, wallet actions, and the medication window in
+`lib/server/notifications.ts`.
+
+**Not converted, each with its reason**, recorded in the guard's allowlist rather
+than left looking overlooked: `lib/network/aggregate-server.ts` (platform-wide
+aggregation — UTC bucketing is what a cross-household benchmark should use),
+`app/api/cron/wallet-allowance/route.ts` (platform-wide cron; bounded at one day
+early for families west of UTC), and five background derivations that take a
+`familyId` but no zone, so converting them means threading one through.
+
+`tests/family-day-not-greenwich-day.test.ts` fails on any new surface that builds
+a Greenwich day key beside a DATE filter without reaching for the zone helpers,
+and a second case fails if an allowlist entry outlives its reason — an allowlist
+that rots is how the next regression hides. Reverting the kitchen fix fails it;
+restoring it passes. `tests/family-day-key-arithmetic.test.ts` pins the helpers,
+including both DST directions.
+
+One correction worth recording: my first two attempts at the DST assertion had
+the direction backwards, and I only got it right by measuring across a year
+rather than reasoning about it. Spring-forward arrives an hour *late* and stays
+inside the right day; it is the autumn transition that lands on the previous
+evening.
+
 ## 4. Closed previously (regression-checked this pass)
 
 | ID | Finding | Still closed by |
@@ -1664,7 +1752,7 @@ $ git check-ignore -v cookies.json
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 1 warning |
-| `vitest run` | 13,464 tests passed |
+| `vitest run` | 13,515 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
 | `db:audit:migrations` | passed, next version 0291 |
@@ -1688,3 +1776,7 @@ $ git check-ignore -v cookies.json
 | notifications cron ×5 | URI-too-long: 0 · duplicate groups 117 → 117 |
 | pristine replay, grants before any probe | five privileged RPCs service-role-only |
 | `git check-ignore cookies.json` | ignored (was untracked and committable — F-016) |
+| day-key drift, every minute of a day, 9 zones | LA 29.2% · NYC 16.7% · Tokyo 37.5% · Sydney 41.7% |
+| meal-plan read at 18:30 Sunday in LA | rendered tomorrow's dinner; now renders tonight's |
+| DST week arithmetic, measured across 2026 | 26–31 Oct: +7 fixed days lands a day short |
+| F-017 guard with the kitchen fix reverted | fails — not vacuous |

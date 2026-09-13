@@ -24,6 +24,11 @@ export async function GET(req: NextRequest) {
   }
   try {
     const supabase = createServiceClient();
+    // Platform-wide, so this stays the UTC day deliberately: the alternative is
+    // resolving every rule's family zone to decide whether its day has arrived,
+    // and the cost of not doing so is bounded at one day early for families west
+    // of UTC. Recorded rather than left looking overlooked — a per-family run
+    // date is the fix if allowance timing ever needs to be exact to the day.
     const today = new Date().toISOString().slice(0, 10);
 
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows

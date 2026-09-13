@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { dayKeyInTz } from '@/lib/services/scope';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -253,7 +254,9 @@ export async function saveAllowanceRuleAction(input: {
   const amount = Math.trunc(input.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: t('actions.enterAnAllowanceGreaterThan') };
 
-  const next = nextRunDate(new Date().toISOString().slice(0, 10), input.cadence);
+  // Schedule from the family's calendar day: a parent setting up an allowance
+  // on Sunday evening in California would otherwise have it dated from Monday.
+  const next = nextRunDate(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), input.cadence);
   const { error } = input.id
     ? await supabase.from('allowance_rules')
         .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
@@ -298,7 +301,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     return { ok: false, error: t('actions.automatedAllowancesAreABasic') };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC');
   const { data: rules, error: rulesError } = await supabase
     .from('allowance_rules')
     .select('id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')

@@ -103,7 +103,12 @@ beforeEach(() => {
   roster = result([{ id: 'one' }, { id: 'two' }, { id: 'three' }]);
   counts = {};
   queries = [];
-  mocks.requireUserContext.mockResolvedValue({ active: { familyId: 'family-1' } });
+  // `family` is the whole families row in the real context, and the page reads
+  // its timezone to resolve the family's calendar day — the DATE columns it
+  // filters on hold the day on the family's wall, not the day at Greenwich.
+  mocks.requireUserContext.mockResolvedValue({
+    active: { familyId: 'family-1', family: { id: 'family-1', timezone: 'America/Los_Angeles' } },
+  });
   mocks.createServer.mockResolvedValue({ from });
   mocks.resolveFamilyPlanLevel.mockResolvedValue(2);
   mocks.effectivePlanLevel.mockResolvedValue(2);

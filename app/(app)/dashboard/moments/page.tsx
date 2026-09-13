@@ -8,6 +8,7 @@ import { activeMoments, type MomentSignals } from '@/lib/moments/organizer';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,7 @@ export default async function Page() {
   let organizerMoments: OrganizerMoment[] = [];
   try {
     const now = new Date();
-    const todayIso = now.toISOString().slice(0, 10);
+    const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
     const in21 = new Date(now.getTime() + 21 * DAY).toISOString();
     const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);

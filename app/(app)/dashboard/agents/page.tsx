@@ -11,6 +11,7 @@ import { reasoningInsights } from '@/lib/reasoning/insights';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Family Assistant | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -41,12 +42,18 @@ export default async function AgentsPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
+  // `todayKey` and the day keys derived from it are compared against DATE
+  // columns (plan_date, due_date, expires_at, start_date), which hold the
+  // family's calendar day — so they are resolved in the family's zone. The
+  // `starts_at` window below stays an instant comparison and is unaffected.
   const now = new Date();
   const iso = now.toISOString();
-  const todayKey = iso.slice(0, 10);
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
   const dayStart = `${todayKey}T00:00:00Z`;
   const weekEnd = new Date(now.getTime() + 7 * 86_400_000);
-  const in14 = new Date(now.getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
+  const weekEndKey = addDaysToDayKey(todayKey, 7);
+  const in14 = addDaysToDayKey(todayKey, 14);
   const in30 = new Date(now.getTime() + 30 * 86_400_000).toISOString();
 
   const [
@@ -57,7 +64,7 @@ export default async function AgentsPage() {
     settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, category')
       .eq('family_id', familyId).gte('starts_at', dayStart).lte('starts_at', weekEnd.toISOString()).order('starts_at').limit(500)),
     settle(supabase.from('meal_plans').select('plan_date, meal_type').eq('family_id', familyId)
-      .gte('plan_date', todayKey).lt('plan_date', weekEnd.toISOString().slice(0, 10))),
+      .gte('plan_date', todayKey).lt('plan_date', weekEndKey)),
     settle(supabase.from('family_members').select('birthday').eq('family_id', familyId)),
     settle(supabase.from('agent_activity').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at', { ascending: false }).limit(200)),
     count(supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false)),
@@ -113,7 +120,7 @@ export default async function AgentsPage() {
   }
 
   const plannedDinners = new Set((mealPlans.data ?? []).filter((m) => m.meal_type === 'dinner').map((m) => m.plan_date));
-  const unplannedDinners = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
+  const unplannedDinners = Array.from({ length: 7 }, (_, i) => addDaysToDayKey(todayKey, i))
     .filter((d) => !plannedDinners.has(d)).length;
 
   const birthdaysSoon = (members.data ?? []).filter((m) => {

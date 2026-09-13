@@ -184,3 +184,34 @@ export function dayKeysBetween(fromMs: number, toMs: number, tz: string): string
   }
   return keys;
 }
+
+/**
+ * Move a `YYYY-MM-DD` day key by whole calendar days.
+ *
+ * Deliberately string-in, string-out: it never touches an instant, so it cannot
+ * be knocked off by a DST transition. `new Date(d.getTime() + 7 * 86_400_000)`
+ * is the idiom this replaces, and it is wrong twice a year — the week that
+ * crosses a spring-forward is 167 hours long, so adding seven fixed days lands
+ * on 23:00 the previous evening and formats as the day before.
+ */
+export function addDaysToDayKey(dayKey: string, days: number): string {
+  const [y, m, d] = dayKey.split('-').map((part) => Number.parseInt(part, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return dayKey;
+  // UTC arithmetic on a date-only value is exact: no zone is involved, so the
+  // usual DST hazards of Date arithmetic do not apply here.
+  const moved = new Date(Date.UTC(y, m - 1, d + days));
+  return moved.toISOString().slice(0, 10);
+}
+
+/**
+ * The Monday on or before `dayKey`, as a day key. Weeks in this product start
+ * on Monday (the meal planner, the chore week and the kitchen page all agree).
+ */
+export function weekStartDayKey(dayKey: string): string {
+  const [y, m, d] = dayKey.split('-').map((part) => Number.parseInt(part, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return dayKey;
+  const at = new Date(Date.UTC(y, m - 1, d));
+  // getUTCDay(): 0=Sun … 6=Sat. Shift so Monday is 0.
+  const fromMonday = (at.getUTCDay() + 6) % 7;
+  return addDaysToDayKey(dayKey, -fromMonday);
+}

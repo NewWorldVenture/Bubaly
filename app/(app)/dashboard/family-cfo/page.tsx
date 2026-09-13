@@ -18,6 +18,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { loadMoneyTimelineInput } from '@/lib/finance/timeline-load';
 import { buildCashflowTimeline, DEFAULT_BUFFER, money, pretty, type BuildTimelineInput, type PlanSource } from '@/lib/finance/timeline';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Family CFO' };
 export const dynamic = 'force-dynamic';
@@ -38,8 +39,11 @@ export default async function FamilyCfoPage() {
   await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const today = new Date().toISOString().slice(0, 10);
-  const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  // Day keys resolved in the family's zone: these are compared against DATE
+  // columns, which hold the day on the family's wall rather than an instant.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const today = dayKeyInTz(new Date(), tz);
+  const in30 = addDaysToDayKey(today, 30);
   const monthStart = today.slice(0, 8) + '01';
 
   const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await settleAll([

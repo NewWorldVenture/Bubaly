@@ -12,6 +12,7 @@ import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Family Readiness' };
 export const dynamic = 'force-dynamic';
@@ -26,10 +27,17 @@ export default async function ReadinessPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
+  // Day keys in the FAMILY's zone. These are compared against `due_date`,
+  // `plan_date` and `expires_at` — calendar days on the family's wall, not
+  // instants — so a UTC key reads a day ahead for most of every US evening.
   const now = new Date();
-  const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
-  const todayStr = now.toISOString().slice(0, 10);
-  const weekEndStr = weekEnd.toISOString().slice(0, 10);
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayStr = dayKeyInTz(now, tz);
+  const weekEndStr = addDaysToDayKey(todayStr, 7);
+  // A seven-day window over INSTANTS (`starts_at` is timestamptz). Fixed
+  // milliseconds are exactly right here and no zone is involved — the DST
+  // hazard applies to calendar days, which is what the keys above are for.
+  const weekEnd = new Date(now.getTime() + 7 * 86_400_000);
 
   const [
     choresOverdueRes,
@@ -75,8 +83,8 @@ export default async function ReadinessPage() {
 
   // Legacy non-calendar horizon counts remain best-effort. Calendar coverage
   // is explicit: a failed or capped read cannot establish that a week is clear.
-  const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
-  const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const tomorrowKey = addDaysToDayKey(todayStr, 1);
+  const monthEndKey = addDaysToDayKey(todayStr, 30);
   // A failed read and a genuinely quiet week both arrive as zero, and the §51
   // card now makes positive claims ("Documents are current"). So each of these
   // reports whether it succeeded, and the assessor is told which sources it can
@@ -136,7 +144,7 @@ export default async function ReadinessPage() {
   ].some((coverage) => coverage !== 'complete');
 
   const plannedThisWeek = new Set((mealsRes.data ?? []).map((m) => m.plan_date));
-  const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
+  const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => addDaysToDayKey(todayStr, i))
     .filter((d) => !plannedThisWeek.has(d)).length;
   const signals: ReadinessSignals = {
     tomorrowConflicts: tomorrowCalendar.conflicts, tomorrowUnassigned: tomorrowCalendar.unassigned,
