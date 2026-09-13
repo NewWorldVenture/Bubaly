@@ -136,6 +136,12 @@ export type GroceryItemInput = {
 async function writableList(scope: ServiceScope, listId?: string | null): Promise<ServiceResult<{ id: string }>> {
   if (!listId) return ensureDefaultList(scope);
   if (typeof listId !== 'string') return fail('Choose a shopping list.', { code: SERVICE_CODES.invalidInput });
+  // Deliberately NOT filtered on the archive columns, unlike ensureDefaultList
+  // above. Naming a list is the caller saying which one it means, and
+  // tests/grocery-write-path.test.ts pins that: "the shopping module only ever
+  // shows an open one. Overriding that would be the service second-guessing its
+  // caller." Worth knowing when reading it next to the default-list path, which
+  // skips archived lists precisely because nothing named one.
   const { data, error } = await scope.db.from('grocery_lists').select('id')
     .eq('family_id', scope.familyId).eq('id', listId).maybeSingle();
   if (error) return fail(describeDbError(error, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });

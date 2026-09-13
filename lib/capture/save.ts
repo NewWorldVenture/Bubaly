@@ -143,8 +143,14 @@ async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, me
 
 /** Get-or-create the family's default grocery list. */
 async function defaultGroceryListId(supabase: SupabaseBrowser, familyId: string, userId: string, operation: Operation): Promise<string> {
+  // BOTH archive columns. `grocery_lists` carries `is_archived` from 0002 and
+  // `archived_at` from 0014, and nothing in the application ever sets the
+  // first — the shopping module stamps the second. So an is_archived-only
+  // reader takes the family's oldest list whether or not they put it away, and
+  // Quick Capture drops the milk somewhere nobody looks while saying it saved.
   const existing = await request(operation, 'lookup', false, signal => supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).abortSignal(signal).maybeSingle());
+    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
+    .order('created_at', { ascending: true }).limit(1).abortSignal(signal).maybeSingle());
   current(operation, 'lookup');
   if (existing !== null) {
     if (typeof existing !== 'object' || !('id' in existing) || !validId(existing.id)) failure(operation, 'lookup', 'failed');
