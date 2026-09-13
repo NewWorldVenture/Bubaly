@@ -110,7 +110,11 @@ export default async function BlogPage({ searchParams }: Props) {
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
   const activeTag = params.tag ? toHashtag(params.tag) : null;
   const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
-  const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
+  const unsubscribed = params.unsubscribed === '1' ? 'done'
+    : params.unsubscribed === 'invalid' ? 'invalid'
+      // The route could not reach the database. Distinct from 'invalid', which
+      // blames the reader's link for something that was not the link's fault.
+      : params.unsubscribed === 'error' ? 'error' : null;
 
   const [allPostsRaw, featured, categoryCounts] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
@@ -162,7 +166,9 @@ export default async function BlogPage({ searchParams }: Props) {
           )} role="status">
             {unsubscribed === 'done'
               ? 'You’ve been unsubscribed from blog updates. Sorry to see you go — you can rejoin anytime below.'
-              : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
+              : unsubscribed === 'error'
+                ? 'We couldn’t complete that just now, so you may still receive blog emails. Please open the link again in a few minutes.'
+                : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
           </div>
         </Container>
       )}

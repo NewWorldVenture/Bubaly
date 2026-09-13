@@ -18,18 +18,43 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(home);
   }
 
+  // Both the read and the write are checked, because this page TELLS the reader
+  // what happened and only one of the three answers it can give was ever true.
+  //
+  // A PostgREST call resolves with { data, error }. The lookup's error was
+  // discarded, so a refused read produced `data: null` — which this route could
+  // not tell apart from "no such token" and reported as `invalid`: a real
+  // subscriber, holding a real link, told their link was wrong. And the update's
+  // error was discarded too, so a refused write still redirected to
+  // `unsubscribed=1` — "You've been unsubscribed from blog updates" over a row
+  // that still says subscribed, and the next digest goes out to them.
+  //
+  // That is the same defect as the marketing unsubscribe (C-07). It survived
+  // that pass because the guard there watches four tables it could name readers
+  // for, and `blog_subscribers` was not one of them.
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error: lookupError } = await supabase
     .from('blog_subscribers')
     .select('id, status')
     .eq('unsubscribe_token', token)
     .maybeSingle();
 
+  if (lookupError) {
+    console.error('[blog-unsubscribe] subscriber lookup failed', lookupError);
+    home.searchParams.set('unsubscribed', 'error');
+    return NextResponse.redirect(home);
+  }
+
   if (data && data.status !== 'unsubscribed') {
-    await supabase
+    const { error: updateError } = await supabase
       .from('blog_subscribers')
       .update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() })
       .eq('id', data.id);
+    if (updateError) {
+      console.error('[blog-unsubscribe] unsubscribe write failed', { subscriberId: data.id, error: updateError });
+      home.searchParams.set('unsubscribed', 'error');
+      return NextResponse.redirect(home);
+    }
   }
 
   home.searchParams.set('unsubscribed', data ? '1' : 'invalid');

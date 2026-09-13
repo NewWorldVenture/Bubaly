@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Five audits of bubaly.com, kept in one file because one file is the record.
+Six audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -11,6 +11,7 @@ They ran over **different surfaces** and none supersedes another:
 | **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
 | **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
 | **E — Read honesty** | the mirror of C: a read whose error is discarded, where something downstream then treats the absence it returns as a fact | 1 | `E-01` |
+| **F — Public API routes** | every `route.ts` under a PUBLIC middleware prefix, which reaches the handler with no session: does it authenticate itself, and does it only claim what it can support | 2 | `F-a`, `F-b` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -2524,3 +2525,134 @@ neither: the fixture used an actor of kind `'ai'`, and `policyApplies` matches a
 policies were being filtered out and the result was the *fallback* deny, which
 the decision's `basis: 'fallback'` said plainly. The fixture was wrong, not the
 engine. Checking `basis` rather than `effect` is what separated the two.
+
+---
+
+# Pass F — Public API routes (F-a, F-b)
+
+Middleware is the outer session boundary, but a route under a `PUBLIC` prefix is
+deliberately *outside* it: the request reaches the handler with no session at
+all. So two questions, asked of each one — does it **authenticate itself**, and
+does it **only claim what it can support**?
+
+- **Audit head:** `799dd633` (the branch, after Passes A–E)
+- **Surface:** 140 `route.ts` files; **98** sit under one of the 24 public `/api`
+  prefixes in `middleware.ts`
+- **Authentication result:** 94 of 98 have a self-authentication path; the
+  remaining 4 were read individually and all 4 are correct. **No finding.**
+- **Honesty result:** **2 findings**, both on routes the earlier passes could
+  not see — and the reason they could not see them is itself recorded below.
+
+## Authentication: 4 candidates, 4 cleared
+
+| Route | Why it is not a finding |
+|---|---|
+| `/api/health` | Documented as booleans, latency and missing-var **names** only. Verified against the code rather than the comment: `checkRequiredEnv` returns `{ ok, missing }` where `missing` is `REQUIRED_ENV.filter(…)` — names, never values |
+| `/api/build-info` | Returns one build-time literal. No request input, no lookup |
+| `/api/exit-intent/resolve` | Public marketing offer; IP rate-limited at 60/min, bounded body, no family data |
+| `/api/blog/unsubscribe` | Token-authorized after all — `?token=` is validated as a UUID and matched against `unsubscribe_token`. The sweep's pattern list simply lacked that column name |
+
+The first sweep reported **43** bare routes. That was wrong for one reason worth
+keeping: it read each route's own text, and **24 cron routes hold their check in
+a shared helper**, `hasCronAuthorization` from `lib/server/cron-auth`. Resolving
+imports two levels deep took 43 → 4. This is the same failure as Pass D's
+return-type brace: a scan that does not follow the code reports the shape of its
+own pattern.
+
+## Status summary
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| F-a | The blog unsubscribe confirmed an unsubscribe that was never written, and blamed the reader's link for a failed read | High | **Fixed** — this branch |
+| F-b | Activating emergency mode discarded the only record of who activated it | High | **Fixed** — this branch |
+
+---
+
+## F-a — "You've been unsubscribed" over a row that still said subscribed *(High, fixed)*
+
+`/api/blog/unsubscribe` discarded **both** results:
+
+```ts
+const { data } = await supabase.from('blog_subscribers')
+  .select('id, status').eq('unsubscribe_token', token).maybeSingle();
+
+if (data && data.status !== 'unsubscribed') {
+  await supabase.from('blog_subscribers').update({ status: 'unsubscribed', … }).eq('id', data.id);
+}
+home.searchParams.set('unsubscribed', data ? '1' : 'invalid');
+```
+
+Two different lies, from one route:
+
+- **A refused update** still redirected to `unsubscribed=1`, whose banner reads
+  *"You've been unsubscribed from blog updates."* The row still said subscribed,
+  so the next digest goes out to them. This is C-07 exactly, on a second route.
+- **A refused lookup** produced `data: null`, indistinguishable from "no such
+  token", and was reported as `invalid` — *"That unsubscribe link doesn't look
+  right"*. A real subscriber holding a real link, told the link was wrong.
+
+Both results are now read. A failure redirects to a third state, `error`, and
+the blog page renders it — *"we couldn't complete that just now, so you may still
+receive blog emails"* — because a route that redirects to a state the page cannot
+show has moved the problem rather than fixed it.
+
+## F-b — Emergency mode could be activated with no record of who did it *(High, fixed)*
+
+`activateEmergencyAction` writes the `trust_audit_logs` row that is the **only**
+record of who turned emergency mode on and why. Its result was discarded:
+
+```ts
+await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({ … });
+```
+
+Emergency elevation, by the file's own comment, *"outranks every deny, policy and
+risk tier"* — it is the most powerful state the trust engine has. A refused
+insert left a family with a live elevation and nothing saying who started it, on
+the two surfaces built to answer that question: `dashboard/trust` renders these
+rows and `api/privacy/export` cites them.
+
+The fix reads the error and logs the family, the kind and the activating member.
+It is deliberately **non-fatal**, for a reason specific to this action: the
+`emergency_sessions` insert above has already succeeded, so the elevation *is*
+live. Returning an error to a parent mid-emergency invites them to activate it
+again, which is worse than a missing log line. It must not fail; it must not be
+silent either.
+
+## Why Pass C missed both — a hole in its own guard
+
+Both instances are exactly the class Pass C swept for, on tables Pass C was
+watching in one case. They survived because of how its sweep matched:
+
+```js
+if (!new RegExp(`^\\s*(?:void\\s+)?await\\s+[\\w.]*\\.from\\('${table}'\\)`).test(line)) return;
+```
+
+It required `.from('t')` on the **same line** as the `await`. Both offenders
+break the chain across lines — `await supabase` ⏎ `.from('blog_subscribers')`,
+and `await (await ledgerWriter(supabase)).from(…)`, which `[\w.]*` cannot match
+either way. The sweep reported clean over both.
+
+This was found honestly rather than by inspection: `blog_subscribers` was added
+to the watched set, the fix was reverted to check the guard was load-bearing —
+**and it still passed**. That vacuous pass is what exposed the hole.
+
+The sweep now joins an eight-line window and cuts at the statement end before
+matching. Re-run against the same tree it immediately found **F-b**, which no
+pass had seen. A guard that cannot see the common formatting of the thing it
+forbids is decoration.
+
+## How Pass F is kept closed
+
+| guard | cases | what it holds |
+|---|---|---|
+| `tests/public-route-write-honesty.test.ts` | 8 | drives the real route: confirms on a landed write, `error` on a refused write, `error` (not `invalid`) on a refused lookup, `invalid` only for a genuinely unknown token, no DB call for a malformed token, idempotent on an already-unsubscribed row, and the page can render the third state |
+| `tests/claimed-writes-that-did-not-land.test.ts` | 10 | the multi-line-aware sweep, now over **five** tables |
+
+Proved load-bearing by reverting: restoring the original route fails the two
+cases that matter — the refused write and the refused lookup — and leaves the six
+that describe unchanged behaviour passing.
+
+**Noted, not fixed:** `endEmergencyAction` writes no audit row at all. Ending an
+elevation is arguably as worth recording as starting one, but that is a missing
+feature rather than a discarded result, and inventing scope mid-pass is how an
+audit stops being checkable. Recorded here instead.
