@@ -9,6 +9,7 @@
 // or the envelope by mistake. This file pins that, and that a manager still
 // gets all three.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { entitledServiceClient } from './helpers/entitled-service-client';
 import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
@@ -23,7 +24,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
+// The route resolves the family's plan before it works, through the service
+// client (see tests/helpers/entitled-service-client.ts). Seeded as entitled so
+// these keep testing what they are named for; the gate itself is covered by
+// tests/ai-routes-plan-gate.test.ts.
+vi.mock('@/lib/supabase/server', () => ({
+  createServer: mocks.createServer,
+  createServiceClient: () => entitledServiceClient(),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: mocks.isAIConfigured, resolveProvider: mocks.resolveProvider }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
 vi.mock('@/lib/server/bounded-request-body', () => ({

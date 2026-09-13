@@ -15,6 +15,7 @@ import {
 import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -33,21 +34,25 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
 
   // ── Read sources in parallel ──
   const [reminders, events, choreRows, routines, budgetsRes, expensesRes] = await settleAll([
-    sb.from('family_reminders')
+    // Each ceiling here is the number the author meant; `.limit(n)` above 1,000
+    // was never it, because PostgREST caps a response at db-max-rows regardless.
+    readAllAsQuery((from, to) => sb.from('family_reminders')
       .select('id, title, remind_at, status, completed_at, member_id')
       .eq('family_id', familyId).not('remind_at', 'is', null)
-      .gte('remind_at', since90).limit(2000),
-    sb.from('calendar_events')
+      .gte('remind_at', since90).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => sb.from('calendar_events')
       .select('id, title, starts_at, ends_at, assignee_id')
       .eq('family_id', familyId)
-      .gte('starts_at', windowStart).lte('starts_at', windowEnd).limit(2000),
-    sb.from('chore_assignments')
+      .gte('starts_at', windowStart).lte('starts_at', windowEnd)
+      .order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => sb.from('chore_assignments')
       .select('chore_id, status, disputed, member_id, chores(title)')
-      .eq('family_id', familyId).gte('created_at', since90).limit(2000),
+      .eq('family_id', familyId).gte('created_at', since90)
+      .order('id').range(from, to), { max: 2000 }),
     sb.from('routine_templates')
       .select('id, name, weekday_mask').eq('family_id', familyId).eq('is_active', true).limit(200),
     sb.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
-    sb.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).limit(5000),
+    readAllAsQuery((from, to) => sb.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).order('id').range(from, to), { max: 5000 }),
   ]);
   const sourceError = [reminders, events, choreRows, routines, budgetsRes, expensesRes].find((result) => result.error)?.error;
   if (sourceError) {

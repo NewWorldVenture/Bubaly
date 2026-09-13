@@ -17,6 +17,7 @@ import { imminentMomentNotices } from '@/lib/moments/notify';
 import { deliveryTimeFor } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 
@@ -286,11 +287,20 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   let rows: NotificationRow[] = [];
   if (candidates.length > 0) {
     const relatedIds = [...new Set(candidates.map((c) => c.related_id))];
-    const { data: existing, error: existingErr } = await supabase
+    // Batched, because a PostgREST filter travels in the QUERY STRING and these
+    // ids are not uuids — `related_id` carries a composite dedupe key such as
+    // `moment:<eventId>:<date>`, about 60 characters once url-encoded. A few
+    // hundred of them build a request line past the gateway's limit and the read
+    // comes back `URI too long`, which (per the comment below) leaves `seen`
+    // empty and re-inserts every candidate. Observed exactly that, every run.
+    // 50 per batch keeps the longest URL near 3 KB.
+    const { data: existing, error: existingErr } = await readInChunks<
+      { type: string; related_id: string | null; user_id: string | null }, { message: string }
+    >(relatedIds, (chunk) => supabase
       .from('notifications')
       .select('type, related_id, user_id')
       .eq('family_id', familyId)
-      .in('related_id', relatedIds);
+      .in('related_id', chunk), 50);
     // A failed dedup read leaves `seen` empty, so every candidate would pass the
     // filter and re-insert as a duplicate — log it so that spam is diagnosable.
     if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });

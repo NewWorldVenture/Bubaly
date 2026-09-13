@@ -29,3 +29,8 @@ client_secret*.json
 /mobile/android
 /mobile/dist
 /mobile/web-build
+
+# Written by scripts/crawl-login.mjs — a real, live session cookie for whatever
+# account was used. The route crawl is a documented workflow, so this file lands
+# in the working tree routinely; it must never be committed.
+cookies.json

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
@@ -19,12 +20,29 @@ export async function GET(req: NextRequest) {
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Fetch open assignments due within the next 7 days
-  const { data: assignments, error } = await supabase
-    .from('chore_assignments')
-    .select('id, member_id, due_at, family_id, chores(title, points), family_members!member_id(display_name, user_id)')
-    .in('status', ['todo', 'in_progress'])
-    .not('due_at', 'is', null)
-    .lte('due_at', weekEnd);
+  // Every one, not the first thousand: an unbounded select stops at PostgREST's
+  // row ceiling and reports nothing, so the reminders past it would simply never
+  // be sent. See lib/supabase/read-all.ts.
+  type AssignmentRow = {
+    id: string; member_id: string; due_at: string | null; family_id: string;
+    chores: { title: string; points: number } | { title: string; points: number }[] | null;
+    family_members: { display_name: string; user_id: string | null } | { display_name: string; user_id: string | null }[] | null;
+  };
+  // The embedded relations are adapted here rather than typed through readAll:
+  // lib/database.types.ts is hand-authored and declares no relationships, so
+  // supabase-js types an embed as SelectQueryError. The runtime shape is what
+  // the loop below already handles with its Array.isArray guards.
+  const { rows: assignments, error } = await readAll<AssignmentRow>(async (from, to) => {
+    const page = await supabase
+      .from('chore_assignments')
+      .select('id, member_id, due_at, family_id, chores(title, points), family_members!member_id(display_name, user_id)')
+      .in('status', ['todo', 'in_progress'])
+      .not('due_at', 'is', null)
+      .lte('due_at', weekEnd)
+      .order('id')
+      .range(from, to);
+    return { data: (page.data ?? []) as unknown as AssignmentRow[], error: page.error };
+  });
 
   if (error) {
     console.error('Cron chore fetch error:', error);

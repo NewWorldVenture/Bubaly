@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
@@ -22,7 +23,12 @@ export async function GET(req: NextRequest) {
   const weekStart = new Date().toISOString();
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: families, error: familiesError } = await supabase.from('families').select('id, name');
+  // Every household, not the first thousand. An unbounded select is capped at
+  // PostgREST's db-max-rows and says nothing, so families past that ceiling
+  // would silently never receive a digest.
+  const { rows: families, error: familiesError } = await readAll<{ id: string; name: string }>(
+    (from, to) => supabase.from('families').select('id, name').order('id').range(from, to),
+  );
   if (familiesError) {
     console.error('Weekly digest family read error:', familiesError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });

@@ -38,6 +38,20 @@ do $$ begin create role supabase_auth_admin; exception when duplicate_object the
 do $$ begin create role supabase_storage_admin; exception when duplicate_object then null; end $$;
 grant anon, authenticated, service_role to authenticator;
 grant usage on schema auth, storage, extensions, public to anon, authenticated, service_role;
+
+-- Reproduce Supabase's DEFAULT PRIVILEGES, and do it HERE — before a single
+-- migration has run — because that is when they take effect on a real project.
+--
+-- A hosted Supabase ships `alter default privileges in schema public grant all
+-- on tables to anon, authenticated, service_role`, so every table a migration
+-- creates carries arwdDxt for anon from the moment it exists and RLS is the
+-- only thing holding the line. This shim used to grant anon plain SELECT after
+-- the migrations, which made it SAFER than production — the wrong direction for
+-- a boundary harness. wallet-write-rls-check.sql asserts anon holds no INSERT on
+-- wallet_transactions; that passed here for free while being false on every real
+-- database, until 0286 closed it. Setting the defaults up front means a
+-- migration's REVOKE survives, and a missing one is caught.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text, phone text,
   raw_user_meta_data jsonb default '{}', raw_app_meta_data jsonb default '{}', created_at timestamptz default now());
 create or replace function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;
@@ -83,8 +97,11 @@ insert into auth.users (id,email) values ('$ANCHOR_UID','$ANCHOR_EMAIL') on conf
 do \$\$ begin if to_regclass('public.profiles') is not null then
   insert into public.profiles (id,full_name) values ('$ANCHOR_UID','New World Family') on conflict do nothing; end if; end \$\$;
 insert into public.families (id,name,created_by) values ('$ANCHOR_FID','The New World Family','$ANCHOR_UID') on conflict do nothing;
-grant select on all tables in schema public to authenticated, anon;
-grant usage on all sequences in schema public to authenticated, anon;
+-- Sequences only. Table privileges come from the default privileges set in the
+-- shims block ABOVE, before any migration runs — granting them here instead
+-- would re-grant whatever a migration had deliberately revoked (0286 revokes
+-- anon's writes on the money tables) and quietly undo it.
+grant usage, select on all sequences in schema public to authenticated, anon;
 SQL
 
 # SEED_ALL is applied best-effort: it carries known, pre-existing errors and is

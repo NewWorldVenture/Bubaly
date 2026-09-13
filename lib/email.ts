@@ -50,17 +50,30 @@ export async function sendReactEmail({
     return { ok: true, skipped: true };
   }
 
-  const { error } = await getResend().emails.send({
-    from: FROM_EMAIL,
-    to,
-    subject,
-    react,
-    ...(replyTo ? { replyTo } : {}),
-  });
+  // The SDK reports a REJECTED address through `{ error }`, but it can also
+  // THROW — a network failure, or a malformed API key, which surfaces from
+  // inside the client as a bare TypeError. This function's whole contract is
+  // that it answers `{ ok }`, and every caller is built on that: the weekly
+  // digest counts failures per family and moves on, onboarding logs and
+  // continues. An escaping exception broke that promise and took the caller
+  // down with it — one bad key returned 500 from /api/cron/weekly-digest
+  // part-way through the run, abandoning every family after the first.
+  try {
+    const { error } = await getResend().emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject,
+      react,
+      ...(replyTo ? { replyTo } : {}),
+    });
 
-  if (error) {
-    console.error('[email failed]', error);
+    if (error) {
+      console.error('[email failed]', error);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (cause) {
+    console.error('[email failed — the provider threw]', cause);
     return { ok: false };
   }
-  return { ok: true };
 }

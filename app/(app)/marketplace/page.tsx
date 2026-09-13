@@ -21,6 +21,7 @@ import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -97,9 +98,12 @@ export default async function MarketplaceHomePage() {
   const [offers, matches, saves, stores, follows, reviews, orders, collections, collItems] = await Promise.all([
     safe<{ listing_id: string; status: string }>('Offers', sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).eq('status', 'open').limit(1000)),
     safe<{ supply_id: string }>('Matches', sb.from('marketplace_matches').select('supply_id').eq('family_id', familyId).eq('status', 'active').limit(200)),
-    safe<{ listing_id: string; member_id: string }>('Saved listings', sb.from('marketplace_saves').select('listing_id, member_id').eq('family_id', familyId).limit(2000)),
+    // These three feed counts, so a capped read is a wrong number rather than a
+    // short list — and `.limit(2000)` never applied, because PostgREST caps a
+    // response at db-max-rows whatever the client asked for.
+    safe<{ listing_id: string; member_id: string }>('Saved listings', readAllAsQuery((from, to) => sb.from('marketplace_saves').select('listing_id, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 })),
     safe<CreatorStore>('Stores', sb.from('marketplace_stores').select('id, member_id, name, emoji, is_active').eq('family_id', familyId)),
-    safe<{ store_id: string; member_id: string }>('Store follows', sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000)),
+    safe<{ store_id: string; member_id: string }>('Store follows', readAllAsQuery((from, to) => sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 })),
     safe<{ listing_id: string | null; reviewee_member: string | null; rating: number; created_at: string; id: string }>(
       'Reviews',
       settle(sb.from('marketplace_reviews').select('id, listing_id, reviewee_member, rating, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(500))),
@@ -109,7 +113,7 @@ export default async function MarketplaceHomePage() {
     safe<{ id: string; name: string; emoji: string | null; description: string | null }>(
       'Collections',
       settle(sb.from('marketplace_collections').select('id, name, emoji, description').eq('family_id', familyId).limit(8))),
-    safe<{ collection_id: string }>('Collection items', sb.from('marketplace_collection_items').select('collection_id').eq('family_id', familyId).limit(2000)),
+    safe<{ collection_id: string }>('Collection items', readAllAsQuery((from, to) => sb.from('marketplace_collection_items').select('collection_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 })),
   ]);
 
   // ── Derived intelligence (all pure engines) ─────────────────────────────────

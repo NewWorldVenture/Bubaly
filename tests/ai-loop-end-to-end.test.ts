@@ -128,6 +128,11 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
   let planId = '';
   const kicks: { runId: string; budgetMs: number }[] = [];
 
+  // This case builds the whole scripted plan through the real intake path and
+  // lands within a few hundred milliseconds of vitest's 5s default, so it fails
+  // on a slower machine while passing in CI — a flake waiting for whoever runs
+  // the suite on a laptop. The budget is stated rather than inherited; it is
+  // not a licence for the case to get slower.
   it('files the request and answers with a persisted plan before any execution', async () => {
     const { submitRequest } = await import('@/lib/ai/runs/intake');
     const result = await submitRequest(scope(), { text: 'Plan our week' }, {
@@ -171,7 +176,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     expect(db.table('ai_run_events').filter((e) => e.run_id === runId).map((e) => e.event_type)).toContain('planned');
     // The request's context snapshot was persisted for the audit trail.
     expect(db.table('ai_request_context').some((c) => c.request_id === requestId)).toBe(true);
-  });
+  }, 30_000);
 
   it('executes the run through the real executor, tools and services, and parks at the follow-up', async () => {
     const { continueRun } = await import('@/lib/ai/runs/continue');

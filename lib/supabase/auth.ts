@@ -3,8 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { createServer } from './server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { tierToLevel } from '@/lib/features/tiers';
-import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
+import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isRetryableAuthError } from '@/lib/auth/session';
 import type { MemberRole } from '@/lib/constants/roles';
@@ -242,18 +241,10 @@ export async function requireFeature(key: string): Promise<UserContext> {
   if (await isSuperAdmin()) return ctx;
 
   const supabase = await createServer();
-  const [level, byHref] = await Promise.all([
-    resolveFamilyPlanLevel(supabase, ctx.active.familyId),
-    getFeatureTiersByHref(supabase),
-  ]);
-
-  const tier = byHref[key];
-  if (tier === undefined) return ctx;   // route not in the catalog → not gated
-  if (tier === 'off') notFound();
-
-  const need = tierToLevel(tier); // 0 / 1 / 2
-  if (level < need) {
-    redirect(`/dashboard/billing?upgrade=1&need=${need}`);
-  }
-  return ctx;
+  // Resolved by the same function the pipelines behind this page use, so a
+  // screen and its cron/API/webhook cannot disagree about who is entitled.
+  const entitlement = await resolveFeatureEntitlement(supabase, ctx.active.familyId, key);
+  if (entitlement.allowed) return ctx;
+  if (entitlement.reason === 'off') notFound();
+  redirect(`/dashboard/billing?upgrade=1&need=${entitlement.needLevel}`);
 }

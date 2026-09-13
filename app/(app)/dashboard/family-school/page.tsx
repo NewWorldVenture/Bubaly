@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { GraduationCap, BookOpen, CalendarClock, Award, NotebookPen } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function FamilySchoolPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-school');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date().toISOString();

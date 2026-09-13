@@ -116,6 +116,7 @@ describe('registry rows reach the sitemap only when they are pages', () => {
     } as Record<string, unknown[]>;
 
     vi.doMock('@/lib/blog/posts', () => ({
+      getAllPostRefs: vi.fn(async () => [{ slug: 'a-real-post', date: '2026-02-01', updatedAt: undefined }]),
       getAllPosts: vi.fn(async () => [{ slug: 'a-real-post', date: '2026-02-01', updatedAt: undefined }]),
       ALL_CATEGORIES: [],
     }));

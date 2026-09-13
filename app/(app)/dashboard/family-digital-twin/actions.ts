@@ -9,6 +9,7 @@ import {
   simulateDecision, projectActivity,
   type SimResult, type SimBudget, type SimEvent, type ActivityDecision, type ProjectionResult,
 } from '@/lib/twin/simulate';
+import { readAll } from '@/lib/supabase/read-all';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -72,9 +73,13 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
   let budgets: SimBudget[] = [];
   if (b) {
     const start = periodStart(b.period, new Date());
-    const { data: tx } = await supabase
+    // This total drives the budget the simulation is checked against, so a
+    // capped read understates spending. `.limit(2000)` was never 2,000 —
+    // PostgREST caps a response at db-max-rows whatever the client asks for.
+    const { rows: tx } = await readAll((from, to) => supabase
       .from('transactions').select('amount').eq('family_id', familyId)
-      .eq('type', 'expense').ilike('category', b.category).gte('date', start).limit(2000);
+      .eq('type', 'expense').ilike('category', b.category).gte('date', start)
+      .order('id').range(from, to), { max: 2000 });
     const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
     budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
   }
@@ -127,8 +132,10 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
     const b = (budgetRows ?? []).find((x) => x.category.toLowerCase() === input.costCategory!.toLowerCase());
     if (b) {
       const start = periodStart(b.period, now);
-      const { data: tx } = await supabase.from('transactions').select('amount')
-        .eq('family_id', familyId).eq('type', 'expense').ilike('category', b.category).gte('date', start).limit(2000);
+      // Same total, same reason as above.
+      const { rows: tx } = await readAll((from, to) => supabase.from('transactions').select('amount')
+        .eq('family_id', familyId).eq('type', 'expense').ilike('category', b.category).gte('date', start)
+        .order('id').range(from, to), { max: 2000 });
       const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
       budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
     }

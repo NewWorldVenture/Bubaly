@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -24,6 +25,10 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not.
+  // Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/behavior']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-behavior-insight:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
     { error: t('insight.tooManyBehaviorInsightRequests') },

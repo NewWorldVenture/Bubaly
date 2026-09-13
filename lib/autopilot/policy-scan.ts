@@ -23,6 +23,7 @@ import {
   POLICY_SUGGESTION_KIND, POLICY_WINDOW_DAYS,
   type ApprovalHistoryRow, type ExistingAiPolicy, type PolicyCandidate, type ToolCallHistoryRow,
 } from '@/lib/autopilot/policy-candidates';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -60,9 +61,10 @@ export async function loadPolicyHistory(supabase: DB, familyId: string, now: Dat
       .eq('family_id', familyId).eq('requested_by_kind', 'ai')
       .in('status', ['approved', 'rejected', 'modified'])
       .gte('decided_at', sinceIso).limit(1000),
-    supabase.from('ai_tool_calls')
+    readAllAsQuery((from, to) => supabase.from('ai_tool_calls')
       .select('id, tool_name, state, created_at')
-      .eq('family_id', familyId).gte('created_at', sinceIso).limit(2000),
+      .eq('family_id', familyId).gte('created_at', sinceIso)
+      .order('id').range(from, to), { max: 2000 }),
     // A policy addressed to `everyone` reaches Bubaly too, so an offer under it
     // would be redundant the moment it was accepted.
     supabase.from('trust_policies')

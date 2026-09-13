@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -23,6 +24,10 @@ export async function POST(req: Request) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: tr('diagnose.unauthorized') }, { status: 401 }); }
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not, and it
+  // calls a model. Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/home']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-home-diagnose:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
     { error: tr('diagnose.tooManyDiagnosisRequestsPlease') },

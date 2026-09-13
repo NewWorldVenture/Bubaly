@@ -9,6 +9,7 @@ import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Family Treasury' };
 export const dynamic = 'force-dynamic';
@@ -31,9 +32,12 @@ export default async function WalletTreasuryPage() {
   const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }, { data: goals, error: goalsError }, { data: rules, error: rulesError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
-    supabase.from('wallet_transactions')
+    // Balances are summed from these rows, so a capped read is a wrong balance —
+    // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
+    // response at db-max-rows whatever the client asked for.
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, created_at')
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(5000),
+      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 5000 }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('wallet_goals')
       .select('id, child_wallet_id, title, target_cents, saved_cents, status, kind')

@@ -8,6 +8,7 @@ import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '
 import type { SyncProviderEnum } from '@/lib/database.types';
 import { finishOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
 import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
+import { logSyncAudit } from '@/lib/sync/audit';
 
 // Provider-generic OAuth callback (R9): exchanges the code via the registry
 // adapter, resolves the account identity, and stores everything (tokens
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
       scope: tokens.scope ?? null,
       tokens,
     });
-    await admin.from('sync_audit_logs').insert({
+    await logSyncAudit(admin, {
       user_id: ctx.user.id, family_id: ctx.active.familyId, provider, action: 'connect',
       detail: { identity },
     });

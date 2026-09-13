@@ -22,7 +22,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ChevronLeft, ChevronRight, History } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -93,7 +93,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
   const before = parseRunHistoryCursor(params.before);
   const selfHref = historyHref(filter, before);
 
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/concierge/runs');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 

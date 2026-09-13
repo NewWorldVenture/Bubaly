@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { History } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ConciergeModule } from '@/components/modules/concierge-module';
 import { loadFamilyContext } from '@/lib/reasoning/context';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ConciergePage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/concierge');
   const supabase = await createServer();
   // R2: the concierge reasons over Knowledge Graph relationships. Keep the
   // primary module available, but make a failed shared read visible.

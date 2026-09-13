@@ -23,7 +23,16 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 type Params = { params: Promise<{ slug: string }> };
 
-export const revalidate = 3600;
+// Locale is resolved per request from the cookie and Accept-Language, so this
+// page CANNOT be cached per URL — and declaring `revalidate` while reading
+// cookies is not a no-op, it is a runtime failure. Next prerenders the route,
+// then sees the cookie read on a later request and throws
+// "Page changed from static to dynamic at runtime … reason: cookies".
+// On /blog/[slug] that surfaced as a 500 for every slug not baked in at build
+// time — which, with `dynamicParams = true`, is every post published since the
+// last deploy, and every unknown slug a crawler tries (a 404 is the right
+// answer there, not a 500).
+export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
 
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
@@ -77,7 +86,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       description: post.excerpt,
       authors: [post.author],
       publishedTime: post.date,
-      modifiedTime: post.date,
+      modifiedTime: post.updatedAt ?? post.date,
       section: post.category,
       tags: keywords,
       ...(post.heroImageUrl
@@ -126,6 +135,7 @@ export default async function BlogPostPage({ params }: Params) {
         author={post.author}
         category={post.category}
         date={post.date}
+        updatedAt={post.updatedAt}
         heroImageUrl={post.heroImageUrl}
         keywords={articleHashtags(post.tags, 10).map((h) => h.replace(/^#/, ''))}
         wordCount={wordCount}

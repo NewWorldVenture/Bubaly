@@ -17,7 +17,12 @@ const posts = [
   { slug: 'never-edited', date: '2026-02-14', updatedAt: undefined },
 ];
 
+// The sitemap reads `getAllPostRefs` — slug and dates only. It is the same rows
+// as `getAllPosts`, minus the excerpts and hero-image metadata a sitemap entry
+// has no use for; the route renders per request now, so the projection is the
+// difference between reading ~1 MB on every crawl and a few tens of kilobytes.
 vi.mock('@/lib/blog/posts', () => ({
+  getAllPostRefs: vi.fn(async () => posts),
   getAllPosts: vi.fn(async () => posts),
   ALL_CATEGORIES: ['Family', 'Money'],
 }));

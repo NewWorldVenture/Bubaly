@@ -6,6 +6,7 @@ import { runPrepGeneration } from '@/lib/planning/prep-server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { needsRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -21,7 +22,11 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createServiceClient();
     const now = new Date();
-    const { data: families, error } = await supabase.from('families').select('id').limit(5000);
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: families, error } = await readAll((from, to) => supabase
+      .from('families').select('id').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Batch the skip-decision reads into ONE query instead of 2-per-family, so the
@@ -30,8 +35,12 @@ export async function GET(req: NextRequest) {
     // last-refresh time. Best-effort: if the table isn't migrated yet, the map is
     // empty and every family falls through to a refresh.
     const dirtyByFamily = new Map<string, { dirty: boolean; refreshedAt: string | null }>();
-    const { data: dirtyRows, error: dirtyRowsError } = await supabase.from('family_model_dirty')
-      .select('family_id, dirty, refreshed_at').limit(10000);
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: dirtyRows, error: dirtyRowsError } = await readAll((from, to) => supabase
+      .from('family_model_dirty')
+      .select('family_id, dirty, refreshed_at').order('family_id').range(from, to), { max: 10000 });
     if (dirtyRowsError) throw dirtyRowsError;
     for (const r of dirtyRows ?? []) {
       dirtyByFamily.set(r.family_id, { dirty: r.dirty ?? false, refreshedAt: r.refreshed_at ?? null });

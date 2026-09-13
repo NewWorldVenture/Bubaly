@@ -57,6 +57,9 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   const calls: { table: string; operation: string; count: number; limit: number; filter?: string }[] = [];
   const from = (table: string) => {
     let operation = 'select', patch: PushFixtureRow = {}, limit = Infinity, expression: string | undefined;
+    // readAll() pages with .order().range(); without range support the whole
+    // paged read threw, and a cron route that should answer 502 answered 500.
+    let rangeFrom: number | undefined, rangeTo: number | undefined;
     const filters: ((row: PushFixtureRow) => boolean)[] = [];
     const orders: { key: string; ascending: boolean }[] = [];
     const execute = () => {
@@ -74,14 +77,19 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
         calls.push({ table, operation, count: 1, limit });
         return { data: [{ ...patch }], error: null };
       }
-      const rows = tables[table].filter(row => filters.every(filter => filter(row)))
+      const ordered = tables[table].filter(row => filters.every(filter => filter(row)))
         .sort((a, b) => {
           for (const order of orders) {
             const result = compare(order.key, a[order.key], b[order.key]);
             if (result) return order.ascending ? result : -result;
           }
           return 0;
-        }).slice(0, operation === 'select' ? Math.min(limit, options.maxRows ?? Infinity) : limit);
+        });
+      // PostgREST's range is inclusive at both ends. Applying it BEFORE maxRows
+      // keeps the fixture honest about the real shape: the caller asks for a
+      // window, and the server may still answer with fewer rows than it spans.
+      const windowed = rangeFrom === undefined ? ordered : ordered.slice(rangeFrom, (rangeTo ?? ordered.length) + 1);
+      const rows = windowed.slice(0, operation === 'select' ? Math.min(limit, options.maxRows ?? Infinity) : limit);
       calls.push({ table, operation, count: rows.length, limit, filter: expression });
       if (operation === 'update') {
         for (const row of rows) { Object.assign(row, patch); if (table === 'notifications') stamps.push(String(row.id)); }
@@ -97,7 +105,10 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       gt: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) > 0); return query; },
       lte: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) <= 0); return query; },
       or: (value: string) => { expression = value; filters.push(row => clauses(value).some(part => matches(row, part))); return query; },
-      order: (key: string, options: { ascending: boolean }) => { orders.push({ key, ascending: options.ascending }); return query; },
+      // `.order('id')` with no second argument is ascending, which is how
+      // readAll() calls it.
+      order: (key: string, options?: { ascending?: boolean }) => { orders.push({ key, ascending: options?.ascending ?? true }); return query; },
+      range: (start: number, end: number) => { rangeFrom = start; rangeTo = end; return query; },
       limit: (value: number) => { limit = value; return query; },
       update: (value: PushFixtureRow) => { operation = 'update'; patch = value; return query; },
       upsert: (value: PushFixtureRow) => { operation = 'upsert'; patch = value; return query; },

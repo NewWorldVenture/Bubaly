@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
 import { dispatchPendingPushes } from '@/lib/server/push';
@@ -13,6 +14,10 @@ export async function POST() {
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
+    // The page in front of this is feature-gated; this endpoint was not.
+    // Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/notifications']);
+    if (refused) return refused;
     const limited = await enforceRequestRateLimit(
       supabase,
       `notifications:generate:${ctx.active.familyId}:${ctx.user.id}`,

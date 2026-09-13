@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -39,6 +40,10 @@ export async function POST(req: Request) {
   const weeklyBudget = typeof body.weeklyBudget === 'number' && body.weeklyBudget > 0 ? Math.round(body.weeklyBudget) : null;
 
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not, and it
+  // calls a model. Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/kitchen']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-chef:${ctx.user.id}`, { limit: 15 });
   if (!limited.ok) return NextResponse.json(
     { error: t('chef.tooManyChefRequestsPlease') },

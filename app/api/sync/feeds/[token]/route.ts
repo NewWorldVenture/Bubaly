@@ -4,6 +4,7 @@ import { generateICS, type IcsEvent } from '@/lib/sync/ics';
 import { isValidFeedToken } from '@/lib/sync/feed-request';
 import { clientIp, rateLimit } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
+import { readAll } from '@/lib/supabase/read-all';
 
 // Public iCalendar feed for a single bubaly calendar.
 //
@@ -53,14 +54,18 @@ export async function GET(
 
   // Pull the next ~13 months of non-deleted events (subscribers re-poll).
   const horizon = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: rows } = await supabase
+  // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
+  // whatever the client asked for, so a busy calendar published 1,000 events and
+  // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
+  const { rows } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
     .is('deleted_at', null)
     .lte('starts_at', horizon)
     .order('starts_at', { ascending: true })
-    .limit(2000);
+    .order('id')
+    .range(from, to), { max: 2000 });
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,

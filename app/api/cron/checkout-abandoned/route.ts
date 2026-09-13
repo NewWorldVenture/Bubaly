@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { selectAbandonedSessions } from '@/lib/billing/checkout-abandonment';
@@ -19,10 +20,17 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const { data: pending, error } = await supabase
+  // Every one, not the first thousand: an unbounded select stops at PostgREST's
+  // row ceiling and reports nothing, so the reminders past it would simply never
+  // be sent. See lib/supabase/read-all.ts.
+  const { rows: pending, error } = await readAll<{
+    session_id: string; email: string | null; name: string | null; status: string; created_at: string;
+  }>((from, to) => supabase
     .from('checkout_sessions')
     .select('session_id, email, name, status, created_at')
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .order('session_id')
+    .range(from, to));
   if (error) {
     console.error('Abandoned-checkout cron read failed:', error);
     return NextResponse.json({ error: t('checkoutAbandoned.abandonedCheckoutProcessingFailed') }, { status: 500 });

@@ -10,6 +10,7 @@ import { summarizeReferrals, payoutByAffiliate, type ReferralLike } from '@/lib/
 import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -27,7 +28,8 @@ export default async function AffiliatesPage() {
   const supabase = createServiceClient();
   const [affiliatesResult, referralsResult] = await settleAll([
     supabase.from('affiliates').select('*').order('created_at', { ascending: false }).limit(200),
-    supabase.from('affiliate_referrals').select('affiliate_id, status, commission_cents').limit(10000),
+    // `.limit(N)` above 1,000 is not a bound — PostgREST caps at db-max-rows.
+    readAllAsQuery((from, to) => supabase.from('affiliate_referrals').select('affiliate_id, status, commission_cents').order('id').range(from, to), { max: 10000 }),
   ]);
   const readError = affiliatesResult.error ?? referralsResult.error;
   if (readError) {

@@ -8,6 +8,7 @@ import { githubRepoStatus } from '@/lib/integrations/github';
 import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/components/admin/feedback-admin';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -22,10 +23,13 @@ export default async function AdminFeedbackPage() {
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1000)),
-    settle(supabase.from('feedback_comments')
+    // `.limit(3000)` was never 3,000 — PostgREST caps at db-max-rows — and
+    // `created_at` alone is not a total order, so pages could also overlap.
+    readAllAsQuery((from, to) => supabase.from('feedback_comments')
       .select('id, idea_id, author_name, is_team, body, created_at')
       .order('created_at', { ascending: true })
-      .limit(3000)),
+      .order('id')
+      .range(from, to), { max: 3000 }),
     settle(supabase.from('admin_notifications')
       .select('id, kind, title, body, url, is_read, created_at')
       .order('created_at', { ascending: false })

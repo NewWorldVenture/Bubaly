@@ -9,6 +9,7 @@ import { FollowButton } from '@/components/marketplace/follow-button';
 import { rankCreators, type CreatorStore } from '@/lib/marketplace/discover';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Creators · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,8 @@ export default async function MarketplaceCreatorsPage() {
 
   const [{ data: stores, error: storesError }, { data: follows, error: followsError }, { data: reviews, error: reviewsError }, { data: listings, error: listingsError }] = await settleAll([
     sb.from('marketplace_stores').select('id, member_id, name, tagline, emoji, is_active').eq('family_id', familyId),
-    sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).limit(2000),
+    // Follower counts, so a capped read is a wrong number, not a short list.
+    readAllAsQuery((from, to) => sb.from('marketplace_follows').select('store_id, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
     sb.from('marketplace_reviews').select('reviewee_member, rating').eq('family_id', familyId).limit(1000),
     sb.from('marketplace_listings').select('member_id').eq('family_id', familyId).in('status', ['available', 'pending']).limit(1000),
   ]);

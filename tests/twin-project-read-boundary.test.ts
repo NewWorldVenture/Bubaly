@@ -17,12 +17,21 @@ type Reply = { data: unknown; error: { message: string } | null };
  * A PostgREST-shaped stub. Every filter returns the chain and the chain is
  * awaitable at any point, so one stub serves reads that end in `.limit()`,
  * `.eq()`, `.is()` or `.in()` alike.
+ *
+ * `.range(from, to)` actually SLICES, which is the only way a paged read can
+ * finish against a stub: `readAll` keeps asking until a page comes back empty,
+ * so a builder that returned every row to every call would page to its ceiling.
  */
 function chainFor(reply: Reply) {
   const chain: Record<string, unknown> = {};
   for (const method of ['select', 'eq', 'neq', 'gte', 'gt', 'lt', 'lte', 'is', 'in', 'not', 'limit', 'order']) {
     chain[method] = () => chain;
   }
+  chain.range = (from: number, to: number) => ({
+    then: (resolve: (r: Reply) => unknown) => Promise.resolve(
+      Array.isArray(reply.data) ? { ...reply, data: reply.data.slice(from, to + 1) } : reply,
+    ).then(resolve),
+  });
   chain.then = (resolve: (r: Reply) => unknown) => Promise.resolve(reply).then(resolve);
   return chain;
 }

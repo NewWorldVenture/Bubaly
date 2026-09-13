@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { syncFeed } from '@/lib/server/calendar-feeds';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
@@ -15,9 +16,12 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const { data: feeds, error } = await supabase
-    .from('calendar_feeds')
-    .select('id, family_id, url');
+  // Every one, not the first thousand: an unbounded select stops at PostgREST's
+  // row ceiling and reports nothing, so the reminders past it would simply never
+  // be sent. See lib/supabase/read-all.ts.
+  const { rows: feeds, error } = await readAll<{ id: string; family_id: string; url: string }>(
+    (from, to) => supabase.from('calendar_feeds').select('id, family_id, url').order('id').range(from, to),
+  );
   if (error) {
     console.error('Calendar-feed cron read failed:', error);
     return NextResponse.json({ error: t('calendarFeeds.calendarFeedProcessingFailed') }, { status: 500 });

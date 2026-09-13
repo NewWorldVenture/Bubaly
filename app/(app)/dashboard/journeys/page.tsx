@@ -10,6 +10,7 @@ import {
   type JourneyEventLike,
 } from '@/lib/analytics/journey';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Journey Analytics' };
 export const dynamic = 'force-dynamic';
@@ -21,12 +22,16 @@ export default async function JourneysPage() {
   if (!(await isSuperAdmin())) notFound();
 
   const supabase = await createServer();
-  const { data, error } = await supabase
+  // `.limit(5000)` was never 5,000 — PostgREST caps at db-max-rows — and this
+  // page aggregates funnel timings, so a capped read is a wrong number rather
+  // than a short list. `id` breaks `created_at` ties between pages.
+  const { rows: data, error } = await readAll((from, to) => supabase
     .from('journey_events')
     .select('journey, phase, step, duration_ms, session_id, created_at')
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: false })
-    .limit(5000);
+    .order('id')
+    .range(from, to), { max: 5000 });
 
   // A failed telemetry read must not masquerade as "no events" — that would tell
   // the operator onboarding traffic is zero when the query actually errored.

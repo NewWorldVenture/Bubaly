@@ -10,7 +10,13 @@ function queryResult(result: { data: unknown; error: unknown }) {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    order: () => chain,
     limit: () => Promise.resolve(result),
+    // `.range()` slices: `readAll` keeps asking until a page comes back empty,
+    // so a stub handing every row to every call would page to its ceiling.
+    range: (from: number, to: number) => Promise.resolve(
+      Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result,
+    ),
   };
   return chain;
 }

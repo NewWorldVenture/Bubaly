@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Brain, Repeat, BookOpen, Trophy, Target, Sparkles } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function FamilyDigitalTwinPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-digital-twin');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);

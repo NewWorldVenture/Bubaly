@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { runGoogleSync } from '@/lib/sync/engine/google';
 import type { Json } from '@/lib/database.types';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { logSyncAudit } from '@/lib/sync/audit';
 
 // Runs a two-way Google sync for the current user's connected account.
 export async function POST() {
@@ -34,7 +35,7 @@ export async function POST() {
 
   const result = await runGoogleSync(admin, account);
 
-  await admin.from('sync_audit_logs').insert({
+  await logSyncAudit(admin, {
     user_id: ctx.user.id, family_id: ctx.active.familyId, provider: 'google', action: 'sync',
     detail: result as unknown as Json,
   });

@@ -32,7 +32,13 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export const revalidate = 3600;
+// Locale is resolved per request from the cookie and Accept-Language, so this
+// page CANNOT be cached per URL — and declaring `revalidate` while reading
+// cookies is not a no-op, it is a runtime failure. Next prerenders the route,
+// then sees the cookie read on a later request and throws
+// "Page changed from static to dynamic at runtime … reason: cookies", so the
+// background revalidation never succeeds and the page silently stops updating.
+export const dynamic = 'force-dynamic';
 
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
   'Parenting': 'border-violet-200 bg-violet-100 text-violet-800 dark:border-violet-400/20 dark:bg-violet-500/15 dark:text-violet-300',

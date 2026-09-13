@@ -7,6 +7,7 @@ import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/set
 
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Admin · Family Wallet', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,9 @@ export default async function AdminWalletPage() {
     supabase.from('child_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('gift_payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('parent_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').limit(10000),
+    // Money: `.limit(10000)` was never 10,000 (PostgREST caps at db-max-rows),
+    // so this platform total was the sum of 1,000 arbitrary rows.
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').order('id').range(from, to), { max: 10000 }),
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);

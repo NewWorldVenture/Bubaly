@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -32,10 +33,14 @@ export async function GET(req: NextRequest) {
 
     // Find families with recent Guardian activity (last 60 days).
     const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: recent, error: recentError } = await gFrom('guardian_communications')
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: recent, error: recentError } = await readAll((from, to) => gFrom('guardian_communications')
       .select('family_id')
       .gte('started_at', since)
-      .limit(5000);
+      .order('id')
+      .range(from, to), { max: 5000 });
     if (recentError) throw new Error('Guardian activity lookup failed');
 
     const rows = (recent ?? []) as Array<{ family_id: string }>;

@@ -22,6 +22,7 @@ import {
   computeOperatingIndex,
   type HouseholdSnapshot, type OperatingIndex,
 } from '@/lib/operating-index/score';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -188,12 +189,18 @@ export function contextSummary(ctx: FamilyContext): string {
  */
 export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<Graph> {
   const [ents, edges] = await settleAll([
-    supabase.from('graph_entities')
+    // These used to read `.limit(4000)` / `.limit(8000)`, and neither was a
+    // bound: PostgREST caps a response at db-max-rows whatever the client asks
+    // for. Measured on seeded data — one household holds 3,709 graph entities
+    // and `.limit(4000)` returned exactly 1,000 of them. The docstring above
+    // says a partial relationship view must not be presented as current; this
+    // is the read that has to make that true.
+    readAllAsQuery((from, to) => supabase.from('graph_entities')
       .select('id, kind, name, ref_table, ref_id, attributes')
-      .eq('family_id', familyId).limit(4000),
-    supabase.from('graph_edges')
+      .eq('family_id', familyId).order('id').range(from, to), { max: 4000 }),
+    readAllAsQuery((from, to) => supabase.from('graph_edges')
       .select('id, source_id, target_id, relation, weight, attributes')
-      .eq('family_id', familyId).limit(8000),
+      .eq('family_id', familyId).order('id').range(from, to), { max: 8000 }),
   ]);
   const readError = ents.error ?? edges.error;
   if (readError) {

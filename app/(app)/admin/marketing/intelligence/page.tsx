@@ -8,6 +8,7 @@ import {
 } from '@/lib/marketing/attribution';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -34,8 +35,10 @@ export default async function IntelligencePage() {
     results = await settleAll([
       supabase.from('mkt_visitors').select('*', { count: 'exact', head: true }),
       supabase.from('mkt_sessions').select('*', { count: 'exact', head: true }),
-      supabase.from('mkt_sessions').select('source').limit(5000),
-      supabase.from('mkt_touchpoints').select('visitor_id, source, kind, occurred_at').limit(10000),
+      // `.limit(N)` above 1,000 is not a bound — PostgREST caps at db-max-rows,
+      // so these attribution totals were computed from 1,000 rows apiece.
+      readAllAsQuery((from, to) => supabase.from('mkt_sessions').select('source').order('id').range(from, to), { max: 5000 }),
+      readAllAsQuery((from, to) => supabase.from('mkt_touchpoints').select('visitor_id, source, kind, occurred_at').order('id').range(from, to), { max: 10000 }),
     ]);
   } catch {
     return <ReadFailure />;

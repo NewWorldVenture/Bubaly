@@ -8,6 +8,7 @@ import { ListingImage } from '@/components/marketplace/listing-image';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -31,11 +32,14 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
     return <ErrorState message={t('collections.couldNotLoadYourMarketplace')} />;
   }
 
-  const { data: items, error: itemsError } = await sb
+  // `.limit(2000)` was never 2,000 — PostgREST caps at db-max-rows — so past
+  // 1,000 items a collection silently rendered short.
+  const { rows: items, error: itemsError } = await readAll((from, to) => sb
     .from('marketplace_collection_items')
     .select('collection_id, listing_id')
     .eq('family_id', ctx.active.familyId)
-    .limit(2000);
+    .order('id')
+    .range(from, to), { max: 2000 });
   if (itemsError) {
     console.error('[marketplace-collections] Collection items read failed', itemsError);
     dataWarnings.push('Collection items');

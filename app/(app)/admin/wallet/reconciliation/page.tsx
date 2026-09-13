@@ -6,6 +6,7 @@ import { reconcileLedger, type ReconTxn } from '@/lib/wallet/reconcile';
 import { ErrorState } from '@/components/ui/states';
 import { ReconciliationClient } from './reconciliation-client';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Admin · Wallet Reconciliation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -16,11 +17,15 @@ export default async function ReconciliationPage() {
 
   // Pull buckets to map bucket_id → kind, then the ledger rows.
   const [bucketsResult, txnsResult] = await settleAll([
-    supabase.from('wallet_buckets').select('id, kind').limit(20000),
-    supabase.from('wallet_transactions')
+    // This page RECONCILES the ledger, so reading part of it is worse than not
+    // reading it at all: `.limit(20000)` returned 1,000 rows (PostgREST caps at
+    // db-max-rows) and every discrepancy past that went unreported.
+    readAllAsQuery((from, to) => supabase.from('wallet_buckets').select('id, kind').order('id').range(from, to), { max: 20000 }),
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, direction, amount_cents, status, type, reverses_id, created_at')
       .order('created_at', { ascending: false })
-      .limit(20000),
+      .order('id')
+      .range(from, to), { max: 20000 }),
   ]);
 
   const readError = bucketsResult.error ?? txnsResult.error;

@@ -11,6 +11,7 @@ import {
   projectTwin, projectionSummary, eventWindow, stalePrunableEntityIds,
   type TwinSnapshot,
 } from './project';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -177,8 +178,15 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     }
   }
 
-  const { data: idRows, error: readErr } = await sb.from('graph_entities')
-    .select('id, ref_table, ref_id, attributes').eq('family_id', familyId).not('ref_id', 'is', null);
+  // Every node, not the first thousand. This read decides what gets PRUNED, and
+  // a household holding 3,709 graph entities (measured, on seeded data) handed
+  // back 1,000 of them — so stale nodes past that point were never judged and
+  // lingered forever, claiming to be current. Reading short here can only
+  // under-prune, never delete a live node, because only nodes this read SAW are
+  // eligible; that is why it was invisible.
+  const { rows: idRows, error: readErr } = await readAll((from, to) => sb.from('graph_entities')
+    .select('id, ref_table, ref_id, attributes').eq('family_id', familyId)
+    .not('ref_id', 'is', null).order('id').range(from, to));
   if (readErr) {
     console.error('[twin] graph_entities read failed', readErr);
     return { ok: false, error: readErr.message, entities: 0, edges: 0 };

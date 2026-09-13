@@ -20,6 +20,7 @@
 //      snippet of the input in JSON.parse messages, and the input here is text
 //      about a child's behaviour.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { entitledServiceClient } from './helpers/entitled-service-client';
 
 const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(),
@@ -32,7 +33,14 @@ const mocks = vi.hoisted(() => ({
   recordModelCall: vi.fn(),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
+// The route resolves the family's plan before it works, through the service
+// client (see tests/helpers/entitled-service-client.ts). Seeded as entitled so
+// these keep testing what they are named for; the gate itself is covered by
+// tests/route-plan-gate.test.ts.
+vi.mock('@/lib/supabase/server', () => ({
+  createServer: mocks.createServer,
+  createServiceClient: () => entitledServiceClient(),
+}));
 vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
 vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, updateRequest: mocks.updateRequest }));

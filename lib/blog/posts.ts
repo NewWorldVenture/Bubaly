@@ -1,5 +1,7 @@
+import { unstable_rethrow } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
 import type { Database } from '@/lib/database.types';
 
 export type BlogCategory =
@@ -46,11 +48,31 @@ export function isSyntheticBlogSeedSlug(slug: string): boolean {
 const publicRows = (rows: Row[] | null): Row[] =>
   (rows ?? []).filter((row) => !isSyntheticBlogSeedSlug(row.slug));
 
+/**
+ * A published article is not a static asset, and must never be cached as one.
+ *
+ * Next patches `fetch` and, for a route it PRERENDERS, stores the response in
+ * the build Data Cache under the route's revalidate — for a route with no
+ * revalidate that is one year, with no tag able to clear it. `app/sitemap.ts`
+ * is such a route, and the entry survives in `.next/cache`, which Vercel
+ * restores between deploys.
+ *
+ * Measured: a cache entry written 2026-09-07 held 1,000 rows with
+ * `revalidate: 31536000` and `tags: []`, and a build six days later shipped a
+ * sitemap from it — every article published in between was simply absent from
+ * the file search engines read, and would have stayed absent for a year.
+ *
+ * `no-store` keeps these reads out of that cache. The blog pages themselves are
+ * `force-dynamic`, so nothing there was ever cached and nothing there changes.
+ */
 function anonClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false } },
+    {
+      auth: { persistSession: false },
+      global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+    },
   );
 }
 
@@ -138,28 +160,61 @@ const CARD_COLUMNS =
   'slug, title, excerpt, author, published_at, updated_at, reading_minutes, tags, category, featured, accent_color, hero_image_url, hero_image_alt, hero_image_credit';
 
 async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Promise<Pick<Row, K>[]> {
-  const PAGE = 1000;
-  const out: Pick<Row, K>[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await anonClient()
+  // `slug` breaks ties: 717 of the published rows share a `published_at` with
+  // another row, and a key that is not a total order lets the boundary between
+  // two separately-planned pages move — repeating one row and dropping another.
+  const { rows, error } = await readAll<Pick<Row, K>>(async (from, to) => {
+    const page = await anonClient()
       .from('blog_posts')
       .select(columns)
       .eq('published', true)
       .order('published_at', { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const rows = (data ?? []) as unknown as Pick<Row, K>[];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
+      .order('slug')
+      .range(from, to);
+    return { data: (page.data ?? []) as unknown as Pick<Row, K>[], error: page.error };
+  });
+  if (error) throw error;
+  return rows;
 }
 
 export async function getAllPosts(): Promise<BlogPost[]> {
   try {
     const rows = await fetchAllPublishedRows<keyof Row>(CARD_COLUMNS);
     return publicRows(rows as Row[]).map(toPost);
-  } catch {
+  } catch (error) {
+    // `unstable_rethrow` first: Next signals "this route cannot be static" by
+    // THROWING out of the fetch, and a catch-all that swallows it would let a
+    // route prerender with zero posts and ship that. Only a real read failure
+    // reaches the lines below.
+    unstable_rethrow(error);
+    // Degrading to an empty blog is deliberate — a DB hiccup must not take the
+    // page down — but doing it SILENTLY is how a broken read stays broken. The
+    // stale-sitemap defect hid behind this catch for six days.
+    console.error('[blog] getAllPosts failed — rendering an empty list', error);
+    return [];
+  }
+}
+
+/**
+ * Just the slug and dates of every published article.
+ *
+ * `app/sitemap.ts` needs nothing else, and it is now rendered per request, so
+ * the projection is the difference between reading ~1 MB of excerpts, tags and
+ * hero-image metadata on every crawl and reading a few tens of kilobytes.
+ */
+export async function getAllPostRefs(): Promise<{ slug: string; date: string; updatedAt?: string }[]> {
+  try {
+    const rows = await fetchAllPublishedRows<'slug' | 'published_at' | 'updated_at'>('slug, published_at, updated_at');
+    return publicRows(rows as Row[]).map((r) => ({
+      slug: r.slug,
+      date: r.published_at,
+      // A post edited after publication changed on the EDIT date. Same rule the
+      // full loader applies; the sitemap needs it and nothing else from the row.
+      updatedAt: 'updated_at' in r && typeof r.updated_at === 'string' ? r.updated_at : undefined,
+    }));
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error('[blog] getAllPostRefs failed — sitemap will omit articles', error);
     return [];
   }
 }

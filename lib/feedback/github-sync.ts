@@ -5,6 +5,7 @@ import {
 } from '@/lib/integrations/github';
 import { GH_MARKER_LABEL, feedbackIdFromBody, statusFromIssue } from '@/lib/feedback/github-map';
 import { syncIdeaToGithub } from '@/lib/feedback/notify';
+import { readAll } from '@/lib/supabase/read-all';
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -57,11 +58,15 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
     return { configured: true, created, reconciled: 0, changes, errors: errors + 1 };
   }
 
-  const { data: linked } = await admin
+  // `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows — so past
+  // 1,000 linked ideas the sync stopped seeing the rest and would have started
+  // re-opening issues it believed unlinked.
+  const { rows: linked } = await readAll((from, to) => admin
     .from('feedback_ideas')
     .select('id, title, status, github_issue_number')
     .not('github_issue_number', 'is', null)
-    .limit(3000);
+    .order('id')
+    .range(from, to), { max: 3000 });
   const byNumber = new Map<number, { id: string; title: string; status: string; github_issue_number: number | null }>();
   const byId = new Map<string, { id: string; title: string; status: string; github_issue_number: number | null }>();
   for (const row of linked ?? []) {

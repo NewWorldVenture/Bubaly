@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -25,6 +26,10 @@ export async function POST() {
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not, and it
+  // calls a model. Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/subscriptions']);
+  if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-savings:${ctx.user.id}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
     { error: tr('savings.tooManySavingsRequestsPlease') },

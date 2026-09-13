@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { categorizeQuestions, type QuestionLike } from '@/lib/marketplace/questions';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Questions · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,9 @@ export default async function MarketplaceQuestionsPage() {
   const [{ data: questions }, { data: listings }, { data: members }] = await settleAll([
     sb.from('marketplace_questions').select('id, listing_id, asker_member, question, answer, answered_by, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(500),
-    sb.from('marketplace_listings').select('id, title, member_id').eq('family_id', familyId).limit(2000),
+    // The title lookup every question is joined against: a capped read leaves
+    // questions rendering without the listing they are about.
+    readAllAsQuery((from, to) => sb.from('marketplace_listings').select('id, title, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
     sb.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 

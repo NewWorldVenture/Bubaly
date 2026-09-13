@@ -1,16 +1,14 @@
+import { readAll } from '@/lib/supabase/read-all';
+
 /** Read every page before a caller makes a claim about absent household data.
- * The factory must apply family scope and a stable order on each page. */
+ * The factory must apply family scope and a stable order on each page.
+ *
+ * The paging itself lives in `readAll` — there is one loop, not two. This wrapper
+ * keeps the stricter contract its callers rely on: a failure anywhere yields no
+ * rows at all, so a partial read can never be mistaken for the household's
+ * complete history. */
 export async function readAllPages<T>(read: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<{ data: T[] | null; error: unknown }> {
-  const rows: T[] = [];
-  const pageSize = 400;
-  for (let from = 0; ;) {
-    const page = await read(from, from + pageSize - 1);
-    if (page.error) return { data: null, error: page.error };
-    if (!page.data) return { data: null, error: new Error('The data page was unavailable') };
-    if (page.data.length === 0) return { data: rows, error: null };
-    rows.push(...page.data);
-    // A server may cap responses below our requested range. Only an empty
-    // next page proves exhaustion; advance by the rows actually received.
-    from += page.data.length;
-  }
+  const { rows, error } = await readAll<T, unknown>(read);
+  if (error) return { data: null, error };
+  return { data: rows, error: null };
 }

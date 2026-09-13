@@ -10,6 +10,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { computeMatches, type MatchListing, type MarketplaceMatch } from '@/lib/marketplace/matches';
 import { KIND_LABELS, type ListingKind } from '@/lib/marketplace/listings';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -43,12 +44,14 @@ function reasonFor(wantedTitle: string, supplyTitle: string, supplyKind: string,
  */
 export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: string | null): Promise<EnrichedMatch[]> {
   try {
-    const { data: rows } = await sb
+    // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows.
+    const { rows } = await readAll((from, to) => sb
       .from('marketplace_listings')
       .select('id, kind, category, status, title, member_id, price_cents')
       .eq('family_id', familyId)
       .in('status', ['available', 'pending'])
-      .limit(2000);
+      .order('id')
+      .range(from, to), { max: 2000 });
 
     const listings = (rows ?? []) as MatchListing[];
     const matches = computeMatches(listings);

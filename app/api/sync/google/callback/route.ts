@@ -7,6 +7,7 @@ import { hasEncryptionKey } from '@/lib/sync/crypto';
 import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 import { finishOnboardingCalendarOAuth } from '@/lib/services/onboarding-calendar/oauth';
 import { calendarContinuationCookie } from '@/lib/onboarding/calendar-state';
+import { logSyncAudit } from '@/lib/sync/audit';
 
 // Google redirects here after consent. Exchanges the code for tokens, fetches the
 // account email, and stores everything (tokens AES-256-GCM encrypted) via
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
       scope: tokens.scope ?? null,
       tokens,
     });
-    await admin.from('sync_audit_logs').insert({
+    await logSyncAudit(admin, {
       user_id: ctx.user.id, family_id: ctx.active.familyId, provider: 'google', action: 'connect',
       detail: { email },
     });

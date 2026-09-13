@@ -8,6 +8,7 @@ import { WalletActivityView } from '@/components/wallet/activity-view';
 import { isManager } from '@/lib/constants/roles';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Wallet Activity' };
 
@@ -28,7 +29,10 @@ export default async function WalletActivityPage() {
 
   const [{ data: childWallets, error: childWalletsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId),
-    supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(2000),
+    // Balances are summed from these rows, so a capped read is a wrong balance —
+    // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
+    // response at db-max-rows whatever the client asked for.
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
   if (childWalletsError) { console.error('[wallet-activity] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
