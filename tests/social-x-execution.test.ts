@@ -313,7 +313,11 @@ describe('X publish failure and authority boundaries', () => {
     if (reason === 'permission') state.db.seed('social_access_permissions', [{ family_id: originalFamily, user_id: originalUser, social_role: 'read_only', status: 'active' }]);
     if (reason === 'read-error') state.fault = { table: 'social_access_permissions', op: 'select', occurrence: 1, mode: 'error' };
     if (reason === 'token-read-error') state.fault = { table: 'social_account_tokens', op: 'select', occurrence: 1, mode: 'throw' };
-    expect((await getConnector('x').publish(request)).status).toBe('failed'); expect(provider).not.toHaveBeenCalled();
+    expect((await getConnector('x').publish(request)).status).toBe('failed');
+    // None of these may reach the post endpoint. 'expired' is the one that
+    // legitimately touches the network at all — it spends a refresh first, and
+    // fails here because no reply to that refresh is mocked.
+    expect(provider.mock.calls.map(([url]) => url)).toEqual(reason === 'expired' ? ['https://api.x.com/2/oauth2/token'] : []);
   });
   it.each([{ kind: 'image' }, { mediaUrls: ['https://example.org/image.jpg'] }, { kind: 'link', link: 'file:///x' }, { kind: 'link' }, { body: 'x'.repeat(281) }, { body: ' ' }])('rejects unsupported/invalid content before sending: %j', async (patch) => {
     const flow = await connected(); provider.mockClear();
@@ -341,5 +345,108 @@ describe('X publish failure and authority boundaries', () => {
     provider.mockResolvedValueOnce(new Response(body, { status: reason === 'redirect' ? 307 : 201, headers: reason === 'advertised-large' ? { 'content-length': '70000' } : {} }));
     expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('publishing');
     expect(cancel).toHaveBeenCalledOnce(); expect(provider).toHaveBeenCalledTimes(1);
+  });
+});
+
+// An X access token lasts about two hours. `offline.access` is requested so a
+// post scheduled for tomorrow morning can still go out — but nothing ever spent
+// the refresh token, so every publish past that two-hour window failed as
+// "reconnect required" and a recurring schedule quietly stopped recurring.
+describe('X credentials outlive the two-hour access token', () => {
+  const rotatedReply = () => Response.json({ access_token: 'rotated-access-secret', refresh_token: 'rotated-refresh-secret',
+    token_type: 'bearer', scope: 'tweet.read tweet.write users.read offline.access', expires_in: 7200 });
+  const tokenRow = (accountId: string) => state.db.table('social_account_tokens').find((row) => row.id === accountId)!;
+  const storedRefreshToken = (accountId: string) => JSON.parse(decryptSecret(String(tokenRow(accountId).refresh_token_enc))).refreshToken;
+  const tokenState = (accountId: string) => (tokenRow(accountId).metadata as Record<string, unknown>).x_state;
+  const basic = `Basic ${Buffer.from('app-client:app-secret').toString('base64')}`;
+
+  /** A connection made yesterday afternoon, read the next morning. */
+  async function expiredConnection() {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-12T15:00:00Z'));
+    const flow = await connected();
+    vi.setSystemTime(new Date('2026-09-13T09:00:00Z'));
+    provider.mockClear();
+    return flow;
+  }
+
+  it('spends the refresh token and publishes with the rotated credential', async () => {
+    const flow = await expiredConnection();
+    expect(storedRefreshToken(flow.accountId)).toBe('user-refresh-secret');
+    provider.mockResolvedValueOnce(rotatedReply()).mockResolvedValueOnce(Response.json({ data: { id: '987654321' } }, { status: 201 }));
+
+    const result = await getConnector('x').publish(input(flow.accountId));
+    expect(result).toMatchObject({ ok: true, status: 'published', providerObjectId: '987654321' });
+    expect(provider.mock.calls.map(([url]) => url)).toEqual(['https://api.x.com/2/oauth2/token', 'https://api.x.com/2/tweets']);
+
+    const refresh = provider.mock.calls[0][1]!;
+    const body = new URLSearchParams(String(refresh.body));
+    expect(body.get('grant_type')).toBe('refresh_token');
+    expect(body.get('refresh_token')).toBe('user-refresh-secret');
+    expect(refresh.headers).toMatchObject({ Authorization: basic });
+    expect(refresh.redirect).toBe('manual');
+    // X invalidates the refresh token the moment it is spent, so storing the
+    // rotated one is what keeps the connection alive past this single publish.
+    expect(storedRefreshToken(flow.accountId)).toBe('rotated-refresh-secret');
+    expect(tokenRow(flow.accountId).expires_at).toBe('2026-09-13T11:00:00.000Z');
+    expect(provider.mock.calls[1][1]!.headers).toMatchObject({ Authorization: 'Bearer rotated-access-secret' });
+  });
+
+  it('spends only one refresh for a second publish inside the new window', async () => {
+    const flow = await expiredConnection();
+    provider.mockResolvedValueOnce(rotatedReply()).mockResolvedValueOnce(Response.json({ data: { id: '1' } }, { status: 201 }));
+    expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('published');
+    provider.mockClear().mockResolvedValueOnce(Response.json({ data: { id: '2' } }, { status: 201 }));
+    expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('published');
+    expect(provider.mock.calls.map(([url]) => url)).toEqual(['https://api.x.com/2/tweets']);
+  });
+
+  it('blocks the credential and never attempts the post when X rejects the refresh token', async () => {
+    const flow = await expiredConnection();
+    provider.mockResolvedValueOnce(new Response('{"error":"invalid_grant"}', { status: 400 }));
+    const result = await getConnector('x').publish(input(flow.accountId));
+    expect(result).toMatchObject({ ok: false, status: 'failed', errorMessage: 'socialX.reconnectRequired' });
+    // Spent or revoked: retrying it on every later publish would burn a round
+    // trip to reach the same answer, and the member must reconnect either way.
+    expect(tokenState(flow.accountId)).toBe('blocked');
+    expect(tokenRow(flow.accountId).refresh_token_enc).toBeNull();
+    expect(tokenRow(flow.accountId).access_token_enc).toBeNull();
+    expect(state.db.table('social_accounts').find((row) => row.id === flow.accountId)!.last_error).toBe('socialX.reconnectRequired');
+    expect(provider).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the credential when X is briefly unreachable, and the next attempt still works', async () => {
+    const flow = await expiredConnection();
+    provider.mockResolvedValueOnce(new Response('', { status: 503 }));
+    expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('failed');
+    expect(tokenState(flow.accountId)).toBe('ready');
+    expect(storedRefreshToken(flow.accountId)).toBe('user-refresh-secret');
+
+    provider.mockClear().mockResolvedValueOnce(rotatedReply()).mockResolvedValueOnce(Response.json({ data: { id: '987654321' } }, { status: 201 }));
+    expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('published');
+    expect(storedRefreshToken(flow.accountId)).toBe('rotated-refresh-secret');
+  });
+
+  it('lets the member reconnect over a rotation that died mid-flight', async () => {
+    const flow = await expiredConnection();
+    // The process is killed between claiming the row and storing the new grant.
+    // Without a way back out of 'refreshing', that account is bricked: it cannot
+    // publish, and the one remedy a member has would be refused too.
+    tokenRow(flow.accountId).metadata = { x_state: 'refreshing', x_revision: 'abandoned-rotation' };
+
+    const again = await begin();
+    provider.mockResolvedValueOnce(tokenReply()).mockResolvedValueOnce(identityReply());
+    expect((await GET(callback(again))).status).toBe(307);
+    const reconnected = state.db.table('social_account_tokens').find((row) => row.provider_account_id === '123456789')!;
+    expect((reconnected.metadata as Record<string, unknown>).x_state).toBe('ready');
+    expect(JSON.parse(decryptSecret(String(reconnected.refresh_token_enc))).refreshToken).toBe('user-refresh-secret');
+  });
+
+  it('refuses a refreshed grant that came back without the publish scopes', async () => {
+    const flow = await expiredConnection();
+    provider.mockResolvedValueOnce(Response.json({ access_token: 'narrow', refresh_token: 'narrow-refresh',
+      token_type: 'bearer', scope: 'tweet.read users.read', expires_in: 7200 }));
+    expect((await getConnector('x').publish(input(flow.accountId))).status).toBe('failed');
+    expect(tokenState(flow.accountId)).toBe('blocked');
+    expect(provider).toHaveBeenCalledOnce();
   });
 });

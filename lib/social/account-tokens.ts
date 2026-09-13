@@ -99,7 +99,12 @@ export async function saveXConnection(flow: XFlow, grant: XGrant, identity: { id
     const oldToken = await tokenRow(db, flow, target.id);
     if (oldToken) {
       const old = meta(oldToken);
-      if (!['ready', 'blocked'].includes(String(old.x_state)) || typeof old.x_revision !== 'string' || oldToken.provider_account_id !== identity.id) xFailure('reconnectRequired');
+      // 'refreshing' is included because a rotation that died between claiming
+      // the row and writing the new grant leaves it there forever, and the
+      // member's remedy for a credential in an unknown state IS this reconnect.
+      // An in-flight rotation losing to it is correct: its own write is pinned
+      // to the revision this claim replaces, so it writes nothing and fails.
+      if (!['ready', 'blocked', 'refreshing'].includes(String(old.x_state)) || typeof old.x_revision !== 'string' || oldToken.provider_account_id !== identity.id) xFailure('reconnectRequired');
       if (old.x_state === 'blocked' && (typeof old.x_revoked_at !== 'number' || !Number.isFinite(old.x_revoked_at) || old.x_revoked_at >= flow.issuedAt)) xFailure('callbackInvalid');
       const claim = await db.from('social_account_tokens').update({ metadata: { x_state: 'connecting', x_revision: flow.revision } })
         .eq('id', target.id).contains('metadata', { x_state: old.x_state, x_revision: old.x_revision }).select('id').single();
@@ -163,7 +168,19 @@ export async function loadScheduledXAccessToken(input: ConnectorPublishInput): P
   return readXAccessToken({ familyId: input.familyId, userId: input.userId }, input.accountId, input.providerAccountId, input.signal);
 }
 
-async function readXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<string> {
+/**
+ * How close to expiry an access token may be and still be handed out. X tokens
+ * last about two hours, so refreshing a couple of minutes early costs nothing
+ * and keeps a publish that takes a while from expiring mid-flight.
+ */
+const X_REFRESH_MARGIN_MS = 120_000;
+
+/**
+ * The stored access token, or null when it is expired or nearly so and the
+ * refresh token should be spent. Every other invalid state still fails here:
+ * only expiry is recoverable without the member reconnecting.
+ */
+async function readStoredXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<string | null> {
   const db = createServiceClient();
   const account = await accountRow(db, actor, accountId, signal);
   if (account.status !== 'connected' || account.deleted_at || account.provider_account_id !== providerAccountId) xFailure('reconnectRequired');
@@ -174,8 +191,90 @@ async function readXAccessToken(actor: XActor, accountId: string, providerAccoun
   if (token.version !== 1 || token.platform !== 'x' || token.accountId !== accountId || token.familyId !== actor.familyId || token.providerAccountId !== providerAccountId ||
       typeof token.accessToken !== 'string' || !token.accessToken || token.accessToken.length > 16384 || token.refreshToken !== '' ||
       !Array.isArray(token.scopes) || !X_SCOPES.every((scope) => token.scopes.includes(scope)) ||
-      !Number.isFinite(token.expiresAt) || token.expiresAt <= Date.now() + 30_000 || row.expires_at !== new Date(token.expiresAt).toISOString()) xFailure('reconnectRequired');
-  return token.accessToken;
+      !Number.isFinite(token.expiresAt) || row.expires_at !== new Date(token.expiresAt).toISOString()) xFailure('reconnectRequired');
+  return token.expiresAt <= Date.now() + X_REFRESH_MARGIN_MS ? null : token.accessToken;
+}
+
+/**
+ * Spend the stored refresh token and write back both halves of the new grant.
+ *
+ * X invalidates a refresh token the moment it is used, so only one caller may
+ * spend it: the metadata revision is claimed with a compare-and-set before the
+ * network call, and a caller that loses the claim returns without touching
+ * anything so it can re-read the row the winner is about to rewrite. The write
+ * that stores the rotated pair is the first thing to happen after the exchange,
+ * which is as close as two systems without a shared transaction can get.
+ */
+async function refreshXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<void> {
+  const db = createServiceClient();
+  const row = await tokenRow(db, actor, accountId, signal);
+  const state = row ? meta(row) : {};
+  if (!row || row.provider_account_id !== providerAccountId || state.x_state !== 'ready'
+      || typeof state.x_revision !== 'string' || !row.refresh_token_enc) xFailure('reconnectRequired');
+  let stored: Envelope;
+  try { stored = JSON.parse(decryptSecret(row.refresh_token_enc)) as Envelope; } catch { return xFailure(); }
+  // The refresh half carries the same authority binding as the access half, so
+  // a ciphertext lifted from another family or account is refused here too.
+  if (stored.version !== 1 || stored.platform !== 'x' || stored.accountId !== accountId || stored.familyId !== actor.familyId
+      || stored.providerAccountId !== providerAccountId || stored.accessToken !== ''
+      || typeof stored.refreshToken !== 'string' || !stored.refreshToken || stored.refreshToken.length > 16384) xFailure('reconnectRequired');
+
+  const claim = randomUUID();
+  const claimed = await db.from('social_account_tokens')
+    .update({ metadata: { x_state: 'refreshing', x_revision: claim, x_prior_revision: state.x_revision } })
+    .eq('id', row.id).eq('family_id', actor.familyId).eq('platform', 'x')
+    .contains('metadata', { x_state: 'ready', x_revision: state.x_revision }).select('id').single();
+  if (claimed.error || !claimed.data) return; // Another caller owns this rotation.
+
+  // Loaded here rather than at module scope: the HTTP client imports this file
+  // for the connect flow, and only this rare path needs it back.
+  const { exchangeXRefreshToken } = await import('./x-oauth');
+  const outcome = await exchangeXRefreshToken(stored.refreshToken, signal);
+
+  if (!outcome.ok) {
+    if (!outcome.permanent) {
+      // X was briefly unreachable. Hand the row back with its credentials
+      // untouched so the next attempt retries instead of demanding a reconnect.
+      await db.from('social_account_tokens').update({ metadata: { x_state: 'ready', x_revision: claim } })
+        .eq('id', row.id).eq('family_id', actor.familyId).contains('metadata', { x_state: 'refreshing', x_revision: claim });
+      xFailure('storageUnavailable');
+    }
+    // The refresh token is spent or revoked. Blocking it stops every later
+    // publish from spending a round trip on a credential that cannot work, and
+    // is the state a reconnect already knows how to take back over from.
+    await db.from('social_account_tokens').update({
+      access_token_enc: null, refresh_token_enc: null, updated_by: actor.userId,
+      metadata: { x_state: 'blocked', x_revision: randomUUID(), x_revoked_at: Date.now() },
+    }).eq('id', row.id).eq('family_id', actor.familyId).contains('metadata', { x_state: 'refreshing', x_revision: claim });
+    await db.from('social_accounts').update({ health: 'error', last_error: 'socialX.reconnectRequired', updated_by: actor.userId })
+      .eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x');
+    xFailure('reconnectRequired');
+  }
+
+  const grant = outcome.grant;
+  const envelope: Envelope = { ...grant, version: 1, accountId, familyId: actor.familyId, platform: 'x', providerAccountId };
+  const saved = await db.from('social_account_tokens').update({
+    access_token_enc: encryptSecret(JSON.stringify({ ...envelope, refreshToken: '' })),
+    refresh_token_enc: encryptSecret(JSON.stringify({ ...envelope, accessToken: '' })),
+    token_type: 'bearer', scope: grant.scopes.join(' '), expires_at: new Date(grant.expiresAt).toISOString(),
+    updated_by: actor.userId, metadata: { x_state: 'ready', x_revision: claim },
+  }).eq('id', row.id).eq('family_id', actor.familyId).eq('platform', 'x')
+    .contains('metadata', { x_state: 'refreshing', x_revision: claim }).select('id').single();
+  if (saved.error || !saved.data) xFailure();
+  await db.from('social_accounts').update({ health: 'healthy', last_error: null, scopes: grant.scopes, updated_by: actor.userId })
+    .eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x').eq('status', 'connected').is('deleted_at', null);
+}
+
+async function readXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<string> {
+  const current = await readStoredXAccessToken(actor, accountId, providerAccountId, signal);
+  if (current) return current;
+  await refreshXAccessToken(actor, accountId, providerAccountId, signal);
+  const renewed = await readStoredXAccessToken(actor, accountId, providerAccountId, signal);
+  // A rotation that lost its claim to a concurrent one lands here: the winner
+  // has written a usable token, so the second read succeeds. Still expired means
+  // the refresh did not produce one, and only a reconnect will.
+  if (!renewed) xFailure('reconnectRequired');
+  return renewed;
 }
 
 /** Revoke private authority before the public disconnect; a failed public write stays unusable. */

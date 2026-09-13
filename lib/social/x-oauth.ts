@@ -81,6 +81,62 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+/**
+ * The token endpoint's reply, validated to the same standard for both grant
+ * types. `expires_in` bounds and the full scope set are re-checked on every
+ * refresh: a grant that came back narrower than `X_SCOPES` cannot publish, and
+ * storing it would swap a visible failure for a silent one.
+ */
+function readXGrant(response: { status: number; body: unknown }): XGrant | null {
+  const data = record(response.body);
+  const scopes = typeof data.scope === 'string' ? data.scope.split(/\s+/).filter(Boolean) : [];
+  if (response.status !== 200 || typeof data.access_token !== 'string' || !data.access_token || data.access_token.length > 16384 || /[\r\n]/.test(data.access_token) ||
+      typeof data.refresh_token !== 'string' || !data.refresh_token || data.refresh_token.length > 16384 || /[\r\n]/.test(data.refresh_token) ||
+      typeof data.token_type !== 'string' || data.token_type.toLowerCase() !== 'bearer' ||
+      typeof data.expires_in !== 'number' || !Number.isInteger(data.expires_in) || data.expires_in < 60 || data.expires_in > 31_536_000 ||
+      !X_SCOPES.every((scope) => scopes.includes(scope))) return null;
+  return { accessToken: data.access_token, refreshToken: data.refresh_token, expiresAt: Date.now() + data.expires_in * 1000, scopes };
+}
+
+/** `permanent` means only a reconnect can fix it; otherwise the stored credential is still worth keeping. */
+export type XRefreshOutcome = { ok: true; grant: XGrant } | { ok: false; permanent: boolean };
+
+/**
+ * Spend a refresh token for a fresh grant.
+ *
+ * An X access token lasts about two hours. Nothing spent the refresh token, so
+ * an account connected on Monday could not publish the recurring post it was
+ * set up for on Tuesday: every scheduled send past that window failed as
+ * "reconnect required" and the automation quietly stopped being automatic.
+ *
+ * X rotates the refresh token on every use — the reply carries a new one and
+ * the token just spent stops working — so the caller must persist BOTH halves
+ * or it has traded a two-hour credential for a dead one.
+ */
+export async function exchangeXRefreshToken(refreshToken: string, signal?: AbortSignal): Promise<XRefreshOutcome> {
+  requireXConfiguration();
+  const basic = Buffer.from(`${encodeURIComponent(process.env.X_CLIENT_ID!)}:${encodeURIComponent(process.env.X_CLIENT_SECRET!)}`).toString('base64');
+  let response: { status: number; body: unknown };
+  try {
+    response = await xJsonRequest(TOKEN_URL, {
+      method: 'POST', signal,
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString(),
+    });
+  } catch {
+    // Unreachable, timed out, aborted — the credential is untouched and the
+    // next attempt should use it rather than demand a reconnect.
+    return { ok: false, permanent: false };
+  }
+  const grant = readXGrant(response);
+  if (grant) return { ok: true, grant };
+  // 4xx other than rate limiting is X saying this refresh token is spent or
+  // revoked; 429 and 5xx are X saying "not now". A 200 that failed validation
+  // is unusable either way, so it is treated as permanent rather than retried.
+  const retryable = response.status === 429 || response.status >= 500;
+  return { ok: false, permanent: !retryable };
+}
+
 export async function finishXAuthorization(flow: XFlow, code: string): Promise<void> {
   if (!code || code.length > 4096 || /[\x00-\x20\x7f]/.test(code)) xFailure('callbackInvalid');
   requireXConfiguration();
@@ -88,14 +144,8 @@ export async function finishXAuthorization(flow: XFlow, code: string): Promise<v
   const basic = Buffer.from(`${encodeURIComponent(process.env.X_CLIENT_ID!)}:${encodeURIComponent(process.env.X_CLIENT_SECRET!)}`).toString('base64');
   const exchanged = await xJsonRequest(TOKEN_URL, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: flow.redirectUri, code_verifier: flow.verifier }).toString() });
-  const data = record(exchanged.body);
-  const scopes = typeof data.scope === 'string' ? data.scope.split(/\s+/).filter(Boolean) : [];
-  if (exchanged.status !== 200 || typeof data.access_token !== 'string' || !data.access_token || data.access_token.length > 16384 || /[\r\n]/.test(data.access_token) ||
-      typeof data.refresh_token !== 'string' || !data.refresh_token || data.refresh_token.length > 16384 ||
-      typeof data.token_type !== 'string' || data.token_type.toLowerCase() !== 'bearer' ||
-      typeof data.expires_in !== 'number' || !Number.isInteger(data.expires_in) || data.expires_in < 60 || data.expires_in > 31_536_000 ||
-      !X_SCOPES.every((scope) => scopes.includes(scope))) xFailure('connectionFailed');
-  const grant: XGrant = { accessToken: data.access_token as string, refreshToken: data.refresh_token as string, expiresAt: Date.now() + (data.expires_in as number) * 1000, scopes };
+  const grant = readXGrant(exchanged);
+  if (!grant) xFailure('connectionFailed');
   const identityResponse = await xJsonRequest(IDENTITY_URL, { headers: { Authorization: `Bearer ${grant.accessToken}` } });
   const identity = record(record(identityResponse.body).data);
   if (identityResponse.status !== 200 || !isXId(identity.id) || typeof identity.username !== 'string' || !/^[A-Za-z0-9_]{1,15}$/.test(identity.username) ||
