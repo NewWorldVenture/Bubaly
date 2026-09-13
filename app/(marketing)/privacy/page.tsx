@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LEGAL_REVISED } from '@/lib/marketing/content-revisions';
 import { getTranslations } from '@/lib/i18n/server';
 import { LegalPage, type LegalSection } from '@/components/marketing/legal';
 import { CTASection } from '@/components/marketing/cta';
@@ -136,7 +137,7 @@ export default async function PrivacyPage() {
       <LegalPage
         title={t('privacy.privacyPolicy')}
         summary={t('privacy.whatWeCollectWhyAnd')}
-        lastUpdated="2026-06-24"
+        lastUpdated={LEGAL_REVISED['/privacy']}
         path="/privacy"
         sections={SECTIONS}
       />
