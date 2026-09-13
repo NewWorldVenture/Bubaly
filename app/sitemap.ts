@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
+import { getAllPosts, ALL_CATEGORIES, isSyntheticBlogSeedSlug } from '@/lib/blog/posts';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 
@@ -58,6 +58,41 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/cookies', priority: 0.3, changeFrequency: 'yearly' },
   { path: '/acceptable-use', priority: 0.3, changeFrequency: 'yearly' },
 ];
+
+/**
+ * `marketing_pages` rows name a path directly, and nothing in that table
+ * constrains the path to something this site actually renders.
+ *
+ * `/blog/<slug>` is served from `blog_posts`, and `getPost` refuses a synthetic
+ * seed slug outright — so a platform row pointing at one advertises a URL that
+ * is guaranteed to answer 404. The blog's own entries never had this problem
+ * (`getAllPosts` filters through `publicRows`); the platform table has no such
+ * filter, so the two halves of the same system disagreed and the sitemap
+ * published the losing side.
+ *
+ * This is the rule the benchmarks entry above already follows in prose: a
+ * sitemap must never point at a 404.
+ */
+export function isAdvertisablePlatformPath(path: unknown): path is string {
+  if (typeof path !== 'string' || !path.startsWith('/')) return false;
+  const blogSlug = /^\/blog\/(.+)$/.exec(path)?.[1];
+  if (blogSlug === undefined) return true;
+  let decoded = blogSlug;
+  // A stored path may or may not already be encoded. A malformed escape is not
+  // a reason to throw here — fall back to the raw value and let the seed test
+  // see it as written.
+  try { decoded = decodeURIComponent(blogSlug); } catch { /* keep raw */ }
+  return !isSyntheticBlogSeedSlug(decoded) && !isSyntheticBlogSeedSlug(blogSlug);
+}
+
+/**
+ * `''` and `'/'` are the same page, and the dedupe below keys on the URL
+ * STRING — so a platform row storing the root as `/` published a second
+ * homepage entry alongside the static one. Collapse it to the static spelling.
+ */
+export function canonicalSitemapUrl(siteUrl: string, path: string): string {
+  return `${siteUrl}${path === '/' ? '' : path}`;
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -153,9 +188,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         console.error('[sitemap] published platform-page read failed', platformError);
       } else {
         platformEntries = (platformPages ?? [])
-          .filter((page) => typeof page.path === 'string' && page.path.startsWith('/'))
+          .filter((page) => isAdvertisablePlatformPath(page.path))
           .map((page) => ({
-            url: `${SITE_URL}${page.path}`,
+            url: canonicalSitemapUrl(SITE_URL, page.path),
             lastModified: page.updated_at ? new Date(page.updated_at) : now,
             changeFrequency: 'weekly' as const,
             priority: 0.7,

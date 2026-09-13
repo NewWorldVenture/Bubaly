@@ -64,9 +64,29 @@ export async function getSeoPage(path: string): Promise<{ title: string | null; 
  * Resolve a route's Next Metadata from the admin SEO store, falling back to
  * developer-authored values. Use in a page's `generateMetadata()`.
  */
+/**
+ * The root layout sets `template: '%s · Bubaly'`, so every title it formats gets
+ * the brand appended. A title that ALREADY ends in the brand is then doubled:
+ * the admin SEO store held "Security & Privacy — Bubaly", and the live page
+ * shipped `Security & Privacy — Bubaly · Bubaly`. Same for "Contact Bubaly".
+ *
+ * The store is admin-editable free text, so this cannot be fixed by correcting
+ * the rows — the next person to type a brand-suffixed title reintroduces it.
+ * The template owns the brand, so a title that supplies its own opts out of the
+ * template via `absolute` instead of being appended to.
+ *
+ * Only a TRAILING brand counts. "Bubaly — The AI Family Operating System" leads
+ * with the name and still wants the suffix; suppressing it there would drop the
+ * brand from the end of the tab title, which is the opposite of the intent.
+ */
+export function titleWithoutDoubledBrand(title: string): Metadata['title'] {
+  return /(?:^|[\s—–\-|·:])Bubaly\s*$/i.test(title.trim()) ? { absolute: title } : title;
+}
+
 export async function resolveMarketingMetadata(path: string, fallback: Metadata): Promise<Metadata> {
   const seo = await getSeoPage(path);
-  const title = seo?.title ?? fallback.title ?? undefined;
+  const resolved = seo?.title ?? fallback.title ?? undefined;
+  const title = typeof resolved === 'string' ? titleWithoutDoubledBrand(resolved) : resolved;
   const description = seo?.description ?? fallback.description ?? undefined;
   const canonical = seo?.canonical
     ? (seo.canonical.startsWith('http') ? seo.canonical : `${SITE_URL}${seo.canonical.startsWith('/') ? seo.canonical : `/${seo.canonical}`}`)
@@ -79,8 +99,10 @@ export async function resolveMarketingMetadata(path: string, fallback: Metadata)
     ...(description ? { description } : {}),
     ...(canonical ? { alternates: { ...priorAlternates, canonical } } : {}),
     openGraph: {
+      // The plain string, never the `absolute` wrapper. openGraph carries no
+      // brand template of its own, so it was never doubled and needs no opt-out.
       ...priorOg,
-      ...(title ? { title } : {}),
+      ...(resolved ? { title: resolved } : {}),
       ...(description ? { description } : {}),
     },
   };
