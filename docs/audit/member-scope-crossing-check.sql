@@ -80,24 +80,24 @@ begin
   -- 1. by member_id alone — the shape both routes used.
   select count(*) into crossed from public.symptom_logs where member_id = child;
   if crossed = 0 then
-    failures := failures || 'symptom_logs: a member of both families read NOTHING by member_id — the premise of K-01 no longer holds, so re-derive the finding before trusting the fix';
+    failures := array_append(failures, 'symptom_logs: a member of both families read NOTHING by member_id — the premise of K-01 no longer holds, so re-derive the finding before trusting the fix');
   end if;
 
   -- 2. with the active family named — the fix.
   select count(*) into scoped
     from public.symptom_logs where member_id = child and family_id = alpha;
   if scoped <> 0 then
-    failures := failures || format('symptom_logs: family_id = Alpha still returned %s row(s) for a Beta member', scoped);
+    failures := array_append(failures, format('symptom_logs: family_id = Alpha still returned %s row(s) for a Beta member', scoped));
   end if;
 
   select count(*) into crossed from public.behavior_logs where member_id = child;
   if crossed = 0 then
-    failures := failures || 'behavior_logs: a member of both families read NOTHING by member_id — the premise of K-01 no longer holds';
+    failures := array_append(failures, 'behavior_logs: a member of both families read NOTHING by member_id — the premise of K-01 no longer holds');
   end if;
   select count(*) into scoped
     from public.behavior_logs where member_id = child and family_id = alpha;
   if scoped <> 0 then
-    failures := failures || format('behavior_logs: family_id = Alpha still returned %s row(s) for a Beta member', scoped);
+    failures := array_append(failures, format('behavior_logs: family_id = Alpha still returned %s row(s) for a Beta member', scoped));
   end if;
 
   -- ── As someone in neither household ─────────────────────────────────────
@@ -106,11 +106,11 @@ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000d4', true);
   select count(*) into stranger from public.symptom_logs where member_id = child;
   if stranger <> 0 then
-    failures := failures || format('symptom_logs: a user in NEITHER family read %s row(s) — RLS is not holding at all', stranger);
+    failures := array_append(failures, format('symptom_logs: a user in NEITHER family read %s row(s) — RLS is not holding at all', stranger));
   end if;
   select count(*) into stranger from public.behavior_logs where member_id = child;
   if stranger <> 0 then
-    failures := failures || format('behavior_logs: a user in NEITHER family read %s row(s) — RLS is not holding at all', stranger);
+    failures := array_append(failures, format('behavior_logs: a user in NEITHER family read %s row(s) — RLS is not holding at all', stranger));
   end if;
 
   perform set_config('role','postgres', true);

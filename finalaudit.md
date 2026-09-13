@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Fourteen audits of bubaly.com, kept in one file because one file is the record.
+Fifteen audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -20,6 +20,7 @@ They ran over **different surfaces** and none supersedes another:
 | **L — Offer versus gate** | the published plans in `lib/constants/plans.ts` against the catalog that opens a page and the allowance that meters a request: is a family served what it was sold | 3 | `L-01`–`L-03` |
 | **M — State that outlives its request** | the three places a value produced by one request is read by another — module scope on a warm instance, `unstable_cache` keys, and shared HTTP caches — where the boundary has already been evaluated and cannot be evaluated again | 1 | `M-01` |
 | **N — What the browser downloads** | every module a client bundle can reach: does any of them read an environment variable that is not `NEXT_PUBLIC_`, given that such a read is inlined as a literal into JavaScript the browser receives | 0 | — |
+| **O — Where a secret is stored** | the 27 columns in the schema holding a token, a key or a password: which is encrypted, which is a capability, and which is protected by nothing but family membership | 3 | `O-01`–`O-03` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -4004,3 +4005,157 @@ fails with *"reached via components/pwa/register-sw.tsx"*.
 - Full suite: **1,188 files, 13,642 tests, all passing**
 - `tsc --noEmit` clean · `eslint` clean
 - **No code change.** Nothing was found to fix.
+
+---
+
+# Pass O — Where a secret is stored (O-01, O-02, O-03)
+
+Pass N asked whether the browser is handed a secret from the **environment**.
+This asks the same question of the **database**: 27 columns across the schema
+hold a token, a key or a password. Which of them is protected by something, and
+by what?
+
+Most are fine by construction. `sync_tokens` and `social_account_tokens` store
+`access_token_enc` / `refresh_token_enc` — encrypted at rest through
+`lib/sync/crypto.ts` under `SYNC_TOKEN_KEY`. `gift_links.token` and
+`sync_calendars.feed_token` are capability slugs, unguessable by design and
+audited in **M-01**. `stripe_settings.secret_key` is read only by the service
+role, and the admin page that shows its status was checked line by line: it
+sends `hasSecret: Boolean(stripeCfg?.secret_key)` to the client component, never
+the value. `select('*')` there is an over-fetch on the server, not a leak.
+
+One table is not fine.
+
+## Status summary
+
+| id | what it is | severity | state |
+|---|---|---|---|
+| O-01 | a child could change and delete the family's stored card PIN | **Critical** | **fixed** — `0297`, not applied to production |
+| O-02 | a child can still **read** every stored credential | **High** | **open — a product decision, recorded** |
+| O-03 | the vault's step-up MFA is a screen control with nothing behind it | **High** | **open — recorded, with the obstacle** |
+
+## What `family_credentials` is
+
+The "Wi-Fi & Passwords" vault. Its category check constraint reads:
+
+```sql
+CHECK (category = ANY (ARRAY['wifi','website','app','streaming','email','card','pin','membership','other']))
+```
+
+`card` and `pin`. The table is designed to hold bank card numbers and PINs, and
+`secret` is plain `text` — not an `_enc` column, in a schema that encrypts
+provider tokens at rest two tables over.
+
+All four of its policies were `is_family_member(family_id)`.
+
+## O-01 — Proved, not inferred *(Critical, fixed)*
+
+Against a replay of all 309 migrations, seeding a parent and a **child** in one
+family with a card entry, then acting as the child on an `aal1` session
+(password only, no second factor):
+
+```
+NOTICE:  CHILD, aal1 (no second factor): READ 1 row(s), secret = PIN 9317
+NOTICE:  CHILD, aal1: UPDATED 1 row(s)
+NOTICE:  CHILD, aal1: DELETED 1 row(s)
+```
+
+And nothing in the application stands in the way either.
+`components/modules/passwords-module.tsx` has **no role check of any kind** —
+not in the UI, not before the write — and it writes with the caller's own client
+(`sb.from('family_credentials').insert(...)`), never through a server action. So
+RLS is the only boundary this data has ever had.
+
+`0297_family_credentials_write_boundary.sql` makes insert, update and delete
+`can_manage_family(family_id)` — the predicate `family_members`, `subscriptions`
+and `medical_profiles` already use. It is the same defect as **F20**'s chore
+board and the same shape as the money tables' manager-gated writes, on a table
+holding card PINs. **Not applied to production**: authored and replaying clean,
+but the ledger is gated (**F5**) and applying is the owner's.
+
+## O-02 — Reads are left alone, deliberately *(High, open)*
+
+A child can still **read** every credential, and this pass does not change that,
+because narrowing it is a product decision rather than a defect with one answer:
+
+- the page is called **"Wi-Fi & Passwords"** and `wifi` is a category, so some
+  entries are plainly meant to be family-wide;
+- the table carries a **`member_id` column that no policy consults**, which
+  suggests the intended shape was per-person scoping that was never wired;
+- guessing wrong breaks a real use case — a child who cannot read the Wi-Fi
+  password on the page named after it.
+
+Three options, for the owner:
+
+1. **By category** — `wifi` (and perhaps `streaming`) readable by everyone, the
+   rest manager-only. Closest to the page's own name.
+2. **By `member_id`** — a credential with a `member_id` is readable by that
+   member and managers; one without is family-wide. Uses the column that exists.
+3. **Manager-only reads**, and move the Wi-Fi password somewhere else.
+
+The probe below **asserts the read is still open**, so that if this is ever
+addressed the probe fails and this section has to be updated. A finding
+half-fixed must not come to read as fixed.
+
+## O-03 — The strongest signal in the product, enforced only on the screen *(High, open)*
+
+`app/(app)/dashboard/passwords/page.tsx` calls
+`requireAal2(ctx, 'documents', '/dashboard/passwords')` — step-up MFA, the same
+treatment money and trust get. The product plainly considers this data sensitive.
+
+**No policy in the schema references `aal`.** Verified against the catalogue:
+zero of the policies on 491 tables mention it. So the second factor is a page
+guard, and a member's ordinary session reaches the same rows through PostgREST
+without it — which is not a hypothetical, because the module itself queries
+PostgREST directly.
+
+The obstacle is worth recording, because the naive fix is wrong.
+`requireAal2` deliberately does **not** step up a family that never enrolled a
+factor — its own comment says so, and `nextLevel` is `aal1` for them. An RLS
+policy demanding `auth.jwt()->>'aal' = 'aal2'` would therefore lock every
+factor-less family out of their own passwords. The correct mirror is *"aal2, or
+this user has no enrolled factor"*, which needs a `security definer` helper over
+`auth.mfa_factors`. That is a real piece of design and it belongs to the owner.
+
+## How Pass O is kept closed
+
+`docs/audit/family-credential-write-boundary-check.sql`, in a transaction that
+rolls back:
+
+| what it holds | how |
+|---|---|
+| A child cannot insert, update or delete | the three verbs, each separately |
+| A parent still can | the positive control — a guard that refuses everyone is not a boundary |
+| **The read half is still open** | asserted as the CURRENT state, so closing O-02 fails this probe and forces the document to be updated |
+| The three write policies carry one condition | tightening one and forgetting another is how this started |
+
+Negative control: restoring the pre-`0297` permissive policies fails it with
+*"a child INSERTED a credential | a child UPDATED 1 credential row(s) | a child
+DELETED 1 credential row(s)"*.
+
+### The negative control found a bug in the probe itself
+
+Running it the first time did not print those three lines. It printed
+`ERROR: malformed array literal: "a child INSERTED a credential"`.
+
+`failures := failures || 'some text'` does not append to a `text[]` — Postgres
+resolves the untyped literal on the right as an **array literal** and fails to
+parse it. Every branch built with `format(...)` was fine, because that yields a
+typed `text`; every branch built with a plain string was not.
+
+So the probe would still have failed the build — but naming a type error instead
+of the broken boundary, which is most of what a probe is for. **Pass K's
+`member-scope-crossing-check.sql` had the same latent bug** in six branches, and
+it was invisible there precisely because that probe passes: a failure path that
+never runs is a failure path nobody has read. Both now use `array_append`, and
+both negative controls were re-run to confirm they name the boundary.
+
+That is the ninth defect this audit found in its own instruments, and the fourth
+found by deliberately breaking the thing being guarded rather than by reading it.
+
+## Verification
+
+- Full suite: **1,191 files, 13,677 tests, all passing**
+- Fresh replay: **310 migrations applied, 0 failed**; probes **20/20**
+- `npm run db:audit:queries` — 491 tables, 78 functions, 141 routes, all resolve
+- `tsc --noEmit` clean

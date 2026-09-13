@@ -501,9 +501,21 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-two** migration files have landed since, `0255` through
-`0296`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13; the range had simply grown past the sentence.)
+`01881fb2`. **Seventy-three** migration files have landed since, `0255` through
+`0297`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`"
+earlier the same day; the range simply keeps growing past the sentence.)
+
+`0297_family_credentials_write_boundary.sql` is the newest and is worth naming
+here rather than leaving inside a count, because what it closes is live in
+production right now: `family_credentials` holds the "Wi-Fi & Passwords" vault,
+its category constraint allows `card` and `pin`, and all four of its policies
+are `is_family_member(family_id)` — so a member with role `child` can read,
+change and delete the family's stored card PIN, proved behaviourally in
+`docs/audit/family-credential-write-boundary-check.sql`. The migration makes the
+three write verbs `can_manage_family`. Reads are deliberately unchanged (O-02 in
+`finalaudit.md` — a product decision), and the screen's step-up MFA still has
+nothing behind it in the database (O-03).
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 
