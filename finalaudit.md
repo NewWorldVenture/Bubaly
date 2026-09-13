@@ -1,15 +1,16 @@
 # Bubaly — Final Audit
 
-Two audits of bubaly.com, kept in one file because one file is the record.
+Three audits of bubaly.com, kept in one file because one file is the record.
 
-They ran over **different surfaces** and neither supersedes the other:
+They ran over **different surfaces** and none supersedes another:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
+| **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
 
-**Where they touch, stated plainly.** Only two places:
+**Where they touch, stated plainly.** Passes A and B meet in only two places:
 
 - **The production migration ledger** is the same blocker in both — Pass A's
   **F5** and Pass B's **F-001**. A reaches it from the CI workflow (the access
@@ -28,6 +29,15 @@ They ran over **different surfaces** and neither supersedes the other:
   six-day-old copy of the blog served from Next's build Data Cache, and frozen
   for a year. #526's URL work and F-012's freshness fix are both in the current
   file, and neither pass would have found the other's defect.
+
+**Pass C shares a surface with Pass B and no findings with it.** Both read
+Supabase writes; B asked whether the right rows are written and who may write
+them, C asked a narrower question — when a write is refused, does anything
+notice? Run against `main` after B's fixes, C found eight instances B had not
+recorded, and B found none of C's. The one place they nearly met is
+`lib/server/push.ts`: C-08's prune counter was ALSO found independently on the
+`codex/final-production-audit-20260912` branch, which is the only duplicate
+across all three passes and is noted at C-08.
 
 Everything else is disjoint.
 
@@ -1935,3 +1945,259 @@ detect the state it forbids is decoration. Verified: 14/14 probes on a fresh
 | `sync_job_runs` at 700k rows / 2,000 households | 38,258 buffers · 46 ms → 54 buffers · 0.30 ms |
 | 27 further tables checked against `pg_index` | 23 already indexed via UNIQUE/PK; 4 covered by another index |
 | A-14 probe, index dropped in a rolled-back txn | the check detects it — not decoration |
+
+---
+
+# Pass C — Write honesty (C-01–C-08)
+
+One question, asked of every write in `app/` and `lib/`: **when this is refused,
+does anything notice?**
+
+The answer was no in more places than it should have been, for one reason that
+is invisible to every tool the repository runs. A PostgREST call RESOLVES with
+`{ data, error }` and rejects only under `.throwOnError()`. The library's own
+source does this:
+
+```js
+this.shouldThrowOnError = false;                        // default
+if (!this.shouldThrowOnError) res = res.catch((fetchError) => { ... });
+```
+
+So `await supabase.from(t).insert(row)` with the result discarded cannot fail
+visibly — not on an RLS denial, not on a constraint violation, not on a dead
+connection. `tsc` has nothing to say either: awaiting a promise and ignoring its
+value is legal. A `try/catch` around one of these looks like error handling and
+is not; the catch can only ever see a synchronous throw while the query is being
+built.
+
+- **Audit head:** `a041b398` (main, after Passes A and B)
+- **Method:** a scan for the shape — statement-position `await …from(t).<mutation>` —
+  then one question per hit rather than a blanket fix. 55 hits across 37 files;
+  most are genuinely fire-and-forget and are untouched.
+- **What promotes a hit to a finding:** something downstream *claims* the write
+  landed — a success page, a counter in a response, a row that records the
+  outcome, or a screen whose whole job is showing what happened.
+
+Two hits were checked and deliberately left, and the reasons are in the code:
+`app/api/blog/like` and `blog/save` discard their toggle deletes but then re-read
+the real state and return THAT, so a failed delete reports the truth; and
+`app/(auth)/actions.ts` was already correct — its brute-force counter reads its
+error and every caller refuses the sign-in when the write fails.
+
+## Status summary
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| C-01 | `logAudit`'s catch could never run — every caller lost audit rows silently, plus 10 wallet-audit sites written longhand | High | **Fixed** — #531 `3e05006b` |
+| C-02 | An emergency escalation recorded `push_sent: true` for a notification that was never written | High | **Fixed** — #531 |
+| C-03 | Three more urgent notification writes failed silently — a Guardian screening call, an urgent message, a voicemail | High | **Fixed** — #531 |
+| C-04 | "Account disconnected and access revoked" shown when neither had happened | High | **Fixed** — #532 `ed85df8a` |
+| C-05 | A family routine could be wedged permanently by one transient write failure | High | **Fixed** — #532 |
+| C-06 | Twelve provider-sync writes discarded their errors; both tables are read by surfaces people act on | Medium | **Fixed** — #532 |
+| C-07 | An unsubscribe that was never recorded still said "Unsubscribed" | High | **Fixed** — #536 `a041b398` |
+| C-08 | Three counters reported work that did not happen — push prune, trust audit, card authorization | Medium | **Fixed** — #536 |
+
+Nothing in Pass C is open. Every fix is on `main` and verified live.
+
+---
+
+## C-01 — `logAudit` could not report a failed audit write *(High, fixed)*
+
+`lib/server/audit.ts` wrapped its insert in `try/catch` and logged from the
+catch. Per the mechanism above, that line had never run and could not run, so
+every audit-write failure across **all 14 callers it had at the time** was silent
+by construction: a child login created, a PIN reset, an admin action, an
+onboarding step — none recorded, nobody told. (It has 17 today: the fix also
+converted three sites that were writing `audit_logs` longhand and discarding the
+error, which the wallet-only sweep could not see.)
+
+The same shape was written out longhand at **ten wallet-audit call sites**,
+including the credit and debit paths in `lib/wallet/server.ts`, so a transfer, a
+card spend, a card issue or a claimed Pay-ID could complete with no audit row at
+all. `app/(app)/money/actions.ts` already did it correctly through a local
+helper, which is the shape the rest should have had.
+
+Both now read the error. The wallet helper is shared as `logWalletAudit`, and all
+**14** wallet-audit sites go through it — the 10 that discarded their error plus
+the four that were already correct, so there is one implementation rather than
+two idioms and eight silent copies. It deliberately does **not** fail the caller:
+by the time it runs the money has already moved, and refusing a completed
+transfer because its log failed would turn a bookkeeping problem into a financial
+one.
+
+**Proof:** `tests/audit-write-failures-are-visible.test.ts`, built on a fake
+client that RESOLVES with an error the way PostgREST does. Against the original,
+the case that matters fails with *"a refused audit write produced no output at
+all"*.
+
+## C-02 — An emergency escalation recorded a push that never happened *(High, fixed)*
+
+The sharpest instance in the pass, because it did not merely stay silent — it
+wrote down the opposite of what happened. `app/api/guardian/escalate/route.ts`:
+
+```ts
+try {
+  await supabase.from('notifications').insert({ ... });
+  pushSent = true;
+} catch { /* non-fatal */ }
+```
+
+The insert resolves rather than throwing, so a refused write never reached the
+catch and `pushSent = true` ran anyway. That value is not cosmetic: it is written
+into the `guardian_escalations` row as `push_sent` and returned to the caller. An
+emergency escalation was therefore recorded, permanently, as having alerted the
+parents when nothing had been written — and the audit trail of the emergency
+asserted it too.
+
+`pushSent` now becomes true only on the no-error branch.
+
+## C-03 — Three more urgent notification writes were silent *(High, fixed)*
+
+The same dead catch on a Guardian screening call, an urgent Contact Center
+message and an urgent voicemail. Each wrapped its insert in `try/catch` with a
+`console.error` that could not run, so an urgent message reached nobody and left
+no trace of having failed. All three now read the error.
+
+**Deliberately not done here:** routing these four through the `notify()` service,
+which would also give them dedupe, recipient resolution and an urgent-flagged
+quiet-hours bypass. That is the right destination, but it is a larger change on
+Guardian emergency paths that could not be exercised end to end from the audit
+environment. Making the failure visible is the part that should not wait.
+
+## C-04 — "Account disconnected and access revoked", when neither had happened *(High, fixed)*
+
+Both sync disconnect routes discarded the result of the delete that **is** the
+disconnect, then redirected unconditionally:
+
+```ts
+await admin.from('sync_accounts').delete().eq('id', account.id);
+...
+return NextResponse.redirect(new URL(`...?disconnected=1`, ...));
+```
+
+`disconnected=1` renders *"Account disconnected and access revoked."* So a
+refused delete left the row in place — the account still connected, still syncing
+on the next run — and told the member their access was gone. Of every write in
+the pass this is the one whose failure may least be reported as success: being
+told access was revoked is exactly what stops someone checking again.
+
+The provider-generic route also claimed revocation in three cases where none
+happened — no adapter, no refresh token to present, or `revokeToken` throwing
+into `.catch(() => {})`. Best effort is a fine design; saying it worked is not.
+
+The delete's error now answers a `danger` banner saying access has **not** been
+revoked, and a disconnect that could not withdraw the grant says so and points
+the member at the provider.
+
+## C-05 — A routine that fires once and then never again *(High, fixed)*
+
+`app/api/cron/family-routines/route.ts`, at the end of the fire loop, updated
+`next_run_at` and discarded the result. That write is the only thing that moves a
+rule off the occurrence it just handled. Refused, `next_run_at` keeps a `due_at`
+that has already passed — so the next tick selects the same occurrence, collides
+`23505` on the reservation, and hands it to `releaseWedgedOccurrence`, which
+returns immediately because that guard is for reservations that never became a
+request **and this one did**. Nothing else advances the rule.
+
+One transient error and the family's routine is wedged for good, on a tick that
+reported `ok: true`. It now reports the rule in `problems`.
+
+`armPendingRoutines` had the same shape with a different cost: `armed += 1` ran
+unconditionally after its update, and `armed` exists — its own comment says so —
+*"so a quiet tick is distinguishable from a broken one."*
+
+**Proof:** three behavioural cases in `tests/cron-family-routines.test.ts`; the
+in-memory harness now lets one specific update resolve with an error, so the
+wedge is reproduced rather than asserted about.
+
+## C-06 — Twelve provider-sync writes discarded their errors *(Medium, fixed)*
+
+`sync_audit_logs` and `sync_provider_errors` were written longhand at twelve
+sites, every one discarding the result. Neither is telemetry nobody reads:
+
+| table | read by | cost of a lost write |
+|---|---|---|
+| `sync_audit_logs` | `/dashboard/sync/history` | a gap in the member's account history — and `disconnect` is one of its actions, so the missing row is the one someone goes looking for |
+| `sync_provider_errors` | admin sync page, `.eq('is_fatal', true)` | a broken integration looks healthier than it is, on the screen used to decide whether to act |
+
+Both now go through `logSyncAudit` / `logSyncProviderError`. **Two callers
+deliberately do not**, because they do something with the failure the helper
+cannot express — the cron route counts audit failures into its response, and
+onboarding throws, treating a connection it cannot produce a receipt for as
+failed. Both are exempt by name with a reason, and the test checks the reason
+still holds.
+
+## C-07 — An unsubscribe that was never recorded still said "Unsubscribed" *(High, fixed)*
+
+`app/api/marketing/unsubscribe/route.ts`:
+
+```ts
+await supabase.from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
+return page('Unsubscribed', `${clean} will no longer receive marketing emails…`, true);
+```
+
+That upsert **is** the unsubscribe — `lib/marketing/send.ts` drops an address from
+a campaign only by finding its row. The result was discarded and the page
+promises, unconditionally and with a tick and a 200, that the mail stops. A
+refused write sent a person away believing they had opted out, and the next
+campaign mailed them anyway.
+
+What makes this a gap rather than the house style is that every other path
+touching this table already treats the write as load-bearing:
+
+| path | on failure |
+|---|---|
+| `lib/marketing/send.ts` | **throws and abandons the whole send** if it cannot even *read* suppressions — it would rather mail nobody than risk mailing someone who opted out |
+| `app/api/webhooks/resend/route.ts` | answers **503** so a bounce/complaint write is retried |
+| the unsubscribe a person clicks | said "✓ Unsubscribed" |
+
+Both machine-facing paths are rigorous. The one path where a human is told
+something was the one that did not check.
+
+The status is not cosmetic either: `POST` here is the **RFC 8058 one-click
+endpoint**, and a 2xx is what tells Gmail or Yahoo the opt-out was honoured.
+Answering 200 on a failed write spends the provider's only signal on a promise
+that was not kept. It now answers 503 and says the mail may still come — the only
+wording that gives the reader a reason to try again.
+
+The route had no test at all before this; the existing `marketing-unsubscribe`
+spec covered only the token helpers, which is how it survived.
+
+## C-08 — Three counters that counted what did not happen *(Medium, fixed)*
+
+- **`lib/server/push.ts`** incremented `result.pruned` after a delete whose error
+  was discarded. A dead endpoint (404/410) that cannot be removed is retried on
+  every later notification, spending a send each time and reporting itself
+  cleaned up each time. *This is the pass's one duplicate: the same defect was
+  found independently on `codex/final-production-audit-20260912`. Both fixes are
+  the same; `main`'s also logs which device failed.*
+- **`lib/trust/server.ts`** said `// Explainable audit trail — always recorded.`
+  above an insert that discarded its result, so it was not always recorded. That
+  table is what `dashboard/trust` renders (the last forty decisions, with actor,
+  capability, decision and reason) and what `api/privacy/export` cites. A lost row
+  is a decision the family **cannot see**, including a denial or one that needed
+  their approval. Deliberately still non-fatal: callers act on the returned
+  decision, and failing one because its explanation failed to log would take the
+  AI layer down, denials included.
+- **`lib/stripe/webhook.ts`** recorded a card approve/decline "best-effort" and
+  silently. Best-effort is right and must stay — Stripe has already been told, and
+  throwing would answer the webhook non-2xx and have Stripe redeliver a decision
+  that is already final. Silence is not right, because the admin Stripe page and
+  the assistant both answer *"why was this declined"* from those rows.
+
+---
+
+## How Pass C is kept closed
+
+Four guards, **45 cases**, each proved load-bearing by reverting the fix and
+watching the matching case fail alone:
+
+| guard | cases | what it holds |
+|---|---|---|
+| `tests/audit-write-failures-are-visible.test.ts` | 14 | `audit_logs` / `wallet_audit_logs` are never written longhand with the result discarded |
+| `tests/sync-write-failures-are-visible.test.ts` | 16 | the two sync tables go through the helper, the disconnect reads its delete, and the page can render "not revoked" |
+| `tests/claimed-writes-that-did-not-land.test.ts` | 9 | the prune counter (driven behaviourally), the trust and Stripe rows, and a sweep over four tables |
+| `tests/marketing-unsubscribe-route.test.ts` | 6 | the real route: 503 and no claim when the write fails, 200 and the claim when it lands |
+
+Each sweep names the offending **file and line** when a new instance appears, so
+the next one fails on the way in rather than being found by a later audit.
