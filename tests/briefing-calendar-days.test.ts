@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { entitledServiceClient } from './helpers/entitled-service-client';
 import { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -9,7 +10,14 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const mocks = vi.hoisted(() => ({ context: vi.fn(), server: vi.fn(), complete: vi.fn(), build: vi.fn(), locale: 'en-US' as LocaleCode }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
+// The route resolves the family's plan before it works, through the service
+// client (see tests/helpers/entitled-service-client.ts). Seeded as entitled so
+// these keep testing what they are named for; the gate itself is covered by
+// tests/ai-routes-plan-gate.test.ts.
+vi.mock('@/lib/supabase/server', () => ({
+  createServer: mocks.server,
+  createServiceClient: () => entitledServiceClient(),
+}));
 vi.mock('@/lib/i18n/server', () => ({ getLocaleContext: async () => ({ locale: { code: mocks.locale }, messages: getMessages(mocks.locale) }) }));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: async () => true, resolveProvider: async () => ({ complete: mocks.complete }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: async (_scope: unknown, _input: unknown, fn: (obs: { used: () => void }) => unknown) => fn({ used: () => {} }) }));

@@ -5,13 +5,13 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Seventeen findings, and the
+**Audit status: reopened, then complete again.** Nineteen findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **12** — F2, F4, F7, F8, F10, F11, F15, F16, F17 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
-| **Closed without a code change** | **3** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing) |
+| **Fixed in code** | **13** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
 One further observation was **disproved and withdrawn** after re-checking: a
@@ -24,8 +24,9 @@ Nothing is left unexamined or unassigned.
 - **Reopened:** 2026-09-13 — F7 was not a one-off but a *shape*: an entitlement
   stated where a user can see it and absent where it is enforced. Every paid
   feature was re-checked for that shape. It recurred three more times: in a
-  nightly cron (F15), across 24 pages and their shared write path (F16), and in
-  the documentation that describes the tiers (F17)
+  nightly cron (F15), across 24 pages and their shared write path (F16), in the
+  documentation that describes the tiers (F17), and behind 14 AI endpoints
+  (F18)
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
@@ -52,6 +53,8 @@ Nothing is left unexamined or unassigned.
 | F15 | Family Autopilot (Plus) ran nightly for *every* family — both things that run it had no plan check | High | **Fixed** |
 | F16 | 24 of 62 paid features were enforced only by the sidebar padlock — the URL was the bypass | High | **Fixed** |
 | F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
+| F18 | 14 AI endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, on the surface that costs money per call | High | **Fixed** |
+| F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
 
 ---
 
@@ -708,6 +711,97 @@ drift again. Only the five routes that are not catalog features at all
 `/dashboard/relationship`) are still stated by hand, because the catalog has
 nothing to say about them. A test pins that the derivation stays derived: adding
 a hand-written entry that contradicts the catalog fails it.
+
+## F18 — AI endpoints behind gated pages had no gate *(High, fixed)*
+
+Thirty-nine routes live under `/api/ai`. Every one of them calls a model, which
+is the only surface in this application that costs money per request. Of those:
+
+| Guard | Count |
+|---|---|
+| `assertAIAccess` — feature, tier **and** the monthly allowance | 4 |
+| `authenticateAI` — identity only; it resolves a caller and stops there | 5 |
+| a hand-rolled `resolveFamilyPlanLevel` comparison | 4 |
+| a session and a per-minute rate limit, and nothing else | **26** |
+
+The second row is worth reading twice: `authenticateAI` sounds like the gate and
+is not one. Two of the five routes that rely on it — `ai/voice/speak` and
+`ai/voice/transcribe` — are model calls.
+
+Fourteen of those 26 sit directly behind a page that `requireFeature` refuses.
+`/api/ai/resolve-conflict` serves `/dashboard/conflicts` (Plus).
+`/api/ai/briefing` serves `/dashboard/briefing` (Plus). The page refused; the
+endpoint behind it did not, and a `fetch` is not harder to send than a URL is to
+type.
+
+Each mapping was established by finding the component that calls the endpoint
+and the page that hosts it, not by matching names:
+
+| Endpoint | Called from | Page it serves |
+|---|---|---|
+| `ai/resolve-conflict` | `family/conflict-resolver` | `/dashboard/conflicts` (Plus) |
+| `ai/briefing` | `lib/briefing/cache-isolation` | `/dashboard/briefing` (Plus) |
+| `ai/assist`, `ai/import` | `modules/inbox-module`, `modules/concierge-module` | `/dashboard/inbox`, `/dashboard/concierge` |
+| `ai/chef` | `modules/kitchen-dashboard` | `/dashboard/kitchen` |
+| `ai/flyer` | `modules/scan-module` | `/dashboard/scan` |
+| `ai/health/coach` | `modules/health-module` | `/dashboard/health` |
+| `ai/home/diagnose`, `find-pro`, `forecast` | the three `home/*` clients | `/dashboard/home` |
+| `ai/home/utility-savings` | `modules/utilities-module` | `/dashboard/utilities` |
+| `ai/savings` | `modules/savings-coach-card` → `subscriptions-module` | `/dashboard/subscriptions` |
+| `ai/trip` | `modules/trip-intel-module` | `/dashboard/trip-intel` |
+| `ai/auto/accident` | `auto/accident-client` | `/dashboard/auto` |
+
+All fourteen now refuse through `refuseUnlessEntitled`, which resolves through
+the same function the page does. The refusal happens **before the rate limiter
+and before the provider call**, which the tests pin explicitly: a gate placed
+after the model would refuse the family and still have paid for the answer.
+`ai/assist` is served by two modules, so it accepts either — requiring both
+would refuse someone the page in front of them allows.
+
+One near-miss worth recording. `components/marketing/switching-band.tsx` appears
+in a grep for `/api/ai/flyer`, which looked for a moment like a public marketing
+component calling an authenticated AI endpoint. It is a comment citing the route
+as evidence that a claim in the copy ships. Checked before it was written down.
+
+`/api/ai/gift` is genuinely public and is *correct*: documented as such,
+IP-rate-limited both in memory and durably, scoped to one already-secret gift
+token, and read-only. It is the model the other routes should have followed.
+
+## F19 — Most AI endpoints run unmetered *(Medium, open — a pricing decision)*
+
+F18 fixed *entitlement*. It did not fix *metering*, and the two are different
+questions.
+
+`lib/server/ai-access.ts` defines `AI_MONTHLY_ALLOWANCE` per plan level and
+enforces it — for the **4** routes that call `assertAIAccess`. The other 35 have
+at most a per-minute rate limit, which bounds a burst, not a month. A family on any
+tier can call `/api/ai/chef`, `/api/ai/meals/plan`, `/api/ai/journal`,
+`/api/ai/notes` and twenty more as often as they like, all month, and each call
+is a paid model request.
+
+This is **not** written up as a defect to fix, because the fix is a pricing
+decision and both directions cost something:
+
+- **Meter them all against the existing allowance.** Simple, consistent, and it
+  changes what paying customers can do today — a Basic family that uses the meal
+  planner daily would start hitting a wall it has never hit.
+- **Meter only the expensive ones.** Truer to cost, and needs per-route budgets
+  nobody has set.
+- **Leave them unmetered** and accept the exposure, which is what happens now,
+  but deliberately rather than by omission.
+
+What is *not* a live risk: every one of these routes requires a session, a
+family, and now — where the page is gated — an entitlement. The exposure is a
+signed-in family's own usage, not the open internet.
+
+Twelve of the 26 unguarded routes were left ungated by F18 on purpose: they
+serve features that are Free (`ai/journal`, `ai/habits`, `ai/meals/plan`,
+`ai/notes`, `ai/schedule`, `ai/relationship`, `ai/pantry-chef`), or they fan out
+across a dozen modules and would need a per-`kind` mapping (`ai/insights`), or
+they are the assistant itself (`ai`, `ai/chat`). For those, metering — not
+entitlement — is the right instrument, which is exactly the decision above.
+
+The numbers an owner needs are here; the choice is theirs.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 

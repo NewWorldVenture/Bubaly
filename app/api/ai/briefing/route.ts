@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/ai-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
 import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest) {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/briefing']);
+    if (refused) return refused;
     const limited = await enforceAIRateLimit(supabase, `ai-briefing:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: tr('briefing.tooManyBriefingRequestsPlease') },
