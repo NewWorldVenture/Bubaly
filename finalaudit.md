@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Three audits of bubaly.com, kept in one file because one file is the record.
+Four audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -9,6 +9,7 @@ They ran over **different surfaces** and none supersedes another:
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
 | **C — Write honesty** | every place a write's result is discarded and something downstream then claims it happened: audit trails, emergency notifications, provider disconnects, the unsubscribe, scheduler counters | 8 | `C-01`–`C-08` |
+| **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -38,6 +39,15 @@ recorded, and B found none of C's. The one place they nearly met is
 `lib/server/push.ts`: C-08's prune counter was ALSO found independently on the
 `codex/final-production-audit-20260912` branch, which is the only duplicate
 across all three passes and is noted at C-08.
+
+**Pass D found nothing, and that is the finding.** It is recorded in full
+because a pass that reports zero has to be at least as well evidenced as one
+that reports eight — otherwise "we checked" and "we could not see" read the
+same on the page. What it checked is a surface none of A, B or C covered: every
+export of a `'use server'` module is an HTTP endpoint with its own action id,
+callable without the component that normally calls it. 487 of them exist. The
+pass is at Pass D below, together with the false-positive class that nearly got
+33 non-defects reported as findings.
 
 Everything else is disjoint.
 
@@ -2201,3 +2211,118 @@ watching the matching case fail alone:
 
 Each sweep names the offending **file and line** when a new instance appears, so
 the next one fails on the way in rather than being found by a later audit.
+
+---
+
+# Pass D — Server-action authorization (0 findings)
+
+One question, asked of every export of every `'use server'` module: **does this
+establish who is calling — and does authenticating them actually constrain what
+they can write?**
+
+The surface matters because a server action is not a function call. Every export
+of a `'use server'` module is compiled into an HTTP endpoint with its own action
+id, and the client can invoke it directly. The component that normally calls it
+is not a gate; neither is the page's own access check. Whatever the action does
+for a caller who reached it by other means is what it does.
+
+- **Audit head:** `a7ed83c5` (main, after Passes A, B and C)
+- **Surface:** 127 `'use server'` modules · 487 exported async actions · 114 of
+  them in modules that hold a **service-role** client
+- **Why the service-role modules are the ones that matter:** the user client is
+  checked by RLS, so a forged id is refused by the database whatever the action
+  does. The service client is checked by nothing.
+- **Result:** 12 candidates, all 12 cleared against the code. A second, sharper
+  sweep for cross-tenant writes returned 2, both correct. **No findings.**
+
+## The false-positive class that nearly produced 33
+
+This is recorded because the intermediate result was wrong in a way that looked
+authoritative, and the same mistake is available to anyone who repeats this
+audit with the obvious tool.
+
+A text scan finds an action's body by taking the first `{` after its parameter
+list. That is not the body when the return type contains an object:
+
+```ts
+export async function issueCardAction(input: {
+  childWalletId: string; type: 'virtual' | 'physical'; …
+}): Promise<Result<{ cardId: string }>> {
+  const ctx = await requireUserContext();   // ← the guard, on line 3
+```
+
+Brace matching walks the parameters, then takes the next `{` — which opens
+`{ cardId: string }`, **inside the return type**. The extracted "body" is a type
+literal containing no guard, so the action is reported unguarded while its third
+line is `await requireUserContext()`. Every action annotated with an object type
+in its return position was flagged this way.
+
+Three formulations of the scan returned **33**, then **48**, then **52**
+candidates — the count moving with the regex rather than with the code, which is
+the tell. Parsing the modules with the TypeScript compiler instead returned
+**12**, and found 15 modules and 50 actions the text scan had missed entirely.
+None of the 33 was ever reported as a finding; the correction is here so the
+number is not mistaken for a result later.
+
+## The 12 candidates, and why each cleared
+
+| Action | Why it is not a finding |
+|---|---|
+| `app/(app)/dashboard/inbox/actions.ts:inboxRequestText` | Not an endpoint in the meaningful sense: a pure string composer over its own arguments, exported so a test can pin it without a database. Reads nothing, writes nothing |
+| `app/(auth)/actions.ts:stitchIdentityAction` | Authenticates via `supabase.auth.getUser()` and returns early when there is no user — the sweep's guard list did not include the bare property form |
+| `app/(auth)/actions.ts:childSignInAction` | A sign-in cannot require a session. Rate-limited by IP and throttled per username via `child_login_throttle`, checked *before* the password path and even for unknown usernames, so it is not a lookup oracle |
+| `app/gift/actions.ts:submitGiftPledgeAction` | Public by design; the unguessable link token **is** the authorization. Rate-limited, pledges written `pending` a parent's approval, pending pledges per link capped at 25 |
+| `app/reviews/new/actions.ts:submitReviewAction` | Public review form, rate-limited; writes `pending` unless the rating clears the configured auto-approve threshold |
+| `app/s/[slug]/actions.ts:submitResponseAction` | Public survey, respondents may be anonymous; the slug must resolve to a live, active, non-deleted survey and the score must sit inside that survey's own scale |
+| `app/onboarding/actions.ts:previewCalendarImportAction` | Authenticates, then writes nothing at all — the value-first preview step is computed in memory |
+| `app/onboarding/actions.ts:saveFamilyDetailsAction` | Authenticates, then writes through the **user** client. Verified against the policy rather than the comment: `0052_family_onboarding.sql:39` is `FOR ALL TO authenticated USING (is_family_member(family_id)) WITH CHECK (is_family_member(family_id))`, so the `WITH CHECK` refuses a forged `familyId` |
+| `app/onboarding/actions.ts:resetOnboardingAction` | Authenticates, then every service-role write is keyed on `auth.user.id` — it cannot address another account |
+| `app/onboarding/actions.ts:finalizeOnboardingAction` | Authenticates and fails closed on the auth error before any write |
+| `app/onboarding/calendar-actions.ts:startCalendarConnectionAction` | `auth.getUser()`, then `verifyOnboardingOwner`, then `assertOnboardingCalendarAccess` — twice, the second time against the family it just prepared |
+| `app/onboarding/calendar-actions.ts:previewConnectedCalendarAction` | `auth.getUser()`, then the `sync_accounts` read is scoped `.eq('user_id', auth.data.user.id)`, so another user's `accountId` resolves to nothing |
+
+## The sharper question: authentication is not authorization
+
+"Does it have a guard" is the weaker of the two questions. `requireUserContext()`
+answers *who is calling*; it does not answer *which family they may touch*. An
+action that authenticates and then hands a **caller-supplied** family id to the
+**service** client has no boundary left — RLS is not in the path.
+
+A second sweep looked for exactly that: an exported action that constructs a
+service client and keys a read or write on a `family_id` whose value traces back
+to its own parameters. Two hits, both in `app/(app)/admin/actions.ts`:
+
+| Action | Verdict |
+|---|---|
+| `adminCreateUserAction` | `assertSuperAdmin()` with an early return, before anything else. Cross-family is the point of the admin console, and the action is audited via `site_admin` |
+| `adminSetFamilyPlanAction` | Same gate, same early return; audited, and the plan is validated against `ASSIGNABLE_PLANS` |
+
+Both are correct. The rest of the 114 either take the family from the
+authenticated context or go through the user client.
+
+## How Pass D is kept closed
+
+`tests/server-action-authorization.test.ts` — **8 cases**, the two sweeps above
+plus four that prove the detector can see.
+
+| what it holds | how |
+|---|---|
+| Every action in a service-role module reaches a guard, or is on `PUBLIC_BY_DESIGN` with a written reason | AST walk, resolving guards transitively through same-module helpers |
+| A caller-supplied family id reaching the service client is super-admin gated | the parameter-to-`family_id` dataflow sweep, reported with file, line and the parameter it traced to |
+| The public allowlist cannot rot | a stale entry fails; so does a reason under 40 characters, because an unexplained exemption is how the next one gets added |
+| The detector is not blind | four synthetic modules, including the exact return-type-brace shape that defeated the text scan |
+
+Both sweeps report nothing today, which is the condition under which a guard is
+easiest to get wrong — a sweep that cannot see is indistinguishable from a clean
+codebase. So each was proved load-bearing against the real code:
+
+- Replacing `requireUserContext()` in `issueCardAction` with a literal made the
+  first sweep fail naming `app/(app)/money/actions.ts:109  issueCardAction`, and
+  only that.
+- **Downgrading** `assertSuperAdmin()` to `requireUserContext()` in
+  `adminSetFamilyPlanAction` left the first sweep green — it has a guard — and
+  failed the second, naming the three lines where `input.familyId` reaches the
+  service client. That is the case the weaker question misses, and it is caught.
+
+Both mutations were reverted; `git status` and `tsc --noEmit` confirm the tree is
+unchanged apart from the new test.
