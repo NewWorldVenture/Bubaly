@@ -215,3 +215,74 @@ One path is not clean, and it is the emergency one.
 | **AI (scam screening)** | **silently degrades to pattern matching** | **silently degrades** | **see the HIGH finding above** |
 
 - **Status:** VERIFIED
+## Sweep 3 — the scheduler
+
+### [CLAUDE-1][MEDIUM][ARCHITECTURE] Every cron route runs from two schedulers, on an idempotency claim nothing checks
+
+- **Files:** `vercel.json` (24 `crons` entries) · `scripts/cron-dispatch.mjs`
+  (`SCHEDULES`, 24 entries) · `.github/workflows/cron-dispatch.yml` (ticks `*/5`)
+- **Evidence:** set-compared the three sources.
+
+  ```
+  routes on disk      : 24
+  scheduled in vercel : 24
+  in the dispatcher   : 24
+  ROUTE WITH NO SCHEDULE ANYWHERE: none
+  SCHEDULED BUT NO ROUTE        : none
+  IN BOTH (would double-run)    : all 24
+  ```
+
+  No orphan route and no orphan schedule — that part is clean and worth
+  recording. But **all 24 are scheduled twice**, and this is deliberate: Vercel's
+  Hobby plan fails a deployment that schedules anything finer than daily, so
+  `vercel.json` holds daily-safe schedules for the deploy and the real cadences
+  live in the dispatcher.
+- **Problem:** the design rests on one sentence in `scripts/cron-dispatch.mjs`:
+
+  > *"The routes are idempotent and CRON_SECRET-gated, so a Vercel daily run and
+  > a GitHub run of the same route never conflict."*
+
+  That claim is load-bearing for all 24 routes, and **nothing verifies it.** It
+  has already been false: Pass B's **F-014** found notification dedupe failing on
+  every run, so every run re-notified — precisely the failure this sentence
+  assumes away. F-014 was closed by running the notification cron **five times**
+  and counting duplicate groups. That technique proves the claim for **1 of 24
+  routes**. The other 23 have no such proof, and a route that quietly loses its
+  dedupe tomorrow will send a family two digests, two reminders, or two
+  allowances before anyone notices.
+- **Impact:** bounded but real, and it varies by route. `wallet-allowance`
+  carries a timestamp guard and a dedupe key, which is what you want on money.
+  `weekly-digest` and `admin-digest` send email. `automations` and
+  `autopilot-scan` take AI actions on a family's behalf.
+- **Fix:** a harness test that runs each of the 24 routes **twice** against the
+  replayed database and asserts the second run writes nothing new — the shape
+  F-014's fix already used, generalised from one route to the table. The route
+  list should come from `SCHEDULES` so a route added tomorrow is covered
+  tomorrow, the way `run-probes.sh` globs.
+- **Status:** OPEN
+
+#### The count I did NOT report, and why
+
+A first scan looked for an idempotency mechanism in each route file and reported
+**11 of 24 with none** — including `notifications`, the one route F-014 already
+proved idempotent. That number is wrong. `cron/notifications` dedupes inside
+`generateFamilyNotifications` on `related_id` (with `0293` making it a key), and
+the mechanism is simply not visible at the route's own level; the same is true
+for others that delegate to a service.
+
+**Eleven is not a finding, it is a scan that cannot see helpers.** That is the
+tenth time in this audit a pattern-based count would have been wrong, and it is
+recorded here so the number is not mistaken for a result. It is also the reason
+the recommended fix is a *behavioural* test — run it twice and look — rather than
+a static one: the property is not visible in the text.
+
+---
+
+### [CLAUDE-1][INFO][ARCHITECTURE] Scheduler coverage is complete
+
+Every `/api/cron/*` route on disk has a schedule, and every schedule names a
+route that exists — in both `vercel.json` and `scripts/cron-dispatch.mjs`. There
+is no job that never runs and no schedule pointing at a 404. Verified by set
+comparison of all three sources.
+
+- **Status:** VERIFIED
