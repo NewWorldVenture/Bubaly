@@ -7,7 +7,7 @@ They ran over **different surfaces** and neither supersedes the other:
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 19 | `F1`–`F19` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, and the audit's own probes | 17 | `F-001`–`F-017` |
+| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, and the audit's own probes | 18 | `F-001`–`F-018` |
 
 **Where they touch, stated plainly.** Only two places:
 
@@ -999,7 +999,7 @@ risk surface is hydration, which is precisely what could not be exercised here.
 
 ---
 
-# Pass B — Data layer (F-001–F-017)
+# Pass B — Data layer (F-001–F-018)
 
 A running, evidence-based audit of bubaly.com. Every entry records what was
 checked, **how**, and what the check actually returned. Nothing is marked closed
@@ -1026,13 +1026,13 @@ F-002 records reasoning that was wrong and what replaced it.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (1 pre-existing warning) |
-| Unit tests | `vitest run` | ✅ 13,515 tests |
+| Unit tests | `vitest run` | ✅ 13,518 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
-| Migration names | `db:audit:migrations` | ✅ 306 files, no collisions |
-| Migration replay | fresh DB, 0 → 306 | ✅ all applied, 0 failed |
+| Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
+| Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 13 probes, fresh 306-migration replay, run 3× | ✅ 13/13 each time (F-015 made it repeatable) |
+| RLS boundaries | 14 probes, fresh 307-migration replay, run 2× | ✅ 14/14 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
@@ -1043,6 +1043,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Notification dedupe | 5 cron runs, duplicate-group count | ✅ no new duplicates (F-014) |
 | Public sitemap | 1,049 published posts vs the served file | ✅ 1,049 listed (was 1,048 — F-012) |
 | Calendar-day correctness | day keys vs DATE columns, 9 zones | ✅ family zone on every user-facing surface (F-017) |
+| Query plans | family-scoped reads at 700k rows | ✅ index scan, was a full scan (F-018) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -1723,6 +1724,61 @@ rather than reasoning about it. Spring-forward arrives an hour *late* and stays
 inside the right day; it is the autumn transition that lands on the previous
 evening.
 
+### F-018 · Nine family-scoped reads were sequential scans of whole tables
+
+**Severity:** medium · **Status:** CLOSED — migration `0294`
+
+A read filtered by `family_id` on a table with no index *leading* on that column
+scans the whole table — every other household's rows included. The cost then
+grows with the **platform**, not with the family, which is the shape that looks
+fine in staging and becomes a page-load problem at scale. RLS sharpens it: the
+policies gate on `family_id`, so the predicate is applied to every row on every
+read whether or not the application also filters on it.
+
+Measured on `sync_job_runs` loaded with **700,000 rows across 2,000 households**
+— a year of quarter-hourly calendar syncs — running the query the sync history
+page actually issues:
+
+```
+before   Parallel Seq Scan   38,258 buffers   ~46 ms   (46, 48, 46 ms)
+after    Index Scan               54 buffers   ~0.30 ms (0.33, 0.30, 0.28 ms)
+```
+
+~150× faster, ~700× fewer buffers, and bounded by one family's rows.
+
+Nine tables were in that state, each indexed in the order its page queries, so
+one index serves both the filter and the sort:
+
+| Table | Index |
+|---|---|
+| `sync_job_runs` | `(family_id, started_at desc)` |
+| `guardian_routing_rules` | `(family_id, priority)` |
+| `social_post_variants` | `(family_id, post_id)` |
+| `activation_events` | `(family_id, milestone)` |
+| `allowance_rules`, `meal_vote_options`, `meal_vote_ballots`, `move_boxes`, `crm_contacts` | `(family_id)` |
+
+**What was deliberately left alone, and why it matters to the finding.** A first
+pass flagged 27 more tables. Checked against `pg_index` rather than against the
+migration text, **23 of those already had a leading index** from a `UNIQUE` or
+`PRIMARY KEY` declaration on `family_id` — my SQL-text parser simply could not
+see those forms. The remaining four — `ai_messages`, `member_badges`,
+`marketplace_listing_shares`, `social_publish_jobs` — are each read by
+`family_id` *alongside* a primary key or another indexed column, so the other
+index already does the selective work and a `family_id` index would buy nothing
+and cost write throughput.
+
+So the rule is not "every family-scoped read needs a `family_id` index". It is
+"a family-scoped read needs **some** selective index", and only nine had none.
+
+That correction is the reason this closed as a SQL probe rather than a unit
+test. `docs/audit/family-scoped-index-check.sql` asserts against `pg_index`,
+where a UNIQUE or PK declaration is visible as the index it really creates;
+reading the migration SQL for the same fact is what produced 23 false positives.
+The probe also proves it can fail — it drops one index inside a transaction,
+confirms the assertion notices, and rolls back — because a check that cannot
+detect the state it forbids is decoration. Verified: 14/14 probes on a fresh
+307-migration replay, twice, with the dropped index still present afterwards.
+
 ## 4. Closed previously (regression-checked this pass)
 
 | ID | Finding | Still closed by |
@@ -1763,7 +1819,7 @@ evening.
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 1 warning |
-| `vitest run` | 13,515 tests passed |
+| `vitest run` | 13,518 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
 | `db:audit:migrations` | passed, next version 0291 |
@@ -1791,3 +1847,6 @@ evening.
 | meal-plan read at 18:30 Sunday in LA | rendered tomorrow's dinner; now renders tonight's |
 | DST week arithmetic, measured across 2026 | 26–31 Oct: +7 fixed days lands a day short |
 | F-017 guard with the kitchen fix reverted | fails — not vacuous |
+| `sync_job_runs` at 700k rows / 2,000 households | 38,258 buffers · 46 ms → 54 buffers · 0.30 ms |
+| 27 further tables checked against `pg_index` | 23 already indexed via UNIQUE/PK; 4 covered by another index |
+| A-14 probe, index dropped in a rolled-back txn | the check detects it — not decoration |
