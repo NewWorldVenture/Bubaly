@@ -127,6 +127,13 @@ export async function POST(req: NextRequest) {
     result = { summary: summarizeInbound(body), intent: classifyIntent(body) };
   }
 
+  // main reached the family here with an inline sendSms plus a notifications
+  // insert whose error it had just been taught to read. Neither is re-added:
+  // attemptUrgentDelivery below is the same escalation with receipts, and
+  // ensureNotification does strictly more than that fix asked for — it THROWS on
+  // the insert error, reads the row back and checks its identity, and leaves
+  // notificationDone false if any of that fails, which returns 'failed' and makes
+  // this route answer 503 so Twilio retries. A logged line became a retry.
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'sms', from: from ?? undefined, to, body,

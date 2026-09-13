@@ -71,9 +71,16 @@ export async function POST(req: NextRequest) {
     : `⚠️ Urgent Call — ${callerDisplay}`;
   const alertBody = description;
 
-  // Push notifications for all parents
+  // Push notifications for all parents.
+  //
+  // `pushSent` is written into the guardian_escalations row below and returned
+  // to the caller, so it has to mean the row LANDED. A PostgREST insert resolves
+  // with { data, error } rather than throwing, so the catch never fired on a
+  // failed write and `pushSent = true` ran anyway: an emergency escalation was
+  // permanently recorded as having alerted the parents when nothing had been
+  // written. Take the error, and only claim the push on success.
   try {
-    await supabase.from('notifications').insert({
+    const { error: notifyError } = await supabase.from('notifications').insert({
       family_id: familyId,
       user_id: null,
       type: 'system',
@@ -82,8 +89,11 @@ export async function POST(req: NextRequest) {
       related_type: commId ? 'guardian_communications' : undefined,
       related_id: commId ?? null,
     });
-    pushSent = true;
-  } catch { /* non-fatal */ }
+    if (notifyError) console.error('[guardian] escalation notification write failed', notifyError);
+    else pushSent = true;
+  } catch (error) {
+    console.error('[guardian] escalation notification write threw', error);
+  }
 
   if (isTwilioConfigured() && members?.length) {
     // Get phones from profiles table where it's stored

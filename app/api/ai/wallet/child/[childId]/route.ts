@@ -11,6 +11,7 @@ import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/li
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { logWalletAudit } from '@/lib/server/audit';
 
 // POST /api/ai/wallet/child/[childId] — child-specific AI Money Coach.
 // Same tier gate + daily limit as the family-wide coach, but the prompt is
@@ -127,11 +128,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       return NextResponse.json({ error: tr('child.couldNotGenerateCoachingRight') }, { status: 502 });
     }
 
-    await supabase.from('wallet_audit_logs').insert({
+    await logWalletAudit(supabase, {
       family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_coach_call',
       entity_type: 'child_wallet', entity_id: childId,
       detail: `AI Money Coach — ${member?.display_name ?? 'Child'}`,
-    });
+    }, 'child AI money coach call');
 
     return NextResponse.json({ coaching, tier });
   } catch (err) {

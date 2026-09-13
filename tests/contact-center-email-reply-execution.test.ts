@@ -48,6 +48,13 @@ beforeEach(() => {
     defaults: { family_inbox_messages: { ai_handled: false, direction: 'inbound', status: 'new' } },
   });
   db.seed('families', [{ id: FAMILY, name: 'Ours', timezone: 'UTC' }]);
+  // The route gates inbound email on FAMILY_EMAIL_MIN_PLAN_LEVEL (Family+), and
+  // resolveFamilyPlanLevel reads subscriptions through the service-role client.
+  // Without a qualifying row this family is Free, the route answers
+  // { ok: true, skipped: 'plan' } before any reply is composed, and every case
+  // below silently tests the gate instead of the reply behaviour it was written
+  // for. tests/family-email-plan-gate.test.ts is what covers the gate itself.
+  db.seed('subscriptions', [{ family_id: FAMILY, plan: 'plus', status: 'active' }]);
   db.seed('family_contact_channels', [{
     id: 'channel-ours', family_id: FAMILY, email_local: 'ours', ai_concierge_enabled: true, forward_to_phone: null,
   }]);

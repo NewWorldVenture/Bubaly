@@ -17,6 +17,7 @@ import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import type { EventCategory } from '@/lib/database.types';
 import { normalizeEmail, normalizePhone } from '@/lib/migrate/parse';
+import { logAudit } from '@/lib/server/audit';
 import {
   eventKey, resolveImportedItems,
   type ExistingContact, type ExistingMember, type ResolutionPlan,
@@ -312,8 +313,8 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     }
   }
 
-  await supabase.from('audit_logs').insert({
-    family_id: familyId, actor_id: userId, action: 'import', resource: 'migration',
+  await logAudit(supabase, {
+    familyId, actorId: userId, action: 'import', resource: 'migration',
     metadata: { source: payload.source, counts, skipped, assigned },
   });
   revalidatePath('/dashboard', 'layout');
