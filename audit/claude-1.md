@@ -204,3 +204,47 @@ for the entire life of the repository.
   the finding. This is already the house standard in Pass C–F's verification
   tables; it should be applied to guards nobody has questioned yet.
 - **Status:** VERIFIED — the pattern holds across eight independent findings.
+
+### [CLAUDE-1][VERIFIED][SECURITY] The service-role boundary holds — proven by planting a violation
+
+- **File/path:** `lib/supabase/server.ts`, `lib/network/benchmarks-server.ts`,
+  `.next/static/**`
+- **Problem investigated:** 197 modules carry `import 'server-only'`; the module
+  that mints the **service-role** client (which bypasses RLS entirely) did not.
+  The question was whether a client component could pull the admin client, and
+  whether the key could reach a browser.
+- **Evidence — three separate measurements, one of which corrected the other two:**
+  1. **The key value does not reach the browser.** Searched the actual 164-char
+     `SUPABASE_SERVICE_ROLE_KEY` value across every emitted client chunk in
+     `.next/static/` — absent. The three occurrences of the *name* are i18n
+     operator-remedy strings, not env reads.
+  2. **My first probe was invalid and I nearly reported on it.** I planted the
+     client page at `app/__audit_probe/page.tsx` and the build passed, which I
+     briefly took as "the missing guard is exploitable". It was not: a folder
+     beginning with `_` is a Next **private folder**, excluded from routing, so
+     the page was never compiled. The route table in the build log does not
+     contain it. Two "compiled successfully" results meant nothing.
+  3. **Re-run at `app/auditprobe/page.tsx`, the boundary holds — and held before
+     my change.** With the guard: build fails, `You're importing a component that
+     needs "server-only"`. Control with the guard removed: build **also** fails,
+     `You're importing a component that needs "next/headers"`. So the module was
+     already unimportable from a client component.
+- **Impact:** No open vulnerability. The finding downgrades from the MEDIUM I
+  first suspected to **LOW**, and the substance changes: the protection is real
+  but *incidental*. It comes from `createServer()` needing `cookies`, not from
+  any declared boundary. `createServiceClient()` does not need cookies, and 493
+  modules import this file mostly for that one function — so splitting it out is
+  a plausible refactor that would silently remove the only thing keeping the
+  admin client out of a client bundle.
+- **Recommended fix:** applied, as hardening rather than a fix — both modules now
+  state the boundary instead of inheriting it. The comments say plainly that they
+  close no currently-open hole, so nobody later mistakes them for a patched
+  vulnerability.
+- **Status:** VERIFIED (boundary sound) · FIXED (declaration added).
+  `tsc` clean, build exits 0, 13,593 tests pass.
+
+**Method note, since this file argues for it elsewhere:** the control run is what
+made this finding honest. Had I stopped at "build fails with the guard", I would
+have reported a vulnerability I had closed, when the truth is that it was never
+open and I added a seatbelt. Running the *negative* case is the same discipline
+this audit recommends for every guard — it just cuts the other way here.

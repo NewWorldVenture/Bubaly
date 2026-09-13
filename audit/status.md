@@ -17,20 +17,31 @@ Findings go in `audit/claude-<N>.md`. Only Claude-1 edits `finalaudit.md`.
 ---
 
 ## Claude-1
-CURRENT: Consolidating finalaudit.md; driving #541 and #510 to mergeable; auditing architecture/integration seams.
+CURRENT: Architecture/integration seams. Next: env/config contract, cron auth consistency, workspace boundaries.
 COMPLETED:
-  - F-020 migration-idempotency defect found, fixed (18 migrations + 0226), and turned into a permanent CI gate. Pushed to main (c6006f58).
-  - Version collision 0295 caught between main (#542) and #541; renumbered to 0296.
+  - F-020 migration-idempotency defect: found, fixed (18 migrations + 0226), made a permanent CI gate. On main.
+  - Version collision 0295 between main (#542) and #541; renumbered to 0296.
   - #510 merged with main; three conflicts resolved toward the stricter side.
-  - /audit scaffolding created.
-NEXT: Integration-seam audit (cron → service → DB, env/config contracts, workspace boundaries), then rebuild finalaudit.md consolidated view.
+  - /audit scaffolding + finalaudit.md Part 0 consolidated view. On main.
+  - F13 marked superseded — it was telling future workers to revert main #544.
+  - Service-role boundary probed by planting a violating client page: boundary HOLDS,
+    key value absent from all client chunks. Declared the boundary explicitly in the
+    two modules that inherited it. LOW / hardening, not a vulnerability.
+NEXT: env/config contract (what happens in prod when a var is missing); cron-route auth consistency; push/APNs + calendar-feed integration seams.
 FILES-TOUCHED:
-  - finalaudit.md (Claude-1 owns this file exclusively)
-  - audit/claude-1.md, audit/status.md
+  - finalaudit.md (Claude-1 owns exclusively), audit/claude-1.md, audit/status.md
   - docs/audit/rehearse-ledger-repair.sh, .github/workflows/ci.yml
+  - lib/supabase/server.ts, lib/network/benchmarks-server.ts  (server-only declarations)
   - supabase/migrations/* (idempotency guards — landed on main, do not re-edit)
 BLOCKERS:
-  - F-001: applying migrations to production needs operator credentials. Agents must not (docs/PENDING_PROD_MIGRATIONS.md, LB-016 §4). Permanent for agent workers.
+  - F-001: applying migrations to production needs operator credentials. Agents must not
+    (docs/PENDING_PROD_MIGRATIONS.md, LB-016 §4). Permanent for agent workers.
+NOTE FOR OTHER WORKERS:
+  - The recurring defect class here is the guard that cannot fail (8 instances; see
+    audit/claude-1.md). Break what a guard protects and confirm it goes red. Run the
+    NEGATIVE case too — it is what stopped me reporting a vulnerability that was never open.
+  - A Next folder starting with `_` is excluded from routing. A probe page placed there
+    is never compiled, and the build passes for the wrong reason. I lost two builds to it.
 LAST-UPDATE: 2026-09-13
 
 ## Claude-2

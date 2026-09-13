@@ -1,4 +1,22 @@
 // lib/supabase/server.ts — server client bound to the request cookies (RLS as the user)
+// Declares the boundary this module already had by accident.
+//
+// A client component importing this file is a build error today — but only
+// because `createServer()` needs `cookies` from 'next/headers', and Next
+// rejects THAT in a client graph. Verified by planting a 'use client' page
+// importing createServiceClient: without this line the build fails naming
+// next/headers; with it, it fails naming server-only. Both fail, so this line
+// closes no hole that is open right now.
+//
+// It is here because the existing protection is incidental and load-bearing by
+// coincidence. `createServiceClient()` — which mints the SERVICE-ROLE client and
+// bypasses RLS entirely — does not itself need cookies. 493 modules import this
+// file, most of them only for that function, so splitting it out is a plausible
+// refactor, and it would silently remove the only thing keeping the admin client
+// out of a client bundle. 197 other modules in this repository state the
+// boundary rather than inheriting it; this one now does too.
+import 'server-only';
+
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createAdmin } from '@supabase/supabase-js';

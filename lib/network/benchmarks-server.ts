@@ -7,6 +7,12 @@
 // floor through benchmarks.ts. A failed read is a failed read — callers get
 // `{ ok: false }` and must render an error, never an empty benchmark.
 
+// Server-only: reads network-wide benchmark aggregates through the service-role
+// client. Protected transitively today (it imports lib/supabase/server, which
+// imports next/headers), but that is inherited rather than declared — see the
+// note in lib/supabase/server.ts.
+import 'server-only';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/database.types';
