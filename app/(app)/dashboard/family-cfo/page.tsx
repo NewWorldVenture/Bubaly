@@ -3,7 +3,7 @@ import Link from 'next/link';
 import {
   Wallet, Receipt, PiggyBank, TrendingDown, CalendarClock, CreditCard, ArrowRight, Sparkles, Plane, Truck, Hammer, Repeat, ShieldCheck,
 } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -34,7 +34,7 @@ const PLAN_SOURCE: Record<PlanSource, { labelKey: string; icon: typeof Plane; hr
 
 export default async function FamilyCfoPage() {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-cfo');
   await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();

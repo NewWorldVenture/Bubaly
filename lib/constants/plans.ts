@@ -9,6 +9,7 @@
 // Legacy: 'family' and 'family_annual' map to basic tier (backward-compat).
 
 import familyPrices from './family-prices.json';
+import { FEATURE_CATALOG } from './feature-catalog';
 
 export type PlanId = 'free' | 'family' | 'family_annual' | 'basic' | 'basic_annual' | 'plus' | 'plus_annual';
 
@@ -75,68 +76,43 @@ export const PLAN_NAMES: Record<string, string> = {
 
 // ── Route → minimum plan level ───────────────────────────────────────────────
 // 0 = any signed-in user  |  1 = basic+  |  2 = plus+
+//
+// DOCUMENTATION ONLY. Nothing reads this map. Entitlement is enforced from
+// `FEATURE_CATALOG` (catalog default, overridden per-deployment by the admin's
+// Tier & Features settings) through `requireFeature` and
+// `resolveFeatureEntitlement`.
+//
+// It used to be written out by hand, and on 2026-09-13 it disagreed with the
+// enforced tiers on 19 of the 55 routes it shared with them — a third of the
+// table — while three other documents cited it as fact. So the catalog routes
+// are now DERIVED, and can no longer drift from what is enforced. Only routes
+// that are not catalog features at all are still stated here, because the
+// catalog has nothing to say about them.
+const NON_FEATURE_ROUTE_LEVEL: Record<string, number> = {
+  '/dashboard':             0,
+  '/dashboard/settings':    0,
+  '/dashboard/billing':     0,
+  '/dashboard/trust':       0,  // Trust & Permissions is foundational safety — free for all
+  '/dashboard/relationship': 0, // Relationship Helper (dates, gift ideas, AI nudges)
+};
+
 export const ROUTE_PLAN_LEVEL: Record<string, number> = {
-  // Free routes (everyone)
-  '/dashboard':          0,
-  '/dashboard/calendar': 0,
-  '/dashboard/grocery':  0,
-  '/dashboard/todos':    0,
-  '/dashboard/recipes':  0,
-  '/dashboard/messages': 0,
-  '/dashboard/contacts': 0,
-  '/dashboard/notes':    0,
-  '/dashboard/photos':   0,
-  '/dashboard/documents':0,
-  '/dashboard/reminders':0,
-  '/dashboard/settings': 0,
-  '/dashboard/billing':  0,
-  '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
-  '/dashboard/trust':    0,  // Trust & Permissions is foundational safety — free for all
-  '/dashboard/wishlists': 0,
-  '/dashboard/announcements': 0,
-  '/dashboard/activity': 0,
-  '/dashboard/celebrations': 0,
-  '/dashboard/readiness': 0,
-  '/dashboard/memories': 0,
-  '/dashboard/relationship': 0,  // Relationship Helper (dates, gift ideas, AI nudges)
-  '/dashboard/social':   0,  // Social Command (page enforces requireUserContext)
-  // Basic routes
-  '/dashboard/chores':        1,
-  '/dashboard/rewards':       1,
-  '/dashboard/locator':       1,
-  '/dashboard/meals':         1,
-  '/dashboard/pantry':        1,
-  '/dashboard/school':        1,
-  '/dashboard/timetable':     1,
-  '/dashboard/homework':      1,
-  '/dashboard/signups':       1,
-  '/dashboard/sports':        1,
-  '/dashboard/health':        1,
-  '/dashboard/home':          1,
-  '/dashboard/auto':          1,
-  '/dashboard/renewals':      1,
-  '/dashboard/medical':       1,
-  '/dashboard/care':          1,
-  '/dashboard/dental':        1,
-  '/dashboard/goals':         1,
-  '/dashboard/habits':        0,
-  '/dashboard/journal':       0,
-  '/dashboard/focus':         0,
-  '/dashboard/notifications': 1,
-  '/dashboard/briefing':      1,
-  '/dashboard/medications':   1,
-  '/dashboard/inbox':         1,
-  '/dashboard/concierge':     1,
-  '/dashboard/front-desk':    1,
-  '/dashboard/scan':          1,
-  '/dashboard/trips':         1,
-  '/dashboard/rides':         1,
-  '/display':                 1,  // Kitchen Display Mode
-  // Plus routes
-  '/dashboard/autopilot':       2, // Family Autopilot (Mission Control)
-  '/dashboard/command-center':  2, // AI Family Command Center
-  '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
-  '/dashboard/conflicts':       2, // AI Conflict Resolution
+  ...NON_FEATURE_ROUTE_LEVEL,
+  ...Object.fromEntries(
+    FEATURE_CATALOG.flatMap((f) => {
+      // An 'off' feature is unavailable at every tier, so it has no minimum
+      // plan level to document — listing it as 0 would read as "free".
+      if (!f.href || f.defaultTier === 'off') return [];
+      const level = f.defaultTier === 'plus' ? 2 : f.defaultTier === 'basic' ? 1 : 0;
+      return [[f.href, level] as const];
+    })
+      // Two features can share an href; the more permissive tier wins, exactly
+      // as `tiersByHref` resolves it.
+      .reduce((out, [href, level]) => {
+        const seen = out.get(href);
+        return out.set(href, seen === undefined ? level : Math.min(seen, level));
+      }, new Map<string, number>()),
+  ),
 };
 
 // ── Legacy Plan type (kept for admin display) ────────────────────────────────

@@ -6,7 +6,15 @@ import type { CalendarReadinessEvent } from '@/lib/readiness/calendar-source';
 const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(), createServer: vi.fn(), effectivePlanLevel: vi.fn(), resolveFamilyPlanLevel: vi.fn(),
 }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext, effectivePlanLevel: mocks.effectivePlanLevel }));
+// The page resolves its feature entitlement now, not just a session. Both
+// resolve the same UserContext, so the harness answers either with the same
+// stub; what the page is entitled to is covered by
+// tests/paid-features-enforced-server-side.test.ts.
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUserContext: mocks.requireUserContext,
+  requireFeature: mocks.requireUserContext,
+  effectivePlanLevel: mocks.effectivePlanLevel,
+}));
 vi.mock('@/lib/i18n/server', async () => {
   // This test invokes the server component directly, outside a request scope,
   // so cookies() is unavailable. Resolve through the real catalogue so the

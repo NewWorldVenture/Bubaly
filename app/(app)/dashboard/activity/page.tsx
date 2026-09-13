@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ActivityPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/activity');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

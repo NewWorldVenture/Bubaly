@@ -38,11 +38,6 @@ const state = vi.hoisted(() => ({
   failSubscriptionsRead: false,
 }));
 
-// `getFeatureTiersByHref` is request-`cache`d, and React's `cache` is not
-// available outside a render. Unwrapping it keeps the REAL tier resolution
-// (catalog defaults merged with admin overrides) under test.
-vi.mock('react', async (original) => ({ ...await original<typeof import('react')>(), cache: <T>(fn: T) => fn }));
-
 vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => state.db,
   createServiceClient: () => state.db,

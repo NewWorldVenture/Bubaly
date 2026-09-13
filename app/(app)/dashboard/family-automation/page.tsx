@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Zap, Bell, Plus, CheckCircle2, Clock, ToggleRight, ToggleLeft } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -48,7 +48,7 @@ const label = (list: { value: string; label: string }[], v: string) => list.find
 
 export default async function FamilyAutomationPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/family-automation');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);

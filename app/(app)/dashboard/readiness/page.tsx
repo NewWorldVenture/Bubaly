@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-react';
-import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature, requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
@@ -22,7 +22,7 @@ const BAND_COLOR = {
 
 export default async function ReadinessPage() {
   const t = await getTranslations();
-  const ctx = await requireUserContext();
+  const ctx = await requireFeature('/dashboard/readiness');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
