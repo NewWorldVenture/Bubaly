@@ -6,6 +6,18 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Heading = { id: string; text: string };
 
+/**
+ * The scroll-spy window: ignore the top 80px, which sits under the sticky
+ * header, and the bottom 60%, so a heading counts as "current" only once it
+ * has actually reached the reading area.
+ *
+ * This was a catalogue key. A CSS margin has no language, and every one of the
+ * eleven translations carried an identical copy of it — one edit away, in a
+ * translation tool, from a value IntersectionObserver rejects, which throws at
+ * construction and takes the whole table of contents down for that locale.
+ */
+const SCROLL_SPY_MARGIN = '-80px 0px -60% 0px';
+
 export function TableOfContents({ headings }: { headings: Heading[] }) {
   const t = useTranslations();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -19,7 +31,7 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
           }
         }
       },
-      { rootMargin: t('tableOfContents.80px0px600px'), threshold: 0.1 },
+      { rootMargin: SCROLL_SPY_MARGIN, threshold: 0.1 },
     );
 
     for (const { id } of headings) {
