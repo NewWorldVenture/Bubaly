@@ -21,6 +21,7 @@ import {
   eventKey, resolveImportedItems,
   type ExistingContact, type ExistingMember, type ResolutionPlan,
 } from '@/lib/migrate/resolve';
+import { readAll } from '@/lib/supabase/read-all';
 
 export type ImportEventInput = {
   title: string; startsAt: string; endsAt: string | null; allDay: boolean;
@@ -98,9 +99,13 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
   let existingEvents: { title: string; startsAt: string }[] = [];
   if (events.length) {
     const earliest = events.reduce((min, e) => (e.startsAt < min ? e.startsAt : min), events[0].startsAt);
-    const { data, error } = await supabase
+    // This read is the DE-DUPE set: anything it fails to see gets imported a
+    // second time. `.limit(5000)` was never 5,000 — PostgREST caps at
+    // db-max-rows — and a household already holds 1,906 events (measured).
+    const { rows: data, error } = await readAll((from, to) => supabase
       .from('calendar_events').select('title, starts_at')
-      .eq('family_id', familyId).gte('starts_at', earliest).limit(5000);
+      .eq('family_id', familyId).gte('starts_at', earliest)
+      .order('id').range(from, to), { max: 5000 });
     if (error) {
       console.error('[migrate] existing calendar read failed', error);
       return { ok: false, error: t('migrateActions.couldNotCheckYourCalendarForDuplicates'), retryable: true };
@@ -110,9 +115,10 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
 
   let existingContacts: ExistingContact[] = [];
   if (contacts.length) {
-    const { data, error } = await supabase
+    // The de-dupe set again — a short read means duplicate contacts.
+    const { rows: data, error } = await readAll((from, to) => supabase
       .from('family_contacts').select('name, email, phone, phone_alt')
-      .eq('family_id', familyId).limit(5000);
+      .eq('family_id', familyId).order('id').range(from, to), { max: 5000 });
     if (error) {
       console.error('[migrate] existing contacts read failed', error);
       return { ok: false, error: t('migrateActions.couldNotCheckYourContactsForDuplicates'), retryable: true };
@@ -172,9 +178,11 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   const events = included(payload.events);
   if (events.length) {
     const earliest = events.reduce((min, e) => (e.startsAt < min ? e.startsAt : min), events[0].startsAt);
-    const { data: existing, error: existingErr } = await supabase
+    // The de-dupe set the IMPORT itself checks against — see above.
+    const { rows: existing, error: existingErr } = await readAll((from, to) => supabase
       .from('calendar_events').select('title, starts_at')
-      .eq('family_id', familyId).gte('starts_at', earliest).limit(5000);
+      .eq('family_id', familyId).gte('starts_at', earliest)
+      .order('id').range(from, to), { max: 5000 });
     if (existingErr) {
       console.error('[migrate] existing calendar read failed', existingErr);
       return { ok: false, error: t('migrateActions.couldNotCheckYourCalendarForDuplicates'), retryable: true };
@@ -250,9 +258,10 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   // ── Contacts → family_contacts (de-duped by email/phone, then by name) ──
   const contacts = included(payload.contacts);
   if (contacts.length) {
-    const { data: existing, error: existingErr } = await supabase
+    // The de-dupe set the IMPORT itself checks against — see above.
+    const { rows: existing, error: existingErr } = await readAll((from, to) => supabase
       .from('family_contacts').select('name, email, phone, phone_alt')
-      .eq('family_id', familyId).limit(5000);
+      .eq('family_id', familyId).order('id').range(from, to), { max: 5000 });
     if (existingErr) {
       console.error('[migrate] existing contacts read failed', existingErr);
       return { ok: false, error: t('migrateActions.couldNotCheckYourContactsForDuplicates'), retryable: true };

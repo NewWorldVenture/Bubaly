@@ -14,6 +14,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
+import { readAll } from '@/lib/supabase/read-all';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -51,8 +52,12 @@ export async function refreshPlaybookAction(): Promise<Result> {
   const signals: PlaybookSignal[] = [];
 
   // 1) Favorite dinners — meals that appear on the plan repeatedly.
-  const { data: plans } = await sb.from('meal_plans')
-    .select('meal_id').eq('family_id', familyId).gte('plan_date', since.slice(0, 10)).limit(2000);
+  // These signals are COUNTS over the whole window, so a capped read does not
+  // shorten a list, it reports the wrong number. `.limit(N)` above 1,000 never
+  // applied — PostgREST caps a response at db-max-rows regardless.
+  const { rows: plans } = await readAll((from, to) => sb.from('meal_plans')
+    .select('meal_id').eq('family_id', familyId).gte('plan_date', since.slice(0, 10))
+    .order('id').range(from, to), { max: 2000 });
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
   if (mealCounts.size) {
@@ -65,8 +70,9 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 2) Grocery staples — items added to the list again and again.
-  const { data: groceries } = await sb.from('grocery_items')
-    .select('name').eq('family_id', familyId).gte('created_at', since).limit(4000);
+  const { rows: groceries } = await readAll((from, to) => sb.from('grocery_items')
+    .select('name').eq('family_id', familyId).gte('created_at', since)
+    .order('id').range(from, to), { max: 4000 });
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
     const key = (g.name ?? '').trim().toLowerCase();
@@ -84,8 +90,10 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 4) Annual traditions — same-titled events recurring across multiple years.
-  const { data: events } = await sb.from('calendar_events')
-    .select('title,starts_at,recurrence').eq('family_id', familyId).gte('starts_at', since3y).limit(4000);
+  // Three years of events for one household — already 1,906 on seeded data.
+  const { rows: events } = await readAll((from, to) => sb.from('calendar_events')
+    .select('title,starts_at,recurrence').eq('family_id', familyId).gte('starts_at', since3y)
+    .order('id').range(from, to), { max: 4000 });
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
     const key = (e.title ?? '').trim().toLowerCase();

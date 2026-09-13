@@ -18,13 +18,34 @@ function body(fn: string): string {
 }
 
 describe('blog counts/list paginate past the 1000-row cap', () => {
-  it('has a paginating helper that loops with .range() until a short page', () => {
-    const helper = SRC.slice(SRC.indexOf('async function fetchAllPublishedRows'));
-    expect(helper).toContain('.range(from, from + PAGE - 1)');
-    expect(helper).toMatch(/rows\.length < PAGE/);
+  it('reads through the shared paged reader, applying the range it is handed', () => {
+    const helper = SRC.slice(
+      SRC.indexOf('async function fetchAllPublishedRows'),
+      SRC.indexOf('export async function getAllPosts('),
+    );
+    // The loop itself lives in lib/supabase/read-all.ts, which is pinned
+    // behaviourally by tests/supabase-read-all.test.ts — including that it
+    // resumes from the rows RECEIVED, so a server capping a page below the
+    // requested range cannot silently end the read. What matters here is that
+    // this helper goes through it and applies the range it is given, rather
+    // than issuing one query PostgREST will cap at 1,000 rows.
+    expect(helper).toContain('readAll');
+    expect(helper).toMatch(/\.range\(from, to\)/);
+    expect(SRC).toMatch(/import \{ readAll \} from '@\/lib\/supabase\/read-all'/);
   });
 
-  for (const fn of ['getCategoryCounts', 'getAllPosts']) {
+  it('orders by a key no two rows can share, so pages cannot overlap or skip', () => {
+    // `published_at` alone is not a total order — 717 of the 1,049 published
+    // rows share a date with another row — and two pages are two separately
+    // planned queries, so a tied boundary can repeat one row and drop another.
+    const helper = SRC.slice(
+      SRC.indexOf('async function fetchAllPublishedRows'),
+      SRC.indexOf('export async function getAllPosts('),
+    );
+    expect(helper).toMatch(/\.order\('published_at'[^)]*\)\s*\n?\s*\.order\('slug'\)/);
+  });
+
+  for (const fn of ['getCategoryCounts', 'getAllPosts', 'getAllPostRefs']) {
     it(`${fn} fetches through the paginating helper (not a single capped query)`, () => {
       const b = body(fn);
       expect(b).toContain('fetchAllPublishedRows');

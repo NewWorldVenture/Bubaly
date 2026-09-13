@@ -8,6 +8,7 @@ import {
   type OnboardingJourney, type DemoLead,
 } from '@/lib/marketing/journey-recovery';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 
@@ -34,11 +35,15 @@ export async function GET(req: NextRequest) {
 
   // ── Abandoned onboarding ──────────────────────────────────────────────────
   try {
-    const { data, error } = await supabase
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: data, error } = await readAll((from, to) => supabase
       .from('onboarding_progress')
       .select('user_id, status, completed_at, reset_at, created_at, updated_at')
       .eq('status', 'in_progress')
-      .limit(2000);
+      .order('id')
+      .range(from, to), { max: 2000 });
     if (error) throw error;
     const stalled = selectAbandonedOnboarding((data ?? []) as OnboardingJourney[], now);
     for (const r of stalled) {
@@ -65,12 +70,16 @@ export async function GET(req: NextRequest) {
 
   // ── Abandoned demo leads ──────────────────────────────────────────────────
   try {
-    const { data, error } = await supabase
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: data, error } = await readAll((from, to) => supabase
       .from('crm_contacts')
       .select('email, lead_source, lifecycle_stage, created_at')
       .eq('lead_source', 'demo')
       .neq('lifecycle_stage', 'customer')
-      .limit(2000);
+      .order('id')
+      .range(from, to), { max: 2000 });
     if (error) throw error;
     const stalled = selectAbandonedDemoLeads((data ?? []) as DemoLead[], now);
     for (const l of stalled) {

@@ -5,10 +5,12 @@ const source = readFileSync('app/api/cron/journey-recovery/route.ts', 'utf8');
 
 describe('journey recovery cron failure boundaries', () => {
   it('checks both abandonment sweep reads', () => {
-    expect(source).toContain('const { data, error } = await supabase');
+    // Both sweeps read through `readAll`, so each answers `{ rows, error }`.
+    // The boundary is that both bind the error and throw on it.
+    expect(source.match(/const \{ rows: data, error \} = await readAll\(/g)).toHaveLength(2);
     expect(source).toContain(".from('onboarding_progress')");
     expect(source).toContain(".from('crm_contacts')");
-    expect(source).toContain('if (error) throw error;');
+    expect(source.match(/if \(error\) throw error;/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   it('reports profile, automation, and sweep failures for retry', () => {

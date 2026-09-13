@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { marketplaceInsights, type InsightListing } from '@/lib/marketplace/insights';
 import { KIND_LABELS, CATEGORY_LABELS, formatCents, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Pulse · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -43,10 +44,13 @@ export default async function MarketplaceInsightsPage() {
   const familyId = ctx.active.familyId;
 
   const [{ data: listings }, { data: saves }, { data: offers }] = await settleAll([
-    sb.from('marketplace_listings').select('id, title, kind, category, status, price_cents, member_id')
-      .eq('family_id', familyId).limit(2000),
-    sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).limit(5000),
-    sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).limit(5000),
+    // Every figure on this page is a count over these rows, so a capped read is
+    // a wrong number rather than a short list — and `.limit(N)` above 1,000 never
+    // applied, because PostgREST caps a response at db-max-rows regardless.
+    readAllAsQuery((from, to) => sb.from('marketplace_listings').select('id, title, kind, category, status, price_cents, member_id')
+      .eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
+    readAllAsQuery((from, to) => sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
   ]);
 
   const rows = (listings ?? []) as (InsightListing & { title: string })[];

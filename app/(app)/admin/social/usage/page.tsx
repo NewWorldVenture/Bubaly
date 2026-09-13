@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Gauge } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Social Usage', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -25,10 +26,14 @@ async function ReadFailure() {
 export default async function AdminUsagePage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: events, error } = await supabase
+  // This page sums `quantity`, so a capped read reports a wrong total rather
+  // than a short list — and `.limit(5000)` was never 5,000, because PostgREST
+  // caps a response at db-max-rows whatever the client asked for.
+  const { rows: events, error } = await readAll((from, to) => supabase
     .from('social_usage_events')
     .select('kind, quantity')
-    .limit(5000);
+    .order('id')
+    .range(from, to), { max: 5000 });
   if (error) {
     console.error('[admin-social-usage] usage read failed', error);
     return <ReadFailure />;

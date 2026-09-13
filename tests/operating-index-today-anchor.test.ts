@@ -34,6 +34,10 @@ function makeDb() {
     const reply = { data: [], error: null };
     Object.assign(b, {
       select: chain, order: chain, limit: chain, in: chain, is: chain, or: chain, ilike: chain, not: chain,
+      // A paged read stops at an empty page, so `.range()` has to slice.
+      range: (from: number, to: number) => ({
+        then: (resolve: (value: typeof reply) => void) => resolve({ ...reply, data: reply.data.slice(from, to + 1) }),
+      }),
       eq: filter, neq: filter,
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),

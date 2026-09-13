@@ -114,7 +114,19 @@ end $$;
 -- SECURITY DEFINER runs as owner and bypasses RLS, so each family-taking RPC must
 -- gate on public.is_family_member(p_family). Prove a representative mutation RPC
 -- rejects user B acting on family A.
-grant execute on all functions in schema public to authenticated;
+-- NO blanket `grant execute on all functions ... to authenticated` here.
+--
+-- One used to stand on this line so the call below could run as `authenticated`.
+-- It was never needed — CREATE FUNCTION grants EXECUTE to PUBLIC, so
+-- `authenticated` can already call this RPC (verified on a pristine 305-migration
+-- replay: has_function_privilege('authenticated', …) = true with no probe run).
+--
+-- What it DID do was undo the deliberate revokes in 0204/0253/0288, handing
+-- `authenticated` EXECUTE on claim_ai_runs and the four loyalty RPCs — the exact
+-- cross-tenant hole F-006 closed. Probes glob alphabetically, so
+-- privileged-rpc-grants-check (p) ran BEFORE this file (r) and passed, and every
+-- run after that saw a poisoned database. A probe suite whose answer depends on
+-- what ran before it is not evidence, so the grant is gone.
 do $$
 declare rejected boolean := false;
 begin
@@ -135,6 +147,14 @@ end $$;
 -- ensure_family_for_user / onboarding_claim_family provision or claim a family
 -- for p_user_id; they must reject any caller whose auth.uid() != p_user_id
 -- (except service_role), or one user could seize another's family.
+-- A caller can be turned away two ways, and BOTH are a pass:
+--   * the function runs and raises its own 'not authorized', or
+--   * Postgres refuses the call outright — 42501, because EXECUTE is revoked
+--     from `authenticated` and from PUBLIC, which is the stronger boundary.
+-- Matching only the first is what let this invariant look meaningful while the
+-- blanket grant that used to sit above was quietly restoring EXECUTE: remove the
+-- grant and the real answer is 42501. What must never happen is the call
+-- SUCCEEDING, so that is what this now distinguishes.
 do $$
 declare a boolean := false; b boolean := false;
 begin
@@ -142,11 +162,11 @@ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000b2', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   begin perform public.ensure_family_for_user('00000000-0000-4000-8000-000000000001','Stolen');
-  exception when others then a := (sqlerrm ilike '%not authorized%'); end;
+  exception when others then a := (sqlerrm ilike '%not authorized%' or sqlstate = '42501'); end;
   begin perform public.onboarding_claim_family('00000000-0000-4000-8000-000000000001','Stolen','UTC');
-  exception when others then b := (sqlerrm ilike '%not authorized%'); end;
+  exception when others then b := (sqlerrm ilike '%not authorized%' or sqlstate = '42501'); end;
   if not (a and b) then raise exception 'A-03 FAIL: a provisioning RPC accepted a cross-user caller (ensure=%, claim=%)', a, b; end if;
-  raise notice 'A-03 OK: provisioning RPCs reject cross-user callers';
+  raise notice 'A-03 OK: provisioning RPCs reject cross-user callers (in-function check or 42501)';
   perform set_config('role','postgres', true);
 end $$;
 

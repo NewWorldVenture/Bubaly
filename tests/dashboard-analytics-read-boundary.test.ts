@@ -21,7 +21,9 @@ describe('dashboard analytics read boundary', () => {
   });
 
   it('journeys page surfaces a failed telemetry read instead of a false-empty', () => {
-    expect(journeys).toContain('const { data, error } =');
+    // Paged read, so it answers `{ rows, error }`; what this pins is that the
+    // error is bound and branched on before the empty state, not the shape.
+    expect(journeys).toMatch(/const \{ rows: data, error \} = await readAll\(/);
     expect(journeys).toContain('MiniError');
     // The error branch must precede the empty-rows branch.
     expect(journeys.indexOf('error ?')).toBeLessThan(journeys.indexOf('rows.length === 0'));

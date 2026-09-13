@@ -13,6 +13,7 @@ import type { Database } from '@/lib/database.types';
 import { BENCHMARKS_PUBLICATION_KEY, isBenchmarksPublished } from './benchmarks';
 import { K_ANONYMITY_FLOOR, type ConsentScope } from './insights';
 import type { NetworkAggregate } from './aggregate';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -53,12 +54,17 @@ export type AggregatesRead = { ok: true; aggregates: NetworkAggregate[]; compute
 
 /** Every published benchmark row at or above the floor, newest computation first. */
 export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
-  const { data, error } = await sb.from('network_aggregates')
+  // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — and
+  // `cohort_size` is far from unique, so it also needs a tiebreak for two pages
+  // not to overlap or skip.
+  const { rows: data, error } = await readAll((from, to) => sb.from('network_aggregates')
     .select('scope, cohort_key, metric, value, count, cohort_size, computed_at')
     .eq('scope', 'benchmarks')
     .gte('cohort_size', K_ANONYMITY_FLOOR)
     .order('cohort_size', { ascending: false })
-    .limit(2000);
+    .order('cohort_key')
+    .order('metric')
+    .range(from, to), { max: 2000 });
   if (error) {
     console.error('[benchmarks] aggregate read failed', error);
     return { ok: false };

@@ -10,6 +10,13 @@ type Reply = { data: unknown; error: unknown };
 function chain(result: Reply) {
   const c: Record<string, unknown> = {};
   for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit']) c[m] = () => c;
+  // `.range()` slices, so a paged read reaches an empty page and stops. Without
+  // that a stub returning all rows to every call would page to its ceiling.
+  c.range = (from: number, to: number) => ({
+    then: (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(
+      Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result,
+    ).then(res, rej),
+  });
   c.then = (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej);
   return c;
 }

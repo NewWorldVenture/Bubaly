@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -17,7 +18,11 @@ export async function GET(req: NextRequest) {
   }
   try {
     const supabase = createServiceClient();
-    const { data: families, error } = await supabase.from('families').select('id').limit(5000);
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: families, error } = await readAll((from, to) => supabase
+      .from('families').select('id').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     let scanned = 0;

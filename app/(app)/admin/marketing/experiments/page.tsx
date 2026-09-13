@@ -8,6 +8,7 @@ import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -34,9 +35,15 @@ export default async function ABTestingPage() {
   // `ab_experiments` is read unbounded, so `keys` is unbounded too — batch the
   // filter rather than building one query string out of every key.
   const keys = (experiments ?? []).map((e) => e.key);
-  const eventResult = await readInChunks<{ experiment_key: string; variant_key: string; kind: string }, typeof experimentsError>(
+  // The error type also admits `{ message }`: a paged read reports a TRANSPORT
+  // failure in that shape rather than rejecting, so the batch survives it.
+  const eventResult = await readInChunks<{ experiment_key: string; variant_key: string; kind: string }, typeof experimentsError | { message: string }>(
     keys,
-    (chunk) => supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', chunk).limit(100000),
+    // Per CHUNK of experiment keys, and an event table is the one place rows
+    // genuinely pile up: `.limit(100000)` returned 1,000 (PostgREST caps at
+    // db-max-rows), so every conversion rate on this page was computed from a
+    // 1,000-row sample per chunk and read as exact.
+    (chunk) => readAllAsQuery((from, to) => supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', chunk).order('id').range(from, to), { max: 100000 }),
   );
   if (experimentsError || eventResult.error) {
     console.error('[admin-marketing-experiments] experiment read failed', experimentsError ?? eventResult.error);

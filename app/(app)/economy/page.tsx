@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/states';
 import {
   EconomyView, type Currency, type Member, type Reward, type Redemption, type BalanceCell,
 } from '@/components/economy/economy-view';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Family Economy' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,8 @@ export default async function EconomyPage() {
   const [currenciesRes, membersRes, txnsRes, rewardsRes, redemptionsRes] = await settleAll([
     supabase.from('family_currencies').select('id, name, emoji, unit_label, is_active').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
     supabase.from('family_members').select('id, display_name, color, role').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('currency_transactions').select('currency_id, member_id, direction, amount').eq('family_id', familyId).limit(5000),
+    // Balances are summed from these rows, so a capped read is a wrong balance.
+    readAllAsQuery((from, to) => supabase.from('currency_transactions').select('currency_id, member_id, direction, amount').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
     supabase.from('economy_rewards').select('id, currency_id, title, emoji, cost, stock, is_active').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
     supabase.from('economy_redemptions').select('id, currency_id, member_id, title, cost, status, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100),
   ]);

@@ -16,6 +16,7 @@ import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -74,7 +75,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
     // Digital Twin learning: 90d of chore outcomes per member.
-    supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).limit(2000),
+    readAllAsQuery((from, to) => supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).order('id').range(from, to), { max: 2000 }),
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),

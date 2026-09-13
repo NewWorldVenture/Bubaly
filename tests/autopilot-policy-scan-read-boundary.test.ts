@@ -24,6 +24,10 @@ function stubClient(failingTable: string | null) {
         : { data: [], error: null };
       const chain: Record<string, unknown> = {};
       for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'order', 'limit']) chain[method] = () => chain;
+      // A paged read stops at an empty page, so `.range()` must slice.
+      chain.range = (from: number, to: number) => Promise.resolve(
+        Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result,
+      );
       chain.maybeSingle = () => Promise.resolve(result);
       chain.single = () => Promise.resolve(result);
       chain.insert = () => { writes.push({ table, operation: 'insert' }); return chain; };

@@ -26,6 +26,7 @@ import {
   type TimelinePlan,
   type TimelineScenario,
 } from './timeline';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type Client = SupabaseClient<Database>;
 
@@ -161,12 +162,15 @@ export async function loadMoneyTimelineInput(
       .eq('family_id', familyId)
       .in('status', [...OPEN_VACATION_STATUSES])
       .gte('start_date', today).lte('start_date', horizonEndDay).limit(200),
-    supabase.from('vacation_budgets')
+    // A ceiling above 1,000 is not a ceiling on its own: PostgREST caps the
+    // response at db-max-rows whatever `.limit()` says. These total a household's
+    // vacation money, so a quietly truncated read understates every total.
+    readAllAsQuery((from, to) => supabase.from('vacation_budgets')
       .select('vacation_id, planned_cents')
-      .eq('family_id', familyId).limit(2000),
-    supabase.from('vacation_expenses')
+      .eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('vacation_expenses')
       .select('vacation_id, amount_cents')
-      .eq('family_id', familyId).limit(5000),
+      .eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
     supabase.from('moves')
       .select('title, move_date, status, budget_cents, spent_cents')
       .eq('family_id', familyId)

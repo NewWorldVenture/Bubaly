@@ -72,6 +72,7 @@ import { scopeForSystem, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 type ApprovalRow = Database['public']['Tables']['approval_requests']['Row'];
@@ -1131,12 +1132,17 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
     const candidates = aiApprovalReminders(approvals, managers, now);
     if (candidates.length === 0) continue;
 
-    const { data: existing, error: existingError } = await db
+    // Batched: a dedupe key is a composite string, not a uuid, so a few hundred
+    // of them overflow the request line and the read fails `URI too long` —
+    // which, per the branch below, skips the family every tick.
+    const { data: existing, error: existingError } = await readInChunks<
+      { related_id: string | null }, { message: string }
+    >(candidates.map((c) => c.dedupe_key), (chunk) => db
       .from('notifications')
       .select('related_id')
       .eq('family_id', familyId)
       .eq('related_type', 'approval_requests')
-      .in('related_id', candidates.map((c) => c.dedupe_key));
+      .in('related_id', chunk), 50);
     if (existingError) {
       // Without the dedupe read every manager would be re-notified; skip the
       // family this tick rather than ship the duplicate.

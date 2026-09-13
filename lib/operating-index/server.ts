@@ -21,6 +21,7 @@ import {
 } from './score';
 import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
 import { orchestrate, type OrchestratorReport, type DayEvent, type OrchestratorItem } from './orchestrator';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -74,7 +75,7 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
     supabase.from('family_polls').select('id, status').eq('family_id', familyId).eq('status', 'open').limit(100),
     supabase.from('goals').select('id, progress, target_date').eq('family_id', familyId).eq('is_complete', false).limit(200),
     supabase.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
-    supabase.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).limit(5000),
+    readAllAsQuery((from, to) => supabase.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).order('id').range(from, to), { max: 5000 }),
     // Only spendable accounts count as "below zero" — a credit card carrying a
     // negative (owed) balance is expected, not a preparedness problem.
     supabase.from('financial_accounts').select('id, balance').eq('family_id', familyId).lt('balance', 0).neq('type', 'credit').limit(100),

@@ -11,6 +11,7 @@ import { checkDatabase, checkStorage, checkAuth, checkStripe, checkEmail, type H
 import { PLANS } from '@/lib/constants/plans';
 import { fmtMoney } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -55,7 +56,7 @@ export default async function AdminSystemPage() {
     Promise.all([checkDatabase(supabase), checkStorage(supabase), checkAuth(supabase), checkStripe(), Promise.resolve(checkEmail())]),
     settle(supabase.from('profiles').select('id', { count: 'exact', head: true })),
     settle(supabase.from('families').select('id', { count: 'exact', head: true })),
-    settle(supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).limit(2000)),
+    settle(readAllAsQuery((from, to) => supabase.from('profiles').select('created_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 })),
     settle(supabase.from('subscriptions').select('plan, status')),
     settle(supabase.from('documents').select('size_bytes')),
   ]);

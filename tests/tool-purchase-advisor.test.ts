@@ -141,6 +141,15 @@ describe('Ask purchase advice', () => {
       return from(table);
     });
     expect(await tool.execute(scope, { text: 'drill' })).toMatchObject({ ok: false, code: 'db', retryable: true });
-    expect(console.error).toHaveBeenCalledWith('[purchase-advisor] household read failed', expect.any(Error));
+    // The read is paged, and a paged read answers a TRANSPORT failure as
+    // `{ error }` rather than rejecting — so this now lands in the advisor's own
+    // per-table branch and names the table that failed, instead of being caught
+    // by the outer handler as an anonymous "household read failed". The contract
+    // the caller sees (retryable db failure, never a reassuring verdict) is the
+    // assertion above and is unchanged.
+    expect(console.error).toHaveBeenCalledWith(
+      '[purchase-advisor] inventory_items read failed',
+      expect.objectContaining({ message: 'network unavailable' }),
+    );
   });
 });

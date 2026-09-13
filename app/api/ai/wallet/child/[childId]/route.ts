@@ -11,6 +11,7 @@ import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/li
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 // POST /api/ai/wallet/child/[childId] — child-specific AI Money Coach.
 // Same tier gate + daily limit as the family-wide coach, but the prompt is
@@ -65,7 +66,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
-      supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).limit(2000),
+      // Money, so a quietly truncated read is a wrong balance, not a short
+      // list. `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows.
+      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 2000 }),
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
 

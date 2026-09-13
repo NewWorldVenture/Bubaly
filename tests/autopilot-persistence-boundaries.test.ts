@@ -44,6 +44,12 @@ function failingReadClient(failingTable: string) {
         : { data: [], error: null };
       const chain: Record<string, unknown> = {};
       for (const method of methods) chain[method] = () => chain;
+      // A paged read stops at an empty page, so `.range()` must slice.
+      chain.range = (from: number, to: number) => ({
+        then: (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) =>
+          Promise.resolve(Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result)
+            .then(resolveResult, rejectResult),
+      });
       chain.insert = () => { writes.push({ table, operation: 'insert' }); return chain; };
       chain.update = () => { writes.push({ table, operation: 'update' }); return chain; };
       chain.delete = () => { writes.push({ table, operation: 'delete' }); return chain; };
@@ -85,12 +91,22 @@ function suggestionInsertFailureClient() {
       chain.insert = () => { operation = 'insert'; writes.push({ table, operation }); return chain; };
       chain.update = () => { operation = 'update'; writes.push({ table, operation }); return chain; };
       chain.delete = () => { operation = 'delete'; writes.push({ table, operation }); return chain; };
-      chain.then = (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) => {
+      const replyFor = () => {
         let result = reads[table] ?? { data: [], error: null };
         if (table === 'reminders' && operation === 'insert') result = { data: { id: 'reminder-1' }, error: null };
         if (table === 'autopilot_suggestions' && operation === 'insert') result = { data: null, error: new Error('suggestion insert failed') };
-        return Promise.resolve(result).then(resolveResult, rejectResult);
+        return result;
       };
+      // A paged read stops at an empty page, so `.range()` must slice.
+      chain.range = (from: number, to: number) => ({
+        then: (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) => {
+          const result = replyFor();
+          return Promise.resolve(Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result)
+            .then(resolveResult, rejectResult);
+        },
+      });
+      chain.then = (resolveResult: (value: QueryResult) => unknown, rejectResult: (reason: unknown) => unknown) =>
+        Promise.resolve(replyFor()).then(resolveResult, rejectResult);
       return chain;
     },
   };

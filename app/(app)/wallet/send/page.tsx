@@ -9,6 +9,7 @@ import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { SendMoneyView, type SendChild } from '@/components/wallet/send-money-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Send Money' };
 export const dynamic = 'force-dynamic';
@@ -31,9 +32,12 @@ export default async function SendMoneyPage() {
   const [{ data: childWallets, error: childWalletsError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId),
-    supabase.from('wallet_transactions')
+    // Balances are summed from these rows, so a capped read is a wrong balance —
+    // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
+    // response at db-max-rows whatever the client asked for.
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('child_wallet_id, bucket_id, direction, amount_cents, status')
-      .eq('family_id', familyId).limit(3000),
+      .eq('family_id', familyId).order('id').range(from, to), { max: 3000 }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
   ]);
   if (childWalletsError) { console.error('[wallet-send] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }

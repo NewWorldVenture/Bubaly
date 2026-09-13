@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
+import { getAllPostRefs, ALL_CATEGORIES } from '@/lib/blog/posts';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBenchmarksPublication } from '@/lib/network/benchmarks-server';
 
@@ -9,18 +9,31 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
  * How long the sitemap will wait on the database before giving up on the
  * admin-published pages and shipping the routes it already knows.
  *
- * This route is PRERENDERED, so these reads run during `next build`. The
- * try/catch below handles a query that *errors*, but nothing bounded how long
- * one could *hang* — and an unreachable Postgres does not error promptly, it
- * sits at the TCP layer. That makes every deployment, on every branch, depend
- * on database health at build time: a sick database stops being an incident on
- * the site and becomes an incident on the deploy pipeline as well.
+ * The try/catch below handles a query that *errors*, but nothing bounds how
+ * long one can *hang* — and an unreachable Postgres does not error promptly, it
+ * sits at the TCP layer. A sitemap missing its admin-published landing pages
+ * for one crawl is a small, self-correcting loss; a request that never answers
+ * is not.
  *
- * A sitemap missing its admin-published landing pages for one deploy is a
- * small, self-correcting loss. A deployment that cannot ship during an
- * incident is not.
+ * This route USED to be prerendered, and the budget then also kept a sick
+ * database from becoming a deploy incident. It now renders per request,
+ * because a build-time read of the blog was being served from Next's Data
+ * Cache a week later (see the note where the posts are read). The budget still
+ * applies, now per request, and the build no longer touches the database here
+ * at all.
  */
 const DB_BUDGET_MS = 5_000;
+
+/**
+ * Rendered per request, never at build time.
+ *
+ * The blog read below is `no-store`, which already forces this — but only by
+ * THROWING during Next's trial static render, which is both noisy and fragile:
+ * anything that swallowed that throw would hand Next a sitemap with no articles
+ * in it and let it ship. Declaring the route dynamic says it outright, so no
+ * trial render happens at all.
+ */
+export const dynamic = 'force-dynamic';
 
 /** Resolves to `fallback` if `work` has not finished within the budget. */
 async function withBudget<T>(work: PromiseLike<T>, fallback: T, label: string): Promise<T> {
@@ -69,9 +82,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: r.priority,
   }));
 
-  // Published blog posts (best-effort — getAllPosts degrades to [] on any error,
-  // so a DB hiccup can never break the sitemap or the build).
-  const posts = await getAllPosts();
+  // Published blog posts (best-effort — getAllPostRefs degrades to [] on any
+  // error, so a DB hiccup can never break the sitemap).
+  //
+  // These reads are `no-store`, which is what makes this route render per
+  // request instead of at build time. That is the point: a build-time read of
+  // the blog was stored in Next's Data Cache for a YEAR under no tag, so the
+  // shipped sitemap froze to whatever the blog looked like the day that cache
+  // entry was written — 1,048 of 1,049 articles, and falling behind with every
+  // new post. See the note on `anonClient` in lib/blog/posts.ts.
+  const posts = await getAllPostRefs();
   const postEntries: MetadataRoute.Sitemap = posts.map((p) => ({
     url: `${SITE_URL}/blog/${p.slug}`,
     lastModified: p.date ? new Date(p.date) : now,

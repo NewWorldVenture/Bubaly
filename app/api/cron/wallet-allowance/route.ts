@@ -8,6 +8,7 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -25,12 +26,16 @@ export async function GET(req: NextRequest) {
     const supabase = createServiceClient();
     const today = new Date().toISOString().slice(0, 10);
 
-    const { data: rules, error } = await supabase
+    // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
+    // whatever the client asked for, so this quietly read 1,000. `max` is the
+    // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    const { rows: rules, error } = await readAll((from, to) => supabase
       .from('allowance_rules')
       .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')
       .eq('is_active', true)
       .lte('next_run_on', today)
-      .limit(2000);
+      .order('id')
+      .range(from, to), { max: 2000 });
     // If the wallet migration hasn't reached this database yet, there's simply
     // nothing to run — report a clean no-op so the cron isn't flagged as failed.
     if (error && isMissingRelationError(error)) {
