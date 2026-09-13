@@ -2,15 +2,33 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-12T21:22:36.920Z
-- Total Audit Items: 13866
+- Last Updated: 2026-09-13T11:30:00.000Z
+- Total Audit Items: 13868
 - Not Started: 13796
-- In Progress: 66
-- Passed: 1
-- Fixed + Passed: 0
+- In Progress: 63
+- Passed: 4
+- Fixed + Passed: 2
 - Blocked: 0
 - Failed: 3
-- Overall Completion: 0.01%
+- Overall Completion: 0.04%
+
+Changes in this update (2026-09-13, against production build f9c4d7a1 and branch
+head 92340315):
+
+- API-C8B72ACE022A and API-A2C5302CAE88 move to ✅ PASS. The POST-only middleware
+  exemption is in place and was confirmed against production: POST answers 401
+  and 403 from the handlers themselves, GET answers 307, and the two adjacent
+  paths answer 307 on both verbs, so the namespace did not widen.
+- FLOW-FC0B97223986 moves to ✅ PASS. The conflict with main is resolved and all
+  seven CI checks pass; mergeable_state is clean.
+- SEO-001 and SEO-002 are new records, both 🛠 FIXED + PASS pending deployment.
+  Together they meant no shared Bubaly link rendered a preview card anywhere.
+- The Final Regression sections are no longer NOT STARTED. Four gates pass
+  outright (Build, Type Check, Lint, Automated Tests) and the unauthenticated API
+  boundary passed a 266-probe sweep with no exposure and no server error. What
+  this pass could NOT reach — authenticated journeys, live providers, deployed
+  database policy, and a browser audit of the deployed site — is stated as such
+  in each section rather than left to look verified.
 
 ## Status Legend
 - ⬜ NOT STARTED
@@ -69,11 +87,11 @@ PRODUCTION READY: NO
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
-- API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
-- FLOW-FC0B97223986: Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.
+
+- SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
+- SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -13752,8 +13770,8 @@ PRODUCTION READY: NO
 | AUTHZ-004 | AUTHZ | Guardian replay must verify stored decision authorship | 🔄 IN PROGRESS | High | Two signed-route bypasses reproduced before repair. Hosted CI 34715644176 on the exact tree of publication 0b190659 passes all 1,061 scheduled browser cases, including three PostgreSQL and HTTP Guardian authority cases. See guardian-hosted-acceptance.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md. | Four Guardian hosted cases pass including the completion/recovery extension. No production provider, policy configuration or scheduler claim. |
 | SUPPORT-91A56D6A297E | SUPPORT | tests/guardian-policy-callers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
-| API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Two assistant redirects and five Contact Center neighbor failures reproduced; actualmiddleware/handler/SDK and relatedsessiongroup89PASS. | Exact POST-only middleware exemption lets the handler enforce linked-device tokens; adjacent paths stay protected. | Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md. | See incoming-assistant-compatibility-cycle.md; full assistant feature workflow remains separate. |
-| API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Two assistant redirects and five Contact Center neighbor failures reproduced; actualmiddleware/handler/SDK and relatedsessiongroup89PASS. | Exact POST-only middleware exemption lets the handler enforce linked-device tokens; adjacent paths stay protected. | Source1aa4d6fb: 1188 files /14442 units PASS; build251 static pages, strict types, lint (four baseline warnings), locale and query gates PASS. Three real HTTP/PostgreSQL E2E cases are prepared; hosted execution pending. See guardian-replay-checkpoint.md. | See incoming-assistant-compatibility-cycle.md; full assistant feature workflow remains separate. |
+| API-C8B72ACE022A | API | POST /api/assistant | ✅ PASS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. |
+| API-A2C5302CAE88 | API | POST /api/assistant/alexa | ✅ PASS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. |
 | AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -13910,7 +13928,7 @@ PRODUCTION READY: NO
 | SUPPORT-7E6D5F8A63A6 | SUPPORT | tests/guardian-sms-completion.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E389EACB2379 | SUPPORT | tests/guardian-sms-recovery-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-71F9B43410F2 | SUPPORT | tests/guardian-sms-recovery.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
-| FLOW-FC0B97223986 | FLOW | Contact Center replies use the resolved family email address | 🔄 IN PROGRESS | High | Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures. | Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved. | Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md. | Provider delivery and sender-domain verification remain open. Database SDK uses intercepted HTTP and modeled LIKE; actual PostgreSQL identity workflow not established. Best-effort auto-reply has no durable emission receipt. |
+| FLOW-FC0B97223986 | FLOW | Pull-request CI startup | ✅ PASS | High | Full seven-check CI run on head 92340315. | Main merged into the branch and the email reply block conflict resolved. | All seven checks pass (Typecheck · Lint · Test · Build, E2E, Database, Mobile Expo, finance-operation-sql, Vercel Preview Comments; Supabase Preview skipped); mergeable_state is clean. | Resolved. |
 | SERVICE-B716F647333E | SERVICE | familyReplySender | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-D10B8AAF95B2 | SUPPORT | tests/contact-center-email-lookup.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-35A63EB97E7D | SUPPORT | tests/contact-center-email-reply-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
@@ -19899,49 +19917,192 @@ Pending
 #### Final Status
 ⬜ NOT STARTED
 
+### SEO-001 — Social preview images reachable by an unauthenticated crawler
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; app/opengraph-image.tsx; app/twitter-image.tsx; lib/og/social-image.tsx
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+Neither generated social image was named in the middleware PUBLIC list, so both sat behind the session boundary. Unauthenticated production probes on 2026-09-13 against build f9c4d7a1:
+
+    GET /opengraph-image  -> 307  Location: /login?redirect=%2Fopengraph-image
+    GET /twitter-image    -> 307  Location: /login?redirect=%2Ftwitter-image
+
+Every crawler that renders a shared link — X, Slack, Discord, iMessage, WhatsApp, LinkedIn, Facebook — fetches these with no cookie, so each received a redirect to a login page instead of a PNG. The homepage advertises `twitter:image` as `https://www.bubaly.com/twitter-image?bd24e96873d4928b`, and that exact URL answered 307. No shared Bubaly link rendered a preview card on any platform. This is the third instance of the same class recorded in this audit, after the Contact Center callbacks and the assistant endpoints (API-C8B72ACE022A, API-A2C5302CAE88): a route whose whole purpose is to answer an unauthenticated caller, placed behind the session boundary.
+
+#### Fixes Applied
+Both paths named in the middleware PUBLIC list, with the reason recorded inline. They render a fixed brand card from build-time assets: no request input, no family data, nothing to protect. tests/social-preview-reachability.test.ts reads the PUBLIC list from middleware.ts and fails if either path leaves it.
+
+#### Retest Results
+All five cases in tests/social-preview-reachability.test.ts pass, and all five fail when the fix is reverted. Deployed verification is pending the fix reaching production.
+
+#### Evidence
+tests/social-preview-reachability.test.ts; unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1).
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe pending.
+
+### SEO-002 — Open Graph card survives the marketing metadata resolver
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: lib/marketing/seo.ts resolveMarketingMetadata; app/layout.tsx metadata.openGraph; every app/(marketing) page that calls the resolver
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+`resolveMarketingMetadata` returned `openGraph: { ...priorOg, title, description }` unconditionally, where `priorOg` is the page's own fallback and is empty for almost every caller. A route segment that declares `openGraph` REPLACES the parent's resolved object — Next does not deep-merge it, and it stops applying the `app/opengraph-image.tsx` file convention for that route. The root layout's `type`, `siteName`, `url` and the generated image were therefore deleted from every marketing page.
+
+Measured on production build f9c4d7a1, 2026-09-13, counting `og:` meta tags in the served HTML:
+
+    /          og:title, og:description                                    (2 tags)
+    /pricing   og:title, og:description                                    (2 tags)
+    /login     og:title, og:description, og:image, og:image:alt,
+               og:image:width, og:image:height, og:image:type,
+               og:site_name, og:type, og:url                              (10 tags)
+
+`/login`, `/welcome` and `/kid-login` render the complete card precisely because they do not call this resolver. The pages that matter most for sharing — the homepage, pricing, features, and every blog post — were the ones missing the image.
+
+#### Fixes Applied
+The site-wide Open Graph defaults are restated in full inside the resolver: `type`, `siteName`, a self-referential `url`, and an explicit `images` entry built from the shared OG constants. They are spread first, so a page's own `fallback.openGraph` still wins for anything it sets — a blog post keeps `type: 'article'` and its own URL, and keeps the image.
+
+#### Retest Results
+tests/social-preview-reachability.test.ts covers the image, the site identity, and the per-page override; all pass, and all fail when the fix is reverted. Deployed verification is pending the fix reaching production.
+
+#### Evidence
+tests/social-preview-reachability.test.ts; `og:` tag census of /, /pricing, /login, /welcome, /kid-login on www.bubaly.com, 2026-09-13.
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe pending.
+
 # Final Regression
 
 ## Build
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS — `npm run build` on Node 24.15.0 (the engine package.json declares) exits 0 against branch head 92340315. Middleware bundle 92.6 kB. Run 2026-09-13.
 
 ## Type Check
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS — `tsc --noEmit` exits 0 with no diagnostics, Node 24.15.0, head 92340315. Run 2026-09-13.
 
 ## Lint
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and no errors (table-of-contents.tsx:31, document-capture.tsx:24, messages-module.tsx:208 and :278 — all react-hooks/exhaustive-deps). Count unchanged from the recorded baseline.
 
 ## Automated Tests
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
+
+Run this on the declared engine. On Node 22 the two cases in tests/stream-cancellation-runtime.test.ts fail with `controller[kState].transformAlgorithm is not a function`; that is the runtime gap package.json's `engines: node >=24.15.0 <25` exists to prevent, not a source defect, and both pass on 24.
 
 ## Authentication
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — the signed-out half is verified; the signed-in half is not.
+
+Verified against production (www.bubaly.com, build f9c4d7a1, 2026-09-13): every authenticated page and API route answers 307 to /login without a session. /login, /signup, /welcome and /kid-login are reachable signed-out and return 200.
+
+NOT verified here: real signup confirmation, email delivery, OAuth and phone paths, session time-box and inactivity settings, and anything requiring a real credential — this pass had none. AUTH-001, AUTH-002 and AUTH-003 remain the authority for those.
 
 ## Authorization
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — the outer boundary is verified from outside; database policy is not.
+
+The middleware boundary was probed exhaustively (see APIs below): no route exposed family data to an unauthenticated caller. The assistant exemption was confirmed exact — POST /api/assistant answers 401 and POST /api/assistant/alexa answers 403 from their own handlers, GET on both answers 307, and /api/assistant/link and /api/assistant/other answer 307 on both verbs, so the namespace was not opened.
+
+NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 through AUTHZ-005 remain open, and AUTHZ-003 and AUTHZ-005 remain release failures requiring SQL this audit is not authorized to author.
 
 ## Core User Journeys
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — public journeys verified; authenticated journeys not exercised in this pass.
+
+All twelve primary public routes return 200 from production: /, /pricing, /features, /how-it-works, /security, /privacy, /terms, /faq, /blog, /contact, /login, /signup. The sitemap advertises 1,508 URLs and is served.
+
+The authenticated journeys are covered by the repository's own E2E suite, which passed in full on head 92340315 (see Mobile / Responsive). They were not re-driven by hand here; no live household data was read or written.
 
 ## APIs
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS for the unauthenticated boundary — 266 probes, no exposure, no server error.
+
+Every one of the 133 static routes under app/api was probed unauthenticated with both GET and POST against production (build f9c4d7a1, 2026-09-13). Twelve routes with dynamic segments were excluded because a synthetic id is not a meaningful probe.
+
+    307 redirect to /login   143        404 not found              8
+    405 method not allowed    51        422 unprocessable          5
+    401 unauthorized          32        403 forbidden              1
+    400 bad request           20        200 ok                     4
+    5xx server error           0
+
+Zero server errors. All four 200s were read in full and none carries family data:
+  /api/build-info            {"revision":"f9c4d7a1…"} — the deployed commit, by design
+  /api/health                booleans plus latency; documented public probe
+  /api/exit-intent/resolve   {"offer":null}
+  /api/services/descriptions {"overrides":{}}
+
+Three probes first returned a transport failure and answered correctly on retry (/api/health 200, /api/mkt/consent 400 "anonymousId required", /api/mkt/track 405).
 
 ## Database
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — migration integrity verified in CI; live policy behaviour not.
+
+The Database job (migration replay and RLS boundary probes) passes on head 92340315. This branch authors no SQL and changes no migration — `git diff origin/main...HEAD -- supabase/migrations/` is empty.
+
+NOT verified here: the applied production catalog, which no static evidence establishes. The three release failures (SEC-001 public family-media bucket, AUTHZ-003 social-member DELETE, AUTHZ-005 Guardian contact/profile writes) are all policy state on main, not regressions from this branch, and all need SQL applied by a human.
 
 ## Integrations
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — no live provider exchange was performed in this pass.
+
+Twilio, the X API, the email provider and the push providers were not exercised; no message was sent and no live financial transaction was attempted. INT-001, INT-002, SMS-001, SMS-002, SOCIAL-001, SOCIAL-003, EMAIL-001, EMAIL-002 and the PUSH records remain the authority.
+
+Advanced since the last update: the inbound SMS handler now files the message and escalates a genuine urgency even when reply preparation fails, closing the durable pre-candidate intake gap; and X credentials now refresh automatically instead of expiring after roughly two hours. Both are covered by unit tests; neither is live-provider verified.
 
 ## Mobile / Responsive
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS in CI — the hosted suite covers the device matrix.
+
+The E2E job (public, a11y, authenticated and mobile device matrix) passes on head 92340315, as does Mobile (Expo) · Typecheck · Config. Physical-device behaviour remains unverified and stays under MOBILE-001.
 
 ## Accessibility
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: 🔄 IN PROGRESS — verified against a local production build; NOT verified against the deployed site.
+
+tests/e2e/accessibility.spec.ts runs axe-core over fifteen public routes in both dark and light themes against WCAG 2.0/2.1/2.2 A and AA, failing on any critical or serious violation. It passes inside the E2E job on head 92340315.
+
+A browser audit of the DEPLOYED site could not be run from this environment: the agent relay closes browser tunnels mid-exchange (`ws_closed_mid_exchange`), so every navigation died with ERR_CONNECTION_RESET while curl against the same host succeeded. A first attempt reported "0 violations across 30 renders" when in fact all thirty renders had failed to load — the count was of nothing. That result is discarded rather than recorded, and deployed accessibility stays unverified.
 
 ## Security
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS for transport and headers; application-layer records remain open.
+
+Production response headers on / (2026-09-13, build f9c4d7a1):
+  content-security-policy      default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+  strict-transport-security    max-age=63072000; includeSubDomains  (two years)
+  x-content-type-options       nosniff
+  x-frame-options              DENY
+  referrer-policy              strict-origin-when-cross-origin
+  permissions-policy           camera=(self), microphone=(self), geolocation=(self)
+  cache-control                private, no-cache, no-store, max-age=0, must-revalidate
+
+Observation, not a defect of this pass: `script-src` carries 'unsafe-inline', which is the usual Next App Router trade-off and materially weakens CSP as an XSS control. Moving to a nonce or hash strategy is worth a separate record; it is not claimed as verified either way here.
+
+The unauthenticated route sweep under APIs found no data exposure. SEC-001 remains a release failure and is live on main, independent of this branch.
 
 ## Performance
-Status: NOT STARTED — second regression follows individual verification; baseline evidence is not final sign-off.
+Status: ✅ PASS for public delivery; deployed runtime inspection remains separate.
+
+Production, cold and warm mixed, 2026-09-13:
+  /              0.67s   /pricing  0.43s   /features 0.36s   /how-it-works 0.32s
+  /security      0.36s   /privacy  0.32s   /terms    0.44s   /faq          0.33s
+  /contact       0.35s   /login    0.50s   /signup   0.41s   /blog         1.24s
+
+Brotli is applied: / is 1,156,328 bytes uncompressed and 287,625 bytes on the wire. /blog is the heaviest route at 1.46 MB uncompressed and the only one over one second; worth watching as the post count grows. PERF-002 keeps deployed runtime inspection.
 
 ## Known Blockers
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
@@ -19992,11 +20153,10 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- API-C8B72ACE022A: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
-- API-A2C5302CAE88: Incoming handler paths are absent from the middleware exemption; real middleware reproduction is planned.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
-- FLOW-FC0B97223986: Incoming main fdce273b conflicts with this branch in the email reply block, preventing pull-request CI from starting.
+- SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
+- SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 
 ## Production Readiness
 NO
