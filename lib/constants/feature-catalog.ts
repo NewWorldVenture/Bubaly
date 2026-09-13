@@ -28,7 +28,15 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('meals', 'Meals', 'Suggested', 'free', '/dashboard/meals'),
   F('smart-kitchen', 'Smart Kitchen', 'Daily Life', 'basic', '/dashboard/kitchen'),
   F('messages', 'Messages', 'Suggested', 'free', '/dashboard/messages'),
-  F('ai-assistant', 'AI Assistant', 'Suggested', 'basic', '/dashboard/assistant'),
+  // Free, and metered rather than blocked — that is what the plans sell. The
+  // Free plan in lib/constants/plans.ts lists "10 AI requests/month"; Basic
+  // lists "Unlimited AI assistant & concierge". Gating this entry at 'basic'
+  // meant a free family was sold ten requests and given none: the sidebar pins
+  // an "AI Assistant" pill for every plan on purpose, and tapping it answered
+  // with the billing upsell. The meter is AI_MONTHLY_ALLOWANCE in
+  // lib/server/ai-access.ts. The concierge below stays Basic — Free's copy
+  // names AI requests, and only Basic's names the concierge.
+  F('ai-assistant', 'AI Assistant', 'Suggested', 'free', '/dashboard/assistant'),
   F('ai-concierge', 'AI Concierge', 'Suggested', 'basic', '/dashboard/concierge'),
   F('ai-requests', 'Ask Bubaly', 'Suggested', 'basic', '/dashboard/concierge/runs'),
   F('trip-intelligence', 'Trip Intelligence', 'Suggested', 'basic', '/dashboard/trip-intel'),

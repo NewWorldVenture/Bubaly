@@ -31,13 +31,29 @@ import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer'
 type DB = SupabaseClient<Database>;
 
 export const AI_REQUESTS_FEATURE_KEY = 'ai-requests';
+/** The assistant page + `/api/ai`. A different product, at a different tier, from the concierge. */
+export const AI_ASSISTANT_FEATURE_KEY = 'ai-assistant';
 
 /**
- * Monthly concierge requests per plan level (0 Free / 1 Basic / 2 Plus).
- * `null` means unlimited. Numbers land here when the plans define them; the
- * gate, the count query and the error copy are already wired for that day.
+ * Monthly AI requests per plan level (0 Free / 1 Basic / 2 Plus).
+ * `null` means unlimited.
+ *
+ * The numbers are not a choice made here — they are read off the plans the site
+ * sells in `lib/constants/plans.ts`: Free lists **"10 AI requests/month"** and
+ * Basic lists **"Unlimited AI assistant & concierge"**. This constant sat at
+ * `{0: null, 1: null, 2: null}` with a comment saying numbers would land "when
+ * the plans define them" — and the plans had defined them, so Free was sold a
+ * meter that did not exist.
+ *
+ * "AI requests" is the whole-product budget the copy names, so the count below
+ * is every `ai_requests` row the family filed this month whatever its kind — an
+ * assistant turn, a concierge request, a briefing. It used to filter
+ * `kind = 'concierge'`, which counted none of the assistant's turns: the
+ * assistant records its turns with the default kind `'feature'` (see
+ * `withAiRequest`), so a meter that only counted concierge rows would have read
+ * zero however much a family used Bubaly.
  */
-export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = { 0: null, 1: null, 2: null };
+export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = { 0: 10, 1: null, 2: null };
 
 export type AIAccessDenial = {
   ok: false;
@@ -72,9 +88,15 @@ function monthStartIso(now: Date): string {
  */
 export async function assertAIAccess(
   ctx: UserContext,
-  opts: { db: DB; now?: Date },
+  opts: { db: DB; now?: Date; featureKey?: string; label?: string },
 ): Promise<AIAccess> {
   const familyId = ctx.active.familyId;
+  // Which product is being asked for. The concierge ('ai-requests') and the
+  // assistant ('ai-assistant') are separate catalog entries at separate tiers,
+  // and gating both on the concierge's entry is how the assistant came to be
+  // refused to families whose plan includes it.
+  const featureKey = opts.featureKey ?? AI_REQUESTS_FEATURE_KEY;
+  const label = opts.label ?? 'Ask Bubaly';
 
   let tiers: Record<string, string>;
   try {
@@ -83,9 +105,9 @@ export async function assertAIAccess(
     // A settings outage must not open the gate: the catalog default is the
     // documented offer, so fall back to it explicitly rather than to "allow".
     console.error('[ai-access] feature tier read failed; using catalog defaults', error);
-    tiers = { [AI_REQUESTS_FEATURE_KEY]: FEATURE_CATALOG_BY_KEY[AI_REQUESTS_FEATURE_KEY]?.defaultTier ?? 'basic' };
+    tiers = { [featureKey]: FEATURE_CATALOG_BY_KEY[featureKey]?.defaultTier ?? 'basic' };
   }
-  const tier = (tiers[AI_REQUESTS_FEATURE_KEY] ?? FEATURE_CATALOG_BY_KEY[AI_REQUESTS_FEATURE_KEY]?.defaultTier ?? 'basic') as 'off' | 'free' | 'basic' | 'plus';
+  const tier = (tiers[featureKey] ?? FEATURE_CATALOG_BY_KEY[featureKey]?.defaultTier ?? 'basic') as 'off' | 'free' | 'basic' | 'plus';
   const superAdmin = isSuperAdminEmail(ctx.user.email);
 
   if (tier === 'off' && !superAdmin) {
@@ -103,7 +125,7 @@ export async function assertAIAccess(
   if (planLevel < need) {
     return {
       ok: false, status: 403, code: 'plan_required', needLevel: need,
-      error: need >= 2 ? 'Ask Bubaly is part of Family+. Upgrade to let Bubaly plan and act for your family.' : 'Ask Bubaly is part of Family Basic. Upgrade to let Bubaly plan and act for your family.',
+      error: need >= 2 ? `${label} is part of Family+. Upgrade to let Bubaly plan and act for your family.` : `${label} is part of Family Basic. Upgrade to let Bubaly plan and act for your family.`,
     };
   }
 
@@ -115,7 +137,6 @@ export async function assertAIAccess(
     .from('ai_requests')
     .select('id', { count: 'exact', head: true })
     .eq('family_id', familyId)
-    .eq('kind', 'concierge')
     .gte('created_at', monthStartIso(opts.now ?? new Date()));
   if (error) {
     // Fail closed: an allowance that cannot be checked is not an allowance.
@@ -126,7 +147,7 @@ export async function assertAIAccess(
   if (used >= allowance) {
     return {
       ok: false, status: 429, code: 'allowance_exceeded',
-      error: `Your family has used its ${allowance} Ask Bubaly requests for this month. Upgrade for more, or try again next month.`,
+      error: `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
     };
   }
   return { ok: true, planLevel, monthlyUsed: used, monthlyAllowance: allowance };
