@@ -152,7 +152,9 @@ export default async function BlogPage({ searchParams }: Props) {
 
   return (
     <PageWrap>
-      <BlogListStructuredData posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
+      {/* The schema lists the 25 the page shows; slicing before the map keeps
+          a 1,048-element array of excerpts from being built to discard. */}
+      <BlogListStructuredData posts={allPosts.slice(0, 25).map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, date: p.date }))} />
       <MarketingPageStructuredData path="/blog" name={t('blog.theBubalyBlog')} description={t('blog.practicalAdviceRealStoriesAnd')} />
 
       {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
@@ -185,7 +187,9 @@ export default async function BlogPage({ searchParams }: Props) {
             <p className="mt-3 text-base leading-7 text-white/60">
               {t('blog.practicalAdviceRealStoriesAndSmart')}
             </p>
-            <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt.slice(0, 90), category: p.category }))} />
+            {/* No posts prop: the index is fetched on first interaction from
+                /api/blog/search-index. See BlogSearch. */}
+            <BlogSearch />
           </div>
           <div className="hidden lg:flex lg:justify-end">
             <BlogHeroArt className="h-auto w-full max-w-[360px]" />
