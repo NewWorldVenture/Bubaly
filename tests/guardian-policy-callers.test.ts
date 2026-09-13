@@ -5,7 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const seam = vi.hoisted(() => ({ client: null as unknown as SupabaseClient, processed: vi.fn(), scam: vi.fn(), notify: vi.fn(), greeting: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => seam.client }));
-vi.mock('@/lib/guardian/callbacks', async original => ({ ...await original<typeof import('@/lib/guardian/callbacks')>(), claimGuardianCallback: async () => true, markGuardianCallbackProcessed: seam.processed }));
+// claimGuardianCallback answers 'claimed' | 'settled' | 'unavailable', not a
+// boolean. A stub returning `true` reads as NEITHER 'claimed' NOR 'unavailable',
+// so every route here took its acknowledge-a-duplicate path and answered 200
+// having done nothing — the exact truthy-string trap the typed outcome was
+// introduced to close, hiding in the one fixture that still spoke the old
+// vocabulary. Nothing failed at the type level: `true` satisfies no branch and
+// every comparison is legal.
+vi.mock('@/lib/guardian/callbacks', async original => ({ ...await original<typeof import('@/lib/guardian/callbacks')>(), claimGuardianCallback: async () => 'claimed' as const, markGuardianCallbackProcessed: seam.processed }));
 vi.mock('@/lib/guardian/twilio', async original => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), lookupCallerName: async () => null }));
 vi.mock('@/lib/guardian/scam-ai', () => ({ detectScamWithAI: seam.scam }));
 vi.mock('@/lib/guardian/ai-screen', () => ({ buildInitialGreeting: seam.greeting, buildVoicemailPrompt: seam.greeting }));

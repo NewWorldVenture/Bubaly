@@ -16,12 +16,23 @@ describe('vacations-list surfaces the primary read failure', () => {
     expect(list).toMatch(/const \{ data: trips, loading, error, refresh \} = useRealtimeQuery/);
   });
   it('renders a retryable ErrorState before the empty state', () => {
-    expect(list).toContain('error ? (');
+    expect(list).toContain('readError ? (');
     expect(list).toContain("<ErrorState message={");
     expectSays(list, 'vacationsList.couldNotLoadYourTrips', "Could not load your trips. Refresh and try again.");
     // the error branch must precede the empty-state JSX (anchor on the
     // component, not the comment text which also mentions "No trips yet")
-    expect(list.indexOf('error ? (')).toBeLessThan(list.indexOf('<EmptyState icon={Plane}'));
+    expect(list.indexOf('readError ? (')).toBeLessThan(list.indexOf('<EmptyState icon={Plane}'));
+  });
+
+  // The list also reads the members on each trip and the readiness score shown
+  // on its ring. Those started out dropping their errors, so a card could
+  // render a trip with no travellers and no readiness and look finished. The
+  // gate above now covers all three, and the retry re-runs all three.
+  it('gates on the members and readiness reads too', () => {
+    expect(list).toMatch(/const readError = error \|\| vmembersError \|\| scoresError;/);
+    expect(list).toMatch(/const \{ data: vmembers, error: vmembersError, refresh: refreshMembers \}/);
+    expect(list).toMatch(/const \{ data: scores, error: scoresError, refresh: refreshScores \}/);
+    expect(list).toContain('void refresh(); void refreshMembers(); void refreshScores();');
   });
 });
 

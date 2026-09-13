@@ -38,11 +38,11 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     table: 'vacations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId),
   });
-  const { data: vmembers } = useRealtimeQuery<Member>({
+  const { data: vmembers, error: vmembersError, refresh: refreshMembers } = useRealtimeQuery<Member>({
     table: 'vacation_members', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacation_members').select('*').eq('family_id', familyId),
   });
-  const { data: scores } = useRealtimeQuery<Score>({
+  const { data: scores, error: scoresError, refresh: refreshScores } = useRealtimeQuery<Score>({
     table: 'vacation_travel_scores', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('vacation_travel_scores').select('*').eq('family_id', familyId),
   });
@@ -92,6 +92,10 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     router.push(`/dashboard/vacations/${data.id}/overview`);
   }
 
+  // vmembers is who is on each trip and scores is the readiness ring: a card
+  // that renders without them is a trip with no travellers and no readiness.
+  const readError = error || vmembersError || scoresError;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -123,8 +127,8 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
         </Link>
       )}
 
-      {loading ? <LoadingBlock /> : error ? (
-        <ErrorState message={tr('vacationsList.couldNotLoadYourTrips')} onRetry={refresh} />
+      {loading ? <LoadingBlock /> : readError ? (
+        <ErrorState message={tr('vacationsList.couldNotLoadYourTrips')} onRetry={() => { void refresh(); void refreshMembers(); void refreshScores(); }} />
       ) : sorted.length === 0 ? (
         <EmptyState icon={Plane} title={tr('vacationsList.noTripsYet')} description="Create your first vacation — or let the AI builder plan one for you." />
       ) : (

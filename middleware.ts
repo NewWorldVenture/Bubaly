@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
+import { MARKETING_PUBLIC_PREFIXES } from '@/lib/marketing/page-types';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
   shouldForwardAuthCode,
@@ -30,6 +31,16 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/customers',
   // Public Family Wallet gift pages — relatives gift via an unguessable token.
   '/gift',
+  // The Pay-ID resolver a relative follows from a shared handle. It is the
+  // signed-out half of the gift flow: it reads through the service role
+  // precisely because the visitor has no session, then forwards to the
+  // '/gift' token above. Left out of this list, every shared Pay-ID answered
+  // 307 to /login — so the grandparent the handle was shared with was asked
+  // to create a Bubaly account before they could send a gift, while the
+  // /gift link it resolves to worked. It leaks nothing a guess could not
+  // already learn: an unknown or inactive handle renders the same dead-end
+  // page as an active one with no live link.
+  '/pay',
   // Public exit-intent offer resolve + metric beacon (anonymous visitors).
   '/api/exit-intent',
   // Public contact, blog, and marketing telemetry endpoints. These routes
@@ -42,8 +53,9 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public gift-link AI assistant; the gift token and durable IP limiter are
   // the authorization boundary for this narrowly scoped read path.
   '/api/ai/gift',
-  // Public marketing landing pages + their metric beacon.
-  '/lp',
+  // The landing-page metric beacon. The page prefixes themselves come from
+  // MARKETING_PUBLIC_PREFIXES below, which is the same list the platform
+  // publishes them under.
   '/api/lp/track',
   // Public marketing forms (lead capture) + their submit endpoint.
   '/f',
@@ -51,6 +63,14 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
+  // The generated social preview images. Every crawler that renders a shared
+  // Bubaly link — X, Slack, Discord, iMessage, WhatsApp, LinkedIn, Facebook —
+  // fetches these WITHOUT a session, so behind the session boundary they
+  // answered 307 to /login and no shared link showed a preview at all. They
+  // render a fixed brand card from build-time assets: no request input, no
+  // family data, nothing to protect.
+  '/opengraph-image',
+  '/twitter-image',
   // Liveness/readiness probe for uptime monitors + LB health checks. Must be
   // reachable without a session (a monitor cannot authenticate); it is read-only
   // and returns only booleans/latency/missing-var names — never a secret.
@@ -64,7 +84,14 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
   '/api/webhooks',
-  '/api/marketing/unsubscribe'];
+  '/api/marketing/unsubscribe',
+  // Every prefix a published marketing page can live under, read from the same
+  // list the platform builds those paths with. Hand-copying them here is how
+  // /questions, /guides, /compare, /alternatives, /audiences, /resources,
+  // /glossary and /p came to answer 307 to /login for every anonymous visitor
+  // and every search engine — eight of the eleven families, invisible. The page
+  // is the authorization boundary: it renders only published, non-deleted rows.
+  ...MARKETING_PUBLIC_PREFIXES];
 
 // Provider callbacks authenticate inside their handlers. Keep this list exact:
 // future Contact Center settings or data endpoints still require a user session.

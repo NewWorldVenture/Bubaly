@@ -6,6 +6,7 @@
 import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { OG_SIZE, OG_CONTENT_TYPE, OG_ALT } from '@/lib/og/social-image';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -70,9 +71,29 @@ export async function getSeoPage(path: string): Promise<{ title: string | null; 
  * Resolve a route's Next Metadata from the admin SEO store, falling back to
  * developer-authored values. Use in a page's `generateMetadata()`.
  */
+/**
+ * The root layout sets `template: '%s · Bubaly'`, so every title it formats gets
+ * the brand appended. A title that ALREADY ends in the brand is then doubled:
+ * the admin SEO store held "Security & Privacy — Bubaly", and the live page
+ * shipped `Security & Privacy — Bubaly · Bubaly`. Same for "Contact Bubaly".
+ *
+ * The store is admin-editable free text, so this cannot be fixed by correcting
+ * the rows — the next person to type a brand-suffixed title reintroduces it.
+ * The template owns the brand, so a title that supplies its own opts out of the
+ * template via `absolute` instead of being appended to.
+ *
+ * Only a TRAILING brand counts. "Bubaly — The AI Family Operating System" leads
+ * with the name and still wants the suffix; suppressing it there would drop the
+ * brand from the end of the tab title, which is the opposite of the intent.
+ */
+export function titleWithoutDoubledBrand(title: string): Metadata['title'] {
+  return /(?:^|[\s—–\-|·:])Bubaly\s*$/i.test(title.trim()) ? { absolute: title } : title;
+}
+
 export async function resolveMarketingMetadata(path: string, fallback: Metadata): Promise<Metadata> {
   const seo = await getSeoPage(path);
-  const title = seo?.title ?? fallback.title ?? undefined;
+  const resolved = seo?.title ?? fallback.title ?? undefined;
+  const title = typeof resolved === 'string' ? titleWithoutDoubledBrand(resolved) : resolved;
   const description = seo?.description ?? fallback.description ?? undefined;
   const canonical = seo?.canonical
     ? (seo.canonical.startsWith('http') ? seo.canonical : `${SITE_URL}${seo.canonical.startsWith('/') ? seo.canonical : `/${seo.canonical}`}`)
@@ -84,10 +105,34 @@ export async function resolveMarketingMetadata(path: string, fallback: Metadata)
     ...(title ? { title } : {}),
     ...(description ? { description } : {}),
     ...(canonical ? { alternates: { ...priorAlternates, canonical } } : {}),
+    // A segment that declares `openGraph` REPLACES the root layout's resolved
+    // object — Next does not deep-merge it, and it stops applying the
+    // `app/opengraph-image.tsx` file convention for that route. Returning only
+    // {title, description} therefore deleted og:image, og:url, og:type and
+    // og:site_name from every marketing page while /login (which does not call
+    // this) kept all four. Shared links to the homepage, pricing, features and
+    // every blog post rendered with no preview image anywhere.
+    //
+    // So the site-wide defaults are restated here in full. They stay first so a
+    // page's own fallback.openGraph still wins for anything it sets.
     openGraph: {
+      type: 'website',
+      siteName: 'Bubaly',
+      images: [{
+        url: `${SITE_URL}/opengraph-image`,
+        width: OG_SIZE.width,
+        height: OG_SIZE.height,
+        alt: OG_ALT,
+        type: OG_CONTENT_TYPE,
+      }],
       ...priorOg,
-      ...(title ? { title } : {}),
+      // The plain string, never the `absolute` wrapper that the document title
+      // may carry. openGraph has no brand template of its own, so og:title was
+      // never doubled and needs no opt-out.
+      ...(resolved ? { title: resolved } : {}),
       ...(description ? { description } : {}),
+      // The canonical is the page's own URL, so it is also the right og:url.
+      ...(canonical ? { url: canonical } : (priorOg.url ? {} : { url: `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}` })),
     },
   };
 }

@@ -1,9 +1,9 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts, ALL_CATEGORIES } from '@/lib/blog/posts';
+import { getAllPosts } from '@/lib/blog/posts';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBenchmarksPublication } from '@/lib/network/benchmarks-server';
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
+import { staticRevision } from '@/lib/marketing/content-revisions';
+import { canonicalUrl, isRegistryRenderedPath } from '@/lib/marketing/sitemap-urls';
 
 /**
  * How long the sitemap will wait on the database before giving up on the
@@ -59,33 +59,59 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
   { path: '/acceptable-use', priority: 0.3, changeFrequency: 'yearly' },
 ];
 
+/**
+ * The public URLs of this site, each dated by when its CONTENT last changed.
+ *
+ * Both halves of that sentence used to be wrong in production.
+ *
+ * The dates: every static entry was stamped with `new Date()`, so regenerating
+ * the sitemap announced that ~1,500 URLs had all changed simultaneously. A
+ * crawler that learns a site's lastmod is noise stops using it, costing the
+ * signal on the pages that genuinely did change. Each source now answers from
+ * its own real date, and anything with no real date to give omits
+ * `lastModified` rather than inventing one.
+ *
+ * The URLs: 991 of the 1,508 listed should not have been there — 435 answered
+ * 404 with `noindex` (registry rows for blog slugs the public site hides), 9
+ * canonicalised to /blog, and the homepage was listed twice. Every source now
+ * goes through canonicalUrl(), which is the only thing that may mint a `<loc>`.
+ */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((r) => ({
-    url: `${SITE_URL}${r.path}`,
-    lastModified: now,
+    url: canonicalUrl(r.path)!,
+    // Repository-authored copy: a constant that moves when the copy moves.
+    lastModified: staticRevision(r.path),
     changeFrequency: r.changeFrequency,
     priority: r.priority,
   }));
 
   // Published blog posts (best-effort — getAllPosts degrades to [] on any error,
   // so a DB hiccup can never break the sitemap or the build).
+  //
+  // `updated_at` first: a post edited after publication changed on the edit
+  // date, not the publish date. `published_at` is the fallback, and a row with
+  // neither contributes no lastmod at all.
   const posts = await getAllPosts();
-  const postEntries: MetadataRoute.Sitemap = posts.map((p) => ({
-    url: `${SITE_URL}/blog/${p.slug}`,
-    lastModified: p.date ? new Date(p.date) : now,
-    changeFrequency: 'monthly',
-    priority: 0.6,
-  }));
+  const postEntries: MetadataRoute.Sitemap = posts.flatMap((p) => {
+    const url = canonicalUrl(`/blog/${p.slug}`);
+    if (!url) return [];
+    return [{
+      url,
+      lastModified: p.updatedAt ? new Date(p.updatedAt) : p.date ? new Date(p.date) : undefined,
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    }];
+  });
 
-  // Blog category tabs — crawlable landing pages for each topic.
-  const categoryEntries: MetadataRoute.Sitemap = ALL_CATEGORIES.map((c) => ({
-    url: `${SITE_URL}/blog?category=${encodeURIComponent(c)}`,
-    lastModified: now,
-    changeFrequency: 'weekly',
-    priority: 0.5,
-  }));
+  // NOTE: the /blog?category=… tabs are deliberately NOT listed.
+  //
+  // They are the /blog page with a query parameter, and that page declares
+  // `alternates.canonical` pointing at /blog itself — so every one of them told
+  // a crawler "index me" while the page it served said "index /blog instead".
+  // A sitemap listing URLs that canonicalise elsewhere spends crawl budget to
+  // be contradicted. The categories stay reachable and crawlable through the
+  // links on /blog, which is how a canonicalised variant is supposed to be
+  // found.
 
   // Landing pages are published from Super Admin and use a service-role read
   // because their table is intentionally private to the admin control plane.
@@ -111,14 +137,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if (error) {
         console.error('[sitemap] published landing-page read failed', error);
       } else {
-        landingEntries = (data ?? [])
-          .filter((page) => typeof page.slug === 'string' && page.slug.length > 0)
-          .map((page) => ({
-            url: `${SITE_URL}/lp/${encodeURIComponent(page.slug)}`,
-            lastModified: page.updated_at ? new Date(page.updated_at) : now,
+        landingEntries = (data ?? []).flatMap((page) => {
+          if (typeof page.slug !== 'string' || !page.slug) return [];
+          const url = canonicalUrl(`/lp/${page.slug}`);
+          if (!url) return [];
+          return [{
+            url,
+            lastModified: page.updated_at ? new Date(page.updated_at) : undefined,
             changeFrequency: 'weekly' as const,
             priority: 0.7,
-          }));
+          }];
+        });
       }
 
       // The public household benchmarks page exists only while its admin
@@ -131,8 +160,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       );
       if (benchmarks.ok && benchmarks.published) {
         benchmarkEntries.push({
-          url: `${SITE_URL}/resources/benchmarks`,
-          lastModified: benchmarks.updatedAt ? new Date(benchmarks.updatedAt) : now,
+          url: canonicalUrl('/resources/benchmarks')!,
+          lastModified: benchmarks.updatedAt ? new Date(benchmarks.updatedAt) : undefined,
           changeFrequency: 'weekly' as const,
           priority: 0.6,
         });
@@ -152,14 +181,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if (platformError) {
         console.error('[sitemap] published platform-page read failed', platformError);
       } else {
-        platformEntries = (platformPages ?? [])
-          .filter((page) => typeof page.path === 'string' && page.path.startsWith('/'))
-          .map((page) => ({
-            url: `${SITE_URL}${page.path}`,
-            lastModified: page.updated_at ? new Date(page.updated_at) : now,
+        // A registry row is an overlay on a path, not proof the path resolves:
+        // only the prefixes the registry itself renders may add a URL here. See
+        // isRegistryRenderedPath — /blog/… is served from blog_posts, and 435
+        // registry rows for slugs blog_posts hides were publishing 404s.
+        platformEntries = (platformPages ?? []).flatMap((page) => {
+          if (typeof page.path !== 'string' || !isRegistryRenderedPath(page.path)) return [];
+          const url = canonicalUrl(page.path);
+          if (!url) return [];
+          return [{
+            url,
+            lastModified: page.updated_at ? new Date(page.updated_at) : undefined,
             changeFrequency: 'weekly' as const,
             priority: 0.7,
-          }));
+          }];
+        });
       }
     } catch (error) {
       console.error('[sitemap] published landing-page read failed', error);
@@ -167,7 +203,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const byUrl = new Map<string, MetadataRoute.Sitemap[number]>();
-  for (const entry of [...staticEntries, ...categoryEntries, ...postEntries, ...landingEntries, ...benchmarkEntries, ...platformEntries]) {
+  for (const entry of [...staticEntries, ...postEntries, ...landingEntries, ...benchmarkEntries, ...platformEntries]) {
     const previous = byUrl.get(entry.url);
     if (!previous) {
       byUrl.set(entry.url, entry);

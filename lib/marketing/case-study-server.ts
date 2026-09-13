@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isCaseStudySlug } from './case-study';
+import { isSyntheticSeedSlug } from './reputation';
 
 export type CaseStudy = Pick<Database['public']['Tables']['case_studies']['Row'],
   'id' | 'title' | 'slug' | 'customer_name' | 'summary' | 'body' | 'result_metric'>;
@@ -12,6 +13,10 @@ export type CaseStudyResult = { ok: true; study: CaseStudy | null } | { ok: fals
  * publicly readable through a cached detail page or its metadata. */
 export async function loadPublishedCaseStudy(db: SupabaseClient<Database>, slug: string): Promise<CaseStudyResult> {
   if (!isCaseStudySlug(slug)) return { ok: true, study: null };
+  // A seeded row is never a customer story, whatever `is_published` says. The
+  // list already refuses these; the detail page has to agree, or a link that
+  // survived in a cache — or in a search index — still renders one.
+  if (isSyntheticSeedSlug(slug)) return { ok: true, study: null };
   try {
     const { data, error } = await db.from('case_studies')
       .select('id, title, slug, customer_name, summary, body, result_metric, is_published')

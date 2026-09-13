@@ -85,7 +85,7 @@ export function MarketplaceModule({
     table: 'marketplace_listings', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('marketplace_listings').select('*').eq('family_id', familyId),
   });
-  const { data: offers } = useRealtimeQuery<Offer>({
+  const { data: offers, error: offersError } = useRealtimeQuery<Offer>({
     table: 'marketplace_offers', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('marketplace_offers').select('*').eq('family_id', familyId),
   });
@@ -226,7 +226,8 @@ export function MarketplaceModule({
   }
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load the marketplace'} />;
+  const readError = error || offersError;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load the marketplace'} />;
 
   const dialogOffers = offersFor ? openOffersFor(offersFor.id, offers ?? []) : [];
 

@@ -24,7 +24,7 @@ export default async function ContactPage() {
   return (
     <>
     <Section className="pt-20">
-      <SectionHeading eyebrow={t('contact.contact')} title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
+      <SectionHeading as="h1" eyebrow={t('contact.contact')} title={t('contact.wedLoveToHearFromYou')} description={t('contact.questionsFeedbackOrJustSaying')} />
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[

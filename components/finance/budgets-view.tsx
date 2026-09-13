@@ -26,18 +26,20 @@ export function BudgetsView() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: budgets, loading, error, stale, refresh } = useRealtimeQuery<Budget>({
+  const { data: budgets, loading, error: budgetsError, stale, refresh: refreshBudgets } = useRealtimeQuery<Budget>({
     table: 'budgets', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('budgets').select('*').eq('family_id', familyId).order('category'),
   });
-  const { data: txns, loading: transactionsLoading, error: transactionsError, stale: transactionsStale, refresh: refreshTransactions } = useRealtimeQuery<Txn>({
+  // The transactions read matters as much as the budgets one: spend-to-date is
+  // computed from it, so losing it silently reports every category as untouched.
+  const { data: txns, loading: txnsLoading, error: txnsError, stale: txnsStale, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).gte('date', new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)),
   });
+  const readError = budgetsError || txnsError;
 
   const [form, setForm] = useState(false);
   const rows = budgets ?? [];
-  const readError = error || transactionsError;
   const allTxns = useMemo(() => (txns ?? []) as unknown as { type: string; category: string | null; amount: number; date: string }[], [txns]);
 
   async function remove(id: string) {
@@ -52,8 +54,8 @@ export function BudgetsView() {
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
 
       {readError ? (
-        <ErrorState message={readError} onRetry={() => { void refresh(); void refreshTransactions(); }} />
-      ) : loading || stale || transactionsLoading || transactionsStale ? <SkeletonList /> : rows.length === 0 ? (
+        <ErrorState message={t('budgetsView.couldNotLoadBudgets')} onRetry={() => { void refreshBudgets(); void refreshTxns(); }} />
+      ) : loading || stale || txnsLoading || txnsStale ? <SkeletonList /> : rows.length === 0 ? (
         <EmptyState icon={PiggyBank} title={t('budgets.noBudgetsYet')} description={t('budgetsView.createABudgetForA')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('budgets.addBudget')}</Button>} />
       ) : (

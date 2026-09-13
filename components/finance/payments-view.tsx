@@ -18,7 +18,7 @@ export function PaymentsView() {
   const tr = useTranslations();
   const { familyId } = useApp();
 
-  const { data: rows, loading, error, stale, refresh } = useRealtimeQuery<Txn>({
+  const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
@@ -66,7 +66,11 @@ export function PaymentsView() {
       <PageHeader title={tr('payments.paymentHistory')} description={tr('paymentsView.everyTransactionAcrossYourFamily')} />
 
       {/* This month at a glance */}
-      {!loading && !stale && !error && <div className="grid-stats">
+      {/* A +$0.00 is a statement about this family's money, so the whole grid
+          waits for a verified read rather than stating a figure it does not
+          have. One gate, here — no second placeholder inside the tiles, which
+          this gate would make unreachable anyway. */}
+      {!loading && !stale && !readError && <div className="grid-stats">
         {[
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
@@ -97,7 +101,9 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {error ? <ErrorState message={error} onRetry={() => { void refresh(); }} /> : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
+      {readError ? (
+        <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); }} />
+      ) : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">
