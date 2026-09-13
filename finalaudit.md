@@ -6,7 +6,7 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload | 14 | `F1`–`F14` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 17 | `F1`–`F17` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, and the audit's own probes | 16 | `F-001`–`F-016` |
 
 **Where they touch, stated plainly.** Only two places:
@@ -29,7 +29,7 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F14)
+# Pass A — Public surface (F1–F17)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
