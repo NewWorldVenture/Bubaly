@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { getSocialAccess } from '@/lib/social/access';
 import { generate, AI_GENERATION_KINDS, type AiGenerationKind } from '@/lib/social/ai';
@@ -42,6 +43,10 @@ export async function POST(req: Request) {
   // success log all want it, and three `createServer()` calls for one request
   // is three of everything it builds.
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not.
+  // Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/social']);
+  if (refused) return refused;
 
   let result;
   try {

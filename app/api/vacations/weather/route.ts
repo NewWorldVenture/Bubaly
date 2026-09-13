@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { geocode, fetchForecast } from '@/lib/vacations/weather-fetch';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('weather.unauthorized') }, { status: 401 }); }
 
   const supabase = await createServer();
+  // The page in front of this is feature-gated; this endpoint was not.
+  // Same resolver, so the two cannot disagree.
+  const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/vacations']);
+  if (refused) return refused;
   const limited = await enforceRequestRateLimit(supabase, `vac-weather:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
     { error: t('weather.tooManyWeatherRequestsPlease') },

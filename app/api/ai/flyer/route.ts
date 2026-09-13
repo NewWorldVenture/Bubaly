@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest) {
     const familyId = ctx.active.familyId;
     const userId = ctx.user.id;
     const supabase = await createServer();
+    // The page in front of this is feature-gated; this endpoint was not, and it
+    // calls a model. Same resolver, so the two cannot disagree.
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/scan']);
+    if (refused) return refused;
 
     const limited = await enforceAIRateLimit(supabase, `ai-flyer:${userId}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(

@@ -1,5 +1,6 @@
 // Actual request-locale resolution, read models and API envelope over filter-aware transport doubles.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { entitledServiceClient } from './helpers/entitled-service-client';
 import { NextRequest } from 'next/server';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,7 +15,14 @@ import { parseBriefingResponse } from '@/lib/briefing/response-schema';
 const mocks = vi.hoisted(() => ({ locale: 'en-US' as LocaleCode, cookie: undefined as string | null | undefined, country: 'US', acceptLanguage: 'en-US', context: vi.fn(), server: vi.fn(), complete: vi.fn(), configured: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (key: string) => key === LOCALE_COOKIE && mocks.cookie !== null ? { value: mocks.cookie ?? mocks.locale } : undefined }), headers: async () => new Headers({ 'accept-language': mocks.acceptLanguage, 'x-country': mocks.country }) }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
+// The route resolves the family's plan before it works, through the service
+// client (see tests/helpers/entitled-service-client.ts). Seeded as entitled so
+// these keep testing what they are named for; the gate itself is covered by
+// tests/ai-routes-plan-gate.test.ts.
+vi.mock('@/lib/supabase/server', () => ({
+  createServer: mocks.server,
+  createServiceClient: () => entitledServiceClient(),
+}));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: mocks.configured, resolveProvider: async () => ({ complete: mocks.complete }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: async (_scope: unknown, _input: unknown, fn: (obs: { used: () => void }) => unknown) => fn({ used: () => {} }) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
